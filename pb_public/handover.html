@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Handover Log - Nhật Ký Bàn Giao Ca</title>
+    <title>Handover Log</title>
     <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -18,9 +18,12 @@
 </head>
 <body class="bg-slate-950 text-slate-200 min-h-screen">
     <div class="max-w-6xl mx-auto p-6">
-        <div class="flex justify-between items-center mb-10 bg-slate-900 p-6 rounded-3xl">
+        <div class="flex justify-between items-center mb-8 bg-slate-900 p-6 rounded-3xl">
             <h1 class="text-4xl font-bold">📋 Handover Log</h1>
-            <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-8 py-3 rounded-2xl font-medium text-sm">Đăng xuất</button>
+            <div>
+                <button onclick="refreshList()" class="bg-slate-700 hover:bg-slate-600 px-6 py-3 rounded-2xl mr-3">🔄 Refresh</button>
+                <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-8 py-3 rounded-2xl font-medium text-sm">Đăng xuất</button>
+            </div>
         </div>
 
         <!-- Form tạo mới -->
@@ -70,6 +73,7 @@
         pb.collection('entries').subscribe('*', () => loadLogs());
 
         async function createLog() {
+            console.log("Tạo record mới...");
             await pb.collection('entries').create({
                 title: document.getElementById('title').value || 'Bàn giao ca',
                 shift: document.getElementById('shift').value,
@@ -83,6 +87,7 @@
         }
 
         async function loadLogs() {
+            console.log("Đang tải danh sách...");
             const records = await pb.collection('entries').getFullList({ sort: '-created' });
             let html = '';
             records.forEach(r => {
@@ -108,6 +113,7 @@
         }
 
         function editLog(id) {
+            console.log("🔧 Chỉnh sửa ID:", id);
             currentEditId = id;
             pb.collection('entries').getOne(id).then(r => {
                 document.getElementById('editTitle').value = r.title || '';
@@ -117,6 +123,7 @@
         }
 
         async function saveEdit() {
+            console.log("💾 Đang lưu chỉnh sửa ID:", currentEditId);
             await pb.collection('entries').update(currentEditId, {
                 title: document.getElementById('editTitle').value,
                 content: document.getElementById('editContent').value
@@ -131,11 +138,16 @@
         }
 
         async function deleteLog(id) {
-            if (confirm('Xác nhận xóa bản ghi này?')) {
-                await pb.collection('entries').delete(id);
-                loadLogs();
-                alert('🗑️ Đã xóa!');
-            }
+            console.log("🗑️ Đang xóa ID:", id);
+            if (!confirm('Xác nhận xóa bản ghi này?')) return;
+            await pb.collection('entries').delete(id);
+            loadLogs();
+            alert('🗑️ Đã xóa!');
+        }
+
+        function refreshList() {
+            console.log("🔄 Refresh danh sách...");
+            loadLogs();
         }
 
         function logout() {
@@ -144,7 +156,9 @@
             window.location.href = '/';
         }
 
-        window.onload = loadLogs;
+        window.onload = () => {
+            loadLogs();
+        };
     </script>
 </body>
 </html>
