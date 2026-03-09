@@ -62,7 +62,7 @@
     </div>
 
     <script>
-        const pb = new PocketBase('https://GETC.up.railway.app');   // ← domain mới của bạn
+        const pb = new PocketBase('https://getc.up.railway.app');   // ← Domain chữ thường (rất quan trọng!)
         let currentEditId = null;
 
         if (!pb.authStore.isValid) window.location.href = '/';
@@ -70,16 +70,20 @@
         pb.collection('entries').subscribe('*', () => loadLogs());
 
         async function createLog() {
-            await pb.collection('entries').create({
-                title: document.getElementById('title').value || 'Bàn giao ca',
-                shift: document.getElementById('shift').value,
-                priority: document.getElementById('priority').value,
-                content: document.getElementById('content').value
-            });
-            alert('✅ Đã đăng!');
-            document.getElementById('title').value = '';
-            document.getElementById('content').value = '';
-            loadLogs();
+            try {
+                await pb.collection('entries').create({
+                    title: document.getElementById('title').value || 'Bàn giao ca',
+                    shift: document.getElementById('shift').value,
+                    priority: document.getElementById('priority').value,
+                    content: document.getElementById('content').value
+                });
+                alert('✅ Đã đăng!');
+                document.getElementById('title').value = '';
+                document.getElementById('content').value = '';
+                loadLogs();
+            } catch (e) {
+                alert('Lỗi tạo: ' + e.message);
+            }
         }
 
         async function loadLogs() {
@@ -108,22 +112,27 @@
         }
 
         function editLog(id) {
+            console.log("Sửa ID:", id);
             currentEditId = id;
             pb.collection('entries').getOne(id).then(r => {
                 document.getElementById('editTitle').value = r.title || '';
                 document.getElementById('editContent').value = r.content || '';
                 document.getElementById('editModal').classList.remove('hidden');
-            });
+            }).catch(() => alert("Không tìm thấy bản ghi!"));
         }
 
         async function saveEdit() {
-            await pb.collection('entries').update(currentEditId, {
-                title: document.getElementById('editTitle').value,
-                content: document.getElementById('editContent').value
-            });
-            closeModal();
-            loadLogs();
-            alert('✅ Đã lưu thay đổi!');
+            try {
+                await pb.collection('entries').update(currentEditId, {
+                    title: document.getElementById('editTitle').value,
+                    content: document.getElementById('editContent').value
+                });
+                closeModal();
+                loadLogs();
+                alert('✅ Đã lưu thay đổi!');
+            } catch (e) {
+                alert('Lỗi lưu: ' + e.message);
+            }
         }
 
         function closeModal() {
@@ -131,10 +140,14 @@
         }
 
         async function deleteLog(id) {
-            if (confirm('Xác nhận xóa bản ghi này?')) {
+            console.log("Xóa ID:", id);
+            if (!confirm('Xác nhận xóa bản ghi này?')) return;
+            try {
                 await pb.collection('entries').delete(id);
                 loadLogs();
-                alert('🗑️ Đã xóa!');
+                alert('🗑️ Đã xóa thành công!');
+            } catch (e) {
+                alert('Lỗi xóa: Bản ghi không tồn tại hoặc đã bị xóa trước đó.');
             }
         }
 
