@@ -3,93 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nhật Ký Chung - Nhóm 20 người</title>
+    <title>Handover Log - Nhật Ký Bàn Giao Ca</title>
     <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background: #0f172a; color: #e2e8f0; }
-        .entry-card { transition: all 0.3s; }
-        .entry-card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3); }
+        .priority-dot { width: 12px; height: 12px; border-radius: 50%; }
+        .green { background: #10b981; }
+        .yellow { background: #eab308; }
+        .blue { background: #3b82f6; }
+        .red { background: #ef4444; }
     </style>
 </head>
-<body class="min-h-screen p-4">
-    <div class="max-w-3xl mx-auto">
+<body class="bg-slate-950 text-slate-200 min-h-screen">
+    <div class="max-w-5xl mx-auto p-6">
         <!-- Header -->
-        <div class="flex justify-between items-center mb-8 bg-slate-900 p-4 rounded-2xl">
-            <h1 class="text-3xl font-bold flex items-center gap-3">
-                📖 Nhật Ký Chung
-                <span class="text-sm bg-emerald-600 px-3 py-1 rounded-full text-white">20 người</span>
-            </h1>
-            <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-xl text-sm font-medium">Đăng xuất</button>
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-bold flex items-center gap-3">📋 Handover Log</h1>
+            <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-8 py-3 rounded-2xl">Đăng xuất</button>
         </div>
 
-        <!-- Form viết nhật ký -->
-        <div class="bg-slate-900 p-6 rounded-3xl mb-8">
-            <h2 class="text-xl font-semibold mb-4">✍️ Viết entry mới</h2>
-            <input id="title" placeholder="Tiêu đề nhật ký..." class="w-full bg-slate-800 p-4 rounded-2xl mb-3 text-lg">
-            <textarea id="content" rows="5" placeholder="Hôm nay bạn muốn chia sẻ gì với cả nhóm..." class="w-full bg-slate-800 p-4 rounded-3xl mb-4"></textarea>
-            <button onclick="createEntry()" class="w-full bg-emerald-600 hover:bg-emerald-700 py-4 rounded-2xl text-lg font-medium">Đăng nhật ký công khai</button>
+        <!-- Permanent Info -->
+        <div id="infoBoard" class="bg-slate-900 p-6 rounded-3xl mb-8 border border-emerald-500">
+            <h2 class="text-xl font-semibold mb-3 flex items-center gap-2">📌 Thông tin cố định</h2>
+            <div id="permanentContent" class="text-slate-300"></div>
         </div>
 
-        <!-- Danh sách nhật ký -->
-        <h3 class="text-xl font-semibold mb-4 flex items-center gap-2">
-            📜 Nhật ký gần đây
-            <span id="entryCount" class="text-sm bg-slate-700 px-3 py-1 rounded-full">0 entries</span>
-        </h3>
-        <div id="entries" class="space-y-6"></div>
+        <!-- Tạo log mới -->
+        <div class="bg-slate-900 p-8 rounded-3xl mb-10">
+            <h3 class="text-2xl font-semibold mb-6">✍️ Tạo bàn giao ca mới</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input id="title" placeholder="Tiêu đề ca (VD: Ca sáng 09/03)" class="bg-slate-800 p-4 rounded-2xl">
+                <select id="shift" class="bg-slate-800 p-4 rounded-2xl">
+                    <option value="Ca sáng">Ca sáng</option>
+                    <option value="Ca chiều">Ca chiều</option>
+                    <option value="Ca đêm">Ca đêm</option>
+                </select>
+                <select id="priority" class="bg-slate-800 p-4 rounded-2xl">
+                    <option value="green">🟢 Bình thường</option>
+                    <option value="yellow">🟡 Cảnh báo</option>
+                    <option value="blue">🔵 Quan trọng</option>
+                    <option value="red">🔴 Khẩn cấp</option>
+                </select>
+            </div>
+            <textarea id="content" rows="6" placeholder="Nội dung bàn giao chi tiết..." class="w-full mt-4 bg-slate-800 p-6 rounded-3xl"></textarea>
+            <button onclick="createLog()" class="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 py-5 rounded-3xl text-xl font-medium">Đăng bàn giao</button>
+        </div>
+
+        <!-- Search & Filter -->
+        <div class="flex gap-4 mb-6">
+            <input id="search" placeholder="🔍 Tìm kiếm..." onkeyup="filterLogs()" class="flex-1 bg-slate-800 p-4 rounded-2xl">
+            <select id="filterColor" onchange="filterLogs()" class="bg-slate-800 p-4 rounded-2xl">
+                <option value="">Tất cả màu</option>
+                <option value="green">🟢 Xanh</option>
+                <option value="yellow">🟡 Vàng</option>
+                <option value="blue">🔵 Xanh dương</option>
+                <option value="red">🔴 Đỏ</option>
+            </select>
+        </div>
+
+        <!-- Danh sách logs -->
+        <div id="logs" class="space-y-6"></div>
     </div>
 
     <script>
         const pb = new PocketBase('https://shared-diary-pocketbase-production.up.railway.app');
-        let currentUser = null;
 
-        async function loginOrRegister() {
-            // Tự động kiểm tra nếu đã đăng nhập
-            if (pb.authStore.isValid) {
-                showApp();
-            } else {
-                document.getElementById('auth').style.display = 'block'; // nếu bạn muốn giữ form đăng nhập cũ thì giữ
-            }
+        async function createLog() {
+            await pb.collection('entries').create({
+                title: document.getElementById('title').value,
+                shift: document.getElementById('shift').value,
+                priority: document.getElementById('priority').value,
+                content: document.getElementById('content').value
+            });
+            alert('✅ Đã đăng bàn giao!');
+            loadLogs();
         }
 
-        function showApp() {
-            currentUser = pb.authStore.model;
-            document.getElementById('user').textContent = currentUser.username || currentUser.email;
-            loadEntries();
-        }
-
-        async function createEntry() {
-            const title = document.getElementById('title').value.trim();
-            const content = document.getElementById('content').value.trim();
-            if (!content) return alert("Vui lòng viết nội dung!");
-
-            await pb.collection('entries').create({ title, content });
-            alert('✅ Đã đăng nhật ký thành công!');
-            document.getElementById('title').value = '';
-            document.getElementById('content').value = '';
-            loadEntries();
-        }
-
-        async function loadEntries() {
+        async function loadLogs() {
             const records = await pb.collection('entries').getFullList({ sort: '-created' });
-            document.getElementById('entryCount').textContent = `${records.length} entries`;
-
             let html = '';
             records.forEach(r => {
-                const isMine = currentUser && r.user === currentUser.id; // nếu sau này thêm relation user
+                const color = r.priority || 'green';
                 html += `
-                <div class="entry-card bg-slate-900 p-6 rounded-3xl">
-                    <div class="flex justify-between items-start mb-3">
-                        <div>
-                            <p class="font-medium text-emerald-400">@${currentUser ? currentUser.username : 'Người dùng'}</p>
-                            <p class="text-xs text-slate-400">${new Date(r.created).toLocaleDateString('vi-VN')} lúc ${new Date(r.created).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</p>
+                <div class="bg-slate-900 p-8 rounded-3xl border-l-8 border-${color}-500">
+                    <div class="flex justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="priority-dot ${color}"></span>
+                            <span class="font-bold">${r.shift}</span>
+                            <span class="text-emerald-400">${r.title}</span>
                         </div>
+                        <small class="text-slate-400">${new Date(r.created).toLocaleString('vi-VN')}</small>
                     </div>
-                    <h4 class="text-xl font-semibold mb-2">${r.title || 'Không tiêu đề'}</h4>
-                    <p class="text-slate-300 leading-relaxed">${r.content}</p>
+                    <p class="mt-6 text-slate-300 leading-relaxed">${r.content}</p>
                 </div>`;
             });
-            document.getElementById('entries').innerHTML = html || '<p class="text-center text-slate-400 py-12">Chưa có nhật ký nào. Hãy là người đầu tiên viết nhé! ✨</p>';
+            document.getElementById('logs').innerHTML = html || '<p class="text-center text-slate-400 py-20">Chưa có bàn giao nào. Hãy tạo cái đầu tiên!</p>';
+        }
+
+        function filterLogs() {
+            // Có thể mở rộng sau, hiện tại load lại
+            loadLogs();
         }
 
         async function logout() {
@@ -99,11 +112,11 @@
 
         // Khởi động
         window.onload = () => {
-            pb.authStore.onChange(() => {
-                if (pb.authStore.isValid) showApp();
-            });
-            if (pb.authStore.isValid) showApp();
-            else alert('Vui lòng đăng nhập trước!');
+            if (!pb.authStore.isValid) {
+                alert('Vui lòng đăng nhập trước!');
+                return;
+            }
+            loadLogs();
         };
     </script>
 </body>
