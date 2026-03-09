@@ -12,6 +12,8 @@
         .yellow { background: #eab308; }
         .blue { background: #3b82f6; }
         .red { background: #ef4444; }
+        .entry-card { transition: all 0.3s ease; }
+        .entry-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3); }
         .toast { animation: slideIn 0.3s ease; }
         @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
@@ -20,18 +22,15 @@
     <div class="max-w-6xl mx-auto p-6">
         <!-- Header -->
         <div class="flex justify-between items-center mb-10 bg-slate-900 p-6 rounded-3xl">
-            <h1 class="text-4xl font-bold flex items-center gap-3">
-                📋 Handover Log
-                <span class="text-sm bg-emerald-600 px-4 py-1 rounded-full">Nhóm ca làm việc</span>
-            </h1>
+            <h1 class="text-4xl font-bold flex items-center gap-3">📋 Handover Log</h1>
             <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-8 py-3 rounded-2xl font-medium text-sm">Đăng xuất</button>
         </div>
 
-        <!-- Form tạo handover mới -->
+        <!-- Form tạo mới -->
         <div class="bg-slate-900 p-8 rounded-3xl mb-10">
             <h2 class="text-2xl font-semibold mb-6">✍️ Tạo bàn giao ca mới</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <input id="title" placeholder="Tiêu đề ca (ví dụ: Ca sáng 09/03)" class="bg-slate-800 p-4 rounded-2xl text-lg">
+                <input id="title" placeholder="Tiêu đề ca..." class="bg-slate-800 p-4 rounded-2xl text-lg">
                 <select id="shift" class="bg-slate-800 p-4 rounded-2xl text-lg">
                     <option value="Ca 1">🌅 Ca 1</option>
                     <option value="Ca 2">🌞 Ca 2</option>
@@ -48,74 +47,43 @@
             <button onclick="createLog()" class="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 py-5 rounded-3xl text-xl font-medium">📤 Đăng bàn giao ngay</button>
         </div>
 
-        <!-- Tìm kiếm & Lọc -->
-        <div class="flex flex-col md:flex-row gap-4 mb-8">
-            <input id="search" placeholder="🔍 Tìm kiếm..." onkeyup="filterLogs()" class="flex-1 bg-slate-800 p-5 rounded-3xl text-lg">
-            <select id="filterShift" onchange="filterLogs()" class="bg-slate-800 p-5 rounded-3xl text-lg">
-                <option value="">Tất cả ca</option>
-                <option value="Ca 1">🌅 Ca 1</option>
-                <option value="Ca 2">🌞 Ca 2</option>
-                <option value="Ca 3">🌙 Ca 3</option>
-            </select>
-            <select id="filterPriority" onchange="filterLogs()" class="bg-slate-800 p-5 rounded-3xl text-lg">
-                <option value="">Tất cả mức độ</option>
-                <option value="green">🟢 Bình thường</option>
-                <option value="yellow">🟡 Cảnh báo</option>
-                <option value="blue">🔵 Quan trọng</option>
-                <option value="red">🔴 Khẩn cấp</option>
-            </select>
-        </div>
-
-        <!-- Danh sách handover -->
+        <!-- Danh sách -->
         <div id="logs" class="space-y-8"></div>
     </div>
 
-    <!-- Toast thông báo realtime -->
-    <div id="toast" class="hidden fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 toast">
-        <span id="toastText" class="font-medium"></span>
+    <!-- Modal Chỉnh sửa -->
+    <div id="editModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+        <div class="bg-slate-900 p-8 rounded-3xl w-full max-w-2xl mx-4">
+            <h3 class="text-2xl font-bold mb-6">✏️ Chỉnh sửa bàn giao</h3>
+            <input id="editTitle" class="w-full bg-slate-800 p-4 rounded-2xl mb-4 text-lg">
+            <textarea id="editContent" rows="6" class="w-full bg-slate-800 p-6 rounded-3xl mb-6"></textarea>
+            <div class="flex gap-4">
+                <button onclick="closeModal()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-4 rounded-2xl">Hủy</button>
+                <button onclick="saveEdit()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 py-4 rounded-2xl font-medium">Lưu thay đổi</button>
+            </div>
+        </div>
     </div>
+
+    <!-- Toast -->
+    <div id="toast" class="hidden fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 toast"></div>
 
     <script>
         const pb = new PocketBase('https://shared-diary-pocketbase-production.up.railway.app');
+        let currentEditId = null;
 
-        // Kiểm tra đăng nhập
         if (!pb.authStore.isValid) window.location.href = '/';
 
-        // ====================== REALTIME ======================
-        let realtimeSubscription = null;
-
-        function startRealtime() {
-            if (realtimeSubscription) return;
-            realtimeSubscription = pb.collection('entries').subscribe('*', (e) => {
-                if (e.action === 'create') {
-                    showToast('📢 Có bàn giao mới từ người dùng!');
-                    new Audio('https://cdn.jsdelivr.net/gh/iamcal/js-emoji@master/img-apple-64/1f4e3.png').play(); // âm thanh nhẹ (có thể thay)
-                    loadLogs();
-                }
-            });
-        }
-
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            document.getElementById('toastText').innerHTML = message;
-            toast.classList.remove('hidden');
-            setTimeout(() => toast.classList.add('hidden'), 4000);
-        }
-        // =====================================================
+        // Realtime
+        pb.collection('entries').subscribe('*', () => loadLogs());
 
         async function createLog() {
-            const title = document.getElementById('title').value.trim();
-            const content = document.getElementById('content').value.trim();
-            if (!content) return alert("Vui lòng nhập nội dung!");
-
             await pb.collection('entries').create({
-                title: title || 'Bàn giao ca',
+                title: document.getElementById('title').value || 'Bàn giao ca',
                 shift: document.getElementById('shift').value,
                 priority: document.getElementById('priority').value,
-                content: content
+                content: document.getElementById('content').value
             });
-
-            alert('✅ Đã đăng bàn giao thành công!');
+            alert('✅ Đã đăng!');
             document.getElementById('title').value = '';
             document.getElementById('content').value = '';
             loadLogs();
@@ -128,36 +96,63 @@
                 const color = r.priority || 'green';
                 html += `
                 <div class="entry-card bg-slate-900 p-8 rounded-3xl border-l-8 border-${color}-500">
-                    <div class="flex justify-between items-start mb-4">
+                    <div class="flex justify-between mb-4">
                         <div class="flex items-center gap-4">
                             <span class="priority-dot ${color}"></span>
-                            <span class="font-bold text-xl">${r.shift}</span>
-                            <span class="text-emerald-400 text-lg">${r.title}</span>
+                            <span class="font-bold">${r.shift}</span>
+                            <span class="text-emerald-400">${r.title}</span>
                         </div>
-                        <div class="text-right text-sm text-slate-400">
-                            ${new Date(r.created).toLocaleDateString('vi-VN')}<br>
-                            ${new Date(r.created).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}
-                        </div>
+                        <div class="text-xs text-slate-400">${new Date(r.created).toLocaleString('vi-VN')}</div>
                     </div>
-                    <p class="text-slate-300 text-lg leading-relaxed">${r.content.replace(/\n/g, '<br>')}</p>
+                    <p class="text-slate-300 text-lg">${r.content.replace(/\n/g, '<br>')}</p>
+                    <div class="flex gap-3 mt-6">
+                        <button onclick="editLog('${r.id}')" class="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1">✏️ Sửa</button>
+                        <button onclick="deleteLog('${r.id}')" class="text-red-400 hover:text-red-300 text-sm flex items-center gap-1">🗑️ Xóa</button>
+                    </div>
                 </div>`;
             });
-            document.getElementById('logs').innerHTML = html || '<div class="text-center py-20 text-slate-400 text-xl">Chưa có bàn giao nào. Hãy tạo cái đầu tiên!</div>';
+            document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-slate-400">Chưa có bàn giao nào...</p>';
         }
 
-        function filterLogs() { loadLogs(); }
+        function editLog(id) {
+            currentEditId = id;
+            // Lấy dữ liệu hiện tại (có thể tối ưu sau)
+            pb.collection('entries').getOne(id).then(r => {
+                document.getElementById('editTitle').value = r.title || '';
+                document.getElementById('editContent').value = r.content || '';
+                document.getElementById('editModal').classList.remove('hidden');
+            });
+        }
+
+        async function saveEdit() {
+            await pb.collection('entries').update(currentEditId, {
+                title: document.getElementById('editTitle').value,
+                content: document.getElementById('editContent').value
+            });
+            closeModal();
+            loadLogs();
+            alert('✅ Đã lưu thay đổi!');
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        async function deleteLog(id) {
+            if (confirm('Bạn có chắc muốn xóa bản ghi này không?')) {
+                await pb.collection('entries').delete(id);
+                loadLogs();
+                alert('🗑️ Đã xóa!');
+            }
+        }
 
         function logout() {
-            if (realtimeSubscription) pb.collection('entries').unsubscribe();
+            pb.collection('entries').unsubscribe();
             pb.authStore.clear();
             window.location.href = '/';
         }
 
-        // Khởi động
-        window.onload = () => {
-            loadLogs();
-            startRealtime();   // ← Bật realtime
-        };
+        window.onload = loadLogs;
     </script>
 </body>
 </html>
