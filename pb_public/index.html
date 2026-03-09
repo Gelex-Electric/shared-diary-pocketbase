@@ -14,64 +14,65 @@
 <body>
     <h1>📖 Nhật Ký Chung Nhóm</h1>
     <div id="auth">
-        <input id="email" placeholder="Email" type="email">
-        <input id="password" placeholder="Mật khẩu" type="password">
-        <button onclick="register()">Đăng ký</button>
-        <button onclick="login()">Đăng nhập</button>
-    </div>
-    <div id="app" style="display:none;">
-        <h2>Chào <span id="user"></span></h2>
-        <button onclick="logout()">Đăng xuất</button>
-        <h3>Viết entry mới</h3>
-        <input id="title" placeholder="Tiêu đề">
-        <textarea id="content" placeholder="Nội dung nhật ký..." rows="5"></textarea>
-        <button onclick="createEntry()">Đăng nhật ký</button>
-        
-        <h3>Danh sách nhật ký chung</h3>
-        <div id="entries"></div>
-    </div>
+    <input id="username" placeholder="Tên đăng nhập" type="text">
+    <input id="password" placeholder="Mật khẩu" type="password">
+    <button onclick="register()">Đăng ký</button>
+    <button onclick="login()">Đăng nhập</button>
+</div>
+<div id="app" style="display:none;">
+    <h2>Chào <span id="user"></span></h2>
+    <button onclick="logout()">Đăng xuất</button>
+    <h3>Viết entry mới</h3>
+    <input id="title" placeholder="Tiêu đề">
+    <textarea id="content" placeholder="Nội dung nhật ký..." rows="5"></textarea>
+    <button onclick="createEntry()">Đăng nhật ký</button>
+    
+    <h3>Danh sách nhật ký chung</h3>
+    <div id="entries"></div>
+</div>
 
-    <script>
-        const pb = new PocketBase('shared-diary-pocketbase-production.up.railway.app'); // ← thay URL sau khi deploy
+<script>
+    const pb = new PocketBase('https://shared-diary-pocketbase-production.up.railway.app');
 
-        async function register() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            await pb.collection('users').create({ email, password, passwordConfirm: password });
-            alert('Đăng ký thành công! Hãy đăng nhập.');
-        }
+    async function register() {
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const email = username + "@nhatkychung.local"; // tự động tạo email ẩn
+        await pb.collection('users').create({ username, email, password, passwordConfirm: password });
+        alert('Đăng ký thành công! Hãy đăng nhập.');
+    }
 
-        async function login() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            await pb.collection('users').authWithPassword(email, password);
-            document.getElementById('auth').style.display = 'none';
-            document.getElementById('app').style.display = 'block';
-            document.getElementById('user').textContent = pb.authStore.model.email;
-            loadEntries();
-        }
+    async function login() {
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        await pb.collection('users').authWithPassword(username, password);
+        document.getElementById('auth').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        document.getElementById('user').textContent = pb.authStore.model.username || pb.authStore.model.email;
+        loadEntries();
+    }
 
-        async function logout() {
-            pb.authStore.clear();
-            location.reload();
-        }
+    async function logout() {
+        pb.authStore.clear();
+        location.reload();
+    }
 
-        async function createEntry() {
-            const title = document.getElementById('title').value;
-            const content = document.getElementById('content').value;
-            await pb.collection('entries').create({ title, content });
-            alert('Đã đăng nhật ký!');
-            loadEntries();
-        }
+    async function createEntry() {
+        const title = document.getElementById('title').value;
+        const content = document.getElementById('content').value;
+        await pb.collection('entries').create({ title, content });
+        alert('Đã đăng nhật ký!');
+        loadEntries();
+    }
 
-        async function loadEntries() {
-            const records = await pb.collection('entries').getFullList({ sort: '-created' });
-            let html = '';
-            records.forEach(r => {
-                html += `<div class="entry"><strong>${r.title || 'Không tiêu đề'}</strong><p>${r.content}</p><small>${new Date(r.created).toLocaleString('vi-VN')}</small></div>`;
-            });
-            document.getElementById('entries').innerHTML = html;
-        }
-    </script>
+    async function loadEntries() {
+        const records = await pb.collection('entries').getFullList({ sort: '-created' });
+        let html = '';
+        records.forEach(r => {
+            html += `<div class="entry"><strong>${r.title || 'Không tiêu đề'}</strong><p>${r.content}</p><small>${new Date(r.created).toLocaleString('vi-VN')}</small></div>`;
+        });
+        document.getElementById('entries').innerHTML = html;
+    }
+</script>
 </body>
 </html>
