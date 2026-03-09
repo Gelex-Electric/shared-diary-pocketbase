@@ -1,32 +1,30 @@
 <!DOCTYPE html>
-<html lang="vi" class="light">  <!-- Mặc định light mode -->
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Handover Log</title>
     <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',  // Kích hoạt dark mode bằng class 'dark' trên html
-        }
-    </script>
     <style>
-        .entry-card { transition: all 0.3s ease; }
-        .entry-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
+        .entry-card { transition: all 0.3s ease; cursor: pointer; }
+        .entry-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
         .scroll-list { max-height: calc(100vh - 380px); overflow-y: auto; }
+
+        /* Màu cố định cho từng khu vực (dựa trên tên đầy đủ) */
+        .kcn-KCN Tiền Hải { background-color: #dcfce7; color: #166534; }
+        .kcn-KCN Phong Điền { background-color: #dbeafe; color: #1e40af; }
+        .kcn-KCN Thuận Thành I { background-color: #fef3c7; color: #92400e; }
+        .kcn-KCN Yên Mỹ { background-color: #fee2e2; color: #991b1b; }
+        .kcn-KCN số 3 { background-color: #f3e8ff; color: #6b21a8; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen">
     <div class="max-w-7xl mx-auto p-6">
-        <!-- Header -->
+        <!-- Header (không còn toggle theme) -->
         <div class="flex justify-between items-center mb-8 bg-white shadow rounded-3xl p-6">
             <h1 class="text-4xl font-bold text-gray-800">📋 Handover Log</h1>
             <div class="flex items-center gap-4">
-                <!-- Nút toggle Light/Dark -->
-                <button id="themeToggle" onclick="toggleTheme()" class="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition">
-                    <span id="themeIcon">☀️</span>
-                </button>
                 <button onclick="refreshList()" class="bg-gray-200 hover:bg-gray-300 px-6 py-3 rounded-2xl">🔄 Refresh</button>
                 <button onclick="logout()" class="bg-red-500 hover:bg-red-600 px-8 py-3 rounded-2xl font-medium text-white">Đăng xuất</button>
             </div>
@@ -55,11 +53,22 @@
             </div>
         </div>
 
-        <!-- BLOCK 2: Danh sách cuộn -->
-        <div id="logs" class="scroll-list space-y-6"></div>
+        <!-- BLOCK 2: Danh sách ngắn gọn -->
+        <div id="logs" class="scroll-list space-y-4"></div>
     </div>
 
-    <!-- MODAL TẠO / SỬA -->
+    <!-- MODAL CHI TIẾT (click vào bản ghi) -->
+    <div id="detailModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-3xl w-full max-w-4xl mx-4 max-h-[95vh] overflow-auto shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-bold text-gray-800">Chi tiết bàn giao</h3>
+                <button onclick="closeDetailModal()" class="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+            </div>
+            <div id="detailContent" class="space-y-6"></div>
+        </div>
+    </div>
+
+    <!-- MODAL TẠO / SỬA (copy phần nội dung từ code cũ nếu cần, tôi giữ placeholder) -->
     <div id="modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
         <div class="bg-white p-8 rounded-3xl w-full max-w-4xl mx-4 max-h-[95vh] overflow-auto shadow-2xl">
             <h3 id="modalTitle" class="text-2xl font-bold mb-6 text-gray-800">✍️ Tạo bàn giao mới</h3>
@@ -74,6 +83,7 @@
                 </select>
             </div>
 
+            <!-- Các trường còn lại (copy từ code cũ nếu thiếu) -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <input id="main_duty" placeholder="Trực chính" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
                 <input id="sub_duty" placeholder="Trực phụ" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
@@ -108,34 +118,45 @@
         const pb = new PocketBase('https://getc.up.railway.app');
         let currentEditId = null;
         let currentFilter = { area: '', date: '' };
-        const areas = ['KV1','KV2','KV3','KV4','KV5','KV6','KV7','KV8','KV9','KV10'];
+
+        // Danh sách khu vực đầy đủ theo yêu cầu
+        const areas = [
+            'KCN Tiền Hải',
+            'KCN Phong Điền',
+            'KCN Thuận Thành I',
+            'KCN Yên Mỹ',
+            'KCN số 3'
+        ];
 
         if (!pb.authStore.isValid) window.location.href = '/';
 
         pb.collection('handovers').subscribe('*', () => loadLogs());
 
-        // Render options Khu vực
         function renderAreaOptions() {
             const filterSelect = document.getElementById('filterArea');
             filterSelect.innerHTML = '<option value="">Tất cả khu vực</option>';
-            areas.forEach(kv => {
+            areas.forEach(kcn => {
                 const opt = document.createElement('option');
-                opt.value = kv; opt.textContent = kv;
+                opt.value = kcn;
+                opt.textContent = kcn;
                 filterSelect.appendChild(opt);
             });
 
             const modalSelect = document.getElementById('area');
-            modalSelect.innerHTML = '';
-            areas.forEach(kv => {
-                const opt = document.createElement('option');
-                opt.value = kv; opt.textContent = kv;
-                modalSelect.appendChild(opt);
-            });
+            if (modalSelect) {
+                modalSelect.innerHTML = '';
+                areas.forEach(kcn => {
+                    const opt = document.createElement('option');
+                    opt.value = kcn;
+                    opt.textContent = kcn;
+                    modalSelect.appendChild(opt);
+                });
+            }
         }
 
         async function loadLogs() {
             const filterParts = [];
-            if (currentFilter.area) filterParts.push(`area = '${currentFilter.area}'`);
+            if (currentFilter.area) filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
             if (currentFilter.date) filterParts.push(`date = '${currentFilter.date}'`);
 
             const options = {
@@ -146,45 +167,30 @@
             try {
                 const records = await pb.collection('handovers').getFullList(options);
                 let html = '';
+
                 records.forEach(r => {
-                    const situationsHTML = (r.situations || []).map(s => `
-                        <tr class="border-b border-gray-200">
-                            <td class="p-3 text-emerald-600">${s.time || '--:--'}</td>
-                            <td class="p-3">${s.content || ''}</td>
-                        </tr>`).join('');
+                    const areaClass = `kcn-${r.area || areas[0]}`;
+                    const mainSub = [r.main_duty, r.sub_duty].filter(Boolean).join(' / ') || '-';
 
                     html += `
-                    <div class="entry-card bg-white shadow rounded-3xl p-8 relative">
-                        <div class="flex justify-between items-start mb-6">
+                    <div class="entry-card bg-white shadow rounded-3xl p-6 flex justify-between items-center"
+                         onclick="showDetail('${r.id}')">
+                        <div class="flex items-center gap-6 flex-1">
+                            <div class="px-4 py-2 rounded-lg font-bold text-lg ${areaClass}">
+                                ${r.area || 'Chưa có khu vực'}
+                            </div>
                             <div>
-                                <div class="text-2xl font-bold text-gray-800">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}</div>
-                                <div class="text-emerald-600 text-lg">${r.area || '?'} - ${r.shift || '?'}</div>
+                                <div class="font-medium text-gray-800">
+                                    ${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}
+                                </div>
+                                <div class="text-sm text-gray-600">${r.shift || '?'}</div>
                             </div>
-                            <div class="text-right text-xs text-gray-500">
-                                ${new Date(r.created).toLocaleString('vi-VN')}
+                            <div class="text-gray-700 flex-1">
+                                Trực: ${mainSub}
                             </div>
                         </div>
-
-                        <div class="grid grid-cols-2 gap-4 text-sm mb-6">
-                            <div><span class="text-gray-600">Trực chính:</span> ${r.main_duty || '-'}</div>
-                            <div><span class="text-gray-600">Trực phụ:</span> ${r.sub_duty || '-'}</div>
-                            <div><span class="text-gray-600">Trực chính điện lực:</span> ${r.main_power || '-'}</div>
-                            <div><span class="text-gray-600">Trực phụ điện lực:</span> ${r.sub_power || '-'}</div>
-                        </div>
-
-                        ${situationsHTML ? `
-                        <div class="mb-6">
-                            <div class="text-sm text-gray-600 mb-2">Tình hình trong ca</div>
-                            <table class="w-full text-sm border-collapse">${situationsHTML}</table>
-                        </div>` : ''}
-
-                        ${r.notes ? `<div class="mb-4"><span class="text-gray-600">Lưu ý:</span> ${r.notes}</div>` : ''}
-                        ${r.equipment ? `<div class="mb-4"><span class="text-gray-600">Trang bị:</span> ${r.equipment}</div>` : ''}
-                        ${r.opinions ? `<div><span class="text-gray-600">Ý kiến:</span> ${r.opinions}</div>` : ''}
-
-                        <div class="absolute bottom-8 right-8 flex gap-4">
-                            <button onclick="editLog('${r.id}')" class="text-blue-600 hover:text-blue-800">✏️ Sửa</button>
-                            <button onclick="deleteLog('${r.id}')" class="text-red-600 hover:text-red-800">🗑️ Xóa</button>
+                        <div class="text-xs text-gray-500 text-right">
+                            ${new Date(r.created).toLocaleString('vi-VN', {hour: '2-digit', minute:'2-digit'})}
                         </div>
                     </div>`;
                 });
@@ -192,10 +198,70 @@
                 document.getElementById('logs').innerHTML = html || 
                     '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào. Hãy tạo cái đầu tiên!</p>';
             } catch (err) {
-                console.error('❌ Lỗi loadLogs:', err);
+                console.error('Lỗi loadLogs:', err);
                 document.getElementById('logs').innerHTML = 
                     `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu: ${err.message || 'Kiểm tra console'}</p>`;
             }
+        }
+
+        function showDetail(id) {
+            pb.collection('handovers').getOne(id).then(r => {
+                const situationsHTML = (r.situations || []).map(s => `
+                    <tr class="border-b border-gray-200">
+                        <td class="p-3 text-emerald-600">${s.time || '--:--'}</td>
+                        <td class="p-3">${s.content || ''}</td>
+                    </tr>`).join('');
+
+                const content = `
+                    <div class="space-y-6">
+                        <div class="flex justify-between">
+                            <div>
+                                <div class="text-3xl font-bold text-gray-800">${r.area} - ${r.shift}</div>
+                                <div class="text-xl text-gray-600 mt-1">
+                                    ${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}
+                                </div>
+                            </div>
+                            <div class="text-right text-gray-500">
+                                Tạo lúc: ${new Date(r.created).toLocaleString('vi-VN')}
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-6 text-lg">
+                            <div><strong>Trực chính:</strong> ${r.main_duty || '-'}</div>
+                            <div><strong>Trực phụ:</strong> ${r.sub_duty || '-'}</div>
+                            <div><strong>Trực chính điện lực:</strong> ${r.main_power || '-'}</div>
+                            <div><strong>Trực phụ điện lực:</strong> ${r.sub_power || '-'}</div>
+                        </div>
+
+                        ${situationsHTML ? `
+                        <div>
+                            <h4 class="font-semibold text-gray-700 mb-2">Tình hình trong ca</h4>
+                            <table class="w-full text-sm border-collapse">${situationsHTML}</table>
+                        </div>` : ''}
+
+                        ${r.notes ? `<div><strong>Lưu ý:</strong> ${r.notes}</div>` : ''}
+                        ${r.equipment ? `<div><strong>Trang bị:</strong> ${r.equipment}</div>` : ''}
+                        ${r.opinions ? `<div><strong>Ý kiến:</strong> ${r.opinions}</div>` : ''}
+
+                        <div class="flex gap-4 mt-8">
+                            <button onclick="editLog('${r.id}'); closeDetailModal()" 
+                                    class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl">
+                                ✏️ Sửa
+                            </button>
+                            <button onclick="deleteLog('${r.id}'); closeDetailModal()" 
+                                    class="flex-1 bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl">
+                                🗑️ Xóa
+                            </button>
+                        </div>
+                    </div>`;
+
+                document.getElementById('detailContent').innerHTML = content;
+                document.getElementById('detailModal').classList.remove('hidden');
+            }).catch(() => alert('Không tìm thấy bản ghi!'));
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.add('hidden');
         }
 
         function applyFilter() {
@@ -204,39 +270,7 @@
             loadLogs();
         }
 
-        // Theme toggle
-        function toggleTheme() {
-            const html = document.documentElement;
-            if (html.classList.contains('dark')) {
-                html.classList.remove('dark');
-                html.classList.add('light');
-                document.getElementById('themeIcon').textContent = '☀️';
-                localStorage.setItem('theme', 'light');
-            } else {
-                html.classList.remove('light');
-                html.classList.add('dark');
-                document.getElementById('themeIcon').textContent = '🌙';
-                localStorage.setItem('theme', 'dark');
-            }
-            loadLogs();  // Reload để áp dụng style mới
-        }
-
-        // Load theme từ localStorage hoặc mặc định light
-        window.addEventListener('load', () => {
-            const savedTheme = localStorage.getItem('theme');
-            const html = document.documentElement;
-            if (savedTheme === 'dark') {
-                html.classList.add('dark');
-                html.classList.remove('light');
-                document.getElementById('themeIcon').textContent = '🌙';
-            } else {
-                html.classList.add('light');
-                html.classList.remove('dark');
-                document.getElementById('themeIcon').textContent = '☀️';
-            }
-        });
-
-        // Các hàm modal, save, edit, delete... giữ nguyên như code cũ của bạn
+        // Các hàm modal tạo/sửa, bảng phụ (copy từ code cũ nếu thiếu)
         let situationRows = [];
 
         function openCreateModal() {
@@ -247,30 +281,9 @@
             document.getElementById('modal').classList.remove('hidden');
         }
 
-        function editLog(id) {
-            currentEditId = id;
-            document.getElementById('modalTitle').textContent = '✏️ Chỉnh sửa bàn giao';
-            document.getElementById('saveBtn').textContent = 'Lưu thay đổi';
-            pb.collection('handovers').getOne(id).then(r => {
-                document.getElementById('date').value = r.date || '';
-                document.getElementById('area').value = r.area || 'KV1';
-                document.getElementById('shift').value = r.shift || 'Ca 1';
-                document.getElementById('main_duty').value = r.main_duty || '';
-                document.getElementById('sub_duty').value = r.sub_duty || '';
-                document.getElementById('main_power').value = r.main_power || '';
-                document.getElementById('sub_power').value = r.sub_power || '';
-                document.getElementById('notes').value = r.notes || '';
-                document.getElementById('equipment').value = r.equipment || '';
-                document.getElementById('opinions').value = r.opinions || '';
-                situationRows = r.situations || [];
-                renderSituationTable();
-                document.getElementById('modal').classList.remove('hidden');
-            }).catch(() => alert('Không tìm thấy bản ghi!'));
-        }
-
         function clearModal() {
             document.getElementById('date').value = '';
-            document.getElementById('area').value = 'KV1';
+            document.getElementById('area').value = areas[0] || '';
             document.getElementById('shift').value = 'Ca 1';
             document.getElementById('main_duty').value = '';
             document.getElementById('sub_duty').value = '';
@@ -289,8 +302,8 @@
             situationRows.forEach((row, i) => {
                 tbody.innerHTML += `
                     <tr>
-                        <td><input type="time" value="${row.time || ''}" onchange="situationRows[${i}].time = this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-emerald-400"></td>
-                        <td><input type="text" value="${row.content || ''}" onchange="situationRows[${i}].content = this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-emerald-400"></td>
+                        <td><input type="time" value="${row.time || ''}" onchange="situationRows[${i}].time = this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full"></td>
+                        <td><input type="text" value="${row.content || ''}" onchange="situationRows[${i}].content = this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full"></td>
                         <td><button onclick="removeSituationRow(${i})" class="text-red-600 hover:text-red-800 text-xl">×</button></td>
                     </tr>`;
             });
@@ -340,6 +353,27 @@
 
         function closeModal() {
             document.getElementById('modal').classList.add('hidden');
+        }
+
+        function editLog(id) {
+            currentEditId = id;
+            document.getElementById('modalTitle').textContent = '✏️ Chỉnh sửa bàn giao';
+            document.getElementById('saveBtn').textContent = 'Lưu thay đổi';
+            pb.collection('handovers').getOne(id).then(r => {
+                document.getElementById('date').value = r.date || '';
+                document.getElementById('area').value = r.area || areas[0];
+                document.getElementById('shift').value = r.shift || 'Ca 1';
+                document.getElementById('main_duty').value = r.main_duty || '';
+                document.getElementById('sub_duty').value = r.sub_duty || '';
+                document.getElementById('main_power').value = r.main_power || '';
+                document.getElementById('sub_power').value = r.sub_power || '';
+                document.getElementById('notes').value = r.notes || '';
+                document.getElementById('equipment').value = r.equipment || '';
+                document.getElementById('opinions').value = r.opinions || '';
+                situationRows = r.situations || [];
+                renderSituationTable();
+                document.getElementById('modal').classList.remove('hidden');
+            }).catch(() => alert('Không tìm thấy bản ghi!'));
         }
 
         async function deleteLog(id) {
