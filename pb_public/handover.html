@@ -12,8 +12,8 @@
         .yellow { background: #eab308; }
         .blue { background: #3b82f6; }
         .red { background: #ef4444; }
-        .entry-card { transition: all 0.3s ease; }
-        .entry-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3); }
+        .toast { animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-200 min-h-screen">
@@ -24,25 +24,19 @@
                 📋 Handover Log
                 <span class="text-sm bg-emerald-600 px-4 py-1 rounded-full">Nhóm ca làm việc</span>
             </h1>
-            <button onclick="logout()" 
-                    class="bg-red-600 hover:bg-red-700 px-8 py-3 rounded-2xl font-medium text-sm">
-                Đăng xuất
-            </button>
+            <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-8 py-3 rounded-2xl font-medium text-sm">Đăng xuất</button>
         </div>
 
         <!-- Form tạo handover mới -->
         <div class="bg-slate-900 p-8 rounded-3xl mb-10">
             <h2 class="text-2xl font-semibold mb-6">✍️ Tạo bàn giao ca mới</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <input id="title" placeholder="Tiêu đề ca (ví dụ: Ca sáng 09/03)" 
-                       class="bg-slate-800 p-4 rounded-2xl text-lg">
-                
+                <input id="title" placeholder="Tiêu đề ca (ví dụ: Ca sáng 09/03)" class="bg-slate-800 p-4 rounded-2xl text-lg">
                 <select id="shift" class="bg-slate-800 p-4 rounded-2xl text-lg">
                     <option value="Ca sáng">🌅 Ca sáng</option>
                     <option value="Ca chiều">🌞 Ca chiều</option>
                     <option value="Ca đêm">🌙 Ca đêm</option>
                 </select>
-
                 <select id="priority" class="bg-slate-800 p-4 rounded-2xl text-lg">
                     <option value="green">🟢 Bình thường</option>
                     <option value="yellow">🟡 Cảnh báo</option>
@@ -50,21 +44,13 @@
                     <option value="red">🔴 Khẩn cấp</option>
                 </select>
             </div>
-
-            <textarea id="content" rows="6" placeholder="Nội dung bàn giao chi tiết... (sự cố, việc cần theo dõi, khách hàng...)"
-                      class="w-full mt-6 bg-slate-800 p-6 rounded-3xl text-lg"></textarea>
-
-            <button onclick="createLog()" 
-                    class="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 py-5 rounded-3xl text-xl font-medium">
-                📤 Đăng bàn giao ngay
-            </button>
+            <textarea id="content" rows="6" placeholder="Nội dung bàn giao chi tiết..." class="w-full mt-6 bg-slate-800 p-6 rounded-3xl text-lg"></textarea>
+            <button onclick="createLog()" class="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 py-5 rounded-3xl text-xl font-medium">📤 Đăng bàn giao ngay</button>
         </div>
 
         <!-- Tìm kiếm & Lọc -->
         <div class="flex flex-col md:flex-row gap-4 mb-8">
-            <input id="search" placeholder="🔍 Tìm kiếm nội dung hoặc tiêu đề..." 
-                   onkeyup="filterLogs()" 
-                   class="flex-1 bg-slate-800 p-5 rounded-3xl text-lg">
+            <input id="search" placeholder="🔍 Tìm kiếm..." onkeyup="filterLogs()" class="flex-1 bg-slate-800 p-5 rounded-3xl text-lg">
             <select id="filterShift" onchange="filterLogs()" class="bg-slate-800 p-5 rounded-3xl text-lg">
                 <option value="">Tất cả ca</option>
                 <option value="Ca sáng">🌅 Ca sáng</option>
@@ -84,18 +70,43 @@
         <div id="logs" class="space-y-8"></div>
     </div>
 
+    <!-- Toast thông báo realtime -->
+    <div id="toast" class="hidden fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 toast">
+        <span id="toastText" class="font-medium"></span>
+    </div>
+
     <script>
         const pb = new PocketBase('https://shared-diary-pocketbase-production.up.railway.app');
 
         // Kiểm tra đăng nhập
-        if (!pb.authStore.isValid) {
-            window.location.href = '/';
+        if (!pb.authStore.isValid) window.location.href = '/';
+
+        // ====================== REALTIME ======================
+        let realtimeSubscription = null;
+
+        function startRealtime() {
+            if (realtimeSubscription) return;
+            realtimeSubscription = pb.collection('entries').subscribe('*', (e) => {
+                if (e.action === 'create') {
+                    showToast('📢 Có bàn giao mới từ người dùng!');
+                    new Audio('https://cdn.jsdelivr.net/gh/iamcal/js-emoji@master/img-apple-64/1f4e3.png').play(); // âm thanh nhẹ (có thể thay)
+                    loadLogs();
+                }
+            });
         }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastText').innerHTML = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 4000);
+        }
+        // =====================================================
 
         async function createLog() {
             const title = document.getElementById('title').value.trim();
             const content = document.getElementById('content').value.trim();
-            if (!content) return alert("Vui lòng nhập nội dung bàn giao!");
+            if (!content) return alert("Vui lòng nhập nội dung!");
 
             await pb.collection('entries').create({
                 title: title || 'Bàn giao ca',
@@ -111,11 +122,7 @@
         }
 
         async function loadLogs() {
-            const records = await pb.collection('entries').getFullList({ 
-                sort: '-created',
-                expand: 'user' 
-            });
-
+            const records = await pb.collection('entries').getFullList({ sort: '-created' });
             let html = '';
             records.forEach(r => {
                 const color = r.priority || 'green';
@@ -135,27 +142,21 @@
                     <p class="text-slate-300 text-lg leading-relaxed">${r.content.replace(/\n/g, '<br>')}</p>
                 </div>`;
             });
-
-            document.getElementById('logs').innerHTML = html || `
-                <div class="text-center py-20 text-slate-400 text-xl">
-                    Chưa có bàn giao nào.<br>
-                    Hãy tạo bàn giao đầu tiên!
-                </div>`;
+            document.getElementById('logs').innerHTML = html || '<div class="text-center py-20 text-slate-400 text-xl">Chưa có bàn giao nào. Hãy tạo cái đầu tiên!</div>';
         }
 
-        function filterLogs() {
-            // Hiện tại load lại toàn bộ (có thể tối ưu sau)
-            loadLogs();
-        }
+        function filterLogs() { loadLogs(); }
 
         function logout() {
+            if (realtimeSubscription) pb.collection('entries').unsubscribe();
             pb.authStore.clear();
             window.location.href = '/';
         }
 
-        // Khởi động trang
+        // Khởi động
         window.onload = () => {
             loadLogs();
+            startRealtime();   // ← Bật realtime
         };
     </script>
 </body>
