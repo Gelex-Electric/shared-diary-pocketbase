@@ -8,3 +8,4 @@ EXPOSE 8090
 
 # CMD đúng cách cho image muchobien (rất quan trọng!)
 CMD ["serve", "--http=0.0.0.0:8090", "--dir=/pb_data", "--publicDir=/pb_public"]
+# Trigger redeploy để lấy token pbinstall mới - 2026-03-09
