@@ -104,8 +104,8 @@
                     </div>
                     <p class="text-slate-300 text-lg">${r.content.replace(/\n/g, '<br>')}</p>
                     <div class="flex gap-4 mt-6">
-                        <button onclick="editLog('${r.id}')" class="text-blue-400 hover:text-blue-300 font-medium">✏️ Sửa</button>
-                        <button onclick="deleteLog('${r.id}')" class="text-red-400 hover:text-red-300 font-medium">🗑️ Xóa</button>
+                        <button data-action="edit" data-id="${r.id}" class="text-blue-400 hover:text-blue-300 font-medium">✏️ Sửa</button>
+                        <button data-action="delete" data-id="${r.id}" class="text-red-400 hover:text-red-300 font-medium">🗑️ Xóa</button>
                     </div>
                 </div>`;
             });
@@ -123,14 +123,20 @@
         }
 
         async function saveEdit() {
+            if (!currentEditId) return;
             console.log("💾 Đang lưu chỉnh sửa ID:", currentEditId);
-            await pb.collection('entries').update(currentEditId, {
-                title: document.getElementById('editTitle').value,
-                content: document.getElementById('editContent').value
-            });
-            closeModal();
-            loadLogs();
-            alert('✅ Đã lưu thay đổi!');
+            try {
+                await pb.collection('entries').update(currentEditId, {
+                    title: document.getElementById('editTitle').value,
+                    content: document.getElementById('editContent').value
+                });
+                closeModal();
+                loadLogs();
+                alert('✅ Đã lưu thay đổi!');
+            } catch (error) {
+                console.error(error);
+                alert('❌ Không thể lưu thay đổi. Vui lòng thử lại.');
+            }
         }
 
         function closeModal() {
@@ -140,9 +146,14 @@
         async function deleteLog(id) {
             console.log("🗑️ Đang xóa ID:", id);
             if (!confirm('Xác nhận xóa bản ghi này?')) return;
-            await pb.collection('entries').delete(id);
-            loadLogs();
-            alert('🗑️ Đã xóa!');
+            try {
+                await pb.collection('entries').delete(id);
+                loadLogs();
+                alert('🗑️ Đã xóa!');
+            } catch (error) {
+                console.error(error);
+                alert('❌ Không thể xóa bản ghi. Vui lòng thử lại.');
+            }
         }
 
         function refreshList() {
@@ -155,6 +166,23 @@
             pb.authStore.clear();
             window.location.href = '/';
         }
+
+        document.getElementById('logs').addEventListener('click', (event) => {
+            const button = event.target.closest('button[data-action]');
+            if (!button) return;
+
+            const { action, id } = button.dataset;
+            if (!id) return;
+
+            if (action === 'edit') {
+                editLog(id);
+                return;
+            }
+
+            if (action === 'delete') {
+                deleteLog(id);
+            }
+        });
 
         window.onload = () => {
             loadLogs();
