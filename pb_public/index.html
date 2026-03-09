@@ -5,74 +5,106 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nhật Ký Chung - Nhóm 20 người</title>
     <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .entry { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px; }
-        button, input, textarea { margin: 5px; padding: 10px; }
+        body { background: #0f172a; color: #e2e8f0; }
+        .entry-card { transition: all 0.3s; }
+        .entry-card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3); }
     </style>
 </head>
-<body>
-    <h1>📖 Nhật Ký Chung Nhóm</h1>
-    <div id="auth">
-    <input id="username" placeholder="Tên đăng nhập" type="text">
-    <input id="password" placeholder="Mật khẩu" type="password">
-    <button onclick="register()">Đăng ký</button>
-    <button onclick="login()">Đăng nhập</button>
-</div>
-<div id="app" style="display:none;">
-    <h2>Chào <span id="user"></span></h2>
-    <button onclick="logout()">Đăng xuất</button>
-    <h3>Viết entry mới</h3>
-    <input id="title" placeholder="Tiêu đề">
-    <textarea id="content" placeholder="Nội dung nhật ký..." rows="5"></textarea>
-    <button onclick="createEntry()">Đăng nhật ký</button>
-    
-    <h3>Danh sách nhật ký chung</h3>
-    <div id="entries"></div>
-</div>
+<body class="min-h-screen p-4">
+    <div class="max-w-3xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8 bg-slate-900 p-4 rounded-2xl">
+            <h1 class="text-3xl font-bold flex items-center gap-3">
+                📖 Nhật Ký Chung
+                <span class="text-sm bg-emerald-600 px-3 py-1 rounded-full text-white">20 người</span>
+            </h1>
+            <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-xl text-sm font-medium">Đăng xuất</button>
+        </div>
 
-<script>
-    const pb = new PocketBase('https://shared-diary-pocketbase-production.up.railway.app');
+        <!-- Form viết nhật ký -->
+        <div class="bg-slate-900 p-6 rounded-3xl mb-8">
+            <h2 class="text-xl font-semibold mb-4">✍️ Viết entry mới</h2>
+            <input id="title" placeholder="Tiêu đề nhật ký..." class="w-full bg-slate-800 p-4 rounded-2xl mb-3 text-lg">
+            <textarea id="content" rows="5" placeholder="Hôm nay bạn muốn chia sẻ gì với cả nhóm..." class="w-full bg-slate-800 p-4 rounded-3xl mb-4"></textarea>
+            <button onclick="createEntry()" class="w-full bg-emerald-600 hover:bg-emerald-700 py-4 rounded-2xl text-lg font-medium">Đăng nhật ký công khai</button>
+        </div>
 
-    async function register() {
-        const username = document.getElementById('username').value.trim();
-        const password = document.getElementById('password').value;
-        const email = username + "@nhatkychung.local"; // tự động tạo email ẩn
-        await pb.collection('users').create({ username, email, password, passwordConfirm: password });
-        alert('Đăng ký thành công! Hãy đăng nhập.');
-    }
+        <!-- Danh sách nhật ký -->
+        <h3 class="text-xl font-semibold mb-4 flex items-center gap-2">
+            📜 Nhật ký gần đây
+            <span id="entryCount" class="text-sm bg-slate-700 px-3 py-1 rounded-full">0 entries</span>
+        </h3>
+        <div id="entries" class="space-y-6"></div>
+    </div>
 
-    async function login() {
-        const username = document.getElementById('username').value.trim();
-        const password = document.getElementById('password').value;
-        await pb.collection('users').authWithPassword(username, password);
-        document.getElementById('auth').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
-        document.getElementById('user').textContent = pb.authStore.model.username || pb.authStore.model.email;
-        loadEntries();
-    }
+    <script>
+        const pb = new PocketBase('https://shared-diary-pocketbase-production.up.railway.app');
+        let currentUser = null;
 
-    async function logout() {
-        pb.authStore.clear();
-        location.reload();
-    }
+        async function loginOrRegister() {
+            // Tự động kiểm tra nếu đã đăng nhập
+            if (pb.authStore.isValid) {
+                showApp();
+            } else {
+                document.getElementById('auth').style.display = 'block'; // nếu bạn muốn giữ form đăng nhập cũ thì giữ
+            }
+        }
 
-    async function createEntry() {
-        const title = document.getElementById('title').value;
-        const content = document.getElementById('content').value;
-        await pb.collection('entries').create({ title, content });
-        alert('Đã đăng nhật ký!');
-        loadEntries();
-    }
+        function showApp() {
+            currentUser = pb.authStore.model;
+            document.getElementById('user').textContent = currentUser.username || currentUser.email;
+            loadEntries();
+        }
 
-    async function loadEntries() {
-        const records = await pb.collection('entries').getFullList({ sort: '-created' });
-        let html = '';
-        records.forEach(r => {
-            html += `<div class="entry"><strong>${r.title || 'Không tiêu đề'}</strong><p>${r.content}</p><small>${new Date(r.created).toLocaleString('vi-VN')}</small></div>`;
-        });
-        document.getElementById('entries').innerHTML = html;
-    }
-</script>
+        async function createEntry() {
+            const title = document.getElementById('title').value.trim();
+            const content = document.getElementById('content').value.trim();
+            if (!content) return alert("Vui lòng viết nội dung!");
+
+            await pb.collection('entries').create({ title, content });
+            alert('✅ Đã đăng nhật ký thành công!');
+            document.getElementById('title').value = '';
+            document.getElementById('content').value = '';
+            loadEntries();
+        }
+
+        async function loadEntries() {
+            const records = await pb.collection('entries').getFullList({ sort: '-created' });
+            document.getElementById('entryCount').textContent = `${records.length} entries`;
+
+            let html = '';
+            records.forEach(r => {
+                const isMine = currentUser && r.user === currentUser.id; // nếu sau này thêm relation user
+                html += `
+                <div class="entry-card bg-slate-900 p-6 rounded-3xl">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <p class="font-medium text-emerald-400">@${currentUser ? currentUser.username : 'Người dùng'}</p>
+                            <p class="text-xs text-slate-400">${new Date(r.created).toLocaleDateString('vi-VN')} lúc ${new Date(r.created).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</p>
+                        </div>
+                    </div>
+                    <h4 class="text-xl font-semibold mb-2">${r.title || 'Không tiêu đề'}</h4>
+                    <p class="text-slate-300 leading-relaxed">${r.content}</p>
+                </div>`;
+            });
+            document.getElementById('entries').innerHTML = html || '<p class="text-center text-slate-400 py-12">Chưa có nhật ký nào. Hãy là người đầu tiên viết nhé! ✨</p>';
+        }
+
+        async function logout() {
+            pb.authStore.clear();
+            location.reload();
+        }
+
+        // Khởi động
+        window.onload = () => {
+            pb.authStore.onChange(() => {
+                if (pb.authStore.isValid) showApp();
+            });
+            if (pb.authStore.isValid) showApp();
+            else alert('Vui lòng đăng nhập trước!');
+        };
+    </script>
 </body>
 </html>
