@@ -104,7 +104,7 @@
                     </div>
                 </div>`;
             });
-            document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-slate-400">Chưa có bàn giao nào...</p>';
+            document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-slate-400">Chưa có bàn giao nào. Hãy tạo cái đầu tiên!</p>';
         }
 
         function editLog(id) {
@@ -113,23 +113,17 @@
                 document.getElementById('editTitle').value = r.title || '';
                 document.getElementById('editContent').value = r.content || '';
                 document.getElementById('editModal').classList.remove('hidden');
-            }).catch(() => alert("Bản ghi không tồn tại nữa!"));
+            }).catch(() => alert("Bản ghi không tồn tại!"));
         }
 
         async function saveEdit() {
-            try {
-                await pb.collection('entries').update(currentEditId, {
-                    title: document.getElementById('editTitle').value,
-                    content: document.getElementById('editContent').value
-                });
-                closeModal();
-                loadLogs();
-                alert('✅ Đã lưu thay đổi!');
-            } catch (e) {
-                alert('Lỗi: Bản ghi không tồn tại hoặc đã bị xóa trước đó.');
-                closeModal();
-                loadLogs();
-            }
+            await pb.collection('entries').update(currentEditId, {
+                title: document.getElementById('editTitle').value,
+                content: document.getElementById('editContent').value
+            });
+            closeModal();
+            loadLogs();
+            alert('✅ Đã lưu thay đổi!');
         }
 
         function closeModal() {
@@ -137,14 +131,10 @@
         }
 
         async function deleteLog(id) {
-            if (!confirm('Xác nhận xóa bản ghi này?')) return;
-            try {
+            if (confirm('Xác nhận xóa bản ghi này?')) {
                 await pb.collection('entries').delete(id);
                 loadLogs();
-                alert('🗑️ Đã xóa thành công!');
-            } catch (e) {
-                alert('Lỗi: Bản ghi không tồn tại hoặc đã bị xóa trước đó.');
-                loadLogs();
+                alert('🗑️ Đã xóa!');
             }
         }
 
