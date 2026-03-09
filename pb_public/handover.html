@@ -123,7 +123,7 @@
         }
 
 async function loadLogs() {
-    let filterParts = [];
+    const filterParts = [];
 
     if (currentFilter.area) {
         filterParts.push(`area = '${currentFilter.area}'`);
@@ -132,13 +132,14 @@ async function loadLogs() {
         filterParts.push(`date = '${currentFilter.date}'`);
     }
 
-    const filterQuery = filterParts.length > 0 ? filterParts.join(' && ') : '';
+    // XÂY DỰNG OPTIONS KHÔNG BAO GIỜ CÓ KEY "filter" KHI RỖNG
+    const options = {
+        sort: '-date',
+        ...(filterParts.length > 0 && { filter: filterParts.join(' && ') })
+    };
 
     try {
-        const records = await pb.collection('handovers').getFullList({
-            sort: '-date',
-            filter: filterQuery || undefined  // chỉ gửi filter nếu có nội dung
-        });
+        const records = await pb.collection('handovers').getFullList(options);
 
         let html = '';
         records.forEach(r => {
@@ -170,7 +171,7 @@ async function loadLogs() {
                 ${situationsHTML ? `
                 <div class="mb-6">
                     <div class="text-sm text-slate-400 mb-2">Tình hình trong ca</div>
-                    <table class="w-full text-sm border-collapse">${situationsHTML}</table>
+                    <table class="w-full text-sm">${situationsHTML}</table>
                 </div>` : ''}
 
                 ${r.notes ? `<div class="mb-4"><span class="text-slate-400">Lưu ý:</span> ${r.notes}</div>` : ''}
@@ -184,10 +185,12 @@ async function loadLogs() {
             </div>`;
         });
 
-        document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-slate-400">Chưa có bản ghi nào</p>';
+        document.getElementById('logs').innerHTML = html || 
+            '<p class="text-center py-20 text-slate-400">Chưa có bản ghi nào. Hãy tạo cái đầu tiên!</p>';
     } catch (err) {
-        console.error('Lỗi loadLogs:', err);
-        document.getElementById('logs').innerHTML = '<p class="text-center py-20 text-red-400">Lỗi tải dữ liệu: ' + (err.message || 'Kiểm tra console') + '</p>';
+        console.error('❌ Lỗi loadLogs:', err);
+        document.getElementById('logs').innerHTML = 
+            `<p class="text-center py-20 text-red-400">Lỗi tải dữ liệu: ${err.message || 'Kiểm tra console'}</p>`;
     }
 }
 
