@@ -15,10 +15,9 @@
             <input id="username" placeholder="Tên đăng nhập" class="w-full bg-slate-800 p-4 rounded-2xl text-lg">
             <input id="password" type="password" placeholder="Mật khẩu" class="w-full bg-slate-800 p-4 rounded-2xl text-lg">
             
-            <div class="flex gap-4">
-                <button onclick="register()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-4 rounded-2xl font-medium">Đăng ký</button>
-                <button onclick="login()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 py-4 rounded-2xl font-medium">Đăng nhập</button>
-            </div>
+            <button onclick="login()" class="w-full bg-emerald-600 hover:bg-emerald-700 py-4 rounded-2xl font-medium text-lg">
+                Đăng nhập
+            </button>
         </div>
 
         <p class="text-center text-slate-400 mt-8 text-sm">Chỉ thành viên nhóm mới được truy cập</p>
@@ -27,24 +26,12 @@
     <script>
         const pb = new PocketBase('https://shared-diary-pocketbase-production.up.railway.app');
 
-        async function register() {
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
-            if (!username || !password) return alert("Vui lòng điền đầy đủ!");
-
-            const email = username + "@nhatkychung.local";
-            try {
-                await pb.collection('users').create({ username, email, password, passwordConfirm: password });
-                alert("✅ Đăng ký thành công! Hãy đăng nhập.");
-            } catch(e) { alert("Lỗi: " + e.message); }
-        }
-
         async function login() {
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
             try {
                 await pb.collection('users').authWithPassword(username, password);
-                window.location.href = '/handover.html'; // Chuyển sang trang chính
+                window.location.href = '/handover.html';
             } catch(e) {
                 alert("❌ Sai tên đăng nhập hoặc mật khẩu!");
             }

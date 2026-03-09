@@ -22,7 +22,7 @@
     <div class="max-w-6xl mx-auto p-6">
         <!-- Header -->
         <div class="flex justify-between items-center mb-10 bg-slate-900 p-6 rounded-3xl">
-            <h1 class="text-4xl font-bold flex items-center gap-3">📋 Handover Log</h1>
+            <h1 class="text-4xl font-bold">📋 Handover Log</h1>
             <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-8 py-3 rounded-2xl font-medium text-sm">Đăng xuất</button>
         </div>
 
@@ -32,9 +32,9 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <input id="title" placeholder="Tiêu đề ca..." class="bg-slate-800 p-4 rounded-2xl text-lg">
                 <select id="shift" class="bg-slate-800 p-4 rounded-2xl text-lg">
-                    <option value="Ca 1">🌅 Ca 1</option>
-                    <option value="Ca 2">🌞 Ca 2</option>
-                    <option value="Ca 3">🌙 Ca 3</option>
+                    <option value="Ca 1">Ca 1</option>
+                    <option value="Ca 2">Ca 2</option>
+                    <option value="Ca 3">Ca 3</option>
                 </select>
                 <select id="priority" class="bg-slate-800 p-4 rounded-2xl text-lg">
                     <option value="green">🟢 Bình thường</option>
@@ -64,16 +64,12 @@
         </div>
     </div>
 
-    <!-- Toast -->
-    <div id="toast" class="hidden fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 toast"></div>
-
     <script>
         const pb = new PocketBase('https://shared-diary-pocketbase-production.up.railway.app');
         let currentEditId = null;
 
         if (!pb.authStore.isValid) window.location.href = '/';
 
-        // Realtime
         pb.collection('entries').subscribe('*', () => loadLogs());
 
         async function createLog() {
@@ -106,8 +102,8 @@
                     </div>
                     <p class="text-slate-300 text-lg">${r.content.replace(/\n/g, '<br>')}</p>
                     <div class="flex gap-3 mt-6">
-                        <button onclick="editLog('${r.id}')" class="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1">✏️ Sửa</button>
-                        <button onclick="deleteLog('${r.id}')" class="text-red-400 hover:text-red-300 text-sm flex items-center gap-1">🗑️ Xóa</button>
+                        <button onclick="editLog('${r.id}')" class="text-blue-400 hover:text-blue-300">✏️ Sửa</button>
+                        <button onclick="deleteLog('${r.id}')" class="text-red-400 hover:text-red-300">🗑️ Xóa</button>
                     </div>
                 </div>`;
             });
@@ -116,7 +112,6 @@
 
         function editLog(id) {
             currentEditId = id;
-            // Lấy dữ liệu hiện tại (có thể tối ưu sau)
             pb.collection('entries').getOne(id).then(r => {
                 document.getElementById('editTitle').value = r.title || '';
                 document.getElementById('editContent').value = r.content || '';
@@ -139,7 +134,7 @@
         }
 
         async function deleteLog(id) {
-            if (confirm('Bạn có chắc muốn xóa bản ghi này không?')) {
+            if (confirm('Xác nhận xóa bản ghi này?')) {
                 await pb.collection('entries').delete(id);
                 loadLogs();
                 alert('🗑️ Đã xóa!');
