@@ -14,13 +14,10 @@
         .red { background: #ef4444; }
         .entry-card { transition: all 0.3s ease; }
         .entry-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3); }
-        .toast { animation: slideIn 0.3s ease; }
-        @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-200 min-h-screen">
     <div class="max-w-6xl mx-auto p-6">
-        <!-- Header -->
         <div class="flex justify-between items-center mb-10 bg-slate-900 p-6 rounded-3xl">
             <h1 class="text-4xl font-bold">📋 Handover Log</h1>
             <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-8 py-3 rounded-2xl font-medium text-sm">Đăng xuất</button>
@@ -70,6 +67,7 @@
 
         if (!pb.authStore.isValid) window.location.href = '/';
 
+        // Realtime
         pb.collection('entries').subscribe('*', () => loadLogs());
 
         async function createLog() {
@@ -91,7 +89,7 @@
             records.forEach(r => {
                 const color = r.priority || 'green';
                 html += `
-                <div class="entry-card bg-slate-900 p-8 rounded-3xl border-l-8 border-${color}-500">
+                <div class="entry-card bg-slate-900 p-8 rounded-3xl border-l-8 border-${color}-500" data-id="${r.id}">
                     <div class="flex justify-between mb-4">
                         <div class="flex items-center gap-4">
                             <span class="priority-dot ${color}"></span>
@@ -101,13 +99,27 @@
                         <div class="text-xs text-slate-400">${new Date(r.created).toLocaleString('vi-VN')}</div>
                     </div>
                     <p class="text-slate-300 text-lg">${r.content.replace(/\n/g, '<br>')}</p>
-                    <div class="flex gap-3 mt-6">
-                        <button onclick="editLog('${r.id}')" class="text-blue-400 hover:text-blue-300">✏️ Sửa</button>
-                        <button onclick="deleteLog('${r.id}')" class="text-red-400 hover:text-red-300">🗑️ Xóa</button>
+                    <div class="flex gap-4 mt-6">
+                        <button class="edit-btn text-blue-400 hover:text-blue-300 font-medium">✏️ Sửa</button>
+                        <button class="delete-btn text-red-400 hover:text-red-300 font-medium">🗑️ Xóa</button>
                     </div>
                 </div>`;
             });
             document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-slate-400">Chưa có bàn giao nào...</p>';
+
+            // Gắn sự kiện cho nút Sửa & Xóa
+            document.querySelectorAll('.edit-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const card = this.closest('.entry-card');
+                    editLog(card.dataset.id);
+                });
+            });
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const card = this.closest('.entry-card');
+                    deleteLog(card.dataset.id);
+                });
+            });
         }
 
         function editLog(id) {
