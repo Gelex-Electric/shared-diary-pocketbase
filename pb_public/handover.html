@@ -1,59 +1,73 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" class="light">  <!-- Mặc định light mode -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Handover Log</title>
     <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',  // Kích hoạt dark mode bằng class 'dark' trên html
+        }
+    </script>
     <style>
         .entry-card { transition: all 0.3s ease; }
-        .entry-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3); }
+        .entry-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
         .scroll-list { max-height: calc(100vh - 380px); overflow-y: auto; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-200 min-h-screen">
+<body class="bg-gray-50 text-gray-900 min-h-screen">
     <div class="max-w-7xl mx-auto p-6">
-        <div class="flex justify-between items-center mb-8 bg-slate-900 p-6 rounded-3xl">
-            <h1 class="text-4xl font-bold">📋 Handover Log</h1>
-            <div>
-                <button onclick="refreshList()" class="bg-slate-700 hover:bg-slate-600 px-6 py-3 rounded-2xl mr-3">🔄 Refresh</button>
-                <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-8 py-3 rounded-2xl font-medium">Đăng xuất</button>
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8 bg-white shadow rounded-3xl p-6">
+            <h1 class="text-4xl font-bold text-gray-800">📋 Handover Log</h1>
+            <div class="flex items-center gap-4">
+                <!-- Nút toggle Light/Dark -->
+                <button id="themeToggle" onclick="toggleTheme()" class="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition">
+                    <span id="themeIcon">☀️</span>
+                </button>
+                <button onclick="refreshList()" class="bg-gray-200 hover:bg-gray-300 px-6 py-3 rounded-2xl">🔄 Refresh</button>
+                <button onclick="logout()" class="bg-red-500 hover:bg-red-600 px-8 py-3 rounded-2xl font-medium text-white">Đăng xuất</button>
             </div>
         </div>
 
         <!-- BLOCK 1: Nút thêm + Bộ lọc -->
-        <div class="bg-slate-900 p-8 rounded-3xl mb-8 flex flex-wrap gap-6 items-end">
+        <div class="bg-white shadow rounded-3xl p-8 mb-8 flex flex-wrap gap-6 items-end">
             <button onclick="openCreateModal()" 
-                    class="bg-emerald-600 hover:bg-emerald-700 px-10 py-5 rounded-3xl text-xl font-medium flex items-center gap-3">
+                    class="bg-emerald-500 hover:bg-emerald-600 px-10 py-5 rounded-3xl text-xl font-medium text-white flex items-center gap-3">
                 ✨ Thêm bàn giao mới
             </button>
 
             <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                    <label class="block text-sm text-slate-400 mb-2">Khu vực</label>
-                    <select id="filterArea" onchange="applyFilter()" class="w-full bg-slate-800 p-4 rounded-2xl text-lg"></select>
+                    <label class="block text-sm text-gray-600 mb-2">Khu vực</label>
+                    <select id="filterArea" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                        <option value="">Tất cả khu vực</option>
+                    </select>
                 </div>
+
                 <div>
-                    <label class="block text-sm text-slate-400 mb-2">Thời gian</label>
-                    <input type="date" id="filterDate" onchange="applyFilter()" class="w-full bg-slate-800 p-4 rounded-2xl text-lg">
+                    <label class="block text-sm text-gray-600 mb-2">Thời gian</label>
+                    <input type="date" id="filterDate" onchange="applyFilter()" 
+                           class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
                 </div>
             </div>
         </div>
 
-        <!-- BLOCK 2: Danh sách -->
+        <!-- BLOCK 2: Danh sách cuộn -->
         <div id="logs" class="scroll-list space-y-6"></div>
     </div>
 
-    <!-- MODAL -->
-    <div id="modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-        <div class="bg-slate-900 p-8 rounded-3xl w-full max-w-4xl mx-4 max-h-[95vh] overflow-auto">
-            <h3 id="modalTitle" class="text-2xl font-bold mb-6">✍️ Tạo bàn giao mới</h3>
+    <!-- MODAL TẠO / SỬA -->
+    <div id="modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-3xl w-full max-w-4xl mx-4 max-h-[95vh] overflow-auto shadow-2xl">
+            <h3 id="modalTitle" class="text-2xl font-bold mb-6 text-gray-800">✍️ Tạo bàn giao mới</h3>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <input id="date" type="date" class="bg-slate-800 p-4 rounded-2xl">
-                <select id="area" class="bg-slate-800 p-4 rounded-2xl text-lg"></select>
-                <select id="shift" class="bg-slate-800 p-4 rounded-2xl">
+                <input id="date" type="date" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <select id="area" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"></select>
+                <select id="shift" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
                     <option value="Ca 1">Ca 1</option>
                     <option value="Ca 2">Ca 2</option>
                     <option value="Ca 3">Ca 3</option>
@@ -61,31 +75,31 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                <input id="main_duty" placeholder="Trực chính" class="bg-slate-800 p-4 rounded-2xl">
-                <input id="sub_duty" placeholder="Trực phụ" class="bg-slate-800 p-4 rounded-2xl">
-                <input id="main_power" placeholder="Trực chính điện lực" class="bg-slate-800 p-4 rounded-2xl">
-                <input id="sub_power" placeholder="Trực phụ điện lực" class="bg-slate-800 p-4 rounded-2xl">
+                <input id="main_duty" placeholder="Trực chính" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <input id="sub_duty" placeholder="Trực phụ" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <input id="main_power" placeholder="Trực chính điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <input id="sub_power" placeholder="Trực phụ điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
             </div>
 
-            <textarea id="notes" placeholder="Lưu ý" rows="2" class="w-full mt-6 bg-slate-800 p-6 rounded-3xl"></textarea>
-            <textarea id="equipment" placeholder="Trang bị" rows="2" class="w-full mt-4 bg-slate-800 p-6 rounded-3xl"></textarea>
-            <textarea id="opinions" placeholder="Ý kiến" rows="2" class="w-full mt-4 bg-slate-800 p-6 rounded-3xl"></textarea>
+            <textarea id="notes" placeholder="Lưu ý" rows="2" class="w-full mt-6 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
+            <textarea id="equipment" placeholder="Trang bị" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
+            <textarea id="opinions" placeholder="Ý kiến" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
 
             <!-- Bảng phụ Tình hình trong ca -->
             <div class="mt-8">
                 <div class="flex justify-between mb-3">
-                    <h4 class="font-semibold">Tình hình trong ca</h4>
-                    <button onclick="addSituationRow()" class="text-emerald-400 text-sm">+ Thêm dòng</button>
+                    <h4 class="font-semibold text-gray-700">Tình hình trong ca</h4>
+                    <button onclick="addSituationRow()" class="text-emerald-600 hover:text-emerald-700 text-sm">+ Thêm dòng</button>
                 </div>
-                <table id="situationTable" class="w-full text-sm">
-                    <thead><tr class="text-left bg-slate-800"><th class="p-3">Thời gian</th><th class="p-3">Nội dung</th><th class="w-10"></th></tr></thead>
-                    <tbody id="situationBody" class="bg-slate-950"></tbody>
+                <table id="situationTable" class="w-full text-sm border-collapse">
+                    <thead><tr class="text-left bg-gray-100"><th class="p-3">Thời gian</th><th class="p-3">Nội dung</th><th class="w-10"></th></tr></thead>
+                    <tbody id="situationBody" class="bg-white"></tbody>
                 </table>
             </div>
 
             <div class="flex gap-4 mt-10">
-                <button onclick="closeModal()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-5 rounded-3xl">Hủy</button>
-                <button onclick="saveLog()" id="saveBtn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 py-5 rounded-3xl font-medium">Lưu bàn giao</button>
+                <button onclick="closeModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 py-5 rounded-3xl text-gray-800">Hủy</button>
+                <button onclick="saveLog()" id="saveBtn" class="flex-1 bg-emerald-500 hover:bg-emerald-600 py-5 rounded-3xl font-medium text-white">Lưu bàn giao</button>
             </div>
         </div>
     </div>
@@ -94,21 +108,19 @@
         const pb = new PocketBase('https://getc.up.railway.app');
         let currentEditId = null;
         let currentFilter = { area: '', date: '' };
-        let situationRows = [];
-
-        const areas = ['KCNTH','KCNPĐ','KCNYM','KCNTTI','KCN03'];
+        const areas = ['KV1','KV2','KV3','KV4','KV5','KV6','KV7','KV8','KV9','KV10'];
 
         if (!pb.authStore.isValid) window.location.href = '/';
 
         pb.collection('handovers').subscribe('*', () => loadLogs());
 
+        // Render options Khu vực
         function renderAreaOptions() {
             const filterSelect = document.getElementById('filterArea');
             filterSelect.innerHTML = '<option value="">Tất cả khu vực</option>';
             areas.forEach(kv => {
                 const opt = document.createElement('option');
-                opt.value = kv;
-                opt.textContent = kv;
+                opt.value = kv; opt.textContent = kv;
                 filterSelect.appendChild(opt);
             });
 
@@ -116,89 +128,116 @@
             modalSelect.innerHTML = '';
             areas.forEach(kv => {
                 const opt = document.createElement('option');
-                opt.value = kv;
-                opt.textContent = kv;
+                opt.value = kv; opt.textContent = kv;
                 modalSelect.appendChild(opt);
             });
         }
 
-async function loadLogs() {
-    const filterParts = [];
+        async function loadLogs() {
+            const filterParts = [];
+            if (currentFilter.area) filterParts.push(`area = '${currentFilter.area}'`);
+            if (currentFilter.date) filterParts.push(`date = '${currentFilter.date}'`);
 
-    if (currentFilter.area) {
-        filterParts.push(`area = '${currentFilter.area}'`);
-    }
-    if (currentFilter.date) {
-        filterParts.push(`date = '${currentFilter.date}'`);
-    }
+            const options = {
+                sort: '-date',
+                ...(filterParts.length > 0 && { filter: filterParts.join(' && ') })
+            };
 
-    // XÂY DỰNG OPTIONS KHÔNG BAO GIỜ CÓ KEY "filter" KHI RỖNG
-    const options = {
-        sort: '-date',
-        ...(filterParts.length > 0 && { filter: filterParts.join(' && ') })
-    };
+            try {
+                const records = await pb.collection('handovers').getFullList(options);
+                let html = '';
+                records.forEach(r => {
+                    const situationsHTML = (r.situations || []).map(s => `
+                        <tr class="border-b border-gray-200">
+                            <td class="p-3 text-emerald-600">${s.time || '--:--'}</td>
+                            <td class="p-3">${s.content || ''}</td>
+                        </tr>`).join('');
 
-    try {
-        const records = await pb.collection('handovers').getFullList(options);
+                    html += `
+                    <div class="entry-card bg-white shadow rounded-3xl p-8 relative">
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <div class="text-2xl font-bold text-gray-800">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}</div>
+                                <div class="text-emerald-600 text-lg">${r.area || '?'} - ${r.shift || '?'}</div>
+                            </div>
+                            <div class="text-right text-xs text-gray-500">
+                                ${new Date(r.created).toLocaleString('vi-VN')}
+                            </div>
+                        </div>
 
-        let html = '';
-        records.forEach(r => {
-            const situationsHTML = (r.situations || []).map(s => `
-                <tr class="border-b border-slate-700">
-                    <td class="p-3 text-emerald-400">${s.time || '--:--'}</td>
-                    <td class="p-3">${s.content || ''}</td>
-                </tr>`).join('');
+                        <div class="grid grid-cols-2 gap-4 text-sm mb-6">
+                            <div><span class="text-gray-600">Trực chính:</span> ${r.main_duty || '-'}</div>
+                            <div><span class="text-gray-600">Trực phụ:</span> ${r.sub_duty || '-'}</div>
+                            <div><span class="text-gray-600">Trực chính điện lực:</span> ${r.main_power || '-'}</div>
+                            <div><span class="text-gray-600">Trực phụ điện lực:</span> ${r.sub_power || '-'}</div>
+                        </div>
 
-            html += `
-            <div class="entry-card bg-slate-900 p-8 rounded-3xl relative">
-                <div class="flex justify-between items-start mb-6">
-                    <div>
-                        <div class="text-2xl font-bold">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}</div>
-                        <div class="text-emerald-400 text-lg">${r.area || '?'} - ${r.shift || '?'}</div>
-                    </div>
-                    <div class="text-right text-xs text-slate-400">
-                        ${new Date(r.created).toLocaleString('vi-VN')}
-                    </div>
-                </div>
+                        ${situationsHTML ? `
+                        <div class="mb-6">
+                            <div class="text-sm text-gray-600 mb-2">Tình hình trong ca</div>
+                            <table class="w-full text-sm border-collapse">${situationsHTML}</table>
+                        </div>` : ''}
 
-                <div class="grid grid-cols-2 gap-4 text-sm mb-6">
-                    <div><span class="text-slate-400">Trực chính:</span> ${r.main_duty || '-'}</div>
-                    <div><span class="text-slate-400">Trực phụ:</span> ${r.sub_duty || '-'}</div>
-                    <div><span class="text-slate-400">Trực chính điện lực:</span> ${r.main_power || '-'}</div>
-                    <div><span class="text-slate-400">Trực phụ điện lực:</span> ${r.sub_power || '-'}</div>
-                </div>
+                        ${r.notes ? `<div class="mb-4"><span class="text-gray-600">Lưu ý:</span> ${r.notes}</div>` : ''}
+                        ${r.equipment ? `<div class="mb-4"><span class="text-gray-600">Trang bị:</span> ${r.equipment}</div>` : ''}
+                        ${r.opinions ? `<div><span class="text-gray-600">Ý kiến:</span> ${r.opinions}</div>` : ''}
 
-                ${situationsHTML ? `
-                <div class="mb-6">
-                    <div class="text-sm text-slate-400 mb-2">Tình hình trong ca</div>
-                    <table class="w-full text-sm">${situationsHTML}</table>
-                </div>` : ''}
+                        <div class="absolute bottom-8 right-8 flex gap-4">
+                            <button onclick="editLog('${r.id}')" class="text-blue-600 hover:text-blue-800">✏️ Sửa</button>
+                            <button onclick="deleteLog('${r.id}')" class="text-red-600 hover:text-red-800">🗑️ Xóa</button>
+                        </div>
+                    </div>`;
+                });
 
-                ${r.notes ? `<div class="mb-4"><span class="text-slate-400">Lưu ý:</span> ${r.notes}</div>` : ''}
-                ${r.equipment ? `<div class="mb-4"><span class="text-slate-400">Trang bị:</span> ${r.equipment}</div>` : ''}
-                ${r.opinions ? `<div><span class="text-slate-400">Ý kiến:</span> ${r.opinions}</div>` : ''}
-
-                <div class="absolute bottom-8 right-8 flex gap-4">
-                    <button onclick="editLog('${r.id}')" class="text-blue-400 hover:text-blue-300">✏️ Sửa</button>
-                    <button onclick="deleteLog('${r.id}')" class="text-red-400 hover:text-red-300">🗑️ Xóa</button>
-                </div>
-            </div>`;
-        });
-
-        document.getElementById('logs').innerHTML = html || 
-            '<p class="text-center py-20 text-slate-400">Chưa có bản ghi nào. Hãy tạo cái đầu tiên!</p>';
-    } catch (err) {
-        console.error('❌ Lỗi loadLogs:', err);
-        document.getElementById('logs').innerHTML = 
-            `<p class="text-center py-20 text-red-400">Lỗi tải dữ liệu: ${err.message || 'Kiểm tra console'}</p>`;
-    }
-}
+                document.getElementById('logs').innerHTML = html || 
+                    '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào. Hãy tạo cái đầu tiên!</p>';
+            } catch (err) {
+                console.error('❌ Lỗi loadLogs:', err);
+                document.getElementById('logs').innerHTML = 
+                    `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu: ${err.message || 'Kiểm tra console'}</p>`;
+            }
+        }
 
         function applyFilter() {
             currentFilter.area = document.getElementById('filterArea').value;
             currentFilter.date = document.getElementById('filterDate').value;
             loadLogs();
         }
+
+        // Theme toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                html.classList.add('light');
+                document.getElementById('themeIcon').textContent = '☀️';
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.classList.remove('light');
+                html.classList.add('dark');
+                document.getElementById('themeIcon').textContent = '🌙';
+                localStorage.setItem('theme', 'dark');
+            }
+            loadLogs();  // Reload để áp dụng style mới
+        }
+
+        // Load theme từ localStorage hoặc mặc định light
+        window.addEventListener('load', () => {
+            const savedTheme = localStorage.getItem('theme');
+            const html = document.documentElement;
+            if (savedTheme === 'dark') {
+                html.classList.add('dark');
+                html.classList.remove('light');
+                document.getElementById('themeIcon').textContent = '🌙';
+            } else {
+                html.classList.add('light');
+                html.classList.remove('dark');
+                document.getElementById('themeIcon').textContent = '☀️';
+            }
+        });
+
+        // Các hàm modal, save, edit, delete... giữ nguyên như code cũ của bạn
+        let situationRows = [];
 
         function openCreateModal() {
             currentEditId = null;
@@ -226,7 +265,7 @@ async function loadLogs() {
                 situationRows = r.situations || [];
                 renderSituationTable();
                 document.getElementById('modal').classList.remove('hidden');
-            }).catch(() => alert("Bản ghi không tồn tại!"));
+            }).catch(() => alert('Không tìm thấy bản ghi!'));
         }
 
         function clearModal() {
@@ -250,15 +289,15 @@ async function loadLogs() {
             situationRows.forEach((row, i) => {
                 tbody.innerHTML += `
                     <tr>
-                        <td><input type="time" value="${row.time}" onchange="situationRows[${i}].time=this.value" class="bg-slate-800 p-2 rounded w-full"></td>
-                        <td><input type="text" value="${row.content}" onchange="situationRows[${i}].content=this.value" class="bg-slate-800 p-2 rounded w-full"></td>
-                        <td><button onclick="removeSituationRow(${i})" class="text-red-500 text-xl">×</button></td>
+                        <td><input type="time" value="${row.time || ''}" onchange="situationRows[${i}].time = this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-emerald-400"></td>
+                        <td><input type="text" value="${row.content || ''}" onchange="situationRows[${i}].content = this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-emerald-400"></td>
+                        <td><button onclick="removeSituationRow(${i})" class="text-red-600 hover:text-red-800 text-xl">×</button></td>
                     </tr>`;
             });
         }
 
         function addSituationRow() {
-            situationRows.push({ time: '08:00', content: '' });
+            situationRows.push({ time: '', content: '' });
             renderSituationTable();
         }
 
@@ -284,15 +323,19 @@ async function loadLogs() {
 
             if (!data.date || !data.main_duty) return alert('Vui lòng nhập ngày và Trực chính!');
 
-            if (currentEditId) {
-                await pb.collection('handovers').update(currentEditId, data);
-                alert('✅ Đã cập nhật!');
-            } else {
-                await pb.collection('handovers').create(data);
-                alert('✅ Đã tạo bàn giao mới!');
+            try {
+                if (currentEditId) {
+                    await pb.collection('handovers').update(currentEditId, data);
+                    alert('✅ Đã cập nhật!');
+                } else {
+                    await pb.collection('handovers').create(data);
+                    alert('✅ Đã tạo bàn giao mới!');
+                }
+                closeModal();
+                loadLogs();
+            } catch (err) {
+                alert('❌ Lỗi: ' + (err.message || 'Kiểm tra console'));
             }
-            closeModal();
-            loadLogs();
         }
 
         function closeModal() {
@@ -301,9 +344,13 @@ async function loadLogs() {
 
         async function deleteLog(id) {
             if (!confirm('Xác nhận xóa bản ghi này?')) return;
-            await pb.collection('handovers').delete(id);
-            loadLogs();
-            alert('🗑️ Đã xóa!');
+            try {
+                await pb.collection('handovers').delete(id);
+                loadLogs();
+                alert('🗑️ Đã xóa!');
+            } catch (err) {
+                alert('❌ Không thể xóa: ' + err.message);
+            }
         }
 
         function refreshList() { loadLogs(); }
