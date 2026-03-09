@@ -105,22 +105,23 @@
                     </div>
                 </div>`;
             });
-            document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-slate-400">Chưa có bàn giao nào...</p>';
 
-            // Gắn sự kiện cho nút Sửa & Xóa
-            document.querySelectorAll('.edit-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const card = this.closest('.entry-card');
-                    editLog(card.dataset.id);
-                });
-            });
-            document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const card = this.closest('.entry-card');
-                    deleteLog(card.dataset.id);
-                });
-            });
+            document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-slate-400">Chưa có bàn giao nào...</p>';
         }
+
+        // === EVENT DELEGATION (nút Sửa/Xóa hoạt động chắc chắn) ===
+        document.getElementById('logs').addEventListener('click', function(e) {
+            const card = e.target.closest('.entry-card');
+            if (!card) return;
+
+            const id = card.dataset.id;
+
+            if (e.target.classList.contains('edit-btn')) {
+                editLog(id);
+            } else if (e.target.classList.contains('delete-btn')) {
+                deleteLog(id);
+            }
+        });
 
         function editLog(id) {
             currentEditId = id;
