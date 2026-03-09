@@ -14,7 +14,6 @@
 </head>
 <body class="bg-slate-950 text-slate-200 min-h-screen">
     <div class="max-w-7xl mx-auto p-6">
-        <!-- Header -->
         <div class="flex justify-between items-center mb-8 bg-slate-900 p-6 rounded-3xl">
             <h1 class="text-4xl font-bold">📋 Handover Log</h1>
             <div>
@@ -31,38 +30,29 @@
             </button>
 
             <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- Khu vực - LỰA CHỌN SELECT -->
                 <div>
                     <label class="block text-sm text-slate-400 mb-2">Khu vực</label>
-                    <select id="filterArea" onchange="applyFilter()" class="w-full bg-slate-800 p-4 rounded-2xl text-lg">
-                        <option value="">Tất cả khu vực</option>
-                    </select>
+                    <select id="filterArea" onchange="applyFilter()" class="w-full bg-slate-800 p-4 rounded-2xl text-lg"></select>
                 </div>
-
-                <!-- Ngày -->
                 <div>
                     <label class="block text-sm text-slate-400 mb-2">Thời gian</label>
-                    <input type="date" id="filterDate" onchange="applyFilter()" 
-                           class="w-full bg-slate-800 p-4 rounded-2xl text-lg">
+                    <input type="date" id="filterDate" onchange="applyFilter()" class="w-full bg-slate-800 p-4 rounded-2xl text-lg">
                 </div>
             </div>
         </div>
 
-        <!-- BLOCK 2: Danh sách cuộn -->
+        <!-- BLOCK 2: Danh sách -->
         <div id="logs" class="scroll-list space-y-6"></div>
     </div>
 
-    <!-- MODAL TẠO / SỬA -->
+    <!-- MODAL -->
     <div id="modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
         <div class="bg-slate-900 p-8 rounded-3xl w-full max-w-4xl mx-4 max-h-[95vh] overflow-auto">
             <h3 id="modalTitle" class="text-2xl font-bold mb-6">✍️ Tạo bàn giao mới</h3>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <input id="date" type="date" class="bg-slate-800 p-4 rounded-2xl">
-                
-                <!-- Khu vực trong Modal - LỰA CHỌN SELECT -->
                 <select id="area" class="bg-slate-800 p-4 rounded-2xl text-lg"></select>
-                
                 <select id="shift" class="bg-slate-800 p-4 rounded-2xl">
                     <option value="Ca 1">Ca 1</option>
                     <option value="Ca 2">Ca 2</option>
@@ -70,7 +60,6 @@
                 </select>
             </div>
 
-            <!-- Các trường còn lại giữ nguyên -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <input id="main_duty" placeholder="Trực chính" class="bg-slate-800 p-4 rounded-2xl">
                 <input id="sub_duty" placeholder="Trực phụ" class="bg-slate-800 p-4 rounded-2xl">
@@ -82,7 +71,7 @@
             <textarea id="equipment" placeholder="Trang bị" rows="2" class="w-full mt-4 bg-slate-800 p-6 rounded-3xl"></textarea>
             <textarea id="opinions" placeholder="Ý kiến" rows="2" class="w-full mt-4 bg-slate-800 p-6 rounded-3xl"></textarea>
 
-            <!-- Bảng phụ Tình hình trong ca (giữ nguyên) -->
+            <!-- Bảng phụ Tình hình trong ca -->
             <div class="mt-8">
                 <div class="flex justify-between mb-3">
                     <h4 class="font-semibold">Tình hình trong ca</h4>
@@ -105,17 +94,15 @@
         const pb = new PocketBase('https://getc.up.railway.app');
         let currentEditId = null;
         let currentFilter = { area: '', date: '' };
+        let situationRows = [];
 
-        // ==================== DANH SÁCH KHU VỰC (DỄ THÊM SAU NÀY) ====================
         const areas = ['KV1','KV2','KV3','KV4','KV5','KV6','KV7','KV8','KV9','KV10'];
 
         if (!pb.authStore.isValid) window.location.href = '/';
 
         pb.collection('handovers').subscribe('*', () => loadLogs());
 
-        // Render options cho tất cả select Khu vực
         function renderAreaOptions() {
-            // Filter
             const filterSelect = document.getElementById('filterArea');
             filterSelect.innerHTML = '<option value="">Tất cả khu vực</option>';
             areas.forEach(kv => {
@@ -125,7 +112,6 @@
                 filterSelect.appendChild(opt);
             });
 
-            // Modal
             const modalSelect = document.getElementById('area');
             modalSelect.innerHTML = '';
             areas.forEach(kv => {
@@ -136,7 +122,7 @@
             });
         }
 
-        async function loadLogs() { /* giữ nguyên code cũ của bạn */ 
+        async function loadLogs() {
             let filter = '';
             if (currentFilter.area) filter += `area='${currentFilter.area}'`;
             if (currentFilter.date) filter += `${filter ? ' && ' : ''}date='${currentFilter.date}'`;
@@ -161,23 +147,18 @@
                             <div class="text-2xl font-bold">${new Date(r.date).toLocaleDateString('vi-VN')}</div>
                             <div class="text-emerald-400 text-lg">${r.area} - ${r.shift}</div>
                         </div>
-                        <div class="text-right text-xs text-slate-400">
-                            ${new Date(r.created).toLocaleString('vi-VN')}
-                        </div>
+                        <div class="text-right text-xs text-slate-400">${new Date(r.created).toLocaleString('vi-VN')}</div>
                     </div>
-
                     <div class="grid grid-cols-2 gap-4 text-sm mb-6">
                         <div><span class="text-slate-400">Trực chính:</span> ${r.main_duty}</div>
                         <div><span class="text-slate-400">Trực phụ:</span> ${r.sub_duty || '-'}</div>
                         <div><span class="text-slate-400">Trực chính điện lực:</span> ${r.main_power || '-'}</div>
                         <div><span class="text-slate-400">Trực phụ điện lực:</span> ${r.sub_power || '-'}</div>
                     </div>
-
                     ${situationsHTML ? `<div class="mb-6"><div class="text-sm text-slate-400 mb-2">Tình hình trong ca</div><table class="w-full text-sm">${situationsHTML}</table></div>` : ''}
                     ${r.notes ? `<div class="mb-4"><span class="text-slate-400">Lưu ý:</span> ${r.notes}</div>` : ''}
                     ${r.equipment ? `<div class="mb-4"><span class="text-slate-400">Trang bị:</span> ${r.equipment}</div>` : ''}
                     ${r.opinions ? `<div><span class="text-slate-400">Ý kiến:</span> ${r.opinions}</div>` : ''}
-
                     <div class="absolute bottom-8 right-8 flex gap-4">
                         <button onclick="editLog('${r.id}')" class="text-blue-400 hover:text-blue-300">✏️ Sửa</button>
                         <button onclick="deleteLog('${r.id}')" class="text-red-400 hover:text-red-300">🗑️ Xóa</button>
@@ -194,9 +175,6 @@
             loadLogs();
         }
 
-        // ==================== MODAL & CÁC HÀM CÒN LẠI (giữ nguyên như bản trước) ====================
-        let situationRows = [];
-
         function openCreateModal() {
             currentEditId = null;
             document.getElementById('modalTitle').textContent = '✍️ Tạo bàn giao mới';
@@ -205,8 +183,7 @@
             document.getElementById('modal').classList.remove('hidden');
         }
 
-        function editLog(id) { /* giữ nguyên */ 
-            // ... (code giống bản trước)
+        function editLog(id) {
             currentEditId = id;
             document.getElementById('modalTitle').textContent = '✏️ Chỉnh sửa bàn giao';
             document.getElementById('saveBtn').textContent = 'Lưu thay đổi';
@@ -215,26 +192,105 @@
                 document.getElementById('area').value = r.area || 'KV1';
                 document.getElementById('shift').value = r.shift || 'Ca 1';
                 document.getElementById('main_duty').value = r.main_duty || '';
-                // ... các trường khác
+                document.getElementById('sub_duty').value = r.sub_duty || '';
+                document.getElementById('main_power').value = r.main_power || '';
+                document.getElementById('sub_power').value = r.sub_power || '';
+                document.getElementById('notes').value = r.notes || '';
+                document.getElementById('equipment').value = r.equipment || '';
+                document.getElementById('opinions').value = r.opinions || '';
                 situationRows = r.situations || [];
                 renderSituationTable();
                 document.getElementById('modal').classList.remove('hidden');
-            });
+            }).catch(() => alert("Bản ghi không tồn tại!"));
         }
 
-        function clearModal() { /* giữ nguyên */ 
+        function clearModal() {
             document.getElementById('date').value = '';
             document.getElementById('area').value = 'KV1';
             document.getElementById('shift').value = 'Ca 1';
-            // ... reset các trường khác
+            document.getElementById('main_duty').value = '';
+            document.getElementById('sub_duty').value = '';
+            document.getElementById('main_power').value = '';
+            document.getElementById('sub_power').value = '';
+            document.getElementById('notes').value = '';
+            document.getElementById('equipment').value = '';
+            document.getElementById('opinions').value = '';
             situationRows = [];
             renderSituationTable();
         }
 
-        // Các hàm addSituationRow, renderSituationTable, saveLog, deleteLog, closeModal, refreshList, logout... giữ nguyên như bản trước
+        function renderSituationTable() {
+            const tbody = document.getElementById('situationBody');
+            tbody.innerHTML = '';
+            situationRows.forEach((row, i) => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td><input type="time" value="${row.time}" onchange="situationRows[${i}].time=this.value" class="bg-slate-800 p-2 rounded w-full"></td>
+                        <td><input type="text" value="${row.content}" onchange="situationRows[${i}].content=this.value" class="bg-slate-800 p-2 rounded w-full"></td>
+                        <td><button onclick="removeSituationRow(${i})" class="text-red-500 text-xl">×</button></td>
+                    </tr>`;
+            });
+        }
+
+        function addSituationRow() {
+            situationRows.push({ time: '08:00', content: '' });
+            renderSituationTable();
+        }
+
+        function removeSituationRow(i) {
+            situationRows.splice(i, 1);
+            renderSituationTable();
+        }
+
+        async function saveLog() {
+            const data = {
+                date: document.getElementById('date').value,
+                area: document.getElementById('area').value,
+                shift: document.getElementById('shift').value,
+                main_duty: document.getElementById('main_duty').value,
+                sub_duty: document.getElementById('sub_duty').value,
+                main_power: document.getElementById('main_power').value,
+                sub_power: document.getElementById('sub_power').value,
+                notes: document.getElementById('notes').value,
+                equipment: document.getElementById('equipment').value,
+                opinions: document.getElementById('opinions').value,
+                situations: situationRows
+            };
+
+            if (!data.date || !data.main_duty) return alert('Vui lòng nhập ngày và Trực chính!');
+
+            if (currentEditId) {
+                await pb.collection('handovers').update(currentEditId, data);
+                alert('✅ Đã cập nhật!');
+            } else {
+                await pb.collection('handovers').create(data);
+                alert('✅ Đã tạo bàn giao mới!');
+            }
+            closeModal();
+            loadLogs();
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+
+        async function deleteLog(id) {
+            if (!confirm('Xác nhận xóa bản ghi này?')) return;
+            await pb.collection('handovers').delete(id);
+            loadLogs();
+            alert('🗑️ Đã xóa!');
+        }
+
+        function refreshList() { loadLogs(); }
+
+        function logout() {
+            pb.collection('handovers').unsubscribe();
+            pb.authStore.clear();
+            window.location.href = '/';
+        }
 
         window.onload = () => {
-            renderAreaOptions();   // ← Quan trọng: render danh sách KV
+            renderAreaOptions();
             loadLogs();
         };
     </script>
