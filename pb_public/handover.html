@@ -62,12 +62,11 @@
     </div>
 
     <script>
-        const pb = new PocketBase('https://GETC.up.railway.app');
+        const pb = new PocketBase('https://GETC.up.railway.app');   // ← domain mới của bạn
         let currentEditId = null;
 
         if (!pb.authStore.isValid) window.location.href = '/';
 
-        // Realtime
         pb.collection('entries').subscribe('*', () => loadLogs());
 
         async function createLog() {
@@ -89,7 +88,7 @@
             records.forEach(r => {
                 const color = r.priority || 'green';
                 html += `
-                <div class="entry-card bg-slate-900 p-8 rounded-3xl border-l-8 border-${color}-500" data-id="${r.id}">
+                <div class="entry-card bg-slate-900 p-8 rounded-3xl border-l-8 border-${color}-500">
                     <div class="flex justify-between mb-4">
                         <div class="flex items-center gap-4">
                             <span class="priority-dot ${color}"></span>
@@ -100,28 +99,13 @@
                     </div>
                     <p class="text-slate-300 text-lg">${r.content.replace(/\n/g, '<br>')}</p>
                     <div class="flex gap-4 mt-6">
-                        <button class="edit-btn text-blue-400 hover:text-blue-300 font-medium">✏️ Sửa</button>
-                        <button class="delete-btn text-red-400 hover:text-red-300 font-medium">🗑️ Xóa</button>
+                        <button onclick="editLog('${r.id}')" class="text-blue-400 hover:text-blue-300 font-medium">✏️ Sửa</button>
+                        <button onclick="deleteLog('${r.id}')" class="text-red-400 hover:text-red-300 font-medium">🗑️ Xóa</button>
                     </div>
                 </div>`;
             });
-
             document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-slate-400">Chưa có bàn giao nào...</p>';
         }
-
-        // === EVENT DELEGATION (nút Sửa/Xóa hoạt động chắc chắn) ===
-        document.getElementById('logs').addEventListener('click', function(e) {
-            const card = e.target.closest('.entry-card');
-            if (!card) return;
-
-            const id = card.dataset.id;
-
-            if (e.target.classList.contains('edit-btn')) {
-                editLog(id);
-            } else if (e.target.classList.contains('delete-btn')) {
-                deleteLog(id);
-            }
-        });
 
         function editLog(id) {
             currentEditId = id;
