@@ -6,6 +6,8 @@
     <title>Sổ nhật ký vận hành điện tử</title>
     <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         /* === CSS COMPONENT (chỉ thay đổi đoạn này) === */
         .entry-card {
@@ -247,6 +249,10 @@ function showDetail(id) {
                 ${r.opinions ? `<div><strong>Ý kiến:</strong> ${r.opinions}</div>` : ''}
 
                 <div class="flex gap-4 mt-8">
+                    <button onclick="exportToPDF('${r.id}')" 
+                            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-medium">
+                        📄 Xuất PDF
+                    </button>
                     <button onclick="editLog('${r.id}'); closeDetailModal()" 
                             class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl">
                         ✏️ Sửa
@@ -414,7 +420,56 @@ function editLog(id) {
         window.onload = () => {
             renderAreaOptions();
             loadLogs();
-        };
+        }
+
+        async function exportToPDF(id) {
+    const r = await pb.collection('handovers').getOne(id);
+    
+    // Tạo nội dung PDF đẹp
+    const content = `
+        <div style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
+            <h1 style="text-align: center; color: #166534;">SỔ NHẬT KÝ VẬN HÀNH ĐIỆN TỬ</h1>
+            <h2 style="text-align: center; margin: 20px 0;">${r.area} - ${r.shift}</h2>
+            <p style="text-align: center; font-size: 18px;">Ngày: ${new Date(r.date).toLocaleDateString('vi-VN')}</p>
+            
+            <table style="width:100%; border-collapse: collapse; margin: 30px 0;">
+                <tr><td style="padding:8px; border:1px solid #ccc;"><strong>Trực chính:</strong></td><td style="padding:8px; border:1px solid #ccc;">${r.main_duty || '-'}</td></tr>
+                <tr><td style="padding:8px; border:1px solid #ccc;"><strong>Trực phụ:</strong></td><td style="padding:8px; border:1px solid #ccc;">${r.sub_duty || '-'}</td></tr>
+                <tr><td style="padding:8px; border:1px solid #ccc;"><strong>Trực chính điện lực:</strong></td><td style="padding:8px; border:1px solid #ccc;">${r.main_power || '-'}</td></tr>
+                <tr><td style="padding:8px; border:1px solid #ccc;"><strong>Trực phụ điện lực:</strong></td><td style="padding:8px; border:1px solid #ccc;">${r.sub_power || '-'}</td></tr>
+            </table>
+
+            ${r.notes ? `<p><strong>Lưu ý:</strong> ${r.notes}</p>` : ''}
+            ${r.equipment ? `<p><strong>Trang bị:</strong> ${r.equipment}</p>` : ''}
+            ${r.opinions ? `<p><strong>Ý kiến:</strong> ${r.opinions}</p>` : ''}
+
+            <h3 style="margin-top:30px;">Tình hình trong ca</h3>
+            <table style="width:100%; border-collapse: collapse;">
+                <thead><tr style="background:#f1f5f9;"><th style="padding:10px; border:1px solid #ccc;">Thời gian</th><th style="padding:10px; border:1px solid #ccc;">Nội dung</th></tr></thead>
+                <tbody>
+                    ${(r.situations || []).map(s => `
+                        <tr>
+                            <td style="padding:10px; border:1px solid #ccc;">${s.time || '--:--'}</td>
+                            <td style="padding:10px; border:1px solid #ccc;">${s.content}</td>
+                        </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+
+    // Tạo PDF
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content;
+    document.body.appendChild(tempDiv);
+
+    html2canvas(tempDiv, { scale: 2 }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        pdf.addImage(imgData, 'PNG', 10, 10, 190, 0);
+        pdf.save(`BanGiao_${r.area}_${new Date(r.date).toLocaleDateString('vi-VN')}.pdf`);
+        document.body.removeChild(tempDiv);
+    });
+};
     </script>
 </body>
 </html>
