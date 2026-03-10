@@ -7,31 +7,32 @@
     <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* === CSS TÍCH HỢP TRỰC TIẾP === */
+        /* === CSS COMPONENT (chỉ thay đổi đoạn này) === */
         .entry-card {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: background-color 0.3s ease;
             cursor: pointer;
             border: 3px solid transparent;
         }
 
+        /* Hover: chỉ đổi màu nền, giữ nguyên vị trí */
         .entry-card:hover {
-            transform: translateY(-6px) scale(1.03);
-            box-shadow: 0 30px 60px -15px rgb(0 0 0 / 0.3);
+            background-color: #f1f5f9;   /* Màu xám nhạt dễ nhìn */
             border-color: inherit;
         }
 
+        /* Click nhẹ (tùy chọn, bạn có thể xóa nếu không thích) */
         .entry-card:active {
-            transform: scale(0.97);
+            background-color: #e2e8f0;
         }
 
-        /* Màu toàn bộ card theo Khu công nghiệp */
+        /* Màu viền + nền card theo Khu công nghiệp (giữ nguyên) */
         .card-KCN-Tiền-Hải       { background-color: #f0fdf4; border-color: #16a34a; }
         .card-KCN-Phong-Diền     { background-color: #eff6ff; border-color: #3b82f6; }
         .card-KCN-Thuận-Thành-I  { background-color: #fefce8; border-color: #f59e0b; }
         .card-KCN-Yên-Mỹ         { background-color: #fef2f2; border-color: #ef4444; }
         .card-KCN-số-3           { background-color: #f5f3ff; border-color: #8b5cf6; }
 
-        /* Màu tên KCN (giữ đậm) */
+        /* Màu tên KCN (giữ nguyên) */
         .kcn-KCN-Tiền-Hải       { background-color: #dcfce7; color: #166534; }
         .kcn-KCN-Phong-Diền     { background-color: #dbeafe; color: #1e40af; }
         .kcn-KCN-Thuận-Thành-I  { background-color: #fef3c7; color: #92400e; }
@@ -162,109 +163,110 @@
             });
         }
 
-        async function loadLogs() {
-            const filterParts = [];
-            if (currentFilter.area) filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
-            if (currentFilter.date) filterParts.push(`date = '${currentFilter.date}'`);
+async function loadLogs() {
+    const filterParts = [];
+    if (currentFilter.area) filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
+    if (currentFilter.date) filterParts.push(`date = '${currentFilter.date}'`);
 
-            const options = {
-                sort: '-date',
-                ...(filterParts.length > 0 && { filter: filterParts.join(' && ') })
-            };
+    const options = {
+        sort: '-date',
+        ...(filterParts.length > 0 && { filter: filterParts.join(' && ') })
+    };
 
-            try {
-                const records = await pb.collection('handovers').getFullList(options);
-                let html = '';
+    try {
+        const records = await pb.collection('handovers').getFullList(options);
+        let html = '';
 
-                records.forEach(r => {
-                    const safeClass = r.area ? r.area.replace(/\s+/g, '-') : 'KCN-Tien-Hai';
-                    const cardClass = `card-${safeClass}`;
-                    const areaClass = `kcn-${safeClass}`;
-                    const mainSub = [r.main_duty, r.sub_duty].filter(Boolean).join(' / ') || '-';
+        records.forEach(r => {
+            const safeClass = r.area ? r.area.replace(/\s+/g, '-') : 'KCN-Tien-Hai';
+            const cardClass = `card-${safeClass}`;
+            const areaClass = `kcn-${safeClass}`;
 
-                    html += `
-                    <div class="entry-card shadow rounded-3xl p-6 flex justify-between items-center ${cardClass}"
-                         onclick="showDetail('${r.id}')">
-                        <div class="flex items-center gap-6 flex-1">
-                            <div class="px-5 py-3 rounded-lg font-bold text-lg ${areaClass}">
-                                ${r.area || 'Chưa có khu vực'}
-                            </div>
-                            <div>
-                                <div class="font-medium text-gray-800">
-                                    ${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}
-                                </div>
-                                <div class="text-sm text-gray-600">${r.shift || '?'}</div>
-                            </div>
-                            <div class="text-gray-700 flex-1">Trực: ${mainSub}</div>
+            html += `
+            <div class="entry-card shadow rounded-3xl p-6 flex justify-between items-center ${cardClass}"
+                 onclick="showDetail('${r.id}')">
+                <div class="flex items-center gap-6 flex-1">
+                    <div class="px-5 py-3 rounded-lg font-bold text-lg ${areaClass}">
+                        ${r.area || 'Chưa có khu vực'}
+                    </div>
+                    <div>
+                        <div class="font-medium text-gray-800">
+                            ${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}
                         </div>
-                        <div class="text-xs text-gray-500">
-                            ${new Date(r.created).toLocaleString('vi-VN', {hour:'2-digit', minute:'2-digit'})}
-                        </div>
-                    </div>`;
-                });
+                        <div class="text-sm text-gray-600">${r.shift || '?'}</div>
+                    </div>
+                    <div class="text-gray-700 flex-1">
+                        Trực chính: ${r.main_duty || '-'}<br>
+                        Trực phụ điện lực: ${r.sub_power || '-'}
+                    </div>
+                </div>
+            </div>`;
+        });
 
-                document.getElementById('logs').innerHTML = html || 
-                    '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào. Hãy tạo cái đầu tiên!</p>';
-            } catch (err) {
-                console.error('Lỗi loadLogs:', err);
-                if (err.status !== 0) {
-                    document.getElementById('logs').innerHTML = 
-                        `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu: ${err.message || 'Unknown'}</p>`;
-                }
-            }
+        document.getElementById('logs').innerHTML = html || 
+            '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào. Hãy tạo cái đầu tiên!</p>';
+    } catch (err) {
+        console.error('Lỗi loadLogs:', err);
+        if (err.status !== 0) {
+            document.getElementById('logs').innerHTML = 
+                `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu</p>`;
         }
+    }
+}
 
-        function showDetail(id) {
-            pb.collection('handovers').getOne(id).then(r => {
-                const situationsHTML = (r.situations || []).map(s => `
-                    <tr class="border-b border-gray-200">
-                        <td class="p-3 text-emerald-600">${s.time || '--:--'}</td>
-                        <td class="p-3">${s.content || ''}</td>
-                    </tr>`).join('');
+function showDetail(id) {
+    pb.collection('handovers').getOne(id).then(r => {
+        // Đổi format giờ thành 24h (13:00 thay vì 01:00 CH)
+        const situationsHTML = (r.situations || []).map(s => `
+            <tr class="border-b border-gray-200">
+                <td class="p-3 text-emerald-600 font-medium">
+                    ${s.time ? s.time.padStart(5, '0') : '--:--'}
+                </td>
+                <td class="p-3">${s.content || ''}</td>
+            </tr>`).join('');
 
-                const html = `
-                    <div class="space-y-6">
-                        <div class="flex justify-between">
-                            <div>
-                                <div class="text-3xl font-bold text-gray-800">${r.area} - ${r.shift}</div>
-                                <div class="text-xl text-gray-600 mt-1">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}</div>
-                            </div>
-                            <div class="text-right text-gray-500">Tạo lúc: ${new Date(r.created).toLocaleString('vi-VN')}</div>
-                        </div>
+        const html = `
+            <div class="space-y-6">
+                <div class="flex justify-between">
+                    <div>
+                        <div class="text-3xl font-bold text-gray-800">${r.area} - ${r.shift}</div>
+                        <div class="text-xl text-gray-600 mt-1">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}</div>
+                    </div>
+                </div>
 
-                        <div class="grid grid-cols-2 gap-6 text-lg">
-                            <div><strong>Trực chính:</strong> ${r.main_duty || '-'}</div>
-                            <div><strong>Trực phụ:</strong> ${r.sub_duty || '-'}</div>
-                            <div><strong>Trực chính điện lực:</strong> ${r.main_power || '-'}</div>
-                            <div><strong>Trực phụ điện lực:</strong> ${r.sub_power || '-'}</div>
-                        </div>
+                <div class="grid grid-cols-2 gap-6 text-lg">
+                    <div><strong>Trực chính:</strong> ${r.main_duty || '-'}</div>
+                    <div><strong>Trực phụ:</strong> ${r.sub_duty || '-'}</div>
+                    <div><strong>Trực chính điện lực:</strong> ${r.main_power || '-'}</div>
+                    <div><strong>Trực phụ điện lực:</strong> ${r.sub_power || '-'}</div>
+                </div>
 
-                        ${situationsHTML ? `
-                        <div>
-                            <h4 class="font-semibold text-gray-700 mb-2">Tình hình trong ca</h4>
-                            <table class="w-full text-sm border-collapse">${situationsHTML}</table>
-                        </div>` : ''}
+                ${situationsHTML ? `
+                <div>
+                    <h4 class="font-semibold text-gray-700 mb-2">Tình hình trong ca</h4>
+                    <table class="w-full text-sm border-collapse">${situationsHTML}</table>
+                </div>` : ''}
 
-                        ${r.notes ? `<div><strong>Lưu ý:</strong> ${r.notes}</div>` : ''}
-                        ${r.equipment ? `<div><strong>Trang bị:</strong> ${r.equipment}</div>` : ''}
-                        ${r.opinions ? `<div><strong>Ý kiến:</strong> ${r.opinions}</div>` : ''}
+                ${r.notes ? `<div><strong>Lưu ý:</strong> ${r.notes}</div>` : ''}
+                ${r.equipment ? `<div><strong>Trang bị:</strong> ${r.equipment}</div>` : ''}
+                ${r.opinions ? `<div><strong>Ý kiến:</strong> ${r.opinions}</div>` : ''}
 
-                        <div class="flex gap-4 mt-8">
-                            <button onclick="editLog('${r.id}'); closeDetailModal()" 
-                                    class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl">
-                                ✏️ Sửa
-                            </button>
-                            <button onclick="deleteLog('${r.id}'); closeDetailModal()" 
-                                    class="flex-1 bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl">
-                                🗑️ Xóa
-                            </button>
-                        </div>
-                    </div>`;
+                <div class="flex gap-4 mt-8">
+                    <button onclick="editLog('${r.id}'); closeDetailModal()" 
+                            class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl">
+                        ✏️ Sửa
+                    </button>
+                    <button onclick="deleteLog('${r.id}'); closeDetailModal()" 
+                            class="flex-1 bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl">
+                        🗑️ Xóa
+                    </button>
+                </div>
+            </div>`;
 
-                document.getElementById('detailContent').innerHTML = html;
-                document.getElementById('detailModal').classList.remove('hidden');
-            }).catch(() => alert('Không tìm thấy bản ghi!'));
-        }
+        document.getElementById('detailContent').innerHTML = html;
+        document.getElementById('detailModal').classList.remove('hidden');
+    }).catch(() => alert('Không tìm thấy bản ghi!'));
+}
 
         function closeDetailModal() {
             document.getElementById('detailModal').classList.add('hidden');
