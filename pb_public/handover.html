@@ -437,9 +437,9 @@ async function exportToPDF(id) {
 
     const dateStr = new Date(r.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    // Nội dung PDF theo đúng mẫu bạn đưa
+    // Nội dung PDF theo mẫu bạn đưa
     const contentHTML = `
-        <div style="font-family: Arial, sans-serif; font-size: 13px; line-height: 1.5; padding: 57px 57px 57px 85px; max-width: 595px; margin: 0 auto; background: white;">
+        <div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 57px 57px 57px 85px; max-width: 595px; margin: 0 auto; background: white;">
             <!-- Dòng Ca trực tiếp -->
             <p style="text-align: center; margin: 0 0 18px 0; font-weight: bold;">
                 Ca: ${r.shift} ${caTime}
@@ -522,10 +522,14 @@ async function exportToPDF(id) {
     tempDiv.innerHTML = contentHTML;
     document.body.appendChild(tempDiv);
 
-    html2canvas(tempDiv, { scale: 2 }).then(canvas => {
+    html2canvas(tempDiv, { scale: 3 }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
-        // Điều chỉnh để PDF đầy trang, không co cụm
-        pdf.addImage(imgData, 'PNG', 10, 10, 190, 0);
+        
+        // Tính toán kích thước để PDF đầy trang, không co cụm
+        const imgWidth = 190;                    // mm (lề trái phải 10mm)
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
         pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
         document.body.removeChild(tempDiv);
     });
