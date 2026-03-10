@@ -519,7 +519,26 @@ async function exportToPDF(id) {
 
             <p><strong>3. Ý kiến lãnh đạo đơn vị:</strong><br>${r.opinions || 'Không có'}</p>
         </div>`;
+	// Tạo PDF
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'mm', 'a4');
 
+    const tempDiv = document.createElement('div');
+    tempDiv.style.width = '595px';
+    tempDiv.innerHTML = contentHTML;
+    document.body.appendChild(tempDiv);
+
+    html2canvas(tempDiv, { scale: 3.5 }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const pageWidth = 190;
+        const pageHeight = (canvas.height * pageWidth) / canvas.width;
+        
+        pdf.addImage(imgData, 'PNG', 10, 10, pageWidth, pageHeight);
+        pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
+        
+        document.body.removeChild(tempDiv);
+    });
+};
     </script>
 </body>
 </html>
