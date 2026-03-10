@@ -29,17 +29,17 @@
 
         /* Màu viền + nền card theo Khu công nghiệp (giữ nguyên) */
         .card-KCN-Tiền-Hải       { background-color: #f0fdf4; border-color: #16a34a; }
-        .card-KCN-Phong-Diền     { background-color: #eff6ff; border-color: #3b82f6; }
+        .card-KCN-Phong-Điền     { background-color: #eff6ff; border-color: #3b82f6; }
         .card-KCN-Thuận-Thành-I  { background-color: #fefce8; border-color: #f59e0b; }
         .card-KCN-Yên-Mỹ         { background-color: #fef2f2; border-color: #ef4444; }
-        .card-KCN-số-3           { background-color: #f5f3ff; border-color: #8b5cf6; }
+        .card-KCN-Số-3           { background-color: #f5f3ff; border-color: #8b5cf6; }
 
         /* Màu tên KCN (giữ nguyên) */
         .kcn-KCN-Tiền-Hải       { background-color: #dcfce7; color: #166534; }
-        .kcn-KCN-Phong-Diền     { background-color: #dbeafe; color: #1e40af; }
+        .kcn-KCN-Phong-Điền     { background-color: #dbeafe; color: #1e40af; }
         .kcn-KCN-Thuận-Thành-I  { background-color: #fef3c7; color: #92400e; }
         .kcn-KCN-Yên-Mỹ         { background-color: #fee2e2; color: #991b1b; }
-        .kcn-KCN-số-3           { background-color: #f3e8ff; color: #6b21a8; }
+        .kcn-KCN-Số-3           { background-color: #f3e8ff; color: #6b21a8; }
 
         .scroll-list { max-height: calc(100vh - 380px); overflow-y: auto; }
     </style>
@@ -84,7 +84,7 @@
     <div id="detailModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
         <div class="bg-white p-8 rounded-3xl w-full max-w-4xl mx-4 max-h-[95vh] overflow-auto shadow-2xl">
             <div class="flex justify-between items-center mb-6">
-                <h3 class="text-2xl font-bold text-gray-800">Chi tiết bàn giao</h3>
+                <h3 class="text-2xl font-bold text-gray-800">Chi tiết lịch trưc</h3>
                 <button onclick="closeDetailModal()" class="text-gray-500 hover:text-gray-700 text-2xl">×</button>
             </div>
             <div id="detailContent" class="space-y-6"></div>
@@ -94,7 +94,7 @@
     <!-- MODAL TẠO / SỬA -->
     <div id="modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
         <div class="bg-white p-8 rounded-3xl w-full max-w-4xl mx-4 max-h-[95vh] overflow-auto shadow-2xl">
-            <h3 id="modalTitle" class="text-2xl font-bold mb-6 text-gray-800">✍️ Tạo bàn giao mới</h3>
+            <h3 id="modalTitle" class="text-2xl font-bold mb-6 text-gray-800">✍️ Tạo lịch trực mới</h3>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <input id="date" type="date" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
@@ -130,7 +130,7 @@
 
             <div class="flex gap-4 mt-10">
                 <button onclick="closeModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 py-5 rounded-3xl text-gray-800">Hủy</button>
-                <button onclick="saveLog()" id="saveBtn" class="flex-1 bg-emerald-500 hover:bg-emerald-600 py-5 rounded-3xl font-medium text-white">Lưu bàn giao</button>
+                <button onclick="saveLog()" id="saveBtn" class="flex-1 bg-emerald-500 hover:bg-emerald-600 py-5 rounded-3xl font-medium text-white">Lưu lịch trực</button>
             </div>
         </div>
     </div>
@@ -279,8 +279,8 @@ function showDetail(id) {
 
         function openCreateModal() {
             currentEditId = null;
-            document.getElementById('modalTitle').textContent = '✍️ Tạo bàn giao mới';
-            document.getElementById('saveBtn').textContent = 'Lưu bàn giao';
+            document.getElementById('modalTitle').textContent = '✍️ Tạo lịch trực mới';
+            document.getElementById('saveBtn').textContent = 'Lưu Lịch trực';
             clearModal();
             document.getElementById('modal').classList.remove('hidden');
         }
@@ -359,7 +359,7 @@ function renderSituationTable() {
                     alert('✅ Đã cập nhật!');
                 } else {
                     await pb.collection('handovers').create(data);
-                    alert('✅ Đã tạo bàn giao mới!');
+                    alert('✅ Đã tạo lịch trực!');
                 }
                 closeModal();
                 loadLogs();
@@ -374,7 +374,7 @@ function renderSituationTable() {
 
 function editLog(id) {
     currentEditId = id;
-    document.getElementById('modalTitle').textContent = '✏️ Chỉnh sửa bàn giao';
+    document.getElementById('modalTitle').textContent = '✏️ Chỉnh sửa lịch trực';
     document.getElementById('saveBtn').textContent = 'Lưu thay đổi';
 
     pb.collection('handovers').getOne(id).then(r => {
