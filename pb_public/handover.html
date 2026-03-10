@@ -4,11 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sổ nhật ký vận hành điện tử</title>
-    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
     <div class="max-w-7xl mx-auto p-6">
-        <!-- Header -->
         <div class="flex justify-between items-center mb-8 bg-white shadow rounded-3xl p-6">
             <h1 class="text-4xl font-bold text-gray-800">📋 Sổ nhật ký vận hành điện tử</h1>
             <div class="flex items-center gap-4">
@@ -17,18 +18,14 @@
             </div>
         </div>
 
-        <!-- BLOCK 1: Nút thêm + Bộ lọc -->
         <div class="bg-white shadow rounded-3xl p-8 mb-8 flex flex-wrap gap-6 items-end">
             <button onclick="openCreateModal()" class="bg-emerald-500 hover:bg-emerald-600 px-10 py-5 rounded-3xl text-xl font-medium text-white flex items-center gap-3">
                 ✨ Thêm bàn giao mới
             </button>
-
             <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                     <label class="block text-sm text-gray-600 mb-2">Khu vực</label>
-                    <select id="filterArea" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                        <option value="">Tất cả khu vực</option>
-                    </select>
+                    <select id="filterArea" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"></select>
                 </div>
                 <div>
                     <label class="block text-sm text-gray-600 mb-2">Thời gian</label>
@@ -37,7 +34,6 @@
             </div>
         </div>
 
-        <!-- BLOCK 2: Danh sách ngắn gọn -->
         <div id="logs" class="scroll-list space-y-4"></div>
     </div>
 
@@ -61,9 +57,7 @@
                 <input id="date" type="date" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
                 <select id="area" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"></select>
                 <select id="shift" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                    <option value="Ca 1">Ca 1</option>
-                    <option value="Ca 2">Ca 2</option>
-                    <option value="Ca 3">Ca 3</option>
+                    <option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option>
                 </select>
             </div>
 
@@ -96,7 +90,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

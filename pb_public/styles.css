@@ -2,20 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-.entry-card {
-    transition: all 0.3s ease;
-    cursor: pointer;
-}
-.entry-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-}
-.scroll-list {
-    max-height: calc(100vh - 380px);
-    overflow-y: auto;
-}
+.entry-card { transition: all 0.3s ease; cursor: pointer; }
+.entry-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+.scroll-list { max-height: calc(100vh - 380px); overflow-y: auto; }
 
-/* Màu cố định cho từng KCN */
+/* Màu sắc phân biệt từng KCN */
 .kcn-KCN-Tiền-Hải       { background-color: #dcfce7; color: #166534; border-left: 6px solid #16a34a; }
 .kcn-KCN-Phong-Diền     { background-color: #dbeafe; color: #1e40af; border-left: 6px solid #3b82f6; }
 .kcn-KCN-Thuận-Thành-I  { background-color: #fef3c7; color: #92400e; border-left: 6px solid #f59e0b; }
