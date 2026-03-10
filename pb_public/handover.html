@@ -422,7 +422,7 @@ function editLog(id) {
 async function exportToPDF(id) {
     const r = await pb.collection('handovers').getOne(id);
 
-    // Xử lý khung giờ Ca (Ca 3 sang ngày hôm sau)
+    // Xử lý khung giờ Ca
     let caTime = '';
     const startDate = new Date(r.date);
     let endDate = new Date(r.date);
@@ -437,15 +437,13 @@ async function exportToPDF(id) {
 
     const dateStr = new Date(r.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    // Nội dung PDF theo mẫu bạn đưa
+    // Nội dung HTML (giữ nguyên bảng 3x3)
     const contentHTML = `
-        <div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 57px 57px 57px 85px; max-width: 595px; margin: 0 auto; background: white;">
-            <!-- Dòng Ca trực tiếp -->
+        <div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 57px 57px 57px 85px; width: 595px; margin: 0 auto; background: white;">
             <p style="text-align: center; margin: 0 0 18px 0; font-weight: bold;">
                 Ca: ${r.shift} ${caTime}
             </p>
 
-            <!-- NHÂN VIÊN VẬN HÀNH -->
             <p style="margin: 20px 0 8px 0; font-weight: bold;">
                 NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)
             </p>
@@ -467,7 +465,6 @@ async function exportToPDF(id) {
                 </tr>
             </table>
 
-            <!-- I. TÌNH HÌNH VẬN HÀNH TRONG CA -->
             <p style="margin: 25px 0 8px 0; font-weight: bold;">
                 I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)
             </p>
@@ -487,12 +484,10 @@ async function exportToPDF(id) {
                 </tbody>
             </table>
 
-            <!-- II. PHẦN GIAO NHẬN CA -->
             <p style="margin: 25px 0 8px 0; font-weight: bold;">II. PHẦN GIAO NHẬN CA</p>
             <p><strong>1. Những lưu ý và tồn tại ca sau cần giải quyết:</strong><br>${r.notes || 'Không có'}</p>
             <p style="margin-top: 15px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
 
-            <!-- Bảng ký tên -->
             <table style="width:100%; border-collapse: collapse; margin: 25px 0;">
                 <tr>
                     <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Giờ giao ca</td>
@@ -510,7 +505,6 @@ async function exportToPDF(id) {
                 </tr>
             </table>
 
-            <!-- Ý kiến lãnh đạo -->
             <p style="margin-top: 25px;"><strong>3. Ý kiến lãnh đạo đơn vị:</strong><br>${r.opinions || 'Không có'}</p>
         </div>`;
 
@@ -519,6 +513,7 @@ async function exportToPDF(id) {
     const pdf = new jsPDF('p', 'mm', 'a4');
 
     const tempDiv = document.createElement('div');
+    tempDiv.style.width = '595px';           // Cố định chiều rộng A4 portrait
     tempDiv.innerHTML = contentHTML;
     document.body.appendChild(tempDiv);
 
@@ -526,11 +521,12 @@ async function exportToPDF(id) {
         const imgData = canvas.toDataURL('image/png');
         
         // Tính toán kích thước để PDF đầy trang, không co cụm
-        const imgWidth = 1900;                    // mm (lề trái phải 10mm)
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        const pageWidth = 190;                     // 210mm - 20mm margin
+        const pageHeight = (canvas.height * pageWidth) / canvas.width;
         
-        pdf.addImage(imgData, 'PNG', 100, 100, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'PNG', 10, 10, pageWidth, pageHeight);
         pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
+        
         document.body.removeChild(tempDiv);
     });
 };
