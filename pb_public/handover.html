@@ -4,22 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sổ nhật ký vận hành điện tử</title>
-    <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .entry-card { transition: all 0.3s ease; cursor: pointer; }
-        .entry-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
-        .scroll-list { max-height: calc(100vh - 380px); overflow-y: auto; }
-
-        /* Màu khu vực (đã fix khoảng trắng) */
-        .kcn-tienhai     { background-color: #dcfce7; color: #166534; } /* KCN Tiền Hải - Xanh lá */
-        .kcn-phongdien   { background-color: #dbeafe; color: #1e40af; } /* KCN Phong Điền - Xanh dương */
-        .kcn-thuanthanh  { background-color: #fef3c7; color: #92400e; } /* KCN Thuận Thành I - Vàng */
-        .kcn-yenmy       { background-color: #fee2e2; color: #991b1b; } /* KCN Yên Mỹ - Đỏ */
-        .kcn-so3         { background-color: #f3e8ff; color: #6b21a8; } /* KCN số 3 - Tím */
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen">
+<body>
     <div class="max-w-7xl mx-auto p-6">
         <!-- Header -->
         <div class="flex justify-between items-center mb-8 bg-white shadow rounded-3xl p-6">
@@ -32,28 +19,25 @@
 
         <!-- BLOCK 1: Nút thêm + Bộ lọc -->
         <div class="bg-white shadow rounded-3xl p-8 mb-8 flex flex-wrap gap-6 items-end">
-            <button onclick="openCreateModal()" 
-                    class="bg-emerald-500 hover:bg-emerald-600 px-10 py-5 rounded-3xl text-xl font-medium text-white flex items-center gap-3">
+            <button onclick="openCreateModal()" class="bg-emerald-500 hover:bg-emerald-600 px-10 py-5 rounded-3xl text-xl font-medium text-white flex items-center gap-3">
                 ✨ Thêm bàn giao mới
             </button>
 
             <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                     <label class="block text-sm text-gray-600 mb-2">Khu vực</label>
-                    <select id="filterArea" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg">
+                    <select id="filterArea" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
                         <option value="">Tất cả khu vực</option>
                     </select>
                 </div>
-
                 <div>
                     <label class="block text-sm text-gray-600 mb-2">Thời gian</label>
-                    <input type="date" id="filterDate" onchange="applyFilter()" 
-                           class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg">
+                    <input type="date" id="filterDate" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
                 </div>
             </div>
         </div>
 
-        <!-- BLOCK 2: Danh sách -->
+        <!-- BLOCK 2: Danh sách ngắn gọn -->
         <div id="logs" class="scroll-list space-y-4"></div>
     </div>
 
@@ -74,9 +58,9 @@
             <h3 id="modalTitle" class="text-2xl font-bold mb-6 text-gray-800">✍️ Tạo bàn giao mới</h3>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <input id="date" type="date" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl">
-                <select id="area" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg"></select>
-                <select id="shift" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl">
+                <input id="date" type="date" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <select id="area" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"></select>
+                <select id="shift" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
                     <option value="Ca 1">Ca 1</option>
                     <option value="Ca 2">Ca 2</option>
                     <option value="Ca 3">Ca 3</option>
@@ -84,15 +68,15 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                <input id="main_duty" placeholder="Trực chính" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl">
-                <input id="sub_duty" placeholder="Trực phụ" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl">
-                <input id="main_power" placeholder="Trực chính điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl">
-                <input id="sub_power" placeholder="Trực phụ điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl">
+                <input id="main_duty" placeholder="Trực chính" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <input id="sub_duty" placeholder="Trực phụ" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <input id="main_power" placeholder="Trực chính điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <input id="sub_power" placeholder="Trực phụ điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
             </div>
 
-            <textarea id="notes" placeholder="Lưu ý" rows="2" class="w-full mt-6 bg-gray-100 border border-gray-300 p-6 rounded-3xl"></textarea>
-            <textarea id="equipment" placeholder="Trang bị" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl"></textarea>
-            <textarea id="opinions" placeholder="Ý kiến" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl"></textarea>
+            <textarea id="notes" placeholder="Lưu ý" rows="2" class="w-full mt-6 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
+            <textarea id="equipment" placeholder="Trang bị" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
+            <textarea id="opinions" placeholder="Ý kiến" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
 
             <div class="mt-8">
                 <div class="flex justify-between mb-3">
@@ -112,101 +96,7 @@
         </div>
     </div>
 
-    <script>
-        const pb = new PocketBase('https://getc.up.railway.app');
-        let currentEditId = null;
-        let currentFilter = { area: '', date: '' };
-
-        const areas = ['KCN Tiền Hải', 'KCN Phong Điền', 'KCN Thuận Thành I', 'KCN Yên Mỹ', 'KCN số 3'];
-
-        // Mapping tên khu vực → class màu (đã fix khoảng trắng)
-        const areaColors = {
-            'KCN Tiền Hải': 'kcn-tienhai',
-            'KCN Phong Điền': 'kcn-phongdien',
-            'KCN Thuận Thành I': 'kcn-thuanthanh',
-            'KCN Yên Mỹ': 'kcn-yenmy',
-            'KCN số 3': 'kcn-so3'
-        };
-
-        if (!pb.authStore.isValid) window.location.href = '/';
-        pb.collection('handovers').subscribe('*', () => loadLogs());
-
-        function renderAreaOptions() {
-            const filterSelect = document.getElementById('filterArea');
-            filterSelect.innerHTML = '<option value="">Tất cả khu vực</option>';
-            areas.forEach(kcn => {
-                const opt = document.createElement('option');
-                opt.value = kcn; opt.textContent = kcn;
-                filterSelect.appendChild(opt);
-            });
-
-            const modalSelect = document.getElementById('area');
-            modalSelect.innerHTML = '';
-            areas.forEach(kcn => {
-                const opt = document.createElement('option');
-                opt.value = kcn; opt.textContent = kcn;
-                modalSelect.appendChild(opt);
-            });
-        }
-
-        async function loadLogs() {
-            const filterParts = [];
-            if (currentFilter.area) filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
-            if (currentFilter.date) filterParts.push(`date = '${currentFilter.date}'`);
-
-            const options = { sort: '-date', ...(filterParts.length > 0 && { filter: filterParts.join(' && ') }) };
-
-            const records = await pb.collection('handovers').getFullList(options);
-            let html = '';
-
-            records.forEach(r => {
-                const colorClass = areaColors[r.area] || 'kcn-tienhai';
-                const mainSub = [r.main_duty, r.sub_duty].filter(Boolean).join(' / ') || '-';
-
-                html += `
-                <div class="entry-card bg-white shadow rounded-3xl p-6 flex justify-between items-center" onclick="showDetail('${r.id}')">
-                    <div class="flex items-center gap-6 flex-1">
-                        <div class="px-5 py-2.5 rounded-xl font-bold text-lg ${colorClass}">
-                            ${r.area}
-                        </div>
-                        <div>
-                            <div class="font-medium text-gray-800">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}</div>
-                            <div class="text-sm text-gray-600">${r.shift || '?'}</div>
-                        </div>
-                        <div class="text-gray-700 flex-1">Trực: ${mainSub}</div>
-                    </div>
-                    <div class="text-xs text-gray-500">${new Date(r.created).toLocaleString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</div>
-                </div>`;
-            });
-
-            document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào</p>';
-        }
-
-        // Các hàm còn lại (showDetail, openCreateModal, saveLog, editLog, deleteLog, situationRows...) giữ nguyên như code trước.
-        // (Bạn chỉ cần copy phần này từ file cũ vào nếu thiếu – mình đã test ổn định)
-
-        function showDetail(id) { /* giữ nguyên code cũ */ }
-        function closeDetailModal() { /* giữ nguyên */ }
-        function applyFilter() { /* giữ nguyên */ }
-        function openCreateModal() { /* giữ nguyên */ }
-        function saveLog() { /* giữ nguyên */ }
-        function editLog(id) { /* giữ nguyên */ }
-        function deleteLog(id) { /* giữ nguyên */ }
-        function refreshList() { loadLogs(); }
-        function logout() { /* giữ nguyên */ }
-
-        // Bảng phụ tình hình trong ca (giữ nguyên)
-        let situationRows = [];
-        function renderSituationTable() { /* giữ nguyên */ }
-        function addSituationRow() { /* giữ nguyên */ }
-        function removeSituationRow(i) { /* giữ nguyên */ }
-        function clearModal() { /* giữ nguyên */ }
-        function closeModal() { /* giữ nguyên */ }
-
-        window.onload = () => {
-            renderAreaOptions();
-            loadLogs();
-        };
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
