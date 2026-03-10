@@ -444,14 +444,15 @@ async function exportToPDF(id) {
         format: 'a4'
     });
 
-    // Thiết lập font và kích thước đúng yêu cầu
-    doc.setFont('times', 'normal');
+    // Thêm font DejaVuSans (hỗ trợ tiếng Việt hoàn hảo)
+    doc.addFont('https://cdn.jsdelivr.net/npm/dejavu-sans@0.0.1/fonts/DejaVuSans.ttf', 'DejaVuSans', 'normal');
+    doc.setFont('DejaVuSans');
     doc.setFontSize(13);
     doc.setLineHeightFactor(1.5);   // Dãn dòng 1.5
 
     let y = 20;   // Top margin 2cm
 
-    // Dòng Ca (bắt đầu trực tiếp, không có tiêu đề "Sổ nhật ký...")
+    // Dòng Ca (bắt đầu trực tiếp)
     doc.text(caText, 30, y);   // Lề trái 3cm
     y += 12;
 
@@ -484,14 +485,14 @@ async function exportToPDF(id) {
     doc.text('Thời gian', 30, y);
     doc.text('Nội dung', 70, y);
     y += 8;
-    doc.line(30, y - 2, 180, y - 2);   // Đường kẻ
+    doc.line(30, y - 2, 180, y - 2);
 
     // Dữ liệu tình hình trong ca
     (r.situations || []).forEach(s => {
         doc.text(s.time || '', 30, y);
         const lines = doc.splitTextToSize(s.content || '', 110);
         doc.text(lines, 70, y);
-        y += lines.length * 7.8;   // Khoảng cách dòng
+        y += lines.length * 7.8;
     });
 
     y += 12;
@@ -519,7 +520,6 @@ async function exportToPDF(id) {
     y += 8;
     doc.line(30, y, 180, y);
 
-    // Chỗ ký (dòng trống)
     y += 25;
     doc.text('1', 45, y);
     doc.text('1', 110, y);
@@ -529,7 +529,6 @@ async function exportToPDF(id) {
 
     y += 18;
 
-    // 3. Ý kiến lãnh đạo đơn vị
     doc.text('3. Ý kiến lãnh đạo đơn vị:', 30, y);
     y += 10;
     const opinionLines = doc.splitTextToSize(r.opinions || 'Không có', 150);
