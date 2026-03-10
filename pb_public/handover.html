@@ -109,13 +109,13 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <input id="main_duty" placeholder="Trực chính" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
                 <input id="sub_duty" placeholder="Trực phụ" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                <input id="main_power" placeholder="Trực chính điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                <input id="sub_power" placeholder="Trực phụ điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <input id="main_power" placeholder="Trực chính điều độ điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <input id="sub_power" placeholder="Trực phụ điều độ điện lực" class="bg-gray-100 border border-gray-300 p-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
             </div>
 
-            <textarea id="notes" placeholder="Lưu ý" rows="2" class="w-full mt-6 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
-            <textarea id="equipment" placeholder="Trang bị" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
-            <textarea id="opinions" placeholder="Ý kiến" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
+            <textarea id="notes" placeholder="Lưu ý và tồn tại cần giải quyết" rows="2" class="w-full mt-6 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
+            <textarea id="equipment" placeholder="Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
+            <textarea id="opinions" placeholder="Ý kiến lãnh đạo đơn vị" rows="2" class="w-full mt-4 bg-gray-100 border border-gray-300 p-6 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
 
             <div class="mt-8">
                 <div class="flex justify-between mb-3">
@@ -141,7 +141,7 @@
         let currentFilter = { area: '', date: '' };
         let situationRows = [];
 
-        const areas = ['KCN Tiền Hải', 'KCN Phong Điền', 'KCN Thuận Thành I', 'KCN Yên Mỹ', 'KCN số 3'];
+        const areas = ['KCN Tiền Hải', 'KCN Phong Điền', 'KCN Thuận Thành I', 'KCN Yên Mỹ', 'KCN Số 3'];
 
         if (!pb.authStore.isValid) window.location.href = '/';
 
@@ -242,8 +242,8 @@ function showDetail(id) {
                     <table class="w-full text-sm border-collapse">${situationsHTML}</table>
                 </div>` : ''}
 
-                ${r.notes ? `<div><strong>Lưu ý:</strong> ${r.notes}</div>` : ''}
-                ${r.equipment ? `<div><strong>Trang bị:</strong> ${r.equipment}</div>` : ''}
+                ${r.notes ? `<div><strong>Lưu ý và tồn tại cần giải quyết:</strong> ${r.notes}</div>` : ''}
+                ${r.equipment ? `<div><strong>Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong> ${r.equipment}</div>` : ''}
                 ${r.opinions ? `<div><strong>Ý kiến lãnh đạo:</strong> ${r.opinions}</div>` : ''}
 
                 <div class="flex gap-3 mt-8">
