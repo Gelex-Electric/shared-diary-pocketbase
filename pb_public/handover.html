@@ -221,15 +221,17 @@ function showDetail(id) {
             </tr>`).join('');
 
         const html = `
-            <div class="space-y-6">
-                <div class="flex justify-between">
+            <div class="space-y-8">
+                <div class="flex justify-between items-start">
                     <div>
-                        <div class="text-3xl font-bold text-gray-800">${r.area} - ${r.shift}</div>
-                        <div class="text-xl text-gray-600 mt-1">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : ''}</div>
+                        <div class="text-3xl font-bold text-gray-800">${r.area || 'Chưa có khu vực'} - ${r.shift || '?'}</div>
+                        <div class="text-xl text-gray-600 mt-2">
+                            ${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}
+                        </div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-6 text-lg">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-lg">
                     <div><strong>Trực chính:</strong> ${r.main_duty || '-'}</div>
                     <div><strong>Trực phụ:</strong> ${r.sub_duty || '-'}</div>
                     <div><strong>Trực chính điện lực:</strong> ${r.main_power || '-'}</div>
@@ -238,18 +240,32 @@ function showDetail(id) {
 
                 ${situationsHTML ? `
                 <div>
-                    <h4 class="font-semibold text-gray-700 mb-2">Tình hình trong ca</h4>
+                    <h4 class="font-semibold text-gray-700 mb-3 text-lg">Tình hình trong ca</h4>
                     <table class="w-full text-sm border-collapse">${situationsHTML}</table>
                 </div>` : ''}
 
-                ${r.notes ? `<div><strong>Lưu ý và tồn tại cần giải quyết:</strong> ${r.notes}</div>` : ''}
-                ${r.equipment ? `<div><strong>Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong> ${r.equipment}</div>` : ''}
-                ${r.opinions ? `<div><strong>Ý kiến lãnh đạo:</strong> ${r.opinions}</div>` : ''}
+                <!-- 3 phần đầy đủ -->
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="font-semibold text-gray-700 mb-2">1. Những lưu ý và tồn tại ca sau cần giải quyết:</h4>
+                        <p class="text-gray-700">${r.notes || 'Không có'}</p>
+                    </div>
 
-                <div class="flex gap-3 mt-8">
+                    <div>
+                        <h4 class="font-semibold text-gray-700 mb-2">2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</h4>
+                        <p class="text-gray-700">${r.equipment || 'Không có'}</p>
+                    </div>
+
+                    <div>
+                        <h4 class="font-semibold text-gray-700 mb-2">3. Ý kiến lãnh đạo đơn vị:</h4>
+                        <p class="text-gray-700">${r.opinions || 'Không có'}</p>
+                    </div>
+                </div>
+
+                <div class="flex gap-4 mt-10">
                     <button onclick="exportToPDF('${r.id}')" 
                             class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-medium">
-                        📄 In nhật ký vận hành
+                        📄 In lịch trực
                     </button>
                     <button onclick="editLog('${r.id}'); closeDetailModal()" 
                             class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl">
