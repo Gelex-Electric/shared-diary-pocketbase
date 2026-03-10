@@ -522,14 +522,14 @@ async function exportToPDF(id) {
     tempDiv.innerHTML = contentHTML;
     document.body.appendChild(tempDiv);
 
-    html2canvas(tempDiv, { scale: 3 }).then(canvas => {
+    html2canvas(tempDiv, { scale: 3.5 }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
         
         // Tính toán kích thước để PDF đầy trang, không co cụm
-        const imgWidth = 190;                    // mm (lề trái phải 10mm)
+        const imgWidth = 1900;                    // mm (lề trái phải 10mm)
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
         
-        pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'PNG', 100, 100, imgWidth, imgHeight);
         pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
         document.body.removeChild(tempDiv);
     });
