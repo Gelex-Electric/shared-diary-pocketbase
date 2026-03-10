@@ -187,15 +187,15 @@ async function loadLogs() {
             html += `
             <div class="entry-card shadow rounded-3xl p-6 flex justify-between items-center ${cardClass}"
                  onclick="showDetail('${r.id}')">
-                <div class="flex items-center gap-6 flex-1">
-                    <div class="px-5 py-3 rounded-lg font-bold text-lg ${areaClass}">
+                <div class="flex flex-col flex-1">
+                    <div class="text-2xl font-bold text-gray-800 ${areaClass}">
                         ${r.area || 'Chưa có khu vực'}
                     </div>
-                    <div class="text-gray-700 flex-1 text-sm">
-                        Trực chính: <span class="font-medium">${r.main_duty || '-'}</span><br>
-                        Trực phụ: <span class="font-medium">${r.sub_duty || '-'}</span><br>
-                        Trực chính điện lực: <span class="font-medium">${r.main_power || '-'}</span><br>
-                        Trực phụ điện lực: <span class="font-medium">${r.sub_power || '-'}</span>
+                    <div class="text-lg text-gray-600 mt-1">
+                        ${r.shift || '?'} - ${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}
+                    </div>
+                    <div class="text-gray-700 mt-3">
+                        Trực chính: ${r.main_duty || '-'} / Trực phụ: ${r.sub_duty || '-'}
                     </div>
                 </div>
             </div>`;
@@ -206,7 +206,8 @@ async function loadLogs() {
     } catch (err) {
         console.error('Lỗi loadLogs:', err);
         if (err.status !== 0) {
-            document.getElementById('logs').innerHTML = `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu</p>`;
+            document.getElementById('logs').innerHTML = 
+                `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu</p>`;
         }
     }
 }
@@ -248,7 +249,7 @@ function showDetail(id) {
                 <div class="flex gap-3 mt-8">
                     <button onclick="exportToPDF('${r.id}')" 
                             class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-medium">
-                        📄 Xuất PDF theo mẫu
+                        📄 In nhật ký vận hành
                     </button>
                     <button onclick="editLog('${r.id}'); closeDetailModal()" 
                             class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl">
