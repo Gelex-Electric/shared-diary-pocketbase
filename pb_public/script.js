@@ -32,20 +32,28 @@ async function loadLogs() {
     if (currentFilter.area) filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
     if (currentFilter.date) filterParts.push(`date = '${currentFilter.date}'`);
 
-    const options = { sort: '-date', ...(filterParts.length > 0 && { filter: filterParts.join(' && ') }) };
+    const options = {
+        sort: '-date',
+        ...(filterParts.length > 0 && { filter: filterParts.join(' && ') })
+    };
 
     try {
         const records = await pb.collection('handovers').getFullList(options);
         let html = '';
+
         records.forEach(r => {
             const safeClass = r.area ? r.area.replace(/\s+/g, '-') : 'KCN-Tien-Hai';
-            const areaClass = `kcn-${safeClass}`;
+            const cardClass = `card-${safeClass}`;           // ← Màu toàn bộ card
+            const areaClass = `kcn-${safeClass}`;            // ← Màu tên KCN
             const mainSub = [r.main_duty, r.sub_duty].filter(Boolean).join(' / ') || '-';
 
             html += `
-            <div class="entry-card bg-white shadow rounded-3xl p-6 flex justify-between items-center" onclick="showDetail('${r.id}')">
+            <div class="entry-card bg-white shadow rounded-3xl p-6 flex justify-between items-center ${cardClass}"
+                 onclick="showDetail('${r.id}')">
                 <div class="flex items-center gap-6 flex-1">
-                    <div class="px-5 py-3 rounded-lg font-bold text-lg ${areaClass}">${r.area || 'Chưa có khu vực'}</div>
+                    <div class="px-5 py-3 rounded-lg font-bold text-lg ${areaClass}">
+                        ${r.area || 'Chưa có khu vực'}
+                    </div>
                     <div>
                         <div class="font-medium text-gray-800">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}</div>
                         <div class="text-sm text-gray-600">${r.shift || '?'}</div>
@@ -55,7 +63,9 @@ async function loadLogs() {
                 <div class="text-xs text-gray-500">${new Date(r.created).toLocaleString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</div>
             </div>`;
         });
-        document.getElementById('logs').innerHTML = html || '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào. Hãy tạo cái đầu tiên!</p>';
+
+        document.getElementById('logs').innerHTML = html || 
+            '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào. Hãy tạo cái đầu tiên!</p>';
     } catch (err) {
         console.error(err);
         document.getElementById('logs').innerHTML = `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu</p>`;
