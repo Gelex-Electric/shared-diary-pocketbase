@@ -439,7 +439,7 @@ async function exportToPDF(id) {
 
     const dateStr = new Date(r.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    // Nội dung PDF với 2 bảng 3x3 giống hình
+    // Nội dung PDF theo đúng mẫu HTML bạn đưa
     const contentHTML = `
         <div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 57px 57px 57px 85px; max-width: 595px; margin: 0 auto; background: white;">
             <!-- Dòng Ca trực tiếp (bắt đầu luôn) -->
@@ -451,7 +451,7 @@ async function exportToPDF(id) {
             <p style="margin: 20px 0 8px 0; font-weight: bold;">
                 NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)
             </p>
-<table style="width:100%; border-collapse: collapse; margin-bottom: 25px;">
+            <table style="width:100%; border-collapse: collapse; margin-bottom: 25px;">
                 <tr>
                     <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;"></td>
                     <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Trực đội QLVH</td>
@@ -465,7 +465,7 @@ async function exportToPDF(id) {
                 <tr>
                     <td style="border:1px solid #000; padding:8px; text-align:center;">Trực phụ</td>
                     <td style="border:1px solid #000; padding:8px; text-align:center;">${r.sub_duty || ''}</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center;">${r.sub_duty || ''}</td>
+                    <td style="border:1px solid #000; padding:8px; text-align:center;">${r.sub_power || ''}</td>
                 </tr>
             </table>
 
