@@ -189,15 +189,11 @@ async function loadLogs() {
                     <div class="px-5 py-3 rounded-lg font-bold text-lg ${areaClass}">
                         ${r.area || 'Chưa có khu vực'}
                     </div>
-                    <div>
-                        <div class="font-medium text-gray-800">
-                            ${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}
-                        </div>
-                        <div class="text-sm text-gray-600">${r.shift || '?'}</div>
-                    </div>
-                    <div class="text-gray-700 flex-1">
-                        Trực chính: ${r.main_duty || '-'}<br>
-                        Trực phụ điện lực: ${r.sub_power || '-'}
+                    <div class="text-gray-700 flex-1 text-sm">
+                        Trực chính: <span class="font-medium">${r.main_duty || '-'}</span><br>
+                        Trực phụ: <span class="font-medium">${r.sub_duty || '-'}</span><br>
+                        Trực chính điện lực: <span class="font-medium">${r.main_power || '-'}</span><br>
+                        Trực phụ điện lực: <span class="font-medium">${r.sub_power || '-'}</span>
                     </div>
                 </div>
             </div>`;
@@ -208,8 +204,7 @@ async function loadLogs() {
     } catch (err) {
         console.error('Lỗi loadLogs:', err);
         if (err.status !== 0) {
-            document.getElementById('logs').innerHTML = 
-                `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu</p>`;
+            document.getElementById('logs').innerHTML = `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu</p>`;
         }
     }
 }
@@ -301,18 +296,31 @@ function showDetail(id) {
             renderSituationTable();
         }
 
-        function renderSituationTable() {
-            const tbody = document.getElementById('situationBody');
-            tbody.innerHTML = '';
-            situationRows.forEach((row, i) => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td><input type="time" value="${row.time || ''}" onchange="situationRows[${i}].time = this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full"></td>
-                        <td><input type="text" value="${row.content || ''}" onchange="situationRows[${i}].content = this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full"></td>
-                        <td><button onclick="removeSituationRow(${i})" class="text-red-600 hover:text-red-800 text-xl">×</button></td>
-                    </tr>`;
-            });
-        }
+function renderSituationTable() {
+    const tbody = document.getElementById('situationBody');
+    tbody.innerHTML = '';
+    situationRows.forEach((row, i) => {
+        tbody.innerHTML += `
+            <tr>
+                <td>
+                    <input type="time" 
+                           value="${row.time || ''}" 
+                           onchange="situationRows[${i}].time = this.value" 
+                           class="bg-gray-100 border border-gray-300 p-2 rounded w-full">
+                </td>
+                <td>
+                    <input type="text" 
+                           value="${row.content || ''}" 
+                           onchange="situationRows[${i}].content = this.value" 
+                           class="bg-gray-100 border border-gray-300 p-2 rounded w-full">
+                </td>
+                <td>
+                    <button onclick="removeSituationRow(${i})" 
+                            class="text-red-600 hover:text-red-800 text-xl">×</button>
+                </td>
+            </tr>`;
+    });
+}
 
         function addSituationRow() {
             situationRows.push({ time: '', content: '' });
@@ -360,26 +368,29 @@ function showDetail(id) {
             document.getElementById('modal').classList.add('hidden');
         }
 
-        function editLog(id) {
-            currentEditId = id;
-            document.getElementById('modalTitle').textContent = '✏️ Chỉnh sửa bàn giao';
-            document.getElementById('saveBtn').textContent = 'Lưu thay đổi';
-            pb.collection('handovers').getOne(id).then(r => {
-                document.getElementById('date').value = r.date || '';
-                document.getElementById('area').value = r.area || areas[0];
-                document.getElementById('shift').value = r.shift || 'Ca 1';
-                document.getElementById('main_duty').value = r.main_duty || '';
-                document.getElementById('sub_duty').value = r.sub_duty || '';
-                document.getElementById('main_power').value = r.main_power || '';
-                document.getElementById('sub_power').value = r.sub_power || '';
-                document.getElementById('notes').value = r.notes || '';
-                document.getElementById('equipment').value = r.equipment || '';
-                document.getElementById('opinions').value = r.opinions || '';
-                situationRows = r.situations || [];
-                renderSituationTable();
-                document.getElementById('modal').classList.remove('hidden');
-            }).catch(() => alert('Không tìm thấy bản ghi!'));
-        }
+function editLog(id) {
+    currentEditId = id;
+    document.getElementById('modalTitle').textContent = '✏️ Chỉnh sửa bàn giao';
+    document.getElementById('saveBtn').textContent = 'Lưu thay đổi';
+
+    pb.collection('handovers').getOne(id).then(r => {
+        // Giữ nguyên ngày cũ khi sửa (không reset về hôm nay)
+        document.getElementById('date').value = r.date || '';
+        document.getElementById('area').value = r.area || areas[0];
+        document.getElementById('shift').value = r.shift || 'Ca 1';
+        document.getElementById('main_duty').value = r.main_duty || '';
+        document.getElementById('sub_duty').value = r.sub_duty || '';
+        document.getElementById('main_power').value = r.main_power || '';
+        document.getElementById('sub_power').value = r.sub_power || '';
+        document.getElementById('notes').value = r.notes || '';
+        document.getElementById('equipment').value = r.equipment || '';
+        document.getElementById('opinions').value = r.opinions || '';
+
+        situationRows = r.situations || [];
+        renderSituationTable();
+        document.getElementById('modal').classList.remove('hidden');
+    }).catch(() => alert('Không tìm thấy bản ghi!'));
+}
 
         async function deleteLog(id) {
             if (!confirm('Xác nhận xóa bản ghi này?')) return;
