@@ -444,15 +444,15 @@ async function exportToPDF(id) {
     const contentHTML = `
 <div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 10px 10px; width: 595px; margin: 0 auto; background: white;">
             <!-- Dòng Ca trực tiếp -->
-            <p style="text-align: center; margin: 0 0 16px 0; font-weight: bold; font-size: 13px;">
+            <p style="text-align: center; margin: 0 0 8px 0; font-weight: bold; font-size: 13px;">
                 ${r.shift} ${caTime}
             </p>
 
             <!-- NHÂN VIÊN VẬN HÀNH -->
-            <p style="margin: 16px 0 8px 0; font-weight: bold;">
+            <p style="margin: 8px 0 8px 0; font-weight: bold;">
                 NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)
             </p>
-            <table style="width:100%; border-collapse: collapse; margin-bottom: 25px;">
+            <table style="width:100%; border-collapse: collapse; margin-bottom: 8px;">
                 <tr>
                     <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold; width:35%;"></td>
                     <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Trực đội QLVH</td>
@@ -471,7 +471,7 @@ async function exportToPDF(id) {
             </table>
 
             <!-- I. TÌNH HÌNH VẬN HÀNH -->
-            <p style="margin: 16px 0 8px 0; font-weight: bold;">
+            <p style="margin: 8px 0 8px 0; font-weight: bold;">
                 I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)
             </p>
             <table style="width:100%; border-collapse: collapse; margin-bottom: 16px;">
@@ -486,8 +486,8 @@ async function exportToPDF(id) {
                         const s = situations[i];
                         return `
                         <tr>
-                            <td style="border:1px solid #000; padding:8px; height:38px; vertical-align:top;">${s ? s.time || '' : '...'}</td>
-                            <td style="border:1px solid #000; padding:8px; height:38px; vertical-align:top; text-align:left;">${s ? s.content || '...............................' : '...............................'}</td>
+                            <td style="border:1px solid #000; padding:8px; height:16px; vertical-align:top;">${s ? s.time || '' : '...'}</td>
+                            <td style="border:1px solid #000; padding:8px; height:16px; vertical-align:top; text-align:left;">${s ? s.content || '...............................' : '...............................'}</td>
                         </tr>`;
                     }).join('')}
                 </tbody>
@@ -499,21 +499,21 @@ async function exportToPDF(id) {
             <p style="margin-top: 0;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
 
             <!-- Bảng chữ ký -->
-            <table style="width:100%; border-collapse: collapse; margin: 16px 0 8px 0;">
+            <table style="width:100%; border-collapse: collapse; margin: 8px 0 8px 0;">
 			
                 <tr>
-                    <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold; width:33%;">Giờ giao ca</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Người nhận ca ký</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Người giao ca ký</td>
+                    <td style="border:1px solid #000; padding:8px 16px; text-align:center; font-weight:bold; width:33%;">Giờ giao ca</td>
+                    <td style="border:1px solid #000; padding:8px 16px; text-align:center; font-weight:bold;">Người nhận ca ký</td>
+                    <td style="border:1px solid #000; padding:8px 16px; text-align:center; font-weight:bold;">Người giao ca ký</td>
                 </tr>
 				<tr>
         			<td rowspan="2" style="border:1px solid #000; padding:16px; text-align:center;"></td>
-        			<td style="border:1px solid #000; padding: 8px; text-align:center;"></td>
-        			<td style="border:1px solid #000; padding: 8px; text-align:center;"></td>
+        			<td style="border:1px solid #000; padding: 8px 16px; height:16px; text-align:center;"></td>
+        			<td style="border:1px solid #000; padding: 8px 16px; height:16px; text-align:center;"></td>
     			</tr>
                 <tr>
-                    <td style="border:1px solid #000; padding:8px; text-align:center;"></td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center;"></td>
+                    <td style="border:1px solid #000; padding:8px 16px; height:16px; text-align:center;"></td>
+                    <td style="border:1px solid #000; padding:8px 16px; height:16px; text-align:center;"></td>
                 </tr>
             </table>
 
