@@ -6,21 +6,39 @@
     <title>Đăng nhập - Sổ nhật ký vận hành điện tử</title>
     <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+        }
+        .login-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .login-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 30px 60px -15px rgb(0 0 0 / 0.2);
+        }
+        input:focus {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+        }
+    </style>
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center">
-    <div class="w-full max-w-md bg-white shadow rounded-3xl p-10">
-        <h1 class="text-4xl font-bold text-center mb-8 text-gray-800">📋 Sổ nhật ký vận hành điện tử</h1>
-        
+<body class="min-h-screen flex items-center justify-center">
+    <div class="login-card w-full max-w-md bg-white shadow-2xl rounded-3xl p-10">
+        <div class="text-center mb-10">
+            <div class="inline-flex items-center gap-3 text-5xl mb-4">📋</div>
+            <h1 class="text-4xl font-bold text-gray-800">Sổ nhật ký vận hành điện tử</h1>
+        </div>
+
         <div class="space-y-6">
             <input id="username" 
                    placeholder="Tên đăng nhập" 
-                   class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                   class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:border-emerald-500 transition">
 
             <input id="password" 
                    type="password" 
                    placeholder="Mật khẩu" 
-                   class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                   class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:border-emerald-500 transition">
             
             <button onclick="login()" 
                     class="w-full bg-emerald-500 hover:bg-emerald-600 py-4 rounded-2xl font-medium text-lg text-white transition">
@@ -47,7 +65,7 @@
 
             try {
                 await pb.collection('users').authWithPassword(username, password);
-                window.location.href = '/handover.html';
+                window.location.href = 'handover.html';   // ← redirect về trang chính
             } catch(e) {
                 alert("❌ Sai tên đăng nhập hoặc mật khẩu!");
             }
