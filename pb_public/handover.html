@@ -442,10 +442,10 @@ async function exportToPDF(id) {
 
     // Tạo nội dung PDF
     const contentHTML = `
-        <div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 57px 57px 57px 85px; width: 595px; margin: 0 auto; background: white;">
+        <div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 0px 0px 0px 0px; width: 595px; margin: 0 auto; background: white;">
             <!-- Dòng Ca trực tiếp -->
             <p style="text-align: center; margin: 0 0 18px 0; font-weight: bold;">
-                Ca: ${r.shift} ${caTime}
+                ${r.shift} ${caTime}
             </p>
 
             <!-- NHÂN VIÊN VẬN HÀNH -->
