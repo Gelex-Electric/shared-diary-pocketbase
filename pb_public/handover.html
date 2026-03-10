@@ -8,7 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dejavu-sans@0.0.1/fonts/DejaVuSans.ttf" async></script>
     <style>
         /* === CSS COMPONENT (chỉ thay đổi đoạn này) === */
         .entry-card {
@@ -423,7 +422,7 @@ function editLog(id) {
 async function exportToPDF(id) {
     const r = await pb.collection('handovers').getOne(id);
 
-    // Xử lý khung giờ Ca
+    // Xử lý khung giờ Ca (Ca 3 sang ngày hôm sau)
     let caTime = '';
     const startDate = new Date(r.date);
     let endDate = new Date(r.date);
@@ -438,10 +437,10 @@ async function exportToPDF(id) {
 
     const dateStr = new Date(r.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    // Nội dung PDF theo mẫu bạn cung cấp
+    // Nội dung PDF theo đúng mẫu bạn đưa
     const contentHTML = `
-        <div style="font-family: DejaVuSans, Arial, sans-serif; font-size: 13px; line-height: 1.5; padding: 57px 57px 57px 85px; max-width: 595px; margin: 0 auto; background: white;">
-            <!-- Dòng Ca trực tiếp (bắt đầu luôn) -->
+        <div style="font-family: Arial, sans-serif; font-size: 13px; line-height: 1.5; padding: 57px 57px 57px 85px; max-width: 595px; margin: 0 auto; background: white;">
+            <!-- Dòng Ca trực tiếp -->
             <p style="text-align: center; margin: 0 0 18px 0; font-weight: bold;">
                 Ca: ${r.shift} ${caTime}
             </p>
@@ -519,19 +518,14 @@ async function exportToPDF(id) {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('p', 'mm', 'a4');
 
-    // Load font DejaVuSans để hỗ trợ tiếng Việt
-    pdf.addFont('https://cdn.jsdelivr.net/npm/dejavu-sans@0.0.1/fonts/DejaVuSans.ttf', 'DejaVuSans', 'normal');
-    pdf.setFont('DejaVuSans');
-    pdf.setFontSize(13);
-    pdf.setLineHeightFactor(1.5);
-
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = contentHTML;
     document.body.appendChild(tempDiv);
 
     html2canvas(tempDiv, { scale: 2 }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
-        pdf.addImage(imgData, 'PNG', 0, 0, 210, 0);
+        // Điều chỉnh để PDF đầy trang, không co cụm
+        pdf.addImage(imgData, 'PNG', 10, 10, 190, 0);
         pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
         document.body.removeChild(tempDiv);
     });
