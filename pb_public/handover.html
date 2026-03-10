@@ -439,96 +439,107 @@ async function exportToPDF(id) {
 
     const dateStr = new Date(r.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    // Nội dung PDF theo đúng mẫu HTML bạn đưa
-    const contentHTML = `
-        <div style="font-family: Arial, serif; font-size: 13px; line-height: 1.5; padding: 57px 57px 57px 85px; max-width: 595px; margin: 0 auto; background: white;">
-            <!-- Dòng Ca trực tiếp (bắt đầu luôn) -->
-            <p style="text-align: center; margin: 0 0 18px 0; font-weight: bold;">
-                Ca: ${r.shift} ${caTime}
-            </p>
-
-            <!-- NHÂN VIÊN VẬN HÀNH -->
-            <p style="margin: 20px 0 8px 0; font-weight: bold;">
-                NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)
-            </p>
-            <table style="width:100%; border-collapse: collapse; margin-bottom: 25px;">
-                <tr>
-                    <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;"></td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Trực đội QLVH</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Trực điều độ điện lực</td>
-                </tr>
-                <tr>
-                    <td style="border:1px solid #000; padding:8px; text-align:center;">Trực chính</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center;">${r.main_duty || ''}</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center;">${r.main_power || ''}</td>
-                </tr>
-                <tr>
-                    <td style="border:1px solid #000; padding:8px; text-align:center;">Trực phụ</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center;">${r.sub_duty || ''}</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center;">${r.sub_power || ''}</td>
-                </tr>
-            </table>
-
-            <!-- I. TÌNH HÌNH VẬN HÀNH TRONG CA -->
-            <p style="margin: 25px 0 8px 0; font-weight: bold;">
-                I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)
-            </p>
-            <table style="width:100%; border-collapse: collapse; margin-bottom: 25px;">
-                <thead>
-                    <tr style="background:#ffffff;">
-                        <th style="border:1px solid #000; padding:8px; text-align:left; width:25%;">Thời gian</th>
-                        <th style="border:1px solid #000; padding:8px; text-align:left;">Nội dung</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${(r.situations || []).map(s => `
-                        <tr>
-                            <td style="border:1px solid #000; padding:8px;">${s.time || ''}</td>
-                            <td style="border:1px solid #000; padding:8px;">${s.content || ''}</td>
-                        </tr>`).join('')}
-                </tbody>
-            </table>
-
-            <!-- II. PHẦN GIAO NHẬN CA -->
-            <p style="margin: 25px 0 8px 0; font-weight: bold;">II. PHẦN GIAO NHẬN CA</p>
-            <p><strong>1. Những lưu ý và tồn tại ca sau cần giải quyết:</strong><br>${r.notes || 'Không có'}</p>
-            <p style="margin-top: 15px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
-
-            <!-- Bảng ký tên -->
-            <table style="width:100%; border-collapse: collapse; margin: 25px 0;">
-                <tr>
-                    <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Giờ giao ca</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Người nhận ca ký</td>
-                    <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Người giao ca ký</td>
-                </tr>
-				<tr>
-        			<td rowspan="2" style="border:1px solid #000; padding:20px; text-align:center; width:33%;"></td>
-        			<td style="border:1px solid #000; padding: 20px; text-align:center;"></td>
-        			<td style="border:1px solid #000; padding: 20px; text-align:center;"></td>
-    			</tr>
-                <tr>
-                    <td style="border:1px solid #000; padding:20px;"></td>
-                    <td style="border:1px solid #000; padding:20px;"></td>
-                </tr>
-            </table>
-
-            <!-- Ý kiến lãnh đạo -->
-            <p style="margin-top: 25px;"><strong>3. Ý kiến lãnh đạo đơn vị:</strong><br>${r.opinions || 'Không có'}</p>
-        </div>`;
-
-    // Tạo PDF
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = contentHTML;
-    document.body.appendChild(tempDiv);
-
-    html2canvas(tempDiv, { scale: 2 }).then(canvas => {
-        const imgData = canvas.toDataURL('image/png');
-        pdf.addImage(imgData, 'PNG', 0, 0, 210, 0);
-        pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
-        document.body.removeChild(tempDiv);
+    const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
     });
+
+    // Load font DejaVuSans (hỗ trợ tiếng Việt hoàn hảo)
+    doc.addFont('https://cdn.jsdelivr.net/npm/dejavu-sans@0.0.1/fonts/DejaVuSans.ttf', 'DejaVuSans', 'normal');
+    doc.setFont('DejaVuSans');
+    doc.setFontSize(13);
+    doc.setLineHeightFactor(1.5); // Dãn dòng 1.5
+
+    let y = 20; // Top margin 2cm
+
+    // Dòng Ca trực tiếp
+    doc.text(`Ca: ${r.shift} ${caTime}`, 30, y);
+    y += 12;
+
+    // NHÂN VIÊN VẬN HÀNH
+    doc.text('NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', 30, y);
+    y += 10;
+
+    // Bảng nhân viên 3x3
+    doc.setFont('DejaVuSans', 'bold');
+    doc.text('Trực đội QLVH', 30, y);
+    doc.text('Trực điều độ điện lực', 90, y);
+    doc.setFont('DejaVuSans', 'normal');
+    y += 8;
+
+    doc.text('Trực chính', 30, y);
+    doc.text(r.main_duty || '', 90, y);
+    doc.text(r.main_power || '', 150, y);
+    y += 8;
+
+    doc.text('Trực phụ', 30, y);
+    doc.text(r.sub_duty || '', 90, y);
+    doc.text(r.sub_power || '', 150, y);
+    y += 20;
+
+    // I. TÌNH HÌNH VẬN HÀNH TRONG CA
+    doc.setFont('DejaVuSans', 'bold');
+    doc.text('I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)', 30, y);
+    doc.setFont('DejaVuSans', 'normal');
+    y += 10;
+
+    // Bảng tình hình
+    doc.text('Thời gian', 30, y);
+    doc.text('Nội dung', 70, y);
+    y += 8;
+    doc.line(30, y - 2, 180, y - 2);
+
+    (r.situations || []).forEach(s => {
+        doc.text(s.time || '', 30, y);
+        const lines = doc.splitTextToSize(s.content || '', 110);
+        doc.text(lines, 70, y);
+        y += lines.length * 7.8;
+    });
+    y += 12;
+
+    // II. PHẦN GIAO NHẬN CA
+    doc.setFont('DejaVuSans', 'bold');
+    doc.text('II. PHẦN GIAO NHẬN CA', 30, y);
+    doc.setFont('DejaVuSans', 'normal');
+    y += 10;
+
+    doc.text('1. Những lưu ý và tồn tại ca sau cần giải quyết:', 30, y);
+    y += 8;
+    const noteLines = doc.splitTextToSize(r.notes || 'Không có', 150);
+    doc.text(noteLines, 30, y);
+    y += noteLines.length * 7.8 + 8;
+
+    doc.text('2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:', 30, y);
+    y += 8;
+    const equipLines = doc.splitTextToSize(r.equipment || 'Không có', 150);
+    doc.text(equipLines, 30, y);
+    y += equipLines.length * 7.8 + 12;
+
+    // Bảng giờ giao ca 3x3
+    doc.text('Giờ giao ca', 40, y);
+    doc.text('Người nhận ca ký', 95, y);
+    doc.text('Người giao ca ký', 145, y);
+    y += 8;
+    doc.line(30, y, 180, y);
+
+    y += 25;
+    doc.text('1', 45, y);
+    doc.text('1', 110, y);
+    y += 12;
+    doc.text('2', 45, y);
+    doc.text('2', 110, y);
+
+    y += 18;
+
+    doc.text('3. Ý kiến lãnh đạo đơn vị:', 30, y);
+    y += 10;
+    const opinionLines = doc.splitTextToSize(r.opinions || 'Không có', 150);
+    doc.text(opinionLines, 30, y);
+
+    // Lưu file
+    doc.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
 };
 
     </script>
