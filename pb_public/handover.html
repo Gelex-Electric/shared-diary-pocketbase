@@ -442,7 +442,7 @@ async function exportToPDF(id) {
 
     // Tạo nội dung PDF
     const contentHTML = `
-        <div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 0px 0px 0px 0px; width: 595px; margin: 0 auto; background: white;">
+        <div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1; padding: 0px 0px 0px 0px; width: 595px; margin: 0 auto; background: white;">
             <!-- Dòng Ca trực tiếp -->
             <p style="text-align: center; margin: 0 0 18px 0; font-weight: bold;">
                 ${r.shift} ${caTime}
@@ -532,7 +532,7 @@ async function exportToPDF(id) {
         const pageWidth = 190;
         const pageHeight = (canvas.height * pageWidth) / canvas.width;
         
-        pdf.addImage(imgData, 'PNG', 10, 10, pageWidth, pageHeight);
+        pdf.addImage(imgData, 'PNG', 30, 20, pageWidth, pageHeight);
         pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
         
         document.body.removeChild(tempDiv);
