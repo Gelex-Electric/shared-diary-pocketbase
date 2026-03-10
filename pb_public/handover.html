@@ -424,11 +424,10 @@ function editLog(id) {
 async function exportToPDF(id) {
     const r = await pb.collection('handovers').getOne(id);
 
-    // ==================== XỬ LÝ KHUNG GIỜ CA ====================
+    // Xử lý khung giờ Ca (Ca 3 sang ngày hôm sau)
     let caText = '';
     const startDate = new Date(r.date);
     let endDate = new Date(r.date);
-
     if (r.shift === 'Ca 1') {
         caText = `Ca 1 Từ 06 giờ 00 ngày ${startDate.toLocaleDateString('vi-VN')} đến 14 giờ 00 ngày ${startDate.toLocaleDateString('vi-VN')}`;
     } else if (r.shift === 'Ca 2') {
@@ -438,7 +437,6 @@ async function exportToPDF(id) {
         caText = `Ca 3 Từ 22 giờ 00 ngày ${startDate.toLocaleDateString('vi-VN')} đến 06 giờ 00 ngày ${endDate.toLocaleDateString('vi-VN')}`;
     }
 
-    // ==================== TẠO PDF ====================
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({
         orientation: 'portrait',
@@ -446,37 +444,39 @@ async function exportToPDF(id) {
         format: 'a4'
     });
 
-    // Cài đặt font và kích thước
-    doc.setFont('times', 'normal');     // Gần giống Times New Roman nhất
+    // Thiết lập font và kích thước đúng yêu cầu
+    doc.setFont('times', 'normal');
     doc.setFontSize(13);
-    doc.setLineHeightFactor(1.5);       // Dãn dòng 1.5
+    doc.setLineHeightFactor(1.5);   // Dãn dòng 1.5
 
-    let y = 20;                         // Vị trí bắt đầu (top margin 2cm)
+    let y = 20;   // Top margin 2cm
 
-    // ==================== DÒNG CA (bắt đầu trực tiếp) ====================
-    doc.text(caText, 30, y);            // Trái 3cm
+    // Dòng Ca (bắt đầu trực tiếp, không có tiêu đề "Sổ nhật ký...")
+    doc.text(caText, 30, y);   // Lề trái 3cm
     y += 12;
 
-    // ==================== NHÂN VIÊN VẬN HÀNH ====================
+    // NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ
     doc.text('NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', 30, y);
     y += 10;
 
-    const tableData = [
-        ['Trực đội QLVH', r.main_duty || ''],
-        ['Trực điều độ điện lực', r.main_power || ''],
-        ['Trực chính', r.main_duty || ''],
-        ['Trực phụ', r.sub_duty || '']
-    ];
-
-    tableData.forEach(row => {
-        doc.text(row[0], 30, y);
-        doc.text(row[1], 90, y);
-        y += 8;
-    });
-
+    // Bảng nhân viên
+    doc.text('Trực đội QLVH', 30, y);
+    doc.text(r.main_duty || '', 90, y);
     y += 8;
 
-    // ==================== I. TÌNH HÌNH VẬN HÀNH TRONG CA ====================
+    doc.text('Trực điều độ điện lực', 30, y);
+    doc.text(r.main_power || '', 90, y);
+    y += 8;
+
+    doc.text('Trực chính', 30, y);
+    doc.text(r.main_duty || '', 90, y);
+    y += 8;
+
+    doc.text('Trực phụ', 30, y);
+    doc.text(r.sub_duty || '', 90, y);
+    y += 15;
+
+    // I. TÌNH HÌNH VẬN HÀNH TRONG CA
     doc.text('I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)', 30, y);
     y += 10;
 
@@ -484,21 +484,19 @@ async function exportToPDF(id) {
     doc.text('Thời gian', 30, y);
     doc.text('Nội dung', 70, y);
     y += 8;
-
-    // Dòng kẻ
-    doc.line(30, y-2, 180, y-2);
+    doc.line(30, y - 2, 180, y - 2);   // Đường kẻ
 
     // Dữ liệu tình hình trong ca
     (r.situations || []).forEach(s => {
         doc.text(s.time || '', 30, y);
-        const lines = doc.splitTextToSize(s.content || '', 110); // tự xuống dòng
+        const lines = doc.splitTextToSize(s.content || '', 110);
         doc.text(lines, 70, y);
-        y += lines.length * 7.8; // line spacing
+        y += lines.length * 7.8;   // Khoảng cách dòng
     });
 
-    y += 10;
+    y += 12;
 
-    // ==================== II. PHẦN GIAO NHẬN CA ====================
+    // II. PHẦN GIAO NHẬN CA
     doc.text('II. PHẦN GIAO NHẬN CA', 30, y);
     y += 10;
 
@@ -506,7 +504,7 @@ async function exportToPDF(id) {
     y += 8;
     const noteLines = doc.splitTextToSize(r.notes || 'Không có', 150);
     doc.text(noteLines, 30, y);
-    y += noteLines.length * 7.8 + 6;
+    y += noteLines.length * 7.8 + 8;
 
     doc.text('2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:', 30, y);
     y += 8;
@@ -516,22 +514,22 @@ async function exportToPDF(id) {
 
     // Bảng giờ giao ca
     doc.text('Giờ giao ca', 40, y);
-    doc.text('Người nhận ca ký', 90, y);
-    doc.text('Người giao ca ký', 140, y);
+    doc.text('Người nhận ca ký', 95, y);
+    doc.text('Người giao ca ký', 145, y);
     y += 8;
     doc.line(30, y, 180, y);
 
-    // Chỗ ký (3 dòng trống)
+    // Chỗ ký (dòng trống)
     y += 25;
     doc.text('1', 45, y);
-    doc.text('1', 105, y);
+    doc.text('1', 110, y);
     y += 12;
     doc.text('2', 45, y);
-    doc.text('2', 105, y);
+    doc.text('2', 110, y);
 
-    y += 15;
+    y += 18;
 
-    // ==================== 3. Ý KIẾN LÃNH ĐẠO ====================
+    // 3. Ý kiến lãnh đạo đơn vị
     doc.text('3. Ý kiến lãnh đạo đơn vị:', 30, y);
     y += 10;
     const opinionLines = doc.splitTextToSize(r.opinions || 'Không có', 150);
