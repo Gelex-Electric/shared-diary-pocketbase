@@ -348,13 +348,13 @@ async function exportToPDF(id) {
 <div style="font-family: 'Times New Roman', Times, serif; font-size: 12px; line-height: 1,5; padding: 0px 0px; width: 595px; margin: 0 auto; background: white;">
 
     <!-- Tiêu đề Ca -->
-    <p style="text-align: center; margin: 0 0 15px 0; font-weight: bold; font-size: 13px;">
+    <p style="text-align: center; margin: 0 0 8px 0; font-weight: bold; font-size: 13px;">
         ${r.shift} ${caTime}
     </p>
 
     <!-- Bảng Nhân viên vận hành -->
-    <p style="margin: 10px 0 6px 0; font-weight: bold; font-size: 12px;">NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)</p>
-    <table style="width:100%; border-collapse: collapse; margin-bottom: 18px;">
+    <p style="margin: 8px 0 8px 0; font-weight: bold; font-size: 12px;">NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)</p>
+    <table style="width:100%; border-collapse: collapse; margin-bottom: 8px;">
         <tr>
             <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; width:35%; vertical-align:middle;"></td>
             <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; vertical-align:middle;">Trực đội QLVH</td>
@@ -373,8 +373,8 @@ async function exportToPDF(id) {
     </table>
 
     <!-- I. Tình hình vận hành -->
-    <p style="margin: 14px 0 6px 0; font-weight: bold; font-size: 12px;">I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)</p>
-    <table style="width:100%; border-collapse: collapse; margin-bottom: 18px;">
+    <p style="margin: 8px 0 6px 0; font-weight: bold; font-size: 12px;">I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)</p>
+    <table style="width:100%; border-collapse: collapse; margin-bottom: 8px;">
         <thead>
             <tr style="background:#f8f8f8;">
                 <th style="border:0.7px solid #000; padding:6px; width:26%; text-align:center; vertical-align:middle;">Thời gian</th>
@@ -396,10 +396,10 @@ async function exportToPDF(id) {
     <!-- II. Phần giao nhận ca -->
     <p style="margin: 14px 0 8px 0; font-weight: bold; font-size: 12px;">II. PHẦN GIAO NHẬN CA</p>
     <p style="margin-bottom: 8px;"><strong>1. Những lưu ý và tồn tại ca sau cần giải quyết:</strong><br>${r.notes || 'Không có'}</p>
-    <p style="margin-bottom: 12px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
+    <p style="margin-bottom: 8px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
 
     <!-- === BẢNG CHỮ KÝ THEO CẤU TRÚC MERGE BẠN YÊU CẦU === -->
-    <table style="width:100%; border-collapse: collapse; margin: 18px 0 8px 0;">
+    <table style="width:100%; border-collapse: collapse; margin: 8px 0 8px 0;">
         <tr>
             <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; width:33%;">Ngày giờ phút của Ca<br>(giờ giao ca)</td>
             <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold;">Người nhận ca ký</td>
