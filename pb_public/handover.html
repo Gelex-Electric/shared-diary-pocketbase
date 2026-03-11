@@ -71,26 +71,24 @@
     </header>
 
     <!-- Filter + Add -->
-    <div class="bg-white shadow rounded-3xl p-6 md:p-8 mb-8">
-      <div class="flex flex-col md:flex-row md:items-end gap-6">
-        <button onclick="openCreateModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-3xl text-lg font-medium flex items-center gap-3 shadow-md">
-          <i class="fas fa-plus"></i> Thêm lịch trực mới
-        </button>
-
-        <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label class="block text-sm text-gray-600 mb-2 font-medium">Khu vực</label>
-            <select id="filterArea" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg">
-              <option value="">Tất cả khu vực</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm text-gray-600 mb-2 font-medium">Ngày</label>
-            <input type="date" id="filterDate" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg">
-          </div>
-        </div>
-      </div>
+<div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div>
+        <label class="block text-sm text-gray-600 mb-2">Khu vực</label>
+        <select id="filterArea" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
+            <option value="">Tất cả khu vực</option>
+        </select>
     </div>
+
+    <div>
+        <label class="block text-sm text-gray-600 mb-2">Từ ngày</label>
+        <input type="date" id="filterDateFrom" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
+    </div>
+
+    <div>
+        <label class="block text-sm text-gray-600 mb-2">Đến ngày</label>
+        <input type="date" id="filterDateTo" onchange="applyFilter()" class="w-full bg-gray-100 border border-gray-300 p-4 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
+    </div>
+</div>
 
     <!-- Danh sách -->
     <div id="logs" class="scroll-list space-y-4"></div>
