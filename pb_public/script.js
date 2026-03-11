@@ -438,7 +438,7 @@ async function exportToPDF(id) {
         .then(canvas => {
             const imgData = canvas.toDataURL('image/png');
             const pageWidth = 190;
-            const pageHeight = (canvas.height * pageWidth) / canvas.width;
+            const pageHeight = 289;
 
             pdf.addImage(imgData, 'PNG', 10, 4, pageWidth, pageHeight);
             pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
