@@ -116,7 +116,6 @@ function openCreateModal() {
 
 function clearModal() {
     document.getElementById('date').value = '';
-    document.getElementById('area').value = areas[0];
     document.getElementById('shift').value = 'Ca 1';
     document.getElementById('main_duty').value = '';
     document.getElementById('sub_duty').value = '';
@@ -125,6 +124,11 @@ function clearModal() {
     document.getElementById('notes').value = '';
     document.getElementById('equipment').value = '';
     document.getElementById('opinions').value = '';
+    
+    // Tự động gán khu vực của user đang đăng nhập
+    const currentArea = pb.authStore.model?.area || '';
+    document.getElementById('area').value = currentArea;
+    
     situationRows = [];
     renderSituationTable();
 }
