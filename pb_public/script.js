@@ -11,7 +11,7 @@ const AREAS = [
 ];
 
 let currentEditId = null;
-let currentFilter = { area: '', date: '' };
+let currentFilter = { area: '', dateFrom: '', dateTo: '' };
 let situationRows = [];
 
 // ============== KHỞI ĐỘNG ==============
@@ -53,7 +53,8 @@ async function loadLogs() {
 
     const filterParts = [];
     if (currentFilter.area) filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
-    if (currentFilter.date) filterParts.push(`date = '${currentFilter.date}'`);
+    if (currentFilter.dateFrom) filterParts.push(`date >= '${currentFilter.dateFrom}'`);
+    if (currentFilter.dateTo) filterParts.push(`date <= '${currentFilter.dateTo}'`);
 
     const options = { sort: '-date' };
     if (filterParts.length) options.filter = filterParts.join(' && ');
@@ -291,9 +292,10 @@ function editLog(id) {
 function closeModal()          { document.getElementById('modal').classList.add('hidden'); }
 function closeDetailModal()    { document.getElementById('detailModal').classList.add('hidden'); }
 function applyFilter() {
-  currentFilter.area = document.getElementById('filterArea').value;
-  currentFilter.date = document.getElementById('filterDate').value;
-  loadLogs();
+    currentFilter.area = document.getElementById('filterArea').value;
+    currentFilter.dateFrom = document.getElementById('filterDateFrom').value;
+    currentFilter.dateTo = document.getElementById('filterDateTo').value;
+    loadLogs();
 }
 
 async function deleteLog(id) {
