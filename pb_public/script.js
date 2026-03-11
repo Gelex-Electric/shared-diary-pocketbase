@@ -48,62 +48,64 @@ function renderAreaOptions() {
 }
 
 async function loadLogs() {
-  const logsEl = document.getElementById('logs');
-  logsEl.innerHTML = '<p class="text-center py-16 text-gray-500">Đang tải...</p>';
+    const logsEl = document.getElementById('logs');
+    logsEl.innerHTML = '<p class="text-center py-16 text-gray-500">Đang tải...</p>';
 
-  // Xây dựng filter an toàn
-  const filterParts = [];
-  if (currentFilter.area) {
-    filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
-  }
-  if (currentFilter.date) {
-    filterParts.push(`date = '${currentFilter.date}'`);
-  }
+    const filterParts = [];
+    if (currentFilter.area) filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
+    if (currentFilter.date) filterParts.push(`date = '${currentFilter.date}'`);
 
-  // Chỉ thêm filter khi thực sự có điều kiện
-  const options = {
-    sort: '-date'
-  };
-  if (filterParts.length > 0) {
-    options.filter = filterParts.join(' && ');
-  }
+    const options = { sort: '-date' };
+    if (filterParts.length) options.filter = filterParts.join(' && ');
 
-  try {
-    const records = await pb.collection(COLLECTION).getFullList(options);
+    try {
+        const records = await pb.collection(COLLECTION).getFullList(options);
 
-    if (!records.length) {
-      logsEl.innerHTML = '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào</p>';
-      return;
+        if (!records.length) {
+            logsEl.innerHTML = '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào</p>';
+            return;
+        }
+
+        let html = '';
+        for (const r of records) {
+            const safeClass = AREA_TO_CLASS[r.area] || 'KCN-Tien-Hai';
+            const mainSub = [r.main_duty, r.sub_duty].filter(Boolean).join(' / ') || '—';
+
+            html += `
+            <div class="entry-card flex items-center gap-4 cursor-pointer card-${safeClass}"
+                 onclick="showDetail('${r.id}')">
+                
+                <!-- Badge khu vực -->
+                <div class="kcn-badge kcn-${safeClass}">
+                    ${r.area || '—'}
+                </div>
+
+                <!-- Ngày + Ca -->
+                <div class="flex-1 min-w-0">
+                    <span class="font-semibold text-gray-800">
+                        ${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : '—'}
+                    </span>
+                    <span class="ml-3 text-sm text-gray-500">${r.shift || '—'}</span>
+                </div>
+
+                <!-- Trực -->
+                <div class="flex-1 min-w-0 text-gray-700 text-sm truncate">
+                    Trực: ${mainSub}
+                </div>
+
+                <!-- Giờ tạo -->
+                <div class="text-xs text-gray-400 font-medium whitespace-nowrap">
+                    ${new Date(r.created).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+            </div>`;
+        }
+
+        logsEl.innerHTML = html;
+    } catch (err) {
+        console.error(err);
+        logsEl.innerHTML = '<p class="text-center py-20 text-red-600">Không tải được dữ liệu</p>';
     }
-
-    let html = '';
-    for (const r of records) {
-      const safe = getSafeClassName(r.area || 'KCN-Tien-Hai');
-      const mainSub = [r.main_duty, r.sub_duty].filter(Boolean).join(' / ') || '-';
-
-      html += `
-      <div class="entry-card shadow rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer card-${safe}"
-           onclick="showDetail('${r.id}')">
-        <div class="px-5 py-3 rounded-xl font-bold text-lg kcn-${safe}">
-          ${r.area || '—'}
-        </div>
-        <div class="flex-1">
-          <div class="font-semibold">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : '—'}</div>
-          <div class="text-sm text-gray-600">${r.shift || '—'}</div>
-          <div class="text-gray-700 mt-1">Trực: ${mainSub}</div>
-        </div>
-        <div class="text-xs text-gray-500 self-start sm:self-center">
-          ${new Date(r.created).toLocaleString('vi-VN', {hour:'2-digit', minute:'2-digit'})}
-        </div>
-      </div>`;
-    }
-    logsEl.innerHTML = html;
-  } catch (err) {
-    console.error(err);
-    logsEl.innerHTML = '<p class="text-center py-20 text-red-600">Không tải được dữ liệu</p>';
-  }
 }
-
 // ============== CHI TIẾT ==============
 async function showDetail(id) {
   try {
