@@ -345,7 +345,7 @@ async function exportToPDF(id) {
     const situations = (r.situations || []).slice(0, 10);
 
     const contentHTML = `
-<div style="font-family: 'Times New Roman', Times, serif; font-size: 12px; line-height: 1; padding: 0px 0px; width: 595px; margin: 0 auto; background: white;">
+<div style="font-family: 'Times New Roman', Times, serif; font-size: 12px; line-height: 1,5; padding: 0px 0px; width: 595px; margin: 0 auto; background: white;">
 
     <!-- Tiêu đề Ca -->
     <p style="text-align: center; margin: 0 0 15px 0; font-weight: bold; font-size: 13px;">
