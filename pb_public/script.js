@@ -25,9 +25,17 @@ window.addEventListener('load', () => {
   pb.collection(COLLECTION).subscribe('*', () => loadLogs());
 });
 
-// ============== HÀM CHUNG ==============
-function getSafeClassName(str = '') {
-  return str.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+// ============== ÁNH XẠ TÊN KHU VỰC → CLASS (KHÔNG DẤU) ==============
+const AREA_TO_CLASS = {
+    'KCN Tiền Hải':      'KCN-Tien-Hai',
+    'KCN Phong Điền':    'KCN-Phong-Dien',
+    'KCN Thuận Thành I': 'KCN-Thuan-Thanh-I',
+    'KCN Yên Mỹ':        'KCN-Yen-My',
+    'KCN Số 3':          'KCN-So-3'
+};
+
+function getSafeClassName(area = '') {
+    return AREA_TO_CLASS[area] || 'KCN-Tien-Hai';
 }
 
 function renderAreaOptions() {
