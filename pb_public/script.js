@@ -1,223 +1,402 @@
+// ============== CẤU HÌNH ==============
 const pb = new PocketBase('https://getc.up.railway.app');
+const COLLECTION = 'handovers';
+
+const AREAS = [
+  'KCN Tiền Hải',
+  'KCN Phong Điền',
+  'KCN Thuận Thành I',
+  'KCN Yên Mỹ',
+  'KCN Số 3'
+];
+
 let currentEditId = null;
 let currentFilter = { area: '', date: '' };
 let situationRows = [];
 
-const areas = ['KCN Tiền Hải', 'KCN Phong Điền', 'KCN Thuận Thành I', 'KCN Yên Mỹ', 'KCN số 3'];
+// ============== KHỞI ĐỘNG ==============
+if (!pb.authStore.isValid) {
+  window.location.href = '/';
+}
 
-if (!pb.authStore.isValid) window.location.href = '/';
+window.addEventListener('load', () => {
+  renderAreaOptions();
+  loadLogs();
+  pb.collection(COLLECTION).subscribe('*', () => loadLogs());
+});
 
-pb.collection('handovers').subscribe('*', () => loadLogs());
+// ============== HÀM CHUNG ==============
+function getSafeClassName(str = '') {
+  return str.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+}
 
 function renderAreaOptions() {
-    const filterSelect = document.getElementById('filterArea');
-    filterSelect.innerHTML = '<option value="">Tất cả khu vực</option>';
-    areas.forEach(kcn => {
-        const opt = document.createElement('option');
-        opt.value = kcn; opt.textContent = kcn;
-        filterSelect.appendChild(opt);
-    });
+  const filterSel = document.getElementById('filterArea');
+  filterSel.innerHTML = '<option value="">Tất cả khu vực</option>';
+  AREAS.forEach(a => filterSel.insertAdjacentHTML('beforeend', `<option value="${a}">${a}</option>`));
 
-    const modalSelect = document.getElementById('area');
-    modalSelect.innerHTML = '';
-    areas.forEach(kcn => {
-        const opt = document.createElement('option');
-        opt.value = kcn; opt.textContent = kcn;
-        modalSelect.appendChild(opt);
-    });
+  const modalSel = document.getElementById('area');
+  modalSel.innerHTML = AREAS.map(a => `<option value="${a}">${a}</option>`).join('');
 }
 
 async function loadLogs() {
-    const filterParts = [];
-    if (currentFilter.area) filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
-    if (currentFilter.date) filterParts.push(`date = '${currentFilter.date}'`);
+  const logsEl = document.getElementById('logs');
+  logsEl.innerHTML = '<p class="text-center py-16 text-gray-500">Đang tải...</p>';
 
-    const options = {
-        sort: '-date',
-        ...(filterParts.length > 0 && { filter: filterParts.join(' && ') })
-    };
+  const filter = [];
+  if (currentFilter.area)  filter.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
+  if (currentFilter.date)  filter.push(`date = '${currentFilter.date}'`);
 
-    try {
-        const records = await pb.collection('handovers').getFullList(options);
-        let html = '';
-
-        records.forEach(r => {
-            const safeClass = r.area ? r.area.replace(/\s+/g, '-') : 'KCN-Tien-Hai';
-            const cardClass = `card-${safeClass}`;           // ← Màu toàn bộ card
-            const areaClass = `kcn-${safeClass}`;            // ← Màu tên KCN
-            const mainSub = [r.main_duty, r.sub_duty].filter(Boolean).join(' / ') || '-';
-
-            html += `
-            <div class="entry-card bg-white shadow rounded-3xl p-6 flex justify-between items-center ${cardClass}"
-                 onclick="showDetail('${r.id}')">
-                <div class="flex items-center gap-6 flex-1">
-                    <div class="px-5 py-3 rounded-lg font-bold text-lg ${areaClass}">
-                        ${r.area || 'Chưa có khu vực'}
-                    </div>
-                    <div>
-                        <div class="font-medium text-gray-800">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : 'Không có ngày'}</div>
-                        <div class="text-sm text-gray-600">${r.shift || '?'}</div>
-                    </div>
-                    <div class="text-gray-700 flex-1">Trực: ${mainSub}</div>
-                </div>
-                <div class="text-xs text-gray-500">${new Date(r.created).toLocaleString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</div>
-            </div>`;
-        });
-
-        document.getElementById('logs').innerHTML = html || 
-            '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào. Hãy tạo cái đầu tiên!</p>';
-    } catch (err) {
-        console.error(err);
-        document.getElementById('logs').innerHTML = `<p class="text-center py-20 text-red-600">Lỗi tải dữ liệu</p>`;
-    }
-}
-
-function showDetail(id) {
-    pb.collection('handovers').getOne(id).then(r => {
-        const situationsHTML = (r.situations || []).map(s => `<tr class="border-b border-gray-200"><td class="p-3 text-emerald-600">${s.time||'--:--'}</td><td class="p-3">${s.content||''}</td></tr>`).join('');
-        const html = `
-            <div class="space-y-6">
-                <div class="flex justify-between">
-                    <div><div class="text-3xl font-bold">${r.area} - ${r.shift}</div>
-                    <div class="text-xl text-gray-600">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : ''}</div></div>
-                    <div class="text-right text-gray-500">Tạo lúc: ${new Date(r.created).toLocaleString('vi-VN')}</div>
-                </div>
-                <div class="grid grid-cols-2 gap-6 text-lg">
-                    <div><strong>Trực chính:</strong> ${r.main_duty||'-'}</div>
-                    <div><strong>Trực phụ:</strong> ${r.sub_duty||'-'}</div>
-                    <div><strong>Trực chính điện lực:</strong> ${r.main_power||'-'}</div>
-                    <div><strong>Trực phụ điện lực:</strong> ${r.sub_power||'-'}</div>
-                </div>
-                ${situationsHTML ? `<div><h4 class="font-semibold mb-2">Tình hình trong ca</h4><table class="w-full text-sm">${situationsHTML}</table></div>` : ''}
-                ${r.notes ? `<div><strong>Lưu ý:</strong> ${r.notes}</div>` : ''}
-                ${r.equipment ? `<div><strong>Trang bị:</strong> ${r.equipment}</div>` : ''}
-                ${r.opinions ? `<div><strong>Ý kiến:</strong> ${r.opinions}</div>` : ''}
-                <div class="flex gap-4 mt-8">
-                    <button onclick="editLog('${r.id}');closeDetailModal()" class="flex-1 bg-blue-500 text-white py-4 rounded-2xl">✏️ Sửa</button>
-                    <button onclick="deleteLog('${r.id}');closeDetailModal()" class="flex-1 bg-red-500 text-white py-4 rounded-2xl">🗑️ Xóa</button>
-                </div>
-            </div>`;
-        document.getElementById('detailContent').innerHTML = html;
-        document.getElementById('detailModal').classList.remove('hidden');
-    }).catch(() => alert('Không tìm thấy bản ghi!'));
-}
-
-function closeDetailModal() { document.getElementById('detailModal').classList.add('hidden'); }
-function applyFilter() { currentFilter.area = document.getElementById('filterArea').value; currentFilter.date = document.getElementById('filterDate').value; loadLogs(); }
-
-// ==================== CÁC HÀM MODAL TẠO/SỬA ====================
-function openCreateModal() {
-    currentEditId = null;
-    document.getElementById('modalTitle').textContent = '✍️ Tạo bàn giao mới';
-    document.getElementById('saveBtn').textContent = 'Lưu bàn giao';
-    clearModal();
-    document.getElementById('modal').classList.remove('hidden');
-}
-
-function clearModal() {
-    document.getElementById('date').value = '';
-    document.getElementById('shift').value = 'Ca 1';
-    document.getElementById('main_duty').value = '';
-    document.getElementById('sub_duty').value = '';
-    document.getElementById('main_power').value = '';
-    document.getElementById('sub_power').value = '';
-    document.getElementById('notes').value = '';
-    document.getElementById('equipment').value = '';
-    document.getElementById('opinions').value = '';
-    
-    // Tự động gán khu vực của user đang đăng nhập
-    const currentArea = pb.authStore.model?.area || '';
-    document.getElementById('area').value = currentArea;
-    
-    situationRows = [];
-    renderSituationTable();
-}
-
-function renderSituationTable() {
-    const tbody = document.getElementById('situationBody');
-    tbody.innerHTML = '';
-    situationRows.forEach((row, i) => {
-        tbody.innerHTML += `
-            <tr>
-                <td><input type="time" value="${row.time||''}" onchange="situationRows[${i}].time=this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full"></td>
-                <td><input type="text" value="${row.content||''}" onchange="situationRows[${i}].content=this.value" class="bg-gray-100 border border-gray-300 p-2 rounded w-full"></td>
-                <td><button onclick="removeSituationRow(${i})" class="text-red-600 text-xl">×</button></td>
-            </tr>`;
+  try {
+    const records = await pb.collection(COLLECTION).getFullList({
+      sort: '-date',
+      filter: filter.length ? filter.join(' && ') : undefined
     });
+
+    if (!records.length) {
+      logsEl.innerHTML = '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào</p>';
+      return;
+    }
+
+    let html = '';
+    for (const r of records) {
+      const safe = getSafeClassName(r.area || 'KCN-Tien-Hai');
+      const mainSub = [r.main_duty, r.sub_duty].filter(Boolean).join(' / ') || '-';
+
+      html += `
+      <div class="entry-card shadow rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer card-${safe}"
+           onclick="showDetail('${r.id}')">
+        <div class="px-5 py-3 rounded-xl font-bold text-lg kcn-${safe}">
+          ${r.area || '—'}
+        </div>
+        <div class="flex-1">
+          <div class="font-semibold">${r.date ? new Date(r.date).toLocaleDateString('vi-VN') : '—'}</div>
+          <div class="text-sm text-gray-600">${r.shift || '—'}</div>
+          <div class="text-gray-700 mt-1">Trực: ${mainSub}</div>
+        </div>
+        <div class="text-xs text-gray-500 self-start sm:self-center">
+          ${new Date(r.created).toLocaleString('vi-VN', {hour:'2-digit', minute:'2-digit'})}
+        </div>
+      </div>`;
+    }
+    logsEl.innerHTML = html;
+  } catch (err) {
+    console.error(err);
+    logsEl.innerHTML = '<p class="text-center py-20 text-red-600">Không tải được dữ liệu</p>';
+  }
 }
 
-function addSituationRow() { situationRows.push({ time: '', content: '' }); renderSituationTable(); }
-function removeSituationRow(i) { situationRows.splice(i, 1); renderSituationTable(); }
+// ============== CHI TIẾT ==============
+async function showDetail(id) {
+  try {
+    const r = await pb.collection(COLLECTION).getOne(id);
+
+    const situations = (r.situations || []).map(s => `
+      <tr class="border-b border-gray-100">
+        <td class="p-3 text-emerald-700 font-medium">${s.time || '—'}</td>
+        <td class="p-3">${s.content || ''}</td>
+      </tr>`).join('');
+
+    const html = `
+      <div class="space-y-8">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+          <div>
+            <div class="text-3xl font-bold text-gray-800">${r.area || '—'} • ${r.shift || '—'}</div>
+            <div class="text-xl text-gray-600 mt-1">
+              ${r.date ? new Date(r.date).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '—'}
+            </div>
+          </div>
+          <div class="text-right text-gray-500 text-sm">
+            Tạo: ${new Date(r.created).toLocaleString('vi-VN')}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-lg">
+          <div><strong>Trực chính:</strong> ${r.main_duty || '—'}</div>
+          <div><strong>Trực phụ:</strong> ${r.sub_duty || '—'}</div>
+          <div><strong>Điện lực chính:</strong> ${r.main_power || '—'}</div>
+          <div><strong>Điện lực phụ:</strong> ${r.sub_power || '—'}</div>
+        </div>
+
+        ${situations ? `<div><h4 class="font-semibold mb-3">Tình hình trong ca</h4><table class="w-full text-sm">${situations}</table></div>` : ''}
+
+        <div class="space-y-6 border-t pt-6">
+          <div><strong>1. Lưu ý & tồn tại ca sau:</strong><br>${r.notes || 'Không có'}</div>
+          <div><strong>2. Trang bị, liên lạc, vệ sinh:</strong><br>${r.equipment || 'Không có'}</div>
+          <div><strong>3. Ý kiến lãnh đạo:</strong><br>${r.opinions || 'Không có'}</div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-10">
+          <button onclick="exportToPDF('${r.id}')" class="bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-medium flex items-center justify-center gap-2">
+            <i class="fas fa-file-pdf"></i> In PDF
+          </button>
+          <button onclick="editLog('${r.id}');closeDetailModal()" class="bg-amber-600 hover:bg-amber-700 text-white py-4 rounded-2xl flex items-center justify-center gap-2">
+            <i class="fas fa-edit"></i> Sửa
+          </button>
+          <button onclick="deleteLog('${r.id}');closeDetailModal()" class="bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl flex items-center justify-center gap-2">
+            <i class="fas fa-trash"></i> Xóa
+          </button>
+        </div>
+      </div>`;
+
+    document.getElementById('detailContent').innerHTML = html;
+    document.getElementById('detailModal').classList.remove('hidden');
+  } catch (err) {
+    alert('Không tìm thấy bản ghi!');
+  }
+}
+
+// ============== MODAL TẠO/SỬA ==============
+function openCreateModal() {
+  currentEditId = null;
+  document.getElementById('modalTitle').textContent = '✍️ Tạo lịch trực mới';
+  document.getElementById('saveBtn').textContent = 'Lưu lịch trực';
+  clearModalFields();
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+function clearModalFields() {
+  document.getElementById('date').value = '';
+  document.getElementById('area').value = pb.authStore.model?.area || AREAS[0];
+  document.getElementById('shift').value = 'Ca 1';
+  ['main_duty','sub_duty','main_power','sub_power','notes','equipment','opinions'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  situationRows = [];
+  renderSituationRows();
+}
+
+function renderSituationRows() {
+  const tbody = document.getElementById('situationBody');
+  tbody.innerHTML = situationRows.map((row, i) => `
+    <tr>
+      <td class="p-2"><input type="time" value="${row.time||''}" onchange="situationRows[${i}].time=this.value" class="w-full p-2 border rounded"></td>
+      <td class="p-2"><input type="text" value="${row.content||''}" onchange="situationRows[${i}].content=this.value" class="w-full p-2 border rounded"></td>
+      <td class="p-2 text-center"><button onclick="removeSituationRow(${i})" class="text-red-600 hover:text-red-800 text-xl">×</button></td>
+    </tr>
+  `).join('');
+}
+
+function addSituationRow() {
+  situationRows.push({ time: '', content: '' });
+  renderSituationRows();
+}
+
+function removeSituationRow(index) {
+  situationRows.splice(index, 1);
+  renderSituationRows();
+}
 
 async function saveLog() {
-    const data = {
-        date: document.getElementById('date').value,
-        area: document.getElementById('area').value,
-        shift: document.getElementById('shift').value,
-        main_duty: document.getElementById('main_duty').value,
-        sub_duty: document.getElementById('sub_duty').value,
-        main_power: document.getElementById('main_power').value,
-        sub_power: document.getElementById('sub_power').value,
-        notes: document.getElementById('notes').value,
-        equipment: document.getElementById('equipment').value,
-        opinions: document.getElementById('opinions').value,
-        situations: situationRows
-    };
-    if (!data.date || !data.main_duty) return alert('Vui lòng nhập Ngày và Trực chính!');
-    try {
-        if (currentEditId) {
-            await pb.collection('handovers').update(currentEditId, data);
-            alert('✅ Đã cập nhật!');
-        } else {
-            await pb.collection('handovers').create(data);
-            alert('✅ Đã tạo bàn giao mới!');
-        }
-        closeModal();
-        loadLogs();
-    } catch (err) { alert('❌ Lỗi: ' + err.message); }
+  const data = {
+    date:       document.getElementById('date').value,
+    area:       document.getElementById('area').value,
+    shift:      document.getElementById('shift').value,
+    main_duty:  document.getElementById('main_duty').value.trim(),
+    sub_duty:   document.getElementById('sub_duty').value.trim(),
+    main_power: document.getElementById('main_power').value.trim(),
+    sub_power:  document.getElementById('sub_power').value.trim(),
+    notes:      document.getElementById('notes').value.trim(),
+    equipment:  document.getElementById('equipment').value.trim(),
+    opinions:   document.getElementById('opinions').value.trim(),
+    situations: situationRows.filter(r => r.time || r.content) // loại bỏ dòng trống
+  };
+
+  if (!data.date || !data.main_duty) {
+    alert('Vui lòng nhập ít nhất **Ngày** và **Trực chính**!');
+    return;
+  }
+
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.textContent = currentEditId ? 'Đang cập nhật...' : 'Đang tạo...';
+
+  try {
+    if (currentEditId) {
+      await pb.collection(COLLECTION).update(currentEditId, data);
+      alert('Đã cập nhật thành công!');
+    } else {
+      await pb.collection(COLLECTION).create(data);
+      alert('Đã tạo lịch trực mới!');
+    }
+    closeModal();
+    loadLogs();
+  } catch (err) {
+    alert('Lỗi: ' + (err.message || 'Kiểm tra kết nối'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = currentEditId ? 'Lưu thay đổi' : 'Lưu lịch trực';
+  }
 }
 
-function closeModal() { document.getElementById('modal').classList.add('hidden'); }
-
 function editLog(id) {
-    currentEditId = id;
-    document.getElementById('modalTitle').textContent = '✏️ Chỉnh sửa bàn giao';
-    document.getElementById('saveBtn').textContent = 'Lưu thay đổi';
-    pb.collection('handovers').getOne(id).then(r => {
-        document.getElementById('date').value = r.date || '';
-        document.getElementById('area').value = r.area || areas[0];
-        document.getElementById('shift').value = r.shift || 'Ca 1';
-        document.getElementById('main_duty').value = r.main_duty || '';
-        document.getElementById('sub_duty').value = r.sub_duty || '';
-        document.getElementById('main_power').value = r.main_power || '';
-        document.getElementById('sub_power').value = r.sub_power || '';
-        document.getElementById('notes').value = r.notes || '';
-        document.getElementById('equipment').value = r.equipment || '';
-        document.getElementById('opinions').value = r.opinions || '';
-        situationRows = r.situations || [];
-        renderSituationTable();
-        document.getElementById('modal').classList.remove('hidden');
-    }).catch(() => alert('Không tìm thấy bản ghi!'));
+  currentEditId = id;
+  document.getElementById('modalTitle').textContent = '✏️ Chỉnh sửa lịch trực';
+  document.getElementById('saveBtn').textContent = 'Lưu thay đổi';
+
+  pb.collection(COLLECTION).getOne(id).then(r => {
+    document.getElementById('date').value      = r.date      || '';
+    document.getElementById('area').value      = r.area      || AREAS[0];
+    document.getElementById('shift').value     = r.shift     || 'Ca 1';
+    document.getElementById('main_duty').value = r.main_duty || '';
+    document.getElementById('sub_duty').value  = r.sub_duty  || '';
+    document.getElementById('main_power').value= r.main_power|| '';
+    document.getElementById('sub_power').value = r.sub_power || '';
+    document.getElementById('notes').value     = r.notes     || '';
+    document.getElementById('equipment').value = r.equipment || '';
+    document.getElementById('opinions').value  = r.opinions  || '';
+
+    situationRows = Array.isArray(r.situations) ? r.situations : [];
+    renderSituationRows();
+    document.getElementById('modal').classList.remove('hidden');
+  }).catch(() => alert('Không tìm thấy bản ghi!'));
+}
+
+// ============== KHÁC ==============
+function closeModal()          { document.getElementById('modal').classList.add('hidden'); }
+function closeDetailModal()    { document.getElementById('detailModal').classList.add('hidden'); }
+function applyFilter() {
+  currentFilter.area = document.getElementById('filterArea').value;
+  currentFilter.date = document.getElementById('filterDate').value;
+  loadLogs();
 }
 
 async function deleteLog(id) {
-    if (!confirm('Xác nhận xóa?')) return;
-    try {
-        await pb.collection('handovers').delete(id);
-        loadLogs();
-        alert('🗑️ Đã xóa!');
-    } catch (err) { alert('❌ Không thể xóa: ' + err.message); }
+  if (!confirm('Bạn chắc chắn muốn xóa bản ghi này?')) return;
+  try {
+    await pb.collection(COLLECTION).delete(id);
+    alert('Đã xóa thành công!');
+    loadLogs();
+  } catch (err) {
+    alert('Không thể xóa: ' + err.message);
+  }
 }
 
 function refreshList() { loadLogs(); }
 
 function logout() {
-    pb.collection('handovers').unsubscribe();
-    pb.authStore.clear();
-    window.location.href = '/';
+  pb.collection(COLLECTION).unsubscribe();
+  pb.authStore.clear();
+  window.location.href = '/';
 }
 
-window.onload = () => {
-    renderAreaOptions();
-    loadLogs();
-};
+// ============== XUẤT PDF (giữ nguyên logic cũ nhưng cải thiện nhẹ) ==============
+async function exportToPDF(id) {
+    const r = await pb.collection('handovers').getOne(id);
+
+    // Xử lý khung giờ Ca
+    let caTime = '';
+    const startDate = new Date(r.date);
+    let endDate = new Date(r.date);
+    if (r.shift === 'Ca 1') {
+        caTime = `Từ 06 giờ 00 ngày ${startDate.toLocaleDateString('vi-VN')} đến 14 giờ 00 ngày ${startDate.toLocaleDateString('vi-VN')}`;
+    } else if (r.shift === 'Ca 2') {
+        caTime = `Từ 14 giờ 00 ngày ${startDate.toLocaleDateString('vi-VN')} đến 22 giờ 00 ngày ${startDate.toLocaleDateString('vi-VN')}`;
+    } else if (r.shift === 'Ca 3') {
+        endDate.setDate(endDate.getDate() + 1);
+        caTime = `Từ 22 giờ 00 ngày ${startDate.toLocaleDateString('vi-VN')} đến 06 giờ 00 ngày ${endDate.toLocaleDateString('vi-VN')}`;
+    }
+
+    const dateStr = new Date(r.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    // Giới hạn tối đa 10 hàng cho bảng tình hình trong ca
+    const situations = (r.situations || []).slice(0, 10); // Chỉ lấy tối đa 10 hàng
+
+    // Tạo nội dung PDF
+    const contentHTML = `
+<div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 30px 20px; width: 595px; margin: 0 auto; background: white;">
+            <!-- Dòng Ca trực tiếp -->
+            <p style="text-align: center; margin: 0 0 16px 0; font-weight: bold; font-size: 13px;">
+                ${r.shift} ${caTime}
+            </p>
+
+            <!-- NHÂN VIÊN VẬN HÀNH -->
+            <p style="margin: 8px 0 8px 0; font-weight: bold;">
+                NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)
+            </p>
+            <table style="width:100%; border-collapse: collapse; margin-bottom: 16px;">
+                <tr>
+                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold; width:35%;"></td>
+                    <td style="border:1px solid #000; padding:4px ; text-align:center; font-weight:bold;">Trực đội QLVH</td>
+                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold;">Trực điều độ điện lực</td>
+                </tr>
+                <tr>
+                    <td style="border:1px solid #000; padding:4px; text-align:center;">Trực chính</td>
+                    <td style="border:1px solid #000; padding:4px; text-align:center;">${r.main_duty || ''}</td>
+                    <td style="border:1px solid #000; padding:4px; text-align:center;">${r.main_power || ''}</td>
+                </tr>
+                <tr>
+                    <td style="border:1px solid #000; padding:4px; text-align:center;">Trực phụ</td>
+                    <td style="border:1px solid #000; padding:4px; text-align:center;">${r.sub_duty || ''}</td>
+                    <td style="border:1px solid #000; padding:4px; text-align:center;">${r.sub_power || ''}</td>
+                </tr>
+            </table>
+
+            <!-- I. TÌNH HÌNH VẬN HÀNH -->
+            <p style="margin: 8px 0 8px 0; font-weight: bold;">
+                I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)
+            </p>
+            <table style="width:100%; border-collapse: collapse; margin-bottom: 8px;">
+                <thead>
+                    <tr style="background:#f8f8f8;">
+                        <th style="border:1px solid #000; padding:4px; text-align:center; width:28%;">Thời gian</th>
+                        <th style="border:1px solid #000; padding:4px; text-align:center;">Nội dung</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${Array(10).fill(0).map((_, i) => {
+                        const s = situations[i];
+                        return `
+                        <tr>
+                            <td style="border:1px solid #000; padding:4px; vertical-align:top;">${s ? s.time || '' : '...'}</td>
+                            <td style="border:1px solid #000; padding:4px; vertical-align:top; text-align:left;">${s ? s.content || '...............................' : '...............................'}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+
+            <!-- II. PHẦN GIAO NHẬN CA -->
+            <p style="margin: 8px 0 8px 0; font-weight: bold;">II. PHẦN GIAO NHẬN CA</p>
+            <p><strong>1. Những lưu ý và tồn tại ca sau cần giải quyết:</strong><br>${r.notes || 'Không có'}</p>
+            <p style="margin-top: 8px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
+
+            <!-- Bảng chữ ký -->
+            <table style="width:100%; border-collapse: collapse; margin: 16px 0 8px 0;">
+                <tr>
+                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold;">Giờ giao ca</td>
+                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold;">Người nhận ca ký</td>
+                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold;">Người giao ca ký</td>
+                </tr>
+				<tr>
+        			<td rowspan="2" style="border:1px solid #000; padding:30px; text-align:center; width:33%;"></td>
+        			<td style="border:1px solid #000; padding: 15px; text-align:center;"></td>
+        			<td style="border:1px solid #000; padding: 15px; text-align:center;"></td>
+    			</tr>
+                <tr>
+                    <td style="border:1px solid #000; padding:15px;"></td>
+                    <td style="border:1px solid #000; padding:15px;"></td>
+                </tr>
+            </table>
+
+            <p><strong>3. Ý kiến lãnh đạo đơn vị:</strong><br>${r.opinions || 'Không có'}</p>
+        </div>`;
+	// Tạo PDF
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+
+    const tempDiv = document.createElement('div');
+    tempDiv.style.width = '595px';
+    tempDiv.innerHTML = contentHTML;
+    document.body.appendChild(tempDiv);
+
+    html2canvas(tempDiv, { scale: 3.5 }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const pageWidth = 190;
+        const pageHeight = (canvas.height * pageWidth) / canvas.width;
+        
+        pdf.addImage(imgData, 'PNG', 10, 0, pageWidth, pageHeight);
+        pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
+        
+        document.body.removeChild(tempDiv);
+    });
+}
