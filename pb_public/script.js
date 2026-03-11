@@ -319,7 +319,7 @@ function logout() {
 async function exportToPDF(id) {
     const r = await pb.collection('handovers').getOne(id);
 
-    // Xử lý khung giờ Ca
+    // Xử lý khung giờ Ca (giữ nguyên logic của bạn)
     let caTime = '';
     const startDate = new Date(r.date);
     let endDate = new Date(r.date);
@@ -333,89 +333,57 @@ async function exportToPDF(id) {
     }
 
     const dateStr = new Date(r.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const situations = (r.situations || []).slice(0, 10);
 
-    // Giới hạn tối đa 10 hàng cho bảng tình hình trong ca
-    const situations = (r.situations || []).slice(0, 10); // Chỉ lấy tối đa 10 hàng
-
-    // Tạo nội dung PDF
     const contentHTML = `
-<div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.5; padding: 30px 20px; width: 595px; margin: 0 auto; background: white;">
-            <!-- Dòng Ca trực tiếp -->
-            <p style="text-align: center; margin: 0 0 16px 0; font-weight: bold; font-size: 13px;">
-                ${r.shift} ${caTime}
-            </p>
+<div style="font-family: 'Times New Roman', Times, serif; font-size: 13px; line-height: 1.65; padding: 45px 35px; width: 595px; margin: 0 auto; background: white; box-sizing: border-box;">
+    <p style="text-align: center; margin: 0 0 20px 0; font-weight: bold; font-size: 14px;">${r.shift} ${caTime}</p>
 
-            <!-- NHÂN VIÊN VẬN HÀNH -->
-            <p style="margin: 8px 0 8px 0; font-weight: bold;">
-                NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)
-            </p>
-            <table style="width:100%; border-collapse: collapse; margin-bottom: 16px;">
-                <tr>
-                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold; width:35%;"></td>
-                    <td style="border:1px solid #000; padding:4px ; text-align:center; font-weight:bold;">Trực đội QLVH</td>
-                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold;">Trực điều độ điện lực</td>
-                </tr>
-                <tr>
-                    <td style="border:1px solid #000; padding:4px; text-align:center;">Trực chính</td>
-                    <td style="border:1px solid #000; padding:4px; text-align:center;">${r.main_duty || ''}</td>
-                    <td style="border:1px solid #000; padding:4px; text-align:center;">${r.main_power || ''}</td>
-                </tr>
-                <tr>
-                    <td style="border:1px solid #000; padding:4px; text-align:center;">Trực phụ</td>
-                    <td style="border:1px solid #000; padding:4px; text-align:center;">${r.sub_duty || ''}</td>
-                    <td style="border:1px solid #000; padding:4px; text-align:center;">${r.sub_power || ''}</td>
-                </tr>
-            </table>
+    <p style="margin: 15px 0 8px 0; font-weight: bold;">NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)</p>
+    <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
+        <tr><td style="border:1px solid #000; padding:7px; text-align:center; font-weight:bold; width:35%;"></td>
+            <td style="border:1px solid #000; padding:7px; text-align:center; font-weight:bold;">Trực đội QLVH</td>
+            <td style="border:1px solid #000; padding:7px; text-align:center; font-weight:bold;">Trực điều độ điện lực</td>
+        </tr>
+        <tr><td style="border:1px solid #000; padding:8px; text-align:center;">Trực chính</td>
+            <td style="border:1px solid #000; padding:8px; text-align:center;">${r.main_duty || ''}</td>
+            <td style="border:1px solid #000; padding:8px; text-align:center;">${r.main_power || ''}</td>
+        </tr>
+        <tr><td style="border:1px solid #000; padding:8px; text-align:center;">Trực phụ</td>
+            <td style="border:1px solid #000; padding:8px; text-align:center;">${r.sub_duty || ''}</td>
+            <td style="border:1px solid #000; padding:8px; text-align:center;">${r.sub_power || ''}</td>
+        </tr>
+    </table>
 
-            <!-- I. TÌNH HÌNH VẬN HÀNH -->
-            <p style="margin: 8px 0 8px 0; font-weight: bold;">
-                I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)
-            </p>
-            <table style="width:100%; border-collapse: collapse; margin-bottom: 8px;">
-                <thead>
-                    <tr style="background:#f8f8f8;">
-                        <th style="border:1px solid #000; padding:4px; text-align:center; width:28%;">Thời gian</th>
-                        <th style="border:1px solid #000; padding:4px; text-align:center;">Nội dung</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${Array(10).fill(0).map((_, i) => {
-                        const s = situations[i];
-                        return `
-                        <tr>
-                            <td style="border:1px solid #000; padding:4px; vertical-align:top;">${s ? s.time || '' : '...'}</td>
-                            <td style="border:1px solid #000; padding:4px; vertical-align:top; text-align:left;">${s ? s.content || '...............................' : '...............................'}</td>
-                        </tr>`;
-                    }).join('')}
-                </tbody>
-            </table>
+    <p style="margin: 15px 0 8px 0; font-weight: bold;">I. TÌNH HÌNH VẬN HÀNH TRONG CA</p>
+    <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
+        <thead><tr style="background:#f8f8f8;"><th style="border:1px solid #000; padding:7px; width:28%;">Thời gian</th><th style="border:1px solid #000; padding:7px;">Nội dung</th></tr></thead>
+        <tbody>
+            ${Array(10).fill(0).map((_, i) => {
+                const s = situations[i];
+                return `<tr><td style="border:1px solid #000; padding:8px; vertical-align:top;">${s ? s.time || '' : '...'}</td><td style="border:1px solid #000; padding:8px;">${s ? s.content || '...............................' : '...............................'}</td></tr>`;
+            }).join('')}
+        </tbody>
+    </table>
 
-            <!-- II. PHẦN GIAO NHẬN CA -->
-            <p style="margin: 8px 0 8px 0; font-weight: bold;">II. PHẦN GIAO NHẬN CA</p>
-            <p><strong>1. Những lưu ý và tồn tại ca sau cần giải quyết:</strong><br>${r.notes || 'Không có'}</p>
-            <p style="margin-top: 8px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
+    <p style="margin: 15px 0 8px 0; font-weight: bold;">II. PHẦN GIAO NHẬN CA</p>
+    <p><strong>1. Những lưu ý và tồn tại ca sau cần giải quyết:</strong><br>${r.notes || 'Không có'}</p>
+    <p style="margin-top: 12px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
 
-            <!-- Bảng chữ ký -->
-            <table style="width:100%; border-collapse: collapse; margin: 16px 0 8px 0;">
-                <tr>
-                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold;">Giờ giao ca</td>
-                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold;">Người nhận ca ký</td>
-                    <td style="border:1px solid #000; padding:4px; text-align:center; font-weight:bold;">Người giao ca ký</td>
-                </tr>
-				<tr>
-        			<td rowspan="2" style="border:1px solid #000; padding:30px; text-align:center; width:33%;"></td>
-        			<td style="border:1px solid #000; padding: 15px; text-align:center;"></td>
-        			<td style="border:1px solid #000; padding: 15px; text-align:center;"></td>
-    			</tr>
-                <tr>
-                    <td style="border:1px solid #000; padding:15px;"></td>
-                    <td style="border:1px solid #000; padding:15px;"></td>
-                </tr>
-            </table>
+    <table style="width:100%; border-collapse: collapse; margin: 25px 0 15px 0;">
+        <tr><td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Giờ giao ca</td>
+            <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Người nhận ca ký</td>
+            <td style="border:1px solid #000; padding:8px; text-align:center; font-weight:bold;">Người giao ca ký</td>
+        </tr>
+        <tr><td style="border:1px solid #000; padding:45px; text-align:center;"></td>
+            <td style="border:1px solid #000; padding:25px;"></td>
+            <td style="border:1px solid #000; padding:25px;"></td>
+        </tr>
+    </table>
 
-            <p><strong>3. Ý kiến lãnh đạo đơn vị:</strong><br>${r.opinions || 'Không có'}</p>
-        </div>`;
-	// Tạo PDF
+    <p><strong>3. Ý kiến lãnh đạo đơn vị:</strong><br>${r.opinions || 'Không có'}</p>
+</div>`;
+
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('p', 'mm', 'a4');
 
@@ -424,14 +392,21 @@ async function exportToPDF(id) {
     tempDiv.innerHTML = contentHTML;
     document.body.appendChild(tempDiv);
 
-    html2canvas(tempDiv, { scale: 3.5 }).then(canvas => {
+    // === PHẦN TỐI ƯU CHẤT LƯỢNG ===
+    html2canvas(tempDiv, {
+        scale: 4,                    // Tăng nét gấp 4 lần
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        letterRendering: true,
+        logging: false
+    }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
         const pageWidth = 190;
         const pageHeight = (canvas.height * pageWidth) / canvas.width;
-        
-        pdf.addImage(imgData, 'PNG', 10, 0, pageWidth, pageHeight);
+
+        pdf.addImage(imgData, 'PNG', 10, 8, pageWidth, pageHeight);
         pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
-        
+
         document.body.removeChild(tempDiv);
     });
 }
