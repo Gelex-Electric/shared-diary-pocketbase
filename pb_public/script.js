@@ -343,14 +343,14 @@ async function exportToPDF(id) {
     const situations = (r.situations || []).slice(0, 10);
 
     const contentHTML = `
-<div style="font-family: 'Times New Roman', Times, serif; font-size: 11.8px; line-height: 1.45; padding: 28px 25px; width: 595px; margin: 0 auto; background: white;">
+<div style="font-family: 'Times New Roman', Times, serif; font-size: 11px; line-height: 1.45; padding: 28px 25px; width: 595px; margin: 0 auto; background: white;">
 
     <!-- Tiêu đề Ca -->
     <p style="text-align: center; margin: 0 0 15px 0; font-weight: bold; font-size: 13px;">
         ${r.shift} ${caTime}
     </p>
 
-    <!-- Bảng Nhân viên vận hành (nhỏ gọn) -->
+    <!-- Bảng Nhân viên vận hành -->
     <p style="margin: 10px 0 6px 0; font-weight: bold; font-size: 12px;">NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)</p>
     <table style="width:100%; border-collapse: collapse; margin-bottom: 18px;">
         <tr>
@@ -396,19 +396,21 @@ async function exportToPDF(id) {
     <p style="margin-bottom: 8px;"><strong>1. Những lưu ý và tồn tại ca sau cần giải quyết:</strong><br>${r.notes || 'Không có'}</p>
     <p style="margin-bottom: 12px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
 
-    <!-- Bảng chữ ký -->
+    <!-- === BẢNG CHỮ KÝ ĐÃ CHỈNH (3 hàng cho 2 cột ký) === -->
     <table style="width:100%; border-collapse: collapse; margin: 18px 0 8px 0;">
         <tr>
-            <td style="border:0.7px solid #000; padding:7px; text-align:center; font-weight:bold; width:33%; vertical-align:middle;">Ngày giờ phút của Ca<br>(giờ giao ca)</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; font-weight:bold; width:33%; vertical-align:middle;">Ngày giờ giao ca</td>
             <td style="border:0.7px solid #000; padding:7px; text-align:center; font-weight:bold; vertical-align:middle;">Người nhận ca ký</td>
             <td style="border:0.7px solid #000; padding:7px; text-align:center; font-weight:bold; vertical-align:middle;">Người giao ca ký</td>
         </tr>
         <tr>
-            <td style="border:0.7px solid #000; padding:22px; text-align:center; vertical-align:middle; font-size:12.5px;">
+            <!-- Cột giờ giao ca giữ 2 hàng -->
+            <td style="border:0.7px solid #000; padding:18px; text-align:center; vertical-align:middle; font-size:12.5px;">
                 <strong>${giaoCaStr}</strong>
             </td>
-            <td style="border:0.7px solid #000; padding:28px; text-align:center; vertical-align:middle;"></td>
-            <td style="border:0.7px solid #000; padding:28px; text-align:center; vertical-align:middle;"></td>
+            <!-- Hai cột ký tên tăng lên 3 hàng -->
+            <td style="border:0.7px solid #000; padding:42px 8px; text-align:center; vertical-align:middle;"></td>
+            <td style="border:0.7px solid #000; padding:42px 8px; text-align:center; vertical-align:middle;"></td>
         </tr>
     </table>
 
@@ -416,7 +418,7 @@ async function exportToPDF(id) {
 
 </div>`;
 
-    // === XUẤT PDF (đã tối ưu cực mạnh để vừa A4) ===
+    // === Xuất PDF (vừa A4) ===
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('p', 'mm', 'a4');
 
@@ -425,18 +427,15 @@ async function exportToPDF(id) {
     tempDiv.innerHTML = contentHTML;
     document.body.appendChild(tempDiv);
 
-    html2canvas(tempDiv, { 
-        scale: 3,                    // Giảm scale để vừa trang
-        backgroundColor: '#ffffff',
-        logging: false 
-    }).then(canvas => {
-        const imgData = canvas.toDataURL('image/png');
-        const pageWidth = 190;
-        const pageHeight = (canvas.height * pageWidth) / canvas.width;
+    html2canvas(tempDiv, { scale: 3, backgroundColor: '#ffffff', logging: false })
+        .then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const pageWidth = 190;
+            const pageHeight = (canvas.height * pageWidth) / canvas.width;
 
-        pdf.addImage(imgData, 'PNG', 10, 4, pageWidth, pageHeight);   // y = 4 (cao hơn)
-        pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
+            pdf.addImage(imgData, 'PNG', 10, 4, pageWidth, pageHeight);
+            pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
 
-        document.body.removeChild(tempDiv);
-    });
+            document.body.removeChild(tempDiv);
+        });
 }
