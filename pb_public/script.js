@@ -43,15 +43,25 @@ async function loadLogs() {
   const logsEl = document.getElementById('logs');
   logsEl.innerHTML = '<p class="text-center py-16 text-gray-500">Đang tải...</p>';
 
-  const filter = [];
-  if (currentFilter.area)  filter.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
-  if (currentFilter.date)  filter.push(`date = '${currentFilter.date}'`);
+  // Xây dựng filter an toàn
+  const filterParts = [];
+  if (currentFilter.area) {
+    filterParts.push(`area = '${currentFilter.area.replace(/'/g, "\\'")}'`);
+  }
+  if (currentFilter.date) {
+    filterParts.push(`date = '${currentFilter.date}'`);
+  }
+
+  // Chỉ thêm filter khi thực sự có điều kiện
+  const options = {
+    sort: '-date'
+  };
+  if (filterParts.length > 0) {
+    options.filter = filterParts.join(' && ');
+  }
 
   try {
-    const records = await pb.collection(COLLECTION).getFullList({
-      sort: '-date',
-      filter: filter.length ? filter.join(' && ') : undefined
-    });
+    const records = await pb.collection(COLLECTION).getFullList(options);
 
     if (!records.length) {
       logsEl.innerHTML = '<p class="text-center py-20 text-gray-500">Chưa có bản ghi nào</p>';
