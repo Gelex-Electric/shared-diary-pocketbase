@@ -343,40 +343,40 @@ async function exportToPDF(id) {
     const situations = (r.situations || []).slice(0, 10);
 
     const contentHTML = `
-<div style="font-family: 'Times New Roman', Times, serif; font-size: 12.5px; line-height: 1.6; padding: 32px 28px; width: 595px; margin: 0 auto; background: white;">
+<div style="font-family: 'Times New Roman', Times, serif; font-size: 11.8px; line-height: 1.45; padding: 28px 25px; width: 595px; margin: 0 auto; background: white;">
 
     <!-- Tiêu đề Ca -->
-    <p style="text-align: center; margin: 0 0 18px 0; font-weight: bold; font-size: 13.5px;">
+    <p style="text-align: center; margin: 0 0 15px 0; font-weight: bold; font-size: 13px;">
         ${r.shift} ${caTime}
     </p>
 
-    <!-- Bảng Nhân viên -->
-    <p style="margin: 12px 0 8px 0; font-weight: bold;">NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)</p>
-    <table style="width:100%; border-collapse: collapse; margin-bottom: 22px;">
+    <!-- Bảng Nhân viên vận hành (nhỏ gọn) -->
+    <p style="margin: 10px 0 6px 0; font-weight: bold; font-size: 12px;">NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)</p>
+    <table style="width:100%; border-collapse: collapse; margin-bottom: 18px;">
         <tr>
-            <td style="border:0.8px solid #000; padding:8px; text-align:center; font-weight:bold; width:35%;"></td>
-            <td style="border:0.8px solid #000; padding:8px; text-align:center; font-weight:bold;">Trực đội QLVH</td>
-            <td style="border:0.8px solid #000; padding:8px; text-align:center; font-weight:bold;">Trực điều độ điện lực</td>
+            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; width:35%; vertical-align:middle;"></td>
+            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; vertical-align:middle;">Trực đội QLVH</td>
+            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; vertical-align:middle;">Trực điều độ điện lực</td>
         </tr>
         <tr>
-            <td style="border:0.8px solid #000; padding:9px; text-align:center;">Trực chính</td>
-            <td style="border:0.8px solid #000; padding:9px; text-align:center;">${r.main_duty || ''}</td>
-            <td style="border:0.8px solid #000; padding:9px; text-align:center;">${r.main_power || ''}</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">Trực chính</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${r.main_duty || ''}</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${r.main_power || ''}</td>
         </tr>
         <tr>
-            <td style="border:0.8px solid #000; padding:9px; text-align:center;">Trực phụ</td>
-            <td style="border:0.8px solid #000; padding:9px; text-align:center;">${r.sub_duty || ''}</td>
-            <td style="border:0.8px solid #000; padding:9px; text-align:center;">${r.sub_power || ''}</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">Trực phụ</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${r.sub_duty || ''}</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${r.sub_power || ''}</td>
         </tr>
     </table>
 
     <!-- I. Tình hình vận hành -->
-    <p style="margin: 18px 0 8px 0; font-weight: bold;">I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)</p>
-    <table style="width:100%; border-collapse: collapse; margin-bottom: 22px;">
+    <p style="margin: 14px 0 6px 0; font-weight: bold; font-size: 12px;">I. TÌNH HÌNH VẬN HÀNH TRONG CA (Tóm tắt diễn biến chính trong ca)</p>
+    <table style="width:100%; border-collapse: collapse; margin-bottom: 18px;">
         <thead>
             <tr style="background:#f8f8f8;">
-                <th style="border:0.8px solid #000; padding:8px; width:28%; text-align:center;">Thời gian</th>
-                <th style="border:0.8px solid #000; padding:8px; text-align:center;">Nội dung</th>
+                <th style="border:0.7px solid #000; padding:6px; width:26%; text-align:center; vertical-align:middle;">Thời gian</th>
+                <th style="border:0.7px solid #000; padding:6px; text-align:center; vertical-align:middle;">Nội dung</th>
             </tr>
         </thead>
         <tbody>
@@ -384,33 +384,31 @@ async function exportToPDF(id) {
                 const s = situations[i];
                 return `
                 <tr>
-                    <td style="border:0.8px solid #000; padding:9px 8px; vertical-align:top;">${s ? s.time || '' : '...'}</td>
-                    <td style="border:0.8px solid #000; padding:9px 8px; vertical-align:top;">${s ? s.content || '...............................' : '...............................'}</td>
+                    <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${s ? s.time || '' : '...'}</td>
+                    <td style="border:0.7px solid #000; padding:7px; vertical-align:middle;">${s ? s.content || '...............................' : '...............................'}</td>
                 </tr>`;
             }).join('')}
         </tbody>
     </table>
 
     <!-- II. Phần giao nhận ca -->
-    <p style="margin: 18px 0 10px 0; font-weight: bold;">II. PHẦN GIAO NHẬN CA</p>
-    <p><strong>1. Những lưu ý và tồn tại ca sau cần giải quyết:</strong><br>${r.notes || 'Không có'}</p>
-    <p style="margin-top: 12px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
+    <p style="margin: 14px 0 8px 0; font-weight: bold; font-size: 12px;">II. PHẦN GIAO NHẬN CA</p>
+    <p style="margin-bottom: 8px;"><strong>1. Những lưu ý và tồn tại ca sau cần giải quyết:</strong><br>${r.notes || 'Không có'}</p>
+    <p style="margin-bottom: 12px;"><strong>2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:</strong><br>${r.equipment || 'Không có'}</p>
 
     <!-- Bảng chữ ký -->
-    <table style="width:100%; border-collapse: collapse; margin: 25px 0 12px 0;">
+    <table style="width:100%; border-collapse: collapse; margin: 18px 0 8px 0;">
         <tr>
-            <td style="border:0.8px solid #000; padding:10px; text-align:center; font-weight:bold; width:33%;">
-                Ngày giờ phút của Ca<br>(giờ giao ca)
-            </td>
-            <td style="border:0.8px solid #000; padding:10px; text-align:center; font-weight:bold;">Người nhận ca ký</td>
-            <td style="border:0.8px solid #000; padding:10px; text-align:center; font-weight:bold;">Người giao ca ký</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; font-weight:bold; width:33%; vertical-align:middle;">Ngày giờ phút của Ca<br>(giờ giao ca)</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; font-weight:bold; vertical-align:middle;">Người nhận ca ký</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; font-weight:bold; vertical-align:middle;">Người giao ca ký</td>
         </tr>
         <tr>
-            <td style="border:0.8px solid #000; padding:18px; text-align:center; vertical-align:middle; font-size:13px;">
+            <td style="border:0.7px solid #000; padding:22px; text-align:center; vertical-align:middle; font-size:12.5px;">
                 <strong>${giaoCaStr}</strong>
             </td>
-            <td style="border:0.8px solid #000; padding:32px; text-align:center;"></td>
-            <td style="border:0.8px solid #000; padding:32px; text-align:center;"></td>
+            <td style="border:0.7px solid #000; padding:28px; text-align:center; vertical-align:middle;"></td>
+            <td style="border:0.7px solid #000; padding:28px; text-align:center; vertical-align:middle;"></td>
         </tr>
     </table>
 
@@ -418,7 +416,7 @@ async function exportToPDF(id) {
 
 </div>`;
 
-    // === Xuất PDF (đã tối ưu vừa A4) ===
+    // === XUẤT PDF (đã tối ưu cực mạnh để vừa A4) ===
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('p', 'mm', 'a4');
 
@@ -428,7 +426,7 @@ async function exportToPDF(id) {
     document.body.appendChild(tempDiv);
 
     html2canvas(tempDiv, { 
-        scale: 3,                    // ← Giảm từ 4 xuống 3 để vừa trang
+        scale: 3,                    // Giảm scale để vừa trang
         backgroundColor: '#ffffff',
         logging: false 
     }).then(canvas => {
@@ -436,7 +434,7 @@ async function exportToPDF(id) {
         const pageWidth = 190;
         const pageHeight = (canvas.height * pageWidth) / canvas.width;
 
-        pdf.addImage(imgData, 'PNG', 10, 5, pageWidth, pageHeight);  // y = 5 (cao hơn một chút)
+        pdf.addImage(imgData, 'PNG', 10, 4, pageWidth, pageHeight);   // y = 4 (cao hơn)
         pdf.save(`SoTruc_${r.area || 'KCN'}_${r.shift}_${dateStr}.pdf`);
 
         document.body.removeChild(tempDiv);
