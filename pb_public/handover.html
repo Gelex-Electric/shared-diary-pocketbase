@@ -13,37 +13,40 @@
 <style>
     .entry-card {
         transition: all 0.2s ease;
-        border: 2px solid transparent;
+        border: 1px solid #e2e8f0;
+        border-radius: 9999px; /* pill shape */
+        padding: 14px 20px;
     }
     .entry-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        transform: translateY(-1px);
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08);
+        border-color: #cbd5e1;
     }
 
-    /* === MÀU THEO KHU VỰC (đã sửa không dấu) === */
-    .card-KCN-Tien-Hai      { background-color: #f0fdf4; border-color: #16a34a; }
-    .card-KCN-Phong-Dien    { background-color: #eff6ff; border-color: #3b82f6; }
-    .card-KCN-Thuan-Thanh-I { background-color: #fefce8; border-color: #f59e0b; }
-    .card-KCN-Yen-My        { background-color: #fef2f2; border-color: #ef4444; }
-    .card-KCN-So-3          { background-color: #f5f3ff; border-color: #8b5cf6; }
+    /* === MÀU ĐẸP MẮT THEO KHU VỰC (border trái + badge) === */
+    .card-KCN-Tien-Hai      { border-left: 5px solid #16a34a; background: #f0fdf4; }
+    .card-KCN-Phong-Dien    { border-left: 5px solid #3b82f6; background: #eff6ff; }
+    .card-KCN-Thuan-Thanh-I { border-left: 5px solid #f59e0b; background: #fefce8; }
+    .card-KCN-Yen-My        { border-left: 5px solid #ef4444; background: #fef2f2; }
+    .card-KCN-So-3          { border-left: 5px solid #8b5cf6; background: #f5f3ff; }
 
-    .kcn-KCN-Tien-Hai       { background-color: #dcfce7; color: #166534; }
-    .kcn-KCN-Phong-Dien     { background-color: #dbeafe; color: #1e40af; }
-    .kcn-KCN-Thuan-Thanh-I  { background-color: #fef3c7; color: #92400e; }
-    .kcn-KCN-Yen-My         { background-color: #fee2e2; color: #991b1b; }
-    .kcn-KCN-So-3           { background-color: #f3e8ff; color: #6b21a8; }
+    .kcn-badge {
+        font-size: 13px;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .kcn-KCN-Tien-Hai       { background: #dcfce7; color: #166534; }
+    .kcn-KCN-Phong-Dien     { background: #dbeafe; color: #1e40af; }
+    .kcn-KCN-Thuan-Thanh-I  { background: #fef3c7; color: #92400e; }
+    .kcn-KCN-Yen-My         { background: #fee2e2; color: #991b1b; }
+    .kcn-KCN-So-3           { background: #f3e8ff; color: #6b21a8; }
 
     .scroll-list {
-        max-height: calc(100vh - 420px);
+        max-height: calc(100vh - 380px);
         overflow-y: auto;
         scrollbar-width: thin;
-    }
-    .scroll-list::-webkit-scrollbar {
-        width: 6px;
-    }
-    .scroll-list::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 3px;
     }
 </style>
 </head>
