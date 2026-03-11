@@ -185,14 +185,29 @@ function clearModalFields() {
 }
 
 function renderSituationRows() {
-  const tbody = document.getElementById('situationBody');
-  tbody.innerHTML = situationRows.map((row, i) => `
-    <tr>
-      <td class="p-2"><input type="time" value="${row.time||''}" onchange="situationRows[${i}].time=this.value" class="w-full p-2 border rounded"></td>
-      <td class="p-2"><input type="text" value="${row.content||''}" onchange="situationRows[${i}].content=this.value" class="w-full p-2 border rounded"></td>
-      <td class="p-2 text-center"><button onclick="removeSituationRow(${i})" class="text-red-600 hover:text-red-800 text-xl">×</button></td>
-    </tr>
-  `).join('');
+    const tbody = document.getElementById('situationBody');
+    tbody.innerHTML = situationRows.map((row, i) => `
+        <tr>
+            <td class="p-2">
+                <input type="time" 
+                       lang="vi" 
+                       step="60"
+                       value="${row.time || ''}" 
+                       onchange="situationRows[${i}].time = this.value" 
+                       class="w-full p-3 border border-gray-300 rounded-2xl bg-white text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
+            </td>
+            <td class="p-2">
+                <input type="text" 
+                       value="${row.content || ''}" 
+                       onchange="situationRows[${i}].content = this.value" 
+                       class="w-full p-3 border border-gray-300 rounded-2xl bg-white text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">
+            </td>
+            <td class="p-2 text-center">
+                <button onclick="removeSituationRow(${i})" 
+                        class="text-red-600 hover:text-red-800 text-2xl leading-none">×</button>
+            </td>
+        </tr>
+    `).join('');
 }
 
 function addSituationRow() {
