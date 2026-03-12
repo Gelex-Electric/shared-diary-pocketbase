@@ -321,7 +321,6 @@ function logout() {
 async function exportToPDF(id) {
     const r = await pb.collection('handovers').getOne(id);
 
-    // Xử lý giờ ca
     let caTime = '';
     const start = new Date(r.date);
     let end = new Date(r.date);
@@ -343,7 +342,6 @@ async function exportToPDF(id) {
         pageMargins: [40, 35, 40, 35],
         content: [
             { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center' },
-
             { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 15, 0, 8] },
             {
                 table: { widths: ['35%', '*', '*'], body: [
@@ -352,7 +350,6 @@ async function exportToPDF(id) {
                     ['Trực phụ', r.sub_duty || '', r.sub_power || '']
                 ]}, layout: 'lightHorizontalLines'
             },
-
             { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 20, 0, 8] },
             {
                 table: { widths: ['28%', '*'], body: [
@@ -361,42 +358,28 @@ async function exportToPDF(id) {
                     ...Array(10 - situations.length).fill(['...', '...............................'])
                 ]}, layout: 'lightHorizontalLines'
             },
-
             { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 20, 0, 8] },
             { text: `1. Những lưu ý và tồn tại ca sau cần giải quyết:\n${r.notes || 'Không có'}`, margin: [0, 5, 0, 8] },
             { text: `2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:\n${r.equipment || 'Không có'}`, margin: [0, 0, 0, 12] },
 
-            // === BẢNG CHỮ KÝ MERGE ĐÚNG NHƯ BẠN YÊU CẦU ===
             {
                 table: {
                     widths: ['33%', '*', '*'],
                     body: [
-                        [
-                            { text: 'Ngày giờ phút của Ca\n(giờ giao ca)', style: 'tableHeader' },
-                            { text: 'Người nhận ca ký', style: 'tableHeader' },
-                            { text: 'Người giao ca ký', style: 'tableHeader' }
-                        ],
-                        [
-                            { text: giaoCaStr, alignment: 'center', bold: true, rowSpan: 2 },
-                            '',
-                            ''
-                        ],
-                        [
-                            '',
-                            '',
-                            ''
-                        ]
+                        ['Ngày giờ phút của Ca\n(giờ giao ca)', 'Người nhận ca ký', 'Người giao ca ký'],
+                        [{ text: giaoCaStr, alignment: 'center', bold: true, rowSpan: 2 }, '', ''],
+                        ['', '', '']
                     ]
                 },
-                layout: 'lightHorizontalLines'
+                layout: 'lightHorizontalLines',
+                margin: [0, 15, 0, 0]
             },
 
             { text: `3. Ý kiến lãnh đạo đơn vị:\n${r.opinions || 'Không có'}`, margin: [0, 15, 0, 0] }
         ],
         styles: {
             header: { fontSize: 14, bold: true },
-            subheader: { fontSize: 13, bold: true },
-            tableHeader: { bold: true, alignment: 'center' }
+            subheader: { fontSize: 13, bold: true }
         },
         defaultStyle: { fontSize: 12 }
     };
