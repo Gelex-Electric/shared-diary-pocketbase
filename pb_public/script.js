@@ -321,7 +321,7 @@ function logout() {
 async function exportToPDF(id) {
     const r = await pb.collection('handovers').getOne(id);
 
-    // Xử lý giờ ca (giữ nguyên logic cũ của bạn)
+    // Xử lý giờ ca
     let caTime = '';
     const start = new Date(r.date);
     let end = new Date(r.date);
@@ -340,58 +340,66 @@ async function exportToPDF(id) {
 
     const docDefinition = {
         pageSize: 'A4',
-        pageMargins: [40, 40, 40, 40],
+        pageMargins: [40, 35, 40, 35],
         content: [
             { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center' },
+
             { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 15, 0, 8] },
             {
-                table: {
-                    widths: ['35%', '*', '*'],
-                    body: [
-                        ['','Trực đội QLVH','Trực điều độ điện lực'],
-                        ['Trực chính', r.main_duty || '', r.main_power || ''],
-                        ['Trực phụ', r.sub_duty || '', r.sub_power || '']
-                    ]
-                },
-                layout: 'grid'
+                table: { widths: ['35%', '*', '*'], body: [
+                    ['', 'Trực đội QLVH', 'Trực điều độ điện lực'],
+                    ['Trực chính', r.main_duty || '', r.main_power || ''],
+                    ['Trực phụ', r.sub_duty || '', r.sub_power || '']
+                ]}, layout: 'lightHorizontalLines'
             },
+
             { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 20, 0, 8] },
             {
-                table: {
-                    widths: ['28%', '*'],
-                    body: [
-                        ['Thời gian', 'Nội dung'],
-                        ...situations.map(s => [s.time || '', s.content || '']),
-                        ...Array(10 - situations.length).fill(['...', '...............................'])
-                    ]
-                },
-                layout: 'grid'
+                table: { widths: ['28%', '*'], body: [
+                    ['Thời gian', 'Nội dung'],
+                    ...situations.map(s => [s.time || '...', s.content || '...............................']),
+                    ...Array(10 - situations.length).fill(['...', '...............................'])
+                ]}, layout: 'lightHorizontalLines'
             },
-            { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 20, 0, 8] },
-            { text: `1. Những lưu ý và tồn tại ca sau cần giải quyết:\n${r.notes || 'Không có'}`, margin: [0, 5] },
-            { text: `2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:\n${r.equipment || 'Không có'}`, margin: [0, 10] },
 
-            // Bảng chữ ký (cấu trúc merge bạn muốn)
+            { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 20, 0, 8] },
+            { text: `1. Những lưu ý và tồn tại ca sau cần giải quyết:\n${r.notes || 'Không có'}`, margin: [0, 5, 0, 8] },
+            { text: `2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:\n${r.equipment || 'Không có'}`, margin: [0, 0, 0, 12] },
+
+            // === BẢNG CHỮ KÝ MERGE ĐÚNG NHƯ BẠN YÊU CẦU ===
             {
                 table: {
                     widths: ['33%', '*', '*'],
                     body: [
-                        ['Ngày giờ phút của Ca\n(giờ giao ca)', 'Người nhận ca ký', 'Người giao ca ký'],
-                        [{ text: giaoCaStr, alignment: 'center', bold: true }, '', ''],
-                        ['', '', '']
+                        [
+                            { text: 'Ngày giờ phút của Ca\n(giờ giao ca)', style: 'tableHeader' },
+                            { text: 'Người nhận ca ký', style: 'tableHeader' },
+                            { text: 'Người giao ca ký', style: 'tableHeader' }
+                        ],
+                        [
+                            { text: giaoCaStr, alignment: 'center', bold: true, rowSpan: 2 },
+                            '',
+                            ''
+                        ],
+                        [
+                            '',
+                            '',
+                            ''
+                        ]
                     ]
                 },
-                layout: 'grid',
-                margin: [0, 15, 0, 0]
+                layout: 'lightHorizontalLines'
             },
-            { text: `3. Ý kiến lãnh đạo đơn vị:\n${r.opinions || 'Không có'}`, margin: [0, 10] }
+
+            { text: `3. Ý kiến lãnh đạo đơn vị:\n${r.opinions || 'Không có'}`, margin: [0, 15, 0, 0] }
         ],
         styles: {
             header: { fontSize: 14, bold: true },
-            subheader: { fontSize: 13, bold: true }
+            subheader: { fontSize: 13, bold: true },
+            tableHeader: { bold: true, alignment: 'center' }
         },
         defaultStyle: { fontSize: 12 }
     };
 
-    pdfMake.createPdf(docDefinition).download(`SoTruc_${r.area || 'KCN'}_${r.shift}_${new Date(r.date).toLocaleDateString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric'})}.pdf`);
+    pdfMake.createPdf(docDefinition).download(`SoTruc_${r.area || 'KCN'}_${r.shift}_${new Date(r.date).toLocaleDateString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric'})}.pdf`);
 }
