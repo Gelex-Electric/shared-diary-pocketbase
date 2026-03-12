@@ -345,7 +345,7 @@ async function exportToPDF(id) {
     const situations = (r.situations || []).slice(0, 10);
 
     const contentHTML = `
-<div style="font-family: 'Times New Roman', Times, serif; font-size: 11px; line-height: 1,4; padding: 20px 30px; width: 595px; margin: 0 auto; background: white;">
+<div style="font-family: 'Times New Roman', Times, serif; font-size: 11px; line-height: 1,4; width: 595px; background: white;">
 
     <!-- Tiêu đề Ca -->
     <p style="text-align: center; margin: 0 0 8px 0; font-weight: bold; font-size: 13px;">
@@ -356,19 +356,19 @@ async function exportToPDF(id) {
     <p style="margin: 8px 0 8px 0; font-weight: bold; font-size: 12px;">NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)</p>
     <table style="width:100%; border-collapse: collapse; margin-bottom: 8px;">
         <tr>
-            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; width:35%; vertical-align:middle;"></td>
-            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; vertical-align:middle;">Trực đội QLVH</td>
-            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; vertical-align:middle;">Trực điều độ điện lực</td>
+            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; width:35%; vertical-align:middle; font-size: 12px;"></td>
+            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; vertical-align:middle; font-size: 12px;">Trực đội QLVH</td>
+            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; vertical-align:middle; font-size: 12px;">Trực điều độ điện lực</td>
         </tr>
         <tr>
-            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">Trực chính</td>
-            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${r.main_duty || ''}</td>
-            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${r.main_power || ''}</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle; font-size: 12px;">Trực chính</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle; font-size: 12px;">${r.main_duty || ''}</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle; font-size: 12px;">${r.main_power || ''}</td>
         </tr>
         <tr>
-            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">Trực phụ</td>
-            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${r.sub_duty || ''}</td>
-            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${r.sub_power || ''}</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle; font-size: 12px;">Trực phụ</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle; font-size: 12px;">${r.sub_duty || ''}</td>
+            <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle; font-size: 12px;">${r.sub_power || ''}</td>
         </tr>
     </table>
 
@@ -377,8 +377,8 @@ async function exportToPDF(id) {
     <table style="width:100%; border-collapse: collapse; margin-bottom: 8px;">
         <thead>
             <tr style="background:#f8f8f8;">
-                <th style="border:0.7px solid #000; padding:6px; width:26%; text-align:center; vertical-align:middle;">Thời gian</th>
-                <th style="border:0.7px solid #000; padding:6px; text-align:center; vertical-align:middle;">Nội dung</th>
+                <th style="border:0.7px solid #000; padding:6px; width:26%; text-align:center; vertical-align:middle; font-size: 12px;">Thời gian</th>
+                <th style="border:0.7px solid #000; padding:6px; text-align:center; vertical-align:middle; font-size: 12px;">Nội dung</th>
             </tr>
         </thead>
         <tbody>
@@ -386,8 +386,8 @@ async function exportToPDF(id) {
                 const s = situations[i];
                 return `
                 <tr>
-                    <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle;">${s ? s.time || '' : '...'}</td>
-                    <td style="border:0.7px solid #000; padding:7px; vertical-align:middle;">${s ? s.content || '...............................' : '...............................'}</td>
+                    <td style="border:0.7px solid #000; padding:7px; text-align:center; vertical-align:middle; font-size: 12px;">${s ? s.time || '' : '...'}</td>
+                    <td style="border:0.7px solid #000; padding:7px; vertical-align:middle; font-size: 12px;">${s ? s.content || '...............................' : '...............................'}</td>
                 </tr>`;
             }).join('')}
         </tbody>
@@ -401,9 +401,9 @@ async function exportToPDF(id) {
     <!-- === BẢNG CHỮ KÝ THEO CẤU TRÚC MERGE BẠN YÊU CẦU === -->
     <table style="width:100%; border-collapse: collapse; margin: 8px 0 8px 0;">
         <tr>
-            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; width:33%;">Ngày giờ phút của Ca<br>(giờ giao ca)</td>
-            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold;">Người nhận ca ký</td>
-            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold;">Người giao ca ký</td>
+            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; width:33%; font-size: 12px;">Ngày giờ phút của Ca<br>(giờ giao ca)</td>
+            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; font-size: 12px;">Người nhận ca ký</td>
+            <td style="border:0.7px solid #000; padding:6px; text-align:center; font-weight:bold; font-size: 12px;">Người giao ca ký</td>
         </tr>
         <tr>
             <!-- Cột giờ giao ca merge 2 hàng -->
@@ -411,20 +411,19 @@ async function exportToPDF(id) {
                 <strong>${giaoCaStr}</strong>
             </td>
             <!-- Hàng ký tên thứ 1 -->
-            <td style="border:0.7px solid #000; padding:18px; text-align:center; vertical-align:middle;"></td>
-            <td style="border:0.7px solid #000; padding:18px; text-align:center; vertical-align:middle;"></td>
+            <td style="border:0.7px solid #000; padding:18px; text-align:center; vertical-align:middle; font-size: 12px;"></td>
+            <td style="border:0.7px solid #000; padding:18px; text-align:center; vertical-align:middle; font-size: 12px;"></td>
         </tr>
         <tr>
             <!-- Hàng ký tên thứ 2 -->
-            <td style="border:0.7px solid #000; padding:18px; text-align:center; vertical-align:middle;"></td>
-            <td style="border:0.7px solid #000; padding:18px; text-align:center; vertical-align:middle;"></td>
+            <td style="border:0.7px solid #000; padding:18px; text-align:center; vertical-align:middle; font-size: 12px;"></td>
+            <td style="border:0.7px solid #000; padding:18px; text-align:center; vertical-align:middle; font-size: 12px;"></td>
         </tr>
     </table>
 
     <p><strong>3. Ý kiến lãnh đạo đơn vị:</strong><br>${r.opinions || 'Không có'}</p>
 
 </div>`;
-
     // === Xuất PDF ===
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('p', 'mm', 'a4');
