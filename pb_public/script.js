@@ -323,7 +323,6 @@ function logout() {
 }
 
 // ============== HÀM XUẤT PDF ĐÃ ĐƯỢC NÂNG CẤP HOÀN TOÀN ==============
-// ============== HÀM XUẤT PDF ĐÃ CHỈNH SỬA HOÀN CHỈNH ==============
 async function exportToPDF(id) {
   try {
     const r = await pb.collection('handovers').getOne(id);
@@ -382,11 +381,11 @@ async function exportToPDF(id) {
         },
 
         // II. PHẦN GIAO NHẬN CA (khoảng cách giảm mạnh)
-        { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 12, 0, 8] },
+        { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 8, 0, 8] },
         { text: '1. Những lưu ý và tồn tại ca sau cần giải quyết:', style: 'boldSection', margin: [0, 5, 0, 4] },
-        { text: r.notes || 'Không có', margin: [0, 0, 0, 10] },
+        { text: r.notes || 'Không có', margin: [0, 0, 0, 8] },
         { text: '2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:', style: 'boldSection', margin: [0, 5, 0, 4] },
-        { text: r.equipment || 'Không có', margin: [0, 0, 0, 12] },
+        { text: r.equipment || 'Không có', margin: [0, 0, 0, 8] },
 
         // BẢNG KÝ - TĂNG KHÔNG GIAN (3 dòng ký + padding cao)
         {
@@ -400,7 +399,7 @@ async function exportToPDF(id) {
                 { text: 'Người giao ca ký', fillColor: '#e5e7eb', bold: true, alignment: 'center' }
               ],
               [
-                { text: giaoCaStr, rowSpan: 3, alignment: 'center', bold: true },
+                { text: giaoCaStr, rowSpan: 2, alignment: 'center', bold: true },
                 { text: ' ', alignment: 'center' },
                 { text: ' ', alignment: 'center' }
               ],
@@ -419,11 +418,11 @@ async function exportToPDF(id) {
         },
 
         // 3. Ý kiến (khoảng cách giảm mạnh)
-        { text: '3. Ý kiến lãnh đạo đơn vị:', style: 'boldSection', margin: [0, 12, 0, 4] },
+        { text: '3. Ý kiến lãnh đạo đơn vị:', style: 'boldSection', margin: [0, 8, 0, 4] },
         { text: r.opinions || 'Không có', margin: [0, 0, 0, 0] }
       ],
       styles: {
-        header: { fontSize: 14, bold: true },
+        header: { fontSize: 13, bold: true },
         subheader: { fontSize: 13, bold: true },
         boldSection: { bold: true, fontSize: 12 }
       }
