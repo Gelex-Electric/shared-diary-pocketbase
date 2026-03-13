@@ -323,6 +323,7 @@ function logout() {
 }
 
 // ============== HÀM XUẤT PDF ĐÃ ĐƯỢC NÂNG CẤP HOÀN TOÀN ==============
+// ============== HÀM XUẤT PDF – ĐÃ CÓ HEIGHTS CỐ ĐỊNH + TẤT CẢ YÊU CẦU TRƯỚC ==============
 async function exportToPDF(id) {
   try {
     const r = await pb.collection('handovers').getOne(id);
@@ -342,23 +343,16 @@ async function exportToPDF(id) {
       : r.shift === 'Ca 2' ? `22:00 ngày ${start.toLocaleDateString('vi-VN')}`
       : `06:00 ngày ${end.toLocaleDateString('vi-VN')}`;
 
-    // === XỬ LÝ TÌNH HÌNH VẬN HÀNH ===
+    // === Xử lý tình hình (6 dòng, cắt ngắn) ===
     let situations = (r.situations || []);
-    // Nếu có hơn 8 dòng → vẫn chỉ lấy tối đa 6 dòng (theo yêu cầu "không hiển thị" phần thừa)
-    const maxSituations = situations.length > 8 ? 0 : 6; // nếu >8 thì KHÔNG hiển thị bảng tình hình
-    let displaySituations = situations.slice(0, 6);
-    // Luôn cố định đúng 6 dòng (thêm dòng trống nếu ít hơn)
-    const padRows = Array.from({ length: 6 - displaySituations.length }, () => ['', '']);
-
-    // Cắt ngắn nội dung mỗi dòng ≤ 85 ký tự để bảng không phình
-    displaySituations = displaySituations.map(s => [
+    const showSituations = situations.length > 8 ? [] : situations.slice(0, 6);
+    const padRows = Array.from({ length: 6 - showSituations.length }, () => ['', '']);
+    const displaySituations = showSituations.map(s => [
       s.time || '',
-      (s.content || '').length > 85 
-        ? (s.content || '').substring(0, 85) + '...' 
-        : (s.content || '')
+      (s.content || '').length > 85 ? (s.content || '').substring(0, 85) + '...' : (s.content || '')
     ]);
 
-    // === XỬ LÝ MỤC 1,2,3 – chỉ tối đa 2 dòng (185 ký tự) ===
+    // === Xử lý mục 1,2,3 (tối đa 185 ký tự) ===
     const limitText = (text) => {
       const t = (text || 'Không có').trim();
       return t.length > 185 ? t.substring(0, 185) + '...' : t;
@@ -367,12 +361,10 @@ async function exportToPDF(id) {
     const docDefinition = {
       pageSize: 'A4',
       pageMargins: [35, 30, 35, 30],
-      defaultStyle: { font: 'Roboto', fontSize: 12, lineHeight: 1.3 }, // giảm giãn dòng xuống 1.3
+      defaultStyle: { font: 'Roboto', fontSize: 12, lineHeight: 1.3 },
       content: [
-        // Tiêu đề
         { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center', margin: [0, 0, 0, 10] },
 
-        // Bảng nhân viên
         { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 0, 0, 6] },
         {
           table: { headerRows: 1, widths: ['25%', '37.5%', '37.5%'], body: [
@@ -385,12 +377,12 @@ async function exportToPDF(id) {
           layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
         },
 
-        // I. TÌNH HÌNH VẬN HÀNH TRONG CA
         { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 8, 0, 5] },
-        ...(maxSituations > 0 ? [{
+        ...(showSituations.length > 0 ? [{
           table: {
             headerRows: 1,
             widths: ['13%', '*'],
+            heights: [22, 28, 28, 28, 28, 28, 28],   // cố định chiều cao 7 dòng (header + 6 dòng)
             body: [
               [{ text: 'Thời gian', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
                { text: 'Nội dung', fillColor: '#e5e7eb', bold: true, alignment: 'center' }],
@@ -401,18 +393,18 @@ async function exportToPDF(id) {
           layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
         }] : []),
 
-        // II. PHẦN GIAO NHẬN CA
         { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 8, 0, 5] },
         { text: '1. Những lưu ý và tồn tại ca sau cần giải quyết:', style: 'boldSection', margin: [0, 4, 0, 3] },
         { text: limitText(r.notes), margin: [0, 0, 0, 8] },
         { text: '2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:', style: 'boldSection', margin: [0, 4, 0, 3] },
         { text: limitText(r.equipment), margin: [0, 0, 0, 8] },
 
-        // Bảng ký (rowSpan:2 + padding rộng)
+        // Bảng ký – heights cố định (dòng ký rất cao để ký thoải mái)
         {
           table: {
             headerRows: 1,
             widths: ['26%', '37%', '37%'],
+            heights: [22, 85, 85],   // header 22pt + 2 dòng ký mỗi dòng 85pt (cố định)
             body: [
               [
                 { text: 'Giờ giao ca', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
@@ -437,7 +429,7 @@ async function exportToPDF(id) {
             vLineWidth: () => 1,
             hLineColor: () => '#9ca3af',
             vLineColor: () => '#9ca3af',
-            padding: [8, 25, 8, 25]
+            padding: [8, 12, 8, 12]
           }
         },
 
