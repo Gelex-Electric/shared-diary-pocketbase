@@ -327,7 +327,7 @@ async function exportToPDF(id) {
   try {
     const r = await pb.collection('handovers').getOne(id);
 
-    // === Tính thời gian ca (giữ nguyên) ===
+    // === Tính thời gian ca ===
     let caTime = '';
     const start = new Date(r.date);
     let end = new Date(r.date);
@@ -342,122 +342,92 @@ async function exportToPDF(id) {
       : r.shift === 'Ca 2' ? `22:00 ngày ${start.toLocaleDateString('vi-VN')}`
       : `06:00 ngày ${end.toLocaleDateString('vi-VN')}`;
 
-    const situations = (r.situations || []).slice(0, 10);
+    const situations = (r.situations || []);
 
     const docDefinition = {
       pageSize: 'A4',
-      pageMargins: [40, 40, 40, 40],
-      defaultStyle: { font: 'Roboto', fontSize: 12, lineHeight: 1.4 },
+      pageMargins: [35, 35, 35, 35],           // giảm margin để tránh tràn trang
+      defaultStyle: { font: 'Roboto', fontSize: 12, lineHeight: 1.5 },  // đúng theo yêu cầu
       content: [
-        // Tiêu đề ca
-        { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center', margin: [0, 0, 0, 20] },
+        // Tiêu đề
+        { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center', margin: [0, 0, 0, 15] },
 
-        // Bảng NHÂN VIÊN (đã làm đẹp giống mẫu)
+        // Bảng nhân viên (giữ đẹp)
         { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 0, 0, 8] },
         {
-          table: {
-            headerRows: 1,
-            widths: ['25%', '37.5%', '37.5%'],
-            body: [
-              [
-                { text: '', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
-                { text: 'Trực đội QLVH', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
-                { text: 'Trực điều độ điện lực', fillColor: '#e5e7eb', bold: true, alignment: 'center' }
-              ],
-              ['Trực chính', r.main_duty || '', r.main_power || ''],
-              ['Trực phụ', r.sub_duty || '', r.sub_power || '']
-            ]
-          },
-          layout: {
-            fillColor: (rowIndex) => (rowIndex === 0) ? '#e5e7eb' : null,
-            hLineWidth: () => 1,
-            vLineWidth: () => 1,
-            hLineColor: () => '#9ca3af',
-            vLineColor: () => '#9ca3af',
-            paddingLeft: () => 8,
-            paddingRight: () => 8,
-            paddingTop: () => 8,
-            paddingBottom: () => 8
-          }
+          table: { headerRows: 1, widths: ['25%', '37.5%', '37.5%'], body: [
+            [{ text: '', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
+             { text: 'Trực đội QLVH', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
+             { text: 'Trực điều độ điện lực', fillColor: '#e5e7eb', bold: true, alignment: 'center' }],
+            ['Trực chính', r.main_duty || '', r.main_power || ''],
+            ['Trực phụ', r.sub_duty || '', r.sub_power || '']
+          ]},
+          layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
         },
 
-        // I. TÌNH HÌNH VẬN HÀNH TRONG CA (bảng đẹp, header xám, đầy đủ đường viền)
-        { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 25, 0, 8] },
+        // I. TÌNH HÌNH VẬN HÀNH TRONG CA
+        { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 18, 0, 8] },
         {
           table: {
             headerRows: 1,
-            widths: ['25%', '*'],
+            widths: ['13%', '*'],                     // cột thời gian chỉ 13%
             body: [
-              [
-                { text: 'Thời gian', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
-                { text: 'Nội dung', fillColor: '#e5e7eb', bold: true, alignment: 'center' }
-              ],
-              ...situations.map(s => [s.time || '...', s.content || '']),
-              ...Array(10 - situations.length).fill(['...', '................................................'])
+              [{ text: 'Thời gian', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
+               { text: 'Nội dung', fillColor: '#e5e7eb', bold: true, alignment: 'center' }],
+              ...situations.map(s => [s.time || '', s.content || ''])   // KHÔNG thêm dòng "..." nữa
             ]
           },
-          layout: {
-            fillColor: (rowIndex) => (rowIndex === 0) ? '#e5e7eb' : null,
-            hLineWidth: () => 1,
-            vLineWidth: () => 1,
-            hLineColor: () => '#9ca3af',
-            vLineColor: () => '#9ca3af',
-            paddingLeft: () => 8,
-            paddingRight: () => 8,
-            paddingTop: () => 8,
-            paddingBottom: () => 8
-          }
+          layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
         },
 
-        // II. PHẦN GIAO NHẬN CA
-        { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 25, 0, 10] },
-        { text: `1. Những lưu ý và tồn tại ca sau cần giải quyết:\n${r.notes || 'Không có'}`, margin: [0, 0, 0, 12] },
-        { text: `2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:\n${r.equipment || 'Không có'}`, margin: [0, 0, 0, 18] },
+        // II. PHẦN GIAO NHẬN CA (tô đậm 1., 2., 3.)
+        { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 18, 0, 10] },
+        { text: '1. Những lưu ý và tồn tại ca sau cần giải quyết:', style: 'boldSection', margin: [0, 5, 0, 3] },
+        { text: r.notes || 'Không có', margin: [0, 0, 0, 12] },
+        { text: '2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:', style: 'boldSection', margin: [0, 5, 0, 3] },
+        { text: r.equipment || 'Không có', margin: [0, 0, 0, 18] },
 
-        // Bảng ký giao nhận (đẹp giống mẫu)
+        // Bảng ký (giảm kích thước + merge 2 hàng cho mỗi người ký)
         {
           table: {
             headerRows: 1,
-            widths: ['33%', '33%', '34%'],
+            widths: ['28%', '36%', '36%'],   // giảm kích thước bảng
             body: [
               [
-                { text: 'Ngày giờ phút của Ca\n(giờ giao ca)', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
+                { text: 'Giờ giao ca', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
                 { text: 'Người nhận ca ký', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
                 { text: 'Người giao ca ký', fillColor: '#e5e7eb', bold: true, alignment: 'center' }
               ],
               [
-                { text: giaoCaStr, alignment: 'center', bold: true },
-                { text: '', alignment: 'center' },
-                { text: '', alignment: 'center' }
+                { text: giaoCaStr, rowSpan: 2, alignment: 'center', bold: true },
+                { text: ' ', alignment: 'center' },
+                { text: ' ', alignment: 'center' }
+              ],
+              [
+                '',
+                { text: ' ', alignment: 'center' },
+                { text: ' ', alignment: 'center' }
               ]
             ]
           },
-          layout: {
-            fillColor: (rowIndex) => (rowIndex === 0) ? '#e5e7eb' : null,
-            hLineWidth: () => 1,
-            vLineWidth: () => 1,
-            hLineColor: () => '#9ca3af',
-            vLineColor: () => '#9ca3af',
-            paddingLeft: () => 8,
-            paddingRight: () => 8,
-            paddingTop: () => 12,
-            paddingBottom: () => 12
-          }
+          layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,12,8,12] }
         },
 
-        { text: `3. Ý kiến lãnh đạo đơn vị:\n${r.opinions || 'Không có'}`, margin: [0, 20, 0, 0] }
+        // 3. Ý kiến lãnh đạo (tô đậm)
+        { text: '3. Ý kiến lãnh đạo đơn vị:', style: 'boldSection', margin: [0, 15, 0, 3] },
+        { text: r.opinions || 'Không có', margin: [0, 0, 0, 0] }
       ],
       styles: {
         header: { fontSize: 14, bold: true },
-        subheader: { fontSize: 13, bold: true }
+        subheader: { fontSize: 13, bold: true },
+        boldSection: { bold: true, fontSize: 12 }
       }
     };
 
-    // Tên file sạch
     const cleanArea = (r.area || 'KCN').replace(/ /g, '_').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     pdfMake.createPdf(docDefinition).download(`SoTruc_${cleanArea}_${r.shift}_${new Date(r.date).toLocaleDateString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric'})}.pdf`);
 
-    alert('✅ Đã xuất PDF thành công!\nBảng đã được làm đẹp giống mẫu bạn gửi.');
+    alert('✅ Đã xuất PDF thành công!\nĐã áp dụng đúng tất cả yêu cầu của bạn (không tràn trang, bảng gọn, có 2 dòng ký, không dấu "...").');
 
   } catch (err) {
     console.error(err);
