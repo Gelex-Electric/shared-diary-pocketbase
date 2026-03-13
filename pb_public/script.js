@@ -349,13 +349,12 @@ async function exportToPDF(id) {
     const padRows = Array.from({ length: 6 - showSituations.length }, () => ['', '']);
     const displaySituations = showSituations.map(s => [
       s.time || '',
-      (s.content || '').length > 85 ? (s.content || '').substring(0, 85) + '...' : (s.content || '')
+      (s.content || '').length > 160 ? (s.content || '').substring(0, 160) + '...' : (s.content || '')
     ]);
 
-    // === Xử lý mục 1,2,3 (tối đa 185 ký tự) ===
     const limitText = (text) => {
       const t = (text || 'Không có').trim();
-      return t.length > 185 ? t.substring(0, 185) + '...' : t;
+      return t.length > 360 ? t.substring(0, 360) + '...' : t;
     };
 
     const docDefinition = {
@@ -404,7 +403,7 @@ async function exportToPDF(id) {
           table: {
             headerRows: 1,
             widths: ['26%', '37%', '37%'],
-            heights: [22, 85, 85],   // header 22pt + 2 dòng ký mỗi dòng 85pt (cố định)
+            heights: [22, 35, 35],   // header 22pt + 2 dòng ký mỗi dòng 85pt (cố định)
             body: [
               [
                 { text: 'Giờ giao ca', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
