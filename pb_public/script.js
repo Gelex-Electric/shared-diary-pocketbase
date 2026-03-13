@@ -403,7 +403,7 @@ async function exportToPDF(id) {
           table: {
             headerRows: 1,
             widths: ['26%', '37%', '37%'],
-            heights: [22, 35, 35],   // header 22pt + 2 dòng ký mỗi dòng 85pt (cố định)
+            heights: [22, 30, 30],   // header 22pt + 2 dòng ký mỗi dòng 85pt (cố định)
             body: [
               [
                 { text: 'Giờ giao ca', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
@@ -428,7 +428,7 @@ async function exportToPDF(id) {
             vLineWidth: () => 1,
             hLineColor: () => '#9ca3af',
             vLineColor: () => '#9ca3af',
-            padding: [8, 12, 8, 12]
+            padding: [8, 8, 8, 8]
           }
         },
 
@@ -436,7 +436,7 @@ async function exportToPDF(id) {
         { text: limitText(r.opinions), margin: [0, 0, 0, 0] }
       ],
       styles: {
-        header: { fontSize: 14, bold: true },
+        header: { fontSize: 13, bold: true },
         subheader: { fontSize: 13, bold: true },
         boldSection: { bold: true, fontSize: 12 }
       }
