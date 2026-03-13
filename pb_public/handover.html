@@ -9,43 +9,23 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
 
 <style>
-    .entry-card {
-        transition: all 0.2s ease;
-        border: 1px solid #e2e8f0;
-        border-radius: 9999px; /* pill shape */
-        padding: 14px 20px;
-    }
-    .entry-card:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08);
-        border-color: #cbd5e1;
-    }
+    .entry-card { transition: all 0.2s ease; border: 1px solid #e2e8f0; border-radius: 9999px; padding: 14px 20px; }
+    .entry-card:hover { transform: translateY(-1px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08); border-color: #cbd5e1; }
 
-    /* === MÀU ĐẸP MẮT THEO KHU VỰC (border trái + badge) === */
     .card-KCN-Tien-Hai      { border-left: 5px solid #16a34a; background: #f0fdf4; }
     .card-KCN-Phong-Dien    { border-left: 5px solid #3b82f6; background: #eff6ff; }
     .card-KCN-Thuan-Thanh-I { border-left: 5px solid #f59e0b; background: #fefce8; }
     .card-KCN-Yen-My        { border-left: 5px solid #ef4444; background: #fef2f2; }
     .card-KCN-So-3          { border-left: 5px solid #8b5cf6; background: #f5f3ff; }
 
-    .kcn-badge {
-        font-size: 13px;
-        padding: 4px 12px;
-        border-radius: 9999px;
-        font-weight: 700;
-        white-space: nowrap;
-    }
+    .kcn-badge { font-size: 13px; padding: 4px 12px; border-radius: 9999px; font-weight: 700; white-space: nowrap; }
     .kcn-KCN-Tien-Hai       { background: #dcfce7; color: #166534; }
     .kcn-KCN-Phong-Dien     { background: #dbeafe; color: #1e40af; }
     .kcn-KCN-Thuan-Thanh-I  { background: #fef3c7; color: #92400e; }
     .kcn-KCN-Yen-My         { background: #fee2e2; color: #991b1b; }
     .kcn-KCN-So-3           { background: #f3e8ff; color: #6b21a8; }
 
-    .scroll-list {
-        max-height: calc(100vh - 380px);
-        overflow-y: auto;
-        scrollbar-width: thin;
-    }
+    .scroll-list { max-height: calc(100vh - 380px); overflow-y: auto; scrollbar-width: thin; }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen text-gray-900">
@@ -171,8 +151,8 @@
       </div>
     </div>
   </div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.3.0/pdfmake.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.3.0/vfs_fonts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

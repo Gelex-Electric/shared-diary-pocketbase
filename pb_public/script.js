@@ -3,21 +3,26 @@ const pb = new PocketBase('https://getc.up.railway.app');
 const COLLECTION = 'handovers';
 
 const AREAS = [
-  'KCN Tiền Hải',
-  'KCN Phong Điền',
-  'KCN Thuận Thành I',
-  'KCN Yên Mỹ',
-  'KCN Số 3'
+  'KCN Tiền Hải', 'KCN Phong Điền', 'KCN Thuận Thành I',
+  'KCN Yên Mỹ', 'KCN Số 3'
 ];
 
 let currentEditId = null;
 let currentFilter = { area: '', dateFrom: '', dateTo: '' };
 let situationRows = [];
 
+// ============== CẤU HÌNH FONT PDF (Hỗ trợ hoàn hảo tiếng Việt) ==============
+pdfMake.fonts = {
+  Roboto: {
+    normal: 'Roboto-Regular.ttf',
+    bold: 'Roboto-Medium.ttf',
+    italics: 'Roboto-Italic.ttf',
+    bolditalics: 'Roboto-MediumItalic.ttf'
+  }
+};
+
 // ============== KHỞI ĐỘNG ==============
-if (!pb.authStore.isValid) {
-  window.location.href = '/';
-}
+if (!pb.authStore.isValid) window.location.href = '/';
 
 window.addEventListener('load', () => {
   renderAreaOptions();
@@ -317,72 +322,80 @@ function logout() {
   window.location.href = '/';
 }
 
-// ============== XUẤT PDF (giữ nguyên logic cũ nhưng cải thiện nhẹ) ==============
+// ============== XUẤT PDF (ĐÃ SỬA HOÀN CHỈNH) ==============
 async function exportToPDF(id) {
+  try {
     const r = await pb.collection('handovers').getOne(id);
 
+    // Tính thời gian ca (giữ nguyên logic cũ)
     let caTime = '';
     const start = new Date(r.date);
     let end = new Date(r.date);
     if (r.shift === 'Ca 1') caTime = `Từ 06:00 ngày ${start.toLocaleDateString('vi-VN')} đến 14:00 ngày ${start.toLocaleDateString('vi-VN')}`;
     else if (r.shift === 'Ca 2') caTime = `Từ 14:00 ngày ${start.toLocaleDateString('vi-VN')} đến 22:00 ngày ${start.toLocaleDateString('vi-VN')}`;
     else if (r.shift === 'Ca 3') {
-        end.setDate(end.getDate() + 1);
-        caTime = `Từ 22:00 ngày ${start.toLocaleDateString('vi-VN')} đến 06:00 ngày ${end.toLocaleDateString('vi-VN')}`;
+      end.setDate(end.getDate() + 1);
+      caTime = `Từ 22:00 ngày ${start.toLocaleDateString('vi-VN')} đến 06:00 ngày ${end.toLocaleDateString('vi-VN')}`;
     }
 
     const giaoCaStr = r.shift === 'Ca 1' ? `14:00 ngày ${start.toLocaleDateString('vi-VN')}`
-        : r.shift === 'Ca 2' ? `22:00 ngày ${start.toLocaleDateString('vi-VN')}`
-        : `06:00 ngày ${end.toLocaleDateString('vi-VN')}`;
+      : r.shift === 'Ca 2' ? `22:00 ngày ${start.toLocaleDateString('vi-VN')}`
+      : `06:00 ngày ${end.toLocaleDateString('vi-VN')}`;
 
     const situations = (r.situations || []).slice(0, 10);
 
     const docDefinition = {
-        pageSize: 'A4',
-        pageMargins: [40, 35, 40, 35],
-        content: [
-            { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center' },
-            { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 15, 0, 8] },
-            {
-                table: { widths: ['35%', '*', '*'], body: [
-                    ['', 'Trực đội QLVH', 'Trực điều độ điện lực'],
-                    ['Trực chính', r.main_duty || '', r.main_power || ''],
-                    ['Trực phụ', r.sub_duty || '', r.sub_power || '']
-                ]}, layout: 'lightHorizontalLines'
-            },
-            { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 20, 0, 8] },
-            {
-                table: { widths: ['28%', '*'], body: [
-                    ['Thời gian', 'Nội dung'],
-                    ...situations.map(s => [s.time || '...', s.content || '...............................']),
-                    ...Array(10 - situations.length).fill(['...', '...............................'])
-                ]}, layout: 'lightHorizontalLines'
-            },
-            { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 20, 0, 8] },
-            { text: `1. Những lưu ý và tồn tại ca sau cần giải quyết:\n${r.notes || 'Không có'}`, margin: [0, 5, 0, 8] },
-            { text: `2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:\n${r.equipment || 'Không có'}`, margin: [0, 0, 0, 12] },
-
-            {
-                table: {
-                    widths: ['33%', '*', '*'],
-                    body: [
-                        ['Ngày giờ phút của Ca\n(giờ giao ca)', 'Người nhận ca ký', 'Người giao ca ký'],
-                        [{ text: giaoCaStr, alignment: 'center', bold: true, rowSpan: 2 }, '', ''],
-                        ['', '', '']
-                    ]
-                },
-                layout: 'lightHorizontalLines',
-                margin: [0, 15, 0, 0]
-            },
-
-            { text: `3. Ý kiến lãnh đạo đơn vị:\n${r.opinions || 'Không có'}`, margin: [0, 15, 0, 0] }
-        ],
-        styles: {
-            header: { fontSize: 14, bold: true },
-            subheader: { fontSize: 13, bold: true }
+      pageSize: 'A4',
+      pageMargins: [40, 35, 40, 35],
+      defaultStyle: { font: 'Roboto', fontSize: 12 },
+      content: [
+        { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center' },
+        { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 15, 0, 8] },
+        {
+          table: { widths: ['35%', '*', '*'], body: [
+            ['', 'Trực đội QLVH', 'Trực điều độ điện lực'],
+            ['Trực chính', r.main_duty || '', r.main_power || ''],
+            ['Trực phụ', r.sub_duty || '', r.sub_power || '']
+          ]}, layout: 'lightHorizontalLines'
         },
-        defaultStyle: { fontSize: 12 }
+        { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 20, 0, 8] },
+        {
+          table: { widths: ['28%', '*'], body: [
+            ['Thời gian', 'Nội dung'],
+            ...situations.map(s => [s.time || '...', s.content || '...............................']),
+            ...Array(10 - situations.length).fill(['...', '...............................'])
+          ]}, layout: 'lightHorizontalLines'
+        },
+        { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 20, 0, 8] },
+        { text: `1. Những lưu ý và tồn tại ca sau cần giải quyết:\n${r.notes || 'Không có'}`, margin: [0, 5, 0, 8] },
+        { text: `2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:\n${r.equipment || 'Không có'}`, margin: [0, 0, 0, 12] },
+        {
+          table: {
+            widths: ['33%', '*', '*'],
+            body: [
+              ['Ngày giờ phút của Ca\n(giờ giao ca)', 'Người nhận ca ký', 'Người giao ca ký'],
+              [{ text: giaoCaStr, alignment: 'center', bold: true, rowSpan: 2 }, '', ''],
+              ['', '', '']
+            ]
+          }, layout: 'lightHorizontalLines', margin: [0, 15, 0, 0]
+        },
+        { text: `3. Ý kiến lãnh đạo đơn vị:\n${r.opinions || 'Không có'}`, margin: [0, 15, 0, 0] }
+      ],
+      styles: {
+        header: { fontSize: 14, bold: true },
+        subheader: { fontSize: 13, bold: true }
+      }
     };
 
-    pdfMake.createPdf(docDefinition).download(`SoTruc_${r.area || 'KCN'}_${r.shift}_${new Date(r.date).toLocaleDateString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric'})}.pdf`);
+    // Tên file sạch (bỏ dấu để an toàn)
+    const cleanArea = (r.area || 'KCN').replace(/ /g, '_').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    pdfMake.createPdf(docDefinition).download(`SoTruc_${cleanArea}_${r.shift}_${new Date(r.date).toLocaleDateString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric'})}.pdf`);
+
+    // Thông báo thành công
+    alert('✅ Đã xuất PDF thành công!');
+
+  } catch (err) {
+    console.error(err);
+    alert('❌ Lỗi khi xuất PDF: ' + (err.message || 'Kiểm tra kết nối'));
+  }
 }
