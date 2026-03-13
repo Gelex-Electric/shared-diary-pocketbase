@@ -342,18 +342,38 @@ async function exportToPDF(id) {
       : r.shift === 'Ca 2' ? `22:00 ngày ${start.toLocaleDateString('vi-VN')}`
       : `06:00 ngày ${end.toLocaleDateString('vi-VN')}`;
 
-    const situations = (r.situations || []);
+    // === XỬ LÝ TÌNH HÌNH VẬN HÀNH ===
+    let situations = (r.situations || []);
+    // Nếu có hơn 8 dòng → vẫn chỉ lấy tối đa 6 dòng (theo yêu cầu "không hiển thị" phần thừa)
+    const maxSituations = situations.length > 8 ? 0 : 6; // nếu >8 thì KHÔNG hiển thị bảng tình hình
+    let displaySituations = situations.slice(0, 6);
+    // Luôn cố định đúng 6 dòng (thêm dòng trống nếu ít hơn)
+    const padRows = Array.from({ length: 6 - displaySituations.length }, () => ['', '']);
+
+    // Cắt ngắn nội dung mỗi dòng ≤ 85 ký tự để bảng không phình
+    displaySituations = displaySituations.map(s => [
+      s.time || '',
+      (s.content || '').length > 85 
+        ? (s.content || '').substring(0, 85) + '...' 
+        : (s.content || '')
+    ]);
+
+    // === XỬ LÝ MỤC 1,2,3 – chỉ tối đa 2 dòng (185 ký tự) ===
+    const limitText = (text) => {
+      const t = (text || 'Không có').trim();
+      return t.length > 185 ? t.substring(0, 185) + '...' : t;
+    };
 
     const docDefinition = {
       pageSize: 'A4',
-      pageMargins: [35, 35, 35, 35],
-      defaultStyle: { font: 'Roboto', fontSize: 12, lineHeight: 1.5 },
+      pageMargins: [35, 30, 35, 30],
+      defaultStyle: { font: 'Roboto', fontSize: 12, lineHeight: 1.3 }, // giảm giãn dòng xuống 1.3
       content: [
         // Tiêu đề
-        { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center', margin: [0, 0, 0, 12] },
+        { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center', margin: [0, 0, 0, 10] },
 
         // Bảng nhân viên
-        { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 0, 0, 8] },
+        { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 0, 0, 6] },
         {
           table: { headerRows: 1, widths: ['25%', '37.5%', '37.5%'], body: [
             [{ text: '', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
@@ -365,29 +385,30 @@ async function exportToPDF(id) {
           layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
         },
 
-        // I. TÌNH HÌNH (khoảng cách đã giảm mạnh)
-        { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 12, 0, 8] },
-        {
+        // I. TÌNH HÌNH VẬN HÀNH TRONG CA
+        { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 8, 0, 5] },
+        ...(maxSituations > 0 ? [{
           table: {
             headerRows: 1,
             widths: ['13%', '*'],
             body: [
               [{ text: 'Thời gian', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
                { text: 'Nội dung', fillColor: '#e5e7eb', bold: true, alignment: 'center' }],
-              ...situations.map(s => [s.time || '', s.content || ''])
+              ...displaySituations,
+              ...padRows
             ]
           },
           layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
-        },
+        }] : []),
 
-        // II. PHẦN GIAO NHẬN CA (khoảng cách giảm mạnh)
-        { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 8, 0, 8] },
-        { text: '1. Những lưu ý và tồn tại ca sau cần giải quyết:', style: 'boldSection', margin: [0, 5, 0, 4] },
-        { text: r.notes || 'Không có', margin: [0, 0, 0, 8] },
-        { text: '2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:', style: 'boldSection', margin: [0, 5, 0, 4] },
-        { text: r.equipment || 'Không có', margin: [0, 0, 0, 8] },
+        // II. PHẦN GIAO NHẬN CA
+        { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 8, 0, 5] },
+        { text: '1. Những lưu ý và tồn tại ca sau cần giải quyết:', style: 'boldSection', margin: [0, 4, 0, 3] },
+        { text: limitText(r.notes), margin: [0, 0, 0, 8] },
+        { text: '2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:', style: 'boldSection', margin: [0, 4, 0, 3] },
+        { text: limitText(r.equipment), margin: [0, 0, 0, 8] },
 
-        // BẢNG KÝ - TĂNG KHÔNG GIAN (3 dòng ký + padding cao)
+        // Bảng ký (rowSpan:2 + padding rộng)
         {
           table: {
             headerRows: 1,
@@ -403,8 +424,11 @@ async function exportToPDF(id) {
                 { text: ' ', alignment: 'center' },
                 { text: ' ', alignment: 'center' }
               ],
-              [ '', { text: ' ', alignment: 'center' }, { text: ' ', alignment: 'center' } ],
-              [ '', { text: ' ', alignment: 'center' }, { text: ' ', alignment: 'center' } ]
+              [
+                '',
+                { text: ' ', alignment: 'center' },
+                { text: ' ', alignment: 'center' }
+              ]
             ]
           },
           layout: {
@@ -413,16 +437,15 @@ async function exportToPDF(id) {
             vLineWidth: () => 1,
             hLineColor: () => '#9ca3af',
             vLineColor: () => '#9ca3af',
-            padding: [8, 18, 8, 18]   // tăng mạnh để ký thoải mái
+            padding: [8, 25, 8, 25]
           }
         },
 
-        // 3. Ý kiến (khoảng cách giảm mạnh)
-        { text: '3. Ý kiến lãnh đạo đơn vị:', style: 'boldSection', margin: [0, 8, 0, 4] },
-        { text: r.opinions || 'Không có', margin: [0, 0, 0, 0] }
+        { text: '3. Ý kiến lãnh đạo đơn vị:', style: 'boldSection', margin: [0, 8, 0, 3] },
+        { text: limitText(r.opinions), margin: [0, 0, 0, 0] }
       ],
       styles: {
-        header: { fontSize: 13, bold: true },
+        header: { fontSize: 14, bold: true },
         subheader: { fontSize: 13, bold: true },
         boldSection: { bold: true, fontSize: 12 }
       }
@@ -430,8 +453,6 @@ async function exportToPDF(id) {
 
     const cleanArea = (r.area || 'KCN').replace(/ /g, '_').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     pdfMake.createPdf(docDefinition).download(`SoTruc_${cleanArea}_${r.shift}_${new Date(r.date).toLocaleDateString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric'})}.pdf`);
-
-    // Không còn bất kỳ alert nào khi thành công
 
   } catch (err) {
     console.error(err);
