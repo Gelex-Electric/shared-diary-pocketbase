@@ -349,18 +349,18 @@ async function exportToPDF(id) {
     const padRows = Array.from({ length: 6 - showSituations.length }, () => ['', '']);
     const displaySituations = showSituations.map(s => [
       s.time || '',
-      (s.content || '').length > 160 ? (s.content || '').substring(0, 160) + '...' : (s.content || '')
+      (s.content || '').length > 200 ? (s.content || '').substring(0, 200) + '...' : (s.content || '')
     ]);
 
     const limitText = (text) => {
       const t = (text || 'Không có').trim();
-      return t.length > 360 ? t.substring(0, 360) + '...' : t;
+      return t.length > 400 ? t.substring(0, 400) + '...' : t;
     };
 
     const docDefinition = {
       pageSize: 'A4',
       pageMargins: [35, 30, 35, 30],
-      defaultStyle: { font: 'Roboto', fontSize: 12, lineHeight: 1.3 },
+      defaultStyle: { font: 'Roboto', fontSize: 11, lineHeight: 1.3 },
       content: [
         { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center', margin: [0, 0, 0, 10] },
 
@@ -436,9 +436,9 @@ async function exportToPDF(id) {
         { text: limitText(r.opinions), margin: [0, 0, 0, 0] }
       ],
       styles: {
-        header: { fontSize: 13, bold: true },
-        subheader: { fontSize: 13, bold: true },
-        boldSection: { bold: true, fontSize: 12 }
+        header: { fontSize: 11, bold: true },
+        subheader: { fontSize: 11, bold: true },
+        boldSection: { bold: true, fontSize: 11 }
       }
     };
 
