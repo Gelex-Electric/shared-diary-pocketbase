@@ -323,6 +323,7 @@ function logout() {
 }
 
 // ============== HÀM XUẤT PDF ĐÃ ĐƯỢC NÂNG CẤP HOÀN TOÀN ==============
+// ============== HÀM XUẤT PDF ĐÃ CHỈNH SỬA HOÀN CHỈNH ==============
 async function exportToPDF(id) {
   try {
     const r = await pb.collection('handovers').getOne(id);
@@ -346,13 +347,13 @@ async function exportToPDF(id) {
 
     const docDefinition = {
       pageSize: 'A4',
-      pageMargins: [35, 35, 35, 35],           // giảm margin để tránh tràn trang
-      defaultStyle: { font: 'Roboto', fontSize: 12, lineHeight: 1.5 },  // đúng theo yêu cầu
+      pageMargins: [35, 35, 35, 35],
+      defaultStyle: { font: 'Roboto', fontSize: 12, lineHeight: 1.5 },
       content: [
         // Tiêu đề
-        { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center', margin: [0, 0, 0, 15] },
+        { text: `${r.shift} ${caTime}`, style: 'header', alignment: 'center', margin: [0, 0, 0, 12] },
 
-        // Bảng nhân viên (giữ đẹp)
+        // Bảng nhân viên
         { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 0, 0, 8] },
         {
           table: { headerRows: 1, widths: ['25%', '37.5%', '37.5%'], body: [
@@ -365,33 +366,33 @@ async function exportToPDF(id) {
           layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
         },
 
-        // I. TÌNH HÌNH VẬN HÀNH TRONG CA
-        { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 18, 0, 8] },
+        // I. TÌNH HÌNH (khoảng cách đã giảm mạnh)
+        { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 12, 0, 8] },
         {
           table: {
             headerRows: 1,
-            widths: ['13%', '*'],                     // cột thời gian chỉ 13%
+            widths: ['13%', '*'],
             body: [
               [{ text: 'Thời gian', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
                { text: 'Nội dung', fillColor: '#e5e7eb', bold: true, alignment: 'center' }],
-              ...situations.map(s => [s.time || '', s.content || ''])   // KHÔNG thêm dòng "..." nữa
+              ...situations.map(s => [s.time || '', s.content || ''])
             ]
           },
           layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
         },
 
-        // II. PHẦN GIAO NHẬN CA (tô đậm 1., 2., 3.)
-        { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 18, 0, 10] },
-        { text: '1. Những lưu ý và tồn tại ca sau cần giải quyết:', style: 'boldSection', margin: [0, 5, 0, 3] },
-        { text: r.notes || 'Không có', margin: [0, 0, 0, 12] },
-        { text: '2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:', style: 'boldSection', margin: [0, 5, 0, 3] },
-        { text: r.equipment || 'Không có', margin: [0, 0, 0, 18] },
+        // II. PHẦN GIAO NHẬN CA (khoảng cách giảm mạnh)
+        { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 12, 0, 8] },
+        { text: '1. Những lưu ý và tồn tại ca sau cần giải quyết:', style: 'boldSection', margin: [0, 5, 0, 4] },
+        { text: r.notes || 'Không có', margin: [0, 0, 0, 10] },
+        { text: '2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp:', style: 'boldSection', margin: [0, 5, 0, 4] },
+        { text: r.equipment || 'Không có', margin: [0, 0, 0, 12] },
 
-        // Bảng ký (giảm kích thước + merge 2 hàng cho mỗi người ký)
+        // BẢNG KÝ - TĂNG KHÔNG GIAN (3 dòng ký + padding cao)
         {
           table: {
             headerRows: 1,
-            widths: ['28%', '36%', '36%'],   // giảm kích thước bảng
+            widths: ['26%', '37%', '37%'],
             body: [
               [
                 { text: 'Giờ giao ca', fillColor: '#e5e7eb', bold: true, alignment: 'center' },
@@ -399,22 +400,26 @@ async function exportToPDF(id) {
                 { text: 'Người giao ca ký', fillColor: '#e5e7eb', bold: true, alignment: 'center' }
               ],
               [
-                { text: giaoCaStr, rowSpan: 2, alignment: 'center', bold: true },
+                { text: giaoCaStr, rowSpan: 3, alignment: 'center', bold: true },
                 { text: ' ', alignment: 'center' },
                 { text: ' ', alignment: 'center' }
               ],
-              [
-                '',
-                { text: ' ', alignment: 'center' },
-                { text: ' ', alignment: 'center' }
-              ]
+              [ '', { text: ' ', alignment: 'center' }, { text: ' ', alignment: 'center' } ],
+              [ '', { text: ' ', alignment: 'center' }, { text: ' ', alignment: 'center' } ]
             ]
           },
-          layout: { fillColor: (i) => (i===0)?'#e5e7eb':null, hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,12,8,12] }
+          layout: {
+            fillColor: (i) => (i===0)?'#e5e7eb':null,
+            hLineWidth: () => 1,
+            vLineWidth: () => 1,
+            hLineColor: () => '#9ca3af',
+            vLineColor: () => '#9ca3af',
+            padding: [8, 18, 8, 18]   // tăng mạnh để ký thoải mái
+          }
         },
 
-        // 3. Ý kiến lãnh đạo (tô đậm)
-        { text: '3. Ý kiến lãnh đạo đơn vị:', style: 'boldSection', margin: [0, 15, 0, 3] },
+        // 3. Ý kiến (khoảng cách giảm mạnh)
+        { text: '3. Ý kiến lãnh đạo đơn vị:', style: 'boldSection', margin: [0, 12, 0, 4] },
         { text: r.opinions || 'Không có', margin: [0, 0, 0, 0] }
       ],
       styles: {
@@ -427,7 +432,7 @@ async function exportToPDF(id) {
     const cleanArea = (r.area || 'KCN').replace(/ /g, '_').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     pdfMake.createPdf(docDefinition).download(`SoTruc_${cleanArea}_${r.shift}_${new Date(r.date).toLocaleDateString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric'})}.pdf`);
 
-    alert('✅ Đã xuất PDF thành công!\nĐã áp dụng đúng tất cả yêu cầu của bạn (không tràn trang, bảng gọn, có 2 dòng ký, không dấu "...").');
+    // Không còn bất kỳ alert nào khi thành công
 
   } catch (err) {
     console.error(err);
