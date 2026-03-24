@@ -1,6 +1,6 @@
 import PocketBase from 'pocketbase';
 
-const pbUrl = import.meta.env.VITE_PB_URL || 'http://localhost:8090';
+const pbUrl = import.meta.env.VITE_PB_URL || 'https://getc.up.railway.app/pb';
 
 export const pb = new PocketBase(pbUrl);
 
@@ -10,13 +10,13 @@ export const AREAS = [
 ];
 
 export const AREA_TO_CLASS: Record<string, string> = {
-    'KCN Tiền Hải':      'KCN-Tien-Hai',
-    'KCN Phong Điền':    'KCN-Phong-Dien',
-    'KCN Thuận Thành I': 'KCN-Thuan-Thanh-I',
-    'KCN Yên Mỹ':        'KCN-Yen-My',
-    'KCN Số 3':          'KCN-So-3'
+  'KCN Tiền Hải':      'KCN-Tien-Hai',
+  'KCN Phong Điền':    'KCN-Phong-Dien',
+  'KCN Thuận Thành I': 'KCN-Thuan-Thanh-I',
+  'KCN Yên Mỹ':        'KCN-Yen-My',
+  'KCN Số 3':          'KCN-So-3'
 };
 
 export function getSafeClassName(area = '') {
-    return AREA_TO_CLASS[area] || 'KCN-Tien-Hai';
+  return AREA_TO_CLASS[area] || 'KCN-Tien-Hai';
 }
