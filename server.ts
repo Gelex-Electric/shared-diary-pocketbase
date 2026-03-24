@@ -8,7 +8,9 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+
+  // ← SỬA Ở ĐÂY: ép kiểu về number
+  const PORT = parseInt(process.env.PORT || '3000', 10);
 
   // API routes can be added here if needed
   app.get('/api/health', (req, res) => {
@@ -30,7 +32,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(` Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
