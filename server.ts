@@ -10,18 +10,28 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
-  console.log(`🚀 Server starting on port ${PORT}`);
-  console.log(`📊 PocketBase sẽ proxy qua /pb`);
-
-  // ===================== PROXY POCKETBASE =====================
+  // ===================== PROXY POCKETBASE (FIX COOKIE AUTH) =====================
   app.use('/pb', createProxyMiddleware({
     target: 'http://localhost:8090',
     changeOrigin: true,
     ws: true,
     pathRewrite: { '^/pb': '' },
-    onError: (err, req, res) => {
-      console.error('Proxy error:', err);
-      res.status(500).send('Proxy error');
+    secure: false,
+
+    // Fix cookie domain
+    cookieDomainRewrite: {
+      '*': '',                    // xóa domain localhost
+    },
+
+    // Fix Set-Cookie header
+    onProxyRes: (proxyRes, req, res) => {
+      if (proxyRes.headers['set-cookie']) {
+        proxyRes.headers['set-cookie'] = proxyRes.headers['set-cookie'].map(cookie =>
+          cookie
+            .replace(/Domain=[^;]+/i, '')           // xóa Domain
+            .replace(/SameSite=None/i, 'SameSite=Lax') // fix SameSite
+        );
+      }
     }
   }));
 
@@ -31,7 +41,7 @@ async function startServer() {
     app.use(express.static(distPath));
 
     app.get('*', (req, res) => {
-      if (req.path.startsWith('/pb')) return;   // KHÔNG chặn /pb
+      if (req.path.startsWith('/pb')) return;
       res.sendFile(path.join(distPath, 'index.html'));
     });
   } 
@@ -44,7 +54,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ Server chạy tại http://0.0.0.0:${PORT}`);
-    console.log(`🔗 PocketBase Admin: http://localhost:${PORT}/pb/_/`);
+    console.log(`🔗 PocketBase Admin: https://getc.up.railway.app/pb/_/`);
   });
 }
 
