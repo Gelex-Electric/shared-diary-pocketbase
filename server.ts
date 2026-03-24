@@ -10,13 +10,19 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
+  console.log(`🚀 Server starting on port ${PORT}`);
+  console.log(`📊 PocketBase sẽ proxy qua /pb`);
+
   // ===================== PROXY POCKETBASE =====================
-  // Tất cả request /pb/* sẽ được chuyển sang PocketBase (localhost:8090)
   app.use('/pb', createProxyMiddleware({
     target: 'http://localhost:8090',
     changeOrigin: true,
-    ws: true,                    // hỗ trợ realtime
-    pathRewrite: { '^/pb': '' }, // xóa /pb trước khi forward
+    ws: true,
+    pathRewrite: { '^/pb': '' },
+    onError: (err, req, res) => {
+      console.error('Proxy error:', err);
+      res.status(500).send('Proxy error');
+    }
   }));
 
   // ===================== PRODUCTION =====================
@@ -24,26 +30,25 @@ async function startServer() {
     const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
 
-    // Catch-all cho React SPA (KHÔNG áp dụng cho /pb)
     app.get('*', (req, res) => {
-      if (req.path.startsWith('/pb')) return;
+      if (req.path.startsWith('/pb')) return;   // KHÔNG chặn /pb
       res.sendFile(path.join(distPath, 'index.html'));
     });
   } 
-  // ===================== DEVELOPMENT =====================
+  // ===================== DEV =====================
   else {
     const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
-    console.log(`📊 PocketBase Admin: http://localhost:${PORT}/pb/_/`);
+    console.log(`✅ Server chạy tại http://0.0.0.0:${PORT}`);
+    console.log(`🔗 PocketBase Admin: http://localhost:${PORT}/pb/_/`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('❌ Lỗi server:', err);
+  process.exit(1);
+});
