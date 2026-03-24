@@ -10,7 +10,13 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
-  // Proxy PocketBase - phiên bản đơn giản (Admin login được trước đây)
+  // ===================== REDIRECT TRƯỚC PROXY =====================
+  // Fix lỗi truy cập trực tiếp /_/
+  app.get('/_', (req, res) => {
+    res.redirect('/pb/_/');
+  });
+
+  // ===================== PROXY POCKETBASE (phiên bản đơn giản) =====================
   app.use('/pb', createProxyMiddleware({
     target: 'http://localhost:8090',
     changeOrigin: true,
@@ -18,15 +24,12 @@ async function startServer() {
     pathRewrite: { '^/pb': '' },
   }));
 
-  // Redirect tự động /_/ về /pb/_/
-  app.get('/_', (req, res) => {
-    res.redirect('/pb/_/');
-  });
-
+  // ===================== PRODUCTION =====================
   if (process.env.NODE_ENV === 'production') {
     const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
 
+    // Catch-all cho React (không chặn /pb và /_)
     app.get('*', (req, res) => {
       if (req.path.startsWith('/pb') || req.path === '/_') return;
       res.sendFile(path.join(distPath, 'index.html'));
@@ -34,8 +37,8 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server chạy trên port ${PORT}`);
-    console.log(`Admin: https://getc.up.railway.app/pb/_/`);
+    console.log(`✅ Server chạy trên port ${PORT}`);
+    console.log(`🔗 PocketBase Admin: https://getc.up.railway.app/pb/_/`);
   });
 }
 
