@@ -1,5 +1,5 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -8,37 +8,42 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
+  const PORT = process.env.PORT || 3000;
 
-  // ← DÒNG QUAN TRỌNG NHẤT CHO RAILWAY
-  const PORT = parseInt(process.env.PORT || '3000', 10);
+  // ===================== PROXY POCKETBASE =====================
+  // Tất cả request /pb/* sẽ được chuyển sang PocketBase (localhost:8090)
+  app.use('/pb', createProxyMiddleware({
+    target: 'http://localhost:8090',
+    changeOrigin: true,
+    ws: true,                    // hỗ trợ realtime
+    pathRewrite: { '^/pb': '' }, // xóa /pb trước khi forward
+  }));
 
-  console.log(`[INFO] PORT từ Railway: ${process.env.PORT || 'không có'} → Sử dụng: ${PORT}`);
+  // ===================== PRODUCTION =====================
+  if (process.env.NODE_ENV === 'production') {
+    const distPath = path.join(__dirname, 'dist');
+    app.use(express.static(distPath));
 
-  // Health check (dùng để test)
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', port: PORT, env: process.env.NODE_ENV });
-  });
-
-  if (process.env.NODE_ENV !== 'production') {
+    // Catch-all cho React SPA (KHÔNG áp dụng cho /pb)
+    app.get('*', (req, res) => {
+      if (req.path.startsWith('/pb')) return;
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } 
+  // ===================== DEVELOPMENT =====================
+  else {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server chạy thành công trên port ${PORT}`);
+    console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+    console.log(`📊 PocketBase Admin: http://localhost:${PORT}/pb/_/`);
   });
 }
 
-startServer().catch(err => {
-  console.error('❌ Lỗi khởi động server:', err);
-  process.exit(1);
-});
+startServer();
