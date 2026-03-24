@@ -10,7 +10,7 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 
-# Cài PocketBase binary (phiên bản khớp SDK 0.26)
+# Cài PocketBase binary
 RUN apk add --no-cache curl unzip && \
     curl -L https://github.com/pocketbase/pocketbase/releases/download/v0.26.0/pocketbase_0.26.0_linux_amd64.zip -o pb.zip && \
     unzip pb.zip && \
@@ -25,8 +25,6 @@ COPY start.sh ./
 
 RUN npm ci --only=production && npm install tsx
 RUN chmod +x start.sh
-
-VOLUME ["/app/pb_data"]
 
 EXPOSE 3000
 EXPOSE 8090
