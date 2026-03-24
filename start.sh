@@ -8,7 +8,7 @@ echo "🚀 Khởi động PocketBase..."
   --publicUrl=https://getc.up.railway.app/pb \
   > /dev/stdout 2>&1 &
 
-echo "⏳ Đợi PocketBase khởi động..."
+echo "⏳ Đợi PocketBase khởi động 8 giây..."
 sleep 8
 
 echo "🚀 Khởi động React + Express..."
