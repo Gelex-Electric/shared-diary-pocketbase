@@ -10,7 +10,7 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
-  // Proxy PocketBase
+  // Proxy PocketBase - phiên bản đơn giản (Admin login được trước đây)
   app.use('/pb', createProxyMiddleware({
     target: 'http://localhost:8090',
     changeOrigin: true,
@@ -18,8 +18,10 @@ async function startServer() {
     pathRewrite: { '^/pb': '' },
   }));
 
-  // Redirect /_/ về /pb/_/
-  app.get('/_', (req, res) => res.redirect('/pb/_/'));
+  // Redirect tự động /_/ về /pb/_/
+  app.get('/_', (req, res) => {
+    res.redirect('/pb/_/');
+  });
 
   if (process.env.NODE_ENV === 'production') {
     const distPath = path.join(__dirname, 'dist');
