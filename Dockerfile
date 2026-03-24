@@ -1,35 +1,21 @@
-# ==================== BUILD STAGE ====================
-FROM node:20-alpine AS builder
-
+# Sử dụng image Go để build ứng dụng
+FROM golang:1.21-alpine AS builder
 WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install ALL dependencies (dev + prod)
-RUN npm ci --frozen-lockfile
-
-# Copy toàn bộ source code
 COPY . .
+RUN go build -o main .
 
-# Build React app (tạo thư mục dist/)
-RUN npm run build
-
-# ==================== PRODUCTION STAGE ====================
-FROM node:20-alpine
+# Sử dụng image nhẹ để chạy ứng dụng
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
+COPY --from=builder /app/main /app/main
 
-# Copy kết quả build và server
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server.ts ./
-COPY --from=builder /app/package*.json ./
+# Tạo thư mục cho dữ liệu PocketBase
+RUN mkdir /app/pb_data
 
-# Chỉ install production dependencies (nhỏ gọn)
-RUN npm ci --only=production --frozen-lockfile
+# Railway cung cấp biến môi trường PORT
+EXPOSE $PORT
 
-# Railway sẽ tự inject biến $PORT
-EXPOSE 3000
-
-# Chạy bằng script "start" trong package.json (tsx server.ts)
-CMD ["npm", "start"]
+# Lệnh chạy ứng dụng, trỏ dữ liệu vào pb_data và lắng nghe cổng của Railway
+CMD ["./main", "serve", "--http=0.0.0.0:$PORT", "--dir=/app/pb_data"]
