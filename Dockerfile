@@ -1,21 +1,34 @@
-# Sử dụng image Go để build ứng dụng
-FROM golang:1.21-alpine AS builder
+# Stage 1: Build React
+FROM node:20-alpine AS builder
 WORKDIR /app
+COPY package*.json ./
+RUN npm ci
 COPY . .
-RUN go build -o main .
+RUN npm run build
 
-# Sử dụng image nhẹ để chạy ứng dụng
-FROM alpine:latest
-RUN apk add --no-cache ca-certificates
-
+# Stage 2: Production (PocketBase + Node)
+FROM node:20-alpine
 WORKDIR /app
-COPY --from=builder /app/main /app/main
 
-# Tạo thư mục cho dữ liệu PocketBase
-RUN mkdir /app/pb_data
+# Cài PocketBase binary (phiên bản khớp SDK 0.26)
+RUN apk add --no-cache curl unzip && \
+    curl -L https://github.com/pocketbase/pocketbase/releases/download/v0.26.0/pocketbase_0.26.0_linux_amd64.zip -o pb.zip && \
+    unzip pb.zip && \
+    rm pb.zip && \
+    chmod +x pocketbase
 
-# Railway cung cấp biến môi trường PORT
-EXPOSE $PORT
+# Copy build + code
+COPY --from=builder /app/dist ./dist
+COPY server.ts ./
+COPY package*.json ./
+COPY start.sh ./
 
-# Lệnh chạy ứng dụng, trỏ dữ liệu vào pb_data và lắng nghe cổng của Railway
-CMD ["./main", "serve", "--http=0.0.0.0:$PORT", "--dir=/app/pb_data"]
+RUN npm ci --only=production && npm install tsx
+RUN chmod +x start.sh
+
+VOLUME ["/app/pb_data"]
+
+EXPOSE 3000
+EXPOSE 8090
+
+CMD ["./start.sh"]
