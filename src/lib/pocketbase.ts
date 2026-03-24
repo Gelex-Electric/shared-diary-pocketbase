@@ -1,6 +1,8 @@
 import PocketBase from 'pocketbase';
 
-export const pb = new PocketBase('https://getc.up.railway.app');
+const pbUrl = import.meta.env.VITE_PB_URL || 'http://localhost:8090';
+
+export const pb = new PocketBase(pbUrl);
 
 export const AREAS = [
   'KCN Tiền Hải', 'KCN Phong Điền', 'KCN Thuận Thành I',
