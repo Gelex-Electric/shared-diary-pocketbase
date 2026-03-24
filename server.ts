@@ -9,12 +9,14 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   const app = express();
 
-  // ← SỬA Ở ĐÂY: ép kiểu về number
+  // ← DÒNG QUAN TRỌNG NHẤT CHO RAILWAY
   const PORT = parseInt(process.env.PORT || '3000', 10);
 
-  // API routes can be added here if needed
+  console.log(`[INFO] PORT từ Railway: ${process.env.PORT || 'không có'} → Sử dụng: ${PORT}`);
+
+  // Health check (dùng để test)
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', port: PORT, env: process.env.NODE_ENV });
   });
 
   if (process.env.NODE_ENV !== 'production') {
@@ -32,8 +34,11 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(` Server running on http://0.0.0.0:${PORT}`);
+    console.log(`🚀 Server chạy thành công trên port ${PORT}`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('❌ Lỗi khởi động server:', err);
+  process.exit(1);
+});
