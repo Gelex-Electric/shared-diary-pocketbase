@@ -128,43 +128,42 @@ export default function Dashboard() {
   });
   const [situationRows, setSituationRows] = useState<Situation[]>([]);
 
-  const loadLogs = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const filterParts: string[] = [];
-      
-      // Filter by user's area if available
-      if (userArea) {
-        filterParts.push(`area = '${userArea.replace(/'/g, "\\'")}'`);
-      }
-
-      // Filter for the selected month in 2026
-      if (filter.month) {
-        const startOfMonth = `2026-${filter.month}-01 00:00:00`;
-        // Calculate end of month (simple approach for 2026)
-        const nextMonth = parseInt(filter.month) + 1;
-        const endYear = nextMonth > 12 ? 2027 : 2026;
-        const endMonth = nextMonth > 12 ? '01' : nextMonth.toString().padStart(2, '0');
-        const endOfMonth = `${endYear}-${endMonth}-01 00:00:00`;
-        
-        filterParts.push(`date >= '${startOfMonth}' && date < '${endOfMonth}'`);
-      }
-
-      const options: any = { sort: '-date', perPage: 30 };
-      if (filterParts.length) options.filter = filterParts.join(' && ');
-
-      // Limit to 100 latest records
-      const result = await pb.collection('handovers').getList<Handover>(1, 100, {
-        ...options,
-        requestKey: null
-      });
-      setLogs(result.items);
-    } catch (err) {
-      console.error('Error loading logs:', err);
-    } finally {
-      setIsLoading(false);
+const loadLogs = useCallback(async () => {
+  setIsLoading(true);
+  try {
+    const filterParts: string[] = [];
+    
+    // Filter theo khu vực của user
+    if (userArea) {
+      filterParts.push(`area = '${userArea.replace(/'/g, "\\'")}'`);
     }
-  }, [filter, userArea]);
+
+    // Filter theo tháng (giữ nguyên logic của bạn)
+    if (filter.month) {
+      const startOfMonth = `2026-${filter.month}-01 00:00:00`;
+      const nextMonth = parseInt(filter.month) + 1;
+      const endYear = nextMonth > 12 ? 2027 : 2026;
+      const endMonth = nextMonth > 12 ? '01' : nextMonth.toString().padStart(2, '0');
+      const endOfMonth = `${endYear}-${endMonth}-01 00:00:00`;
+      
+      filterParts.push(`date >= '${startOfMonth}' && date < '${endOfMonth}'`);
+    }
+
+    const filterString = filterParts.length ? filterParts.join(' && ') : '';
+
+    const result = await pb.collection('handovers').getFullList<Handover>({
+      filter: filterString,
+      sort: '-date',
+      requestKey: null
+    });
+
+    setLogs(result);
+  } catch (err) {
+    console.error('Error loading logs:', err);
+  } finally {
+    setIsLoading(false);
+  }
+}, [filter, userArea]);
 
   useEffect(() => {
     loadLogs();
