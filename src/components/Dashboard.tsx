@@ -153,8 +153,8 @@ export default function Dashboard() {
       const options: any = { sort: '-date', perPage: 30 };
       if (filterParts.length) options.filter = filterParts.join(' && ');
 
-      // Limit to 30 latest records
-      const result = await pb.collection('handovers').getList<Handover>(1, 30, {
+      // Limit to 100 latest records
+      const result = await pb.collection('handovers').getList<Handover>(1, 100, {
         ...options,
         requestKey: null
       });
