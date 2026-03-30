@@ -19,7 +19,6 @@ export default function ElectricShiftManager() {
     area: userArea || AREAS[0]
   });
 
-  // ====================== LOAD DANH SÁCH (sắp xếp theo IDnum tăng dần) ======================
   const loadStaff = useCallback(async () => {
     if (!pb.authStore.isValid) return;
     setIsLoading(true);
@@ -27,7 +26,7 @@ export default function ElectricShiftManager() {
       const filter = userArea ? `area = '${userArea.replace(/'/g, "\\'")}'` : '';
       const result = await pb.collection('Electric_shift').getFullList<ElectricShift>({
         filter,
-        sort: '+IDnum',           // ← Sắp xếp theo STT tăng dần
+        sort: '+IDnum',
         requestKey: null
       });
       setStaff(result);
@@ -39,10 +38,21 @@ export default function ElectricShiftManager() {
     }
   }, [userArea]);
 
+  // ====================== REALTIME SUBSCRIPTION (ĐÃ FIX) ======================
   useEffect(() => {
+    if (!pb.authStore.isValid) return;
+
     loadStaff();
-    const unsubscribe = pb.collection('Electric_shift').subscribe('*', () => loadStaff());
-    return () => unsubscribe();
+
+    // Subscribe realtime (cách viết này an toàn nhất với PocketBase hiện tại)
+    pb.collection('Electric_shift').subscribe('*', () => {
+      loadStaff();
+    });
+
+    // Cleanup khi component unmount hoặc chuyển tab
+    return () => {
+      pb.collection('Electric_shift').unsubscribe();
+    };
   }, [loadStaff]);
 
   // ====================== KIỂM TRA IDnum KHÔNG TRÙNG ======================
@@ -82,7 +92,6 @@ export default function ElectricShiftManager() {
       return;
     }
 
-    // Kiểm tra IDnum trùng
     const isDuplicate = await checkDuplicateID(
       formData.IDnum,
       formData.area,
@@ -150,7 +159,6 @@ export default function ElectricShiftManager() {
         </div>
       )}
 
-      {/* Phần bảng danh sách (đã sort theo IDnum) */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
           <RefreshCw className="w-10 h-10 animate-spin mb-4" />
@@ -214,7 +222,7 @@ export default function ElectricShiftManager() {
         </div>
       )}
 
-      {/* MODAL FORM */}
+      {/* ==================== MODAL FORM ==================== */}
       <AnimatePresence>
         {isModalOpen && (
           <motion.div
