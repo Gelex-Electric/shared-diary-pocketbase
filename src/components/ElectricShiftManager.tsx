@@ -26,7 +26,7 @@ export default function ElectricShiftManager() {
       const filter = userArea ? `area = '${userArea.replace(/'/g, "\\'")}'` : '';
       const result = await pb.collection('Electric_shift').getFullList<ElectricShift>({
         filter,
-        sort: '+IDnum',
+        sort: 'IDnum',                    // ← giữ giống code cũ
         requestKey: null
       });
       setStaff(result);
@@ -38,6 +38,7 @@ export default function ElectricShiftManager() {
     }
   }, [userArea]);
 
+  // Realtime (đã fix cleanup theo đúng cách cũ của Dashboard)
   useEffect(() => {
     if (!pb.authStore.isValid) return;
     loadStaff();
@@ -45,7 +46,7 @@ export default function ElectricShiftManager() {
     pb.collection('Electric_shift').subscribe('*', () => loadStaff());
 
     return () => {
-      pb.collection('Electric_shift').unsubscribe();
+      pb.collection('Electric_shift').unsubscribe('*');   // ← fix chỗ này
     };
   }, [loadStaff]);
 
@@ -104,6 +105,7 @@ export default function ElectricShiftManager() {
       setEditingStaff(null);
       setFormData({ IDnum: 0, Name: '', area: userArea || AREAS[0] });
       setErrorMessage(null);
+      loadStaff();                    // ← reload ngay sau khi lưu
     } catch (err: any) {
       setErrorMessage('Lỗi: ' + (err.message || 'Kiểm tra kết nối'));
     }
@@ -126,9 +128,9 @@ export default function ElectricShiftManager() {
   };
 
   return (
-    <div className="space-y-8"> {/* ← tăng spacing tổng thể */}
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex justify-between items-center mb-8"> {/* ← thêm mb-8 để nút Thêm cách bảng */}
+      <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Quản lý nhân sự trực</h2>
           <p className="text-slate-500 text-sm">Khu vực: <span className="font-bold text-emerald-600">{userArea || 'Tất cả'}</span></p>
@@ -214,7 +216,7 @@ export default function ElectricShiftManager() {
         </div>
       )}
 
-      {/* ==================== MODAL FORM (đã thoáng hơn) ==================== */}
+      {/* Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <motion.div
@@ -236,7 +238,7 @@ export default function ElectricShiftManager() {
                 <p className="text-slate-500 text-sm">Khu vực: {userArea || 'Tất cả'}</p>
               </div>
 
-              <form onSubmit={handleSave} className="px-8 space-y-8"> {/* ← tăng spacing form */}
+              <form onSubmit={handleSave} className="px-8 space-y-8">
                 <div>
                   <label className="block text-sm font-medium text-slate-500 mb-2">STT (số thứ tự)</label>
                   <div className="relative">
@@ -280,7 +282,7 @@ export default function ElectricShiftManager() {
 
                 {errorMessage && <p className="text-red-500 text-sm">{errorMessage}</p>}
 
-                <div className="flex gap-3 pt-6"> {/* ← thêm pt-6 cho nút thoáng hơn */}
+                <div className="flex gap-3 pt-6">
                   <button
                     type="button"
                     onClick={() => {
@@ -304,4 +306,6 @@ export default function ElectricShiftManager() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div
+    </div>
+  );
+}
