@@ -19,20 +19,20 @@ export default function ElectricShiftManager() {
     area: userArea || AREAS[0]
   });
 
+  // ====================== LOAD DANH SÁCH (sắp xếp theo IDnum tăng dần) ======================
   const loadStaff = useCallback(async () => {
     if (!pb.authStore.isValid) return;
     setIsLoading(true);
     try {
-      // Filter by user's area if available
       const filter = userArea ? `area = '${userArea.replace(/'/g, "\\'")}'` : '';
       const result = await pb.collection('Electric_shift').getFullList<ElectricShift>({
         filter,
-        sort: 'IDnum',
+        sort: '+IDnum',           // ← Sắp xếp theo STT tăng dần
         requestKey: null
       });
       setStaff(result);
     } catch (err: any) {
-      if (err.isAbort) return; // Ignore auto-cancelled requests
+      if (err.isAbort) return;
       console.error('Error loading staff:', err);
     } finally {
       setIsLoading(false);
@@ -41,16 +41,56 @@ export default function ElectricShiftManager() {
 
   useEffect(() => {
     loadStaff();
-    pb.collection('Electric_shift').subscribe('*', () => loadStaff());
-    return () => {
-      pb.collection('Electric_shift').unsubscribe('*');
-    };
+    const unsubscribe = pb.collection('Electric_shift').subscribe('*', () => loadStaff());
+    return () => unsubscribe();
   }, [loadStaff]);
 
+  // ====================== KIỂM TRA IDnum KHÔNG TRÙNG ======================
+  const checkDuplicateID = async (idnum: number, area: string, excludeId: string | null = null): Promise<boolean> => {
+    try {
+      let filter = `IDnum = ${idnum} && area = '${area.replace(/'/g, "\\'")}'`;
+      if (excludeId) filter += ` && id != '${excludeId}'`;
+
+      const existing = await pb.collection('Electric_shift').getFullList({
+        filter,
+        requestKey: null
+      });
+      return existing.length > 0;
+    } catch (err) {
+      console.error('Check duplicate error:', err);
+      return false;
+    }
+  };
+
+  // ====================== XÓA NHÂN VIÊN ======================
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Bạn chắc chắn muốn xóa nhân viên "${name}"?`)) return;
+
+    try {
+      await pb.collection('Electric_shift').delete(id);
+      setErrorMessage(null);
+    } catch (err: any) {
+      setErrorMessage('Lỗi khi xóa: ' + (err.message || 'Kiểm tra kết nối'));
+    }
+  };
+
+  // ====================== LƯU (THÊM / SỬA) ======================
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.Name || !formData.IDnum) {
-      setErrorMessage('Vui lòng nhập đầy đủ thông tin!');
+    if (!formData.Name || formData.IDnum <= 0) {
+      setErrorMessage('Vui lòng nhập đầy đủ Họ tên và STT (> 0)!');
+      return;
+    }
+
+    // Kiểm tra IDnum trùng
+    const isDuplicate = await checkDuplicateID(
+      formData.IDnum,
+      formData.area,
+      editingStaff?.id || null
+    );
+
+    if (isDuplicate) {
+      setErrorMessage(`STT ${formData.IDnum} đã tồn tại trong khu vực ${formData.area}. Vui lòng chọn STT khác!`);
       return;
     }
 
@@ -58,17 +98,12 @@ export default function ElectricShiftManager() {
       if (editingStaff) {
         await pb.collection('Electric_shift').update(editingStaff.id, formData);
       } else {
-        if (staff.length >= 6) {
-          setErrorMessage('Tối đa chỉ được thêm 6 nhân viên!');
-          return;
-        }
         await pb.collection('Electric_shift').create(formData);
       }
       setIsModalOpen(false);
       setEditingStaff(null);
       setFormData({ IDnum: 0, Name: '', area: userArea || AREAS[0] });
       setErrorMessage(null);
-      loadStaff();
     } catch (err: any) {
       setErrorMessage('Lỗi: ' + (err.message || 'Kiểm tra kết nối'));
     }
@@ -84,6 +119,12 @@ export default function ElectricShiftManager() {
     setIsModalOpen(true);
   };
 
+  const openAddNew = () => {
+    setEditingStaff(null);
+    setFormData({ IDnum: 0, Name: '', area: userArea || AREAS[0] });
+    setIsModalOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -92,20 +133,11 @@ export default function ElectricShiftManager() {
           <p className="text-slate-500 text-sm">Khu vực: <span className="font-bold text-emerald-600">{userArea || 'Tất cả'}</span></p>
         </div>
         <button 
-          onClick={() => { 
-            if (staff.length >= 6) {
-              setErrorMessage('Tối đa chỉ được thêm 6 nhân viên!');
-              return;
-            }
-            setEditingStaff(null); 
-            setFormData({ IDnum: staff.length + 1, Name: '', area: userArea || AREAS[0] }); 
-            setIsModalOpen(true); 
-          }}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-medium flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={staff.length >= 6}
+          onClick={openAddNew}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-medium flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
         >
           <Plus className="w-5 h-5" />
-          Thêm nhân viên ({staff.length}/6)
+          Thêm nhân viên
         </button>
       </div>
 
@@ -118,6 +150,7 @@ export default function ElectricShiftManager() {
         </div>
       )}
 
+      {/* Phần bảng danh sách (đã sort theo IDnum) */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
           <RefreshCw className="w-10 h-10 animate-spin mb-4" />
@@ -164,6 +197,13 @@ export default function ElectricShiftManager() {
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
+                        <button 
+                          onClick={() => handleDelete(s.id, s.Name)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                          title="Xóa"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -174,73 +214,94 @@ export default function ElectricShiftManager() {
         </div>
       )}
 
-      {/* Form Modal */}
+      {/* MODAL FORM */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden"
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden"
             >
-              <form onSubmit={handleSave} className="p-8">
-                <h3 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-3">
-                  <User className="w-7 h-7 text-emerald-600" />
-                  {editingStaff ? 'Sửa nhân viên' : 'Thêm nhân viên mới'}
+              <div className="px-8 pt-8 pb-6">
+                <h3 className="text-2xl font-bold text-slate-800 mb-1">
+                  {editingStaff ? 'Sửa thông tin nhân viên' : 'Thêm nhân viên mới'}
                 </h3>
+                <p className="text-slate-500 text-sm">Khu vực: {userArea || 'Tất cả'}</p>
+              </div>
 
-                <div className="space-y-5">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Số thứ tự (STT)</label>
-                    <div className="relative">
-                      <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                      <input 
-                        type="number"
-                        value={formData.IDnum}
-                        readOnly
-                        className="w-full pl-12 pr-4 py-4 bg-slate-100 border border-slate-200 rounded-2xl text-slate-500 cursor-not-allowed outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Họ và tên</label>
-                    <div className="relative">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                      <input 
-                        placeholder="Nhập họ tên nhân viên"
-                        value={formData.Name}
-                        onChange={(e) => setFormData({ ...formData, Name: e.target.value })}
-                        className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none"
-                        required
-                      />
-                    </div>
+              <form onSubmit={handleSave} className="px-8 space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-500 mb-2">STT (số thứ tự)</label>
+                  <div className="relative">
+                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type="number"
+                      value={formData.IDnum}
+                      onChange={(e) => setFormData({ ...formData, IDnum: Number(e.target.value) })}
+                      className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-emerald-500 text-lg font-medium"
+                      placeholder="Nhập STT"
+                      required
+                    />
                   </div>
                 </div>
 
-                <div className="flex gap-3 mt-8">
-                  <button 
-                    type="button" onClick={() => setIsModalOpen(false)}
-                    className="flex-1 py-4 rounded-2xl font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+                <div>
+                  <label className="block text-sm font-medium text-slate-500 mb-2">Họ và tên</label>
+                  <input
+                    type="text"
+                    value={formData.Name}
+                    onChange={(e) => setFormData({ ...formData, Name: e.target.value })}
+                    className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-emerald-500 text-lg"
+                    placeholder="Nhập họ tên"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-500 mb-2">Khu vực</label>
+                  <select
+                    value={formData.area}
+                    onChange={(e) => setFormData({ ...formData, area: e.target.value })}
+                    className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-emerald-500"
+                    disabled={!!userArea}
+                  >
+                    {AREAS.map(area => (
+                      <option key={area} value={area}>{area}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {errorMessage && <p className="text-red-500 text-sm">{errorMessage}</p>}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setEditingStaff(null);
+                      setErrorMessage(null);
+                    }}
+                    className="flex-1 py-4 text-slate-500 font-medium rounded-2xl hover:bg-slate-100 transition-colors"
                   >
                     Hủy
                   </button>
-                  <button 
+                  <button
                     type="submit"
-                    className="flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-medium transition-all active:scale-95"
                   >
-                    {editingStaff ? 'Cập nhật' : 'Lưu nhân viên'}
+                    {editingStaff ? 'Lưu thay đổi' : 'Thêm nhân viên'}
                   </button>
                 </div>
               </form>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
