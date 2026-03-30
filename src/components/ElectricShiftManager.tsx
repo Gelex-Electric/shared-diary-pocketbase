@@ -38,24 +38,17 @@ export default function ElectricShiftManager() {
     }
   }, [userArea]);
 
-  // ====================== REALTIME SUBSCRIPTION (ĐÃ FIX) ======================
   useEffect(() => {
     if (!pb.authStore.isValid) return;
-
     loadStaff();
 
-    // Subscribe realtime (cách viết này an toàn nhất với PocketBase hiện tại)
-    pb.collection('Electric_shift').subscribe('*', () => {
-      loadStaff();
-    });
+    pb.collection('Electric_shift').subscribe('*', () => loadStaff());
 
-    // Cleanup khi component unmount hoặc chuyển tab
     return () => {
       pb.collection('Electric_shift').unsubscribe();
     };
   }, [loadStaff]);
 
-  // ====================== KIỂM TRA IDnum KHÔNG TRÙNG ======================
   const checkDuplicateID = async (idnum: number, area: string, excludeId: string | null = null): Promise<boolean> => {
     try {
       let filter = `IDnum = ${idnum} && area = '${area.replace(/'/g, "\\'")}'`;
@@ -72,7 +65,6 @@ export default function ElectricShiftManager() {
     }
   };
 
-  // ====================== XÓA NHÂN VIÊN ======================
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Bạn chắc chắn muốn xóa nhân viên "${name}"?`)) return;
 
@@ -84,7 +76,6 @@ export default function ElectricShiftManager() {
     }
   };
 
-  // ====================== LƯU (THÊM / SỬA) ======================
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.Name || formData.IDnum <= 0) {
@@ -135,18 +126,19 @@ export default function ElectricShiftManager() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-8"> {/* ← tăng spacing tổng thể */}
+      {/* Header */}
+      <div className="flex justify-between items-center mb-8"> {/* ← thêm mb-8 để nút Thêm cách bảng */}
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Quản lý nhân sự trực</h2>
           <p className="text-slate-500 text-sm">Khu vực: <span className="font-bold text-emerald-600">{userArea || 'Tất cả'}</span></p>
         </div>
         <button 
           onClick={openAddNew}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-medium flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-2xl font-medium flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
         >
           <Plus className="w-5 h-5" />
-          Thêm nhân viên
+          Thêm nhân sự trực
         </button>
       </div>
 
@@ -222,7 +214,7 @@ export default function ElectricShiftManager() {
         </div>
       )}
 
-      {/* ==================== MODAL FORM ==================== */}
+      {/* ==================== MODAL FORM (đã thoáng hơn) ==================== */}
       <AnimatePresence>
         {isModalOpen && (
           <motion.div
@@ -239,12 +231,12 @@ export default function ElectricShiftManager() {
             >
               <div className="px-8 pt-8 pb-6">
                 <h3 className="text-2xl font-bold text-slate-800 mb-1">
-                  {editingStaff ? 'Sửa thông tin nhân viên' : 'Thêm nhân viên mới'}
+                  {editingStaff ? 'Sửa nhân sự trực' : 'Thêm nhân sự trực'}
                 </h3>
                 <p className="text-slate-500 text-sm">Khu vực: {userArea || 'Tất cả'}</p>
               </div>
 
-              <form onSubmit={handleSave} className="px-8 space-y-6">
+              <form onSubmit={handleSave} className="px-8 space-y-8"> {/* ← tăng spacing form */}
                 <div>
                   <label className="block text-sm font-medium text-slate-500 mb-2">STT (số thứ tự)</label>
                   <div className="relative">
@@ -288,7 +280,7 @@ export default function ElectricShiftManager() {
 
                 {errorMessage && <p className="text-red-500 text-sm">{errorMessage}</p>}
 
-                <div className="flex gap-3 pt-4">
+                <div className="flex gap-3 pt-6"> {/* ← thêm pt-6 cho nút thoáng hơn */}
                   <button
                     type="button"
                     onClick={() => {
@@ -304,7 +296,7 @@ export default function ElectricShiftManager() {
                     type="submit"
                     className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-medium transition-all active:scale-95"
                   >
-                    {editingStaff ? 'Lưu thay đổi' : 'Thêm nhân viên'}
+                    {editingStaff ? 'Sửa nhân sự trực' : 'Thêm nhân sự trực'}
                   </button>
                 </div>
               </form>
@@ -312,6 +304,4 @@ export default function ElectricShiftManager() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
+    </div
