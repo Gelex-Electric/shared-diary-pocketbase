@@ -16,7 +16,7 @@
 
 ## Chạy Local
 
-1. Clone repo
+1. Clone repo0
    ```bash
    git clone https://github.com/Gelex-Electric/shared-diary-pocketbase.git
    cd shared-diary-pocketbase
