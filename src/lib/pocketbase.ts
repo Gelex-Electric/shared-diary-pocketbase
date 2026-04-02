@@ -9,22 +9,6 @@ export const AREAS = [
   'KCN Yên Mỹ', 'KCN Số 3'
 ];
 
-// Map for display names to IDs
-// If your 'areas' field in collections stores IDs, update these values to match the IDs in PocketBase.
-// If it stores names, you can keep them as names or leave them as is.
-export const AREA_IDS: Record<string, string> = {
-  'KCN Tiền Hải':      'KCN Tiền Hải',
-  'KCN Phong Điền':    'KCN Phong Điền',
-  'KCN Thuận Thành I': 'KCN Thuận Thành I',
-  'KCN Yên Mỹ':        'KCN Yên Mỹ',
-  'KCN Số 3':          'KCN Số 3'
-};
-
-// Reverse map to get Name from ID
-export const ID_TO_AREA: Record<string, string> = Object.fromEntries(
-  Object.entries(AREA_IDS).map(([name, id]) => [id, name])
-);
-
 export const AREA_TO_CLASS: Record<string, string> = {
   'KCN Tiền Hải':      'KCN-Tien-Hai',
   'KCN Phong Điền':    'KCN-Phong-Dien',
