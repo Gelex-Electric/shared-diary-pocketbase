@@ -40,7 +40,7 @@ export default function Login() {
             </div>
           </div>
           <h1 className="text-3xl font-bold text-gray-800">Sổ nhật ký vận hành</h1>
-          <p className="text-gray-500 mt-2">Hệ thống bàn giao ca trực vận hành điện tử</p>
+          <p className="text-gray-500 mt-2">Hệ thống bàn giao ca trực điện tử</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
