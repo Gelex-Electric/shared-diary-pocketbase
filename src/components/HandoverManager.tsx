@@ -97,9 +97,10 @@ export default function HandoverManager() {
       }
 
       if (filter.month) {
-        const startOfMonth = `2026-${filter.month}-01 00:00:00`;
+        const currentYear = new Date().getFullYear();
+        const startOfMonth = `${currentYear}-${filter.month}-01 00:00:00`;
         const nextMonth = parseInt(filter.month) + 1;
-        const endYear = nextMonth > 12 ? 2027 : 2026;
+        const endYear = nextMonth > 12 ? currentYear + 1 : currentYear;
         const endMonth = nextMonth > 12 ? '01' : nextMonth.toString().padStart(2, '0');
         const endOfMonth = `${endYear}-${endMonth}-01 00:00:00`;
         filterParts.push(`startdate >= '${startOfMonth}' && startdate < '${endOfMonth}'`);
@@ -131,9 +132,9 @@ export default function HandoverManager() {
 
   const groupedLogs = React.useMemo(() => {
     return logs.reduce((acc: { id: string, date: string, area: string, records: Handover[] }[], log) => {
-      // Convert UTC string to local date for grouping
+      // Treat stored date as "wall clock" time by using UTC methods
       const dateObj = new Date(log.startdate.includes('Z') ? log.startdate : log.startdate + 'Z');
-      const logDate = `${dateObj.getFullYear()}-${(dateObj.getMonth() + 1).toString().padStart(2, '0')}-${dateObj.getDate().toString().padStart(2, '0')}`;
+      const logDate = `${dateObj.getUTCFullYear()}-${(dateObj.getUTCMonth() + 1).toString().padStart(2, '0')}-${dateObj.getUTCDate().toString().padStart(2, '0')}`;
       
       const groupId = `${logDate}-${log.area}`;
       const existing = acc.find(g => g.id === groupId);
@@ -228,12 +229,13 @@ export default function HandoverManager() {
     if (isSaving) return;
     setIsSaving(true);
     try {
-      const start = new Date(`${formData.startDate}T${formData.startTime}:00`);
-      const end = new Date(`${formData.endDate}T${formData.endTime}:00`);
+      // Save as "wall clock" time strings to avoid timezone shifts in filtering
+      const startdate = `${formData.startDate} ${formData.startTime}:00`;
+      const enddate = `${formData.endDate} ${formData.endTime}:00`;
 
       const data = {
-        startdate: start.toISOString().replace('T', ' ').replace('Z', ''),
-        enddate: end.toISOString().replace('T', ' ').replace('Z', ''),
+        startdate,
+        enddate,
         area: formData.area,
         shift: formData.shift,
         main_duty: formData.main_duty,
@@ -307,9 +309,11 @@ export default function HandoverManager() {
 
   const formatTime = (dateStr: string) => {
     try {
-      // PocketBase returns UTC, we convert to local
+      // Treat stored date as "wall clock" time by using UTC methods
       const date = new Date(dateStr.includes('Z') ? dateStr : dateStr + 'Z');
-      return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const hours = date.getUTCHours().toString().padStart(2, '0');
+      const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes}`;
     } catch (e) {
       return '--:--';
     }
@@ -318,10 +322,10 @@ export default function HandoverManager() {
   const formatFullDateTime = (dateStr: string) => {
     try {
       const date = new Date(dateStr.includes('Z') ? dateStr : dateStr + 'Z');
-      const time = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-      const day = date.getDate().toString().padStart(2, '0');
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const year = date.getFullYear();
+      const time = `${date.getUTCHours().toString().padStart(2, '0')}:${date.getUTCMinutes().toString().padStart(2, '0')}`;
+      const day = date.getUTCDate().toString().padStart(2, '0');
+      const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+      const year = date.getUTCFullYear();
       return `${time} ngày ${day}/${month}/${year}`;
     } catch (e) {
       return '---';
@@ -330,14 +334,14 @@ export default function HandoverManager() {
 
   // PDF Export Logic (Copied from Dashboard.tsx)
   const getLogPDFContent = (log: Handover) => {
-    const start = new Date(log.startdate);
-    const end = new Date(log.enddate);
+    const start = new Date(log.startdate.includes('Z') ? log.startdate : log.startdate + 'Z');
+    const end = new Date(log.enddate.includes('Z') ? log.enddate : log.enddate + 'Z');
     
     const formatDateTime = (date: Date) => {
-      const time = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-      const day = date.getDate().toString().padStart(2, '0');
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const year = date.getFullYear();
+      const time = `${date.getUTCHours().toString().padStart(2, '0')}:${date.getUTCMinutes().toString().padStart(2, '0')}`;
+      const day = date.getUTCDate().toString().padStart(2, '0');
+      const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+      const year = date.getUTCFullYear();
       return `${time} ngày ${day}/${month}/${year}`;
     };
 
@@ -423,7 +427,7 @@ export default function HandoverManager() {
         }
       };
       pdfMake.fonts = TINOS_FONTS;
-      pdfMake.createPdf(docDefinition).download(`SoTruc_${log.area}_${log.shift}_${new Date(log.startdate).toLocaleDateString('vi-VN').replace(/\//g, '-')}.pdf`);
+      pdfMake.createPdf(docDefinition).download(`SoTruc_${log.area}_${log.shift}_${log.startdate.split(' ')[0]}.pdf`);
     } catch (err) {
       console.error(err);
     }
@@ -494,7 +498,7 @@ export default function HandoverManager() {
   const uniqueDaysCount = React.useMemo(() => {
     return new Set(logs.map(log => {
       const dateObj = new Date(log.startdate.includes('Z') ? log.startdate : log.startdate + 'Z');
-      return `${dateObj.getFullYear()}-${(dateObj.getMonth() + 1).toString().padStart(2, '0')}-${dateObj.getDate().toString().padStart(2, '0')}`;
+      return `${dateObj.getUTCFullYear()}-${(dateObj.getUTCMonth() + 1).toString().padStart(2, '0')}-${dateObj.getUTCDate().toString().padStart(2, '0')}`;
     })).size;
   }, [logs]);
 
