@@ -36,20 +36,24 @@ export default function HandoverManager() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<Handover | null>(null);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    startDate: new Date().toISOString().split('T')[0],
-    startTime: '06:00',
-    endDate: new Date().toISOString().split('T')[0],
-    endTime: '14:00',
-    area: AREAS[0],
-    shift: 'Ca 1',
-    main_duty: '',
-    sub_duty: '',
-    main_power: '',
-    sub_power: '',
-    notes: '',
-    equipment: '',
-    opinions: '',
+  const [formData, setFormData] = useState(() => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+    return {
+      startDate: todayStr,
+      startTime: '06:00',
+      endDate: todayStr,
+      endTime: '14:00',
+      area: AREAS[0],
+      shift: 'Ca 1',
+      main_duty: '',
+      sub_duty: '',
+      main_power: '',
+      sub_power: '',
+      notes: '',
+      equipment: '',
+      opinions: '',
+    };
   });
   const [situationRows, setSituationRows] = useState<Situation[]>([]);
   const [staffList, setStaffList] = useState<ElectricShift[]>([]);
@@ -153,10 +157,13 @@ export default function HandoverManager() {
   const startAddLog = () => {
     setIsModalOpen(true);
     setEditingLogId(null);
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+    
     setFormData({
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: todayStr,
       startTime: '06:00',
-      endDate: new Date().toISOString().split('T')[0],
+      endDate: todayStr,
       endTime: '14:00',
       area: effectiveAreas[0] || AREAS[0],
       shift: 'Ca 1',
@@ -600,36 +607,41 @@ export default function HandoverManager() {
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Ca trực</label>
                       <select 
                         value={formData.shift} 
-                        onChange={(e) => {
-                          const newShift = e.target.value;
-                          let newStartTime = formData.startTime;
-                          let newEndTime = formData.endTime;
-                          let newEndDate = formData.startDate;
+                          onChange={(e) => {
+                            const newShift = e.target.value;
+                            let newStartTime = formData.startTime;
+                            let newEndTime = formData.endTime;
+                            let newEndDate = formData.startDate;
 
-                          if (newShift === 'Ca 1') {
-                            newStartTime = '06:00';
-                            newEndTime = '14:00';
-                            newEndDate = formData.startDate;
-                          } else if (newShift === 'Ca 2') {
-                            newStartTime = '14:00';
-                            newEndTime = '22:00';
-                            newEndDate = formData.startDate;
-                          } else if (newShift === 'Ca 3') {
-                            newStartTime = '22:00';
-                            newEndTime = '06:00';
-                            const date = new Date(formData.startDate + 'T00:00:00');
-                            date.setDate(date.getDate() + 1);
-                            newEndDate = date.toISOString().split('T')[0];
-                          }
+                            const getNextDay = (dateStr: string) => {
+                              const [year, month, day] = dateStr.split('-').map(Number);
+                              const date = new Date(year, month - 1, day);
+                              date.setDate(date.getDate() + 1);
+                              return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                            };
 
-                          setFormData({ 
-                            ...formData, 
-                            shift: newShift,
-                            startTime: newStartTime,
-                            endTime: newEndTime,
-                            endDate: newEndDate
-                          });
-                        }} 
+                            if (newShift === 'Ca 1') {
+                              newStartTime = '06:00';
+                              newEndTime = '14:00';
+                              newEndDate = formData.startDate;
+                            } else if (newShift === 'Ca 2') {
+                              newStartTime = '14:00';
+                              newEndTime = '22:00';
+                              newEndDate = formData.startDate;
+                            } else if (newShift === 'Ca 3') {
+                              newStartTime = '22:00';
+                              newEndTime = '06:00';
+                              newEndDate = getNextDay(formData.startDate);
+                            }
+
+                            setFormData({ 
+                              ...formData, 
+                              shift: newShift,
+                              startTime: newStartTime,
+                              endTime: newEndTime,
+                              endDate: newEndDate
+                            });
+                          }} 
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500"
                       >
                         <option value="Ca 1">Ca 1 (06:00 - 14:00)</option>
@@ -650,9 +662,10 @@ export default function HandoverManager() {
                             const newStartDate = e.target.value;
                             let newEndDate = newStartDate;
                             if (formData.shift === 'Ca 3') {
-                              const date = new Date(newStartDate + 'T00:00:00');
+                              const [year, month, day] = newStartDate.split('-').map(Number);
+                              const date = new Date(year, month - 1, day);
                               date.setDate(date.getDate() + 1);
-                              newEndDate = date.toISOString().split('T')[0];
+                              newEndDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
                             }
                             setFormData({ ...formData, startDate: newStartDate, endDate: newEndDate });
                           }} 
