@@ -141,11 +141,22 @@ export default function HandoverManager() {
       
       if (existing) {
         existing.records.push(log);
-        // Sort by start time within the group
+        // Sort by shift name descending (Ca 3, Ca 2, Ca 1)
         existing.records.sort((a, b) => {
+          // Extract shift numbers if possible for numeric comparison
+          const getShiftNum = (s: string) => {
+            const match = s.match(/\d+/);
+            return match ? parseInt(match[0]) : 0;
+          };
+          const numA = getShiftNum(a.shift);
+          const numB = getShiftNum(b.shift);
+          
+          if (numA !== numB) return numB - numA;
+          
+          // Fallback to time if shifts are same
           const timeA = new Date(a.startdate.includes('Z') ? a.startdate : a.startdate + 'Z').getTime();
           const timeB = new Date(b.startdate.includes('Z') ? b.startdate : b.startdate + 'Z').getTime();
-          return timeA - timeB;
+          return timeB - timeA;
         });
       } else {
         acc.push({ id: groupId, date: logDate, area: log.area, records: [log] });
