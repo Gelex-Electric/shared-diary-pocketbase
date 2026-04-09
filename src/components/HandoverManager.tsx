@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Edit2, X, CheckCircle2, Search, 
   Calendar, Clock, User, Users, Zap, Download, ChevronDown, 
   ChevronRight, RefreshCw, ClipboardList, Package,
-  MessageSquare, FileText, Activity
+  MessageSquare, FileText, Activity, CheckSquare, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -23,6 +23,7 @@ const TINOS_FONTS = {
 export default function HandoverManager() {
   const [logs, setLogs] = useState<Handover[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [filter, setFilter] = useState({ 
     month: (new Date().getMonth() + 1).toString().padStart(2, '0'),
     area: '' 
@@ -36,7 +37,10 @@ export default function HandoverManager() {
   const [selectedLog, setSelectedLog] = useState<Handover | null>(null);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
+    startDate: new Date().toISOString().split('T')[0],
+    startTime: '06:00',
+    endDate: new Date().toISOString().split('T')[0],
+    endTime: '14:00',
     area: AREAS[0],
     shift: 'Ca 1',
     main_duty: '',
@@ -94,12 +98,12 @@ export default function HandoverManager() {
         const endYear = nextMonth > 12 ? 2027 : 2026;
         const endMonth = nextMonth > 12 ? '01' : nextMonth.toString().padStart(2, '0');
         const endOfMonth = `${endYear}-${endMonth}-01 00:00:00`;
-        filterParts.push(`date >= '${startOfMonth}' && date < '${endOfMonth}'`);
+        filterParts.push(`startdate >= '${startOfMonth}' && startdate < '${endOfMonth}'`);
       }
 
       const result = await pb.collection('handovers').getFullList<Handover>({
         filter: filterParts.join(' && '),
-        sort: '-date',
+        sort: '-startdate',
         requestKey: null
       });
       setLogs(result);
@@ -121,25 +125,39 @@ export default function HandoverManager() {
     }
   }, [formData.area, loadStaff]);
 
-  const groupedLogs = logs.reduce((acc: { id: string, date: string, area: string, records: Handover[] }[], log) => {
-    const logDate = log.date.split(' ')[0];
-    const groupId = `${logDate}-${log.area}`;
-    const existing = acc.find(g => g.id === groupId);
-    if (existing) {
-      existing.records.push(log);
-      existing.records.sort((a, b) => a.shift.localeCompare(b.shift));
-    } else {
-      acc.push({ id: groupId, date: logDate, area: log.area, records: [log] });
-    }
-    return acc;
-  }, []);
+  const groupedLogs = React.useMemo(() => {
+    return logs.reduce((acc: { id: string, date: string, area: string, records: Handover[] }[], log) => {
+      // Convert UTC string to local date for grouping
+      const dateObj = new Date(log.startdate.includes('Z') ? log.startdate : log.startdate + 'Z');
+      const logDate = `${dateObj.getFullYear()}-${(dateObj.getMonth() + 1).toString().padStart(2, '0')}-${dateObj.getDate().toString().padStart(2, '0')}`;
+      
+      const groupId = `${logDate}-${log.area}`;
+      const existing = acc.find(g => g.id === groupId);
+      
+      if (existing) {
+        existing.records.push(log);
+        // Sort by start time within the group
+        existing.records.sort((a, b) => {
+          const timeA = new Date(a.startdate.includes('Z') ? a.startdate : a.startdate + 'Z').getTime();
+          const timeB = new Date(b.startdate.includes('Z') ? b.startdate : b.startdate + 'Z').getTime();
+          return timeA - timeB;
+        });
+      } else {
+        acc.push({ id: groupId, date: logDate, area: log.area, records: [log] });
+      }
+      return acc;
+    }, []);
+  }, [logs]);
 
   // Handlers
   const startAddLog = () => {
     setIsModalOpen(true);
     setEditingLogId(null);
     setFormData({
-      date: new Date().toISOString().split('T')[0],
+      startDate: new Date().toISOString().split('T')[0],
+      startTime: '06:00',
+      endDate: new Date().toISOString().split('T')[0],
+      endTime: '14:00',
       area: effectiveAreas[0] || AREAS[0],
       shift: 'Ca 1',
       main_duty: '',
@@ -156,8 +174,24 @@ export default function HandoverManager() {
   const startEditLog = (log: Handover) => {
     setEditingLogId(log.id);
     setIsModalOpen(true);
+    
+    // Safety parsing for startdate and enddate
+    const parseDateTime = (dtStr: string) => {
+      if (!dtStr) return { date: new Date().toISOString().split('T')[0], time: '00:00' };
+      const parts = dtStr.includes(' ') ? dtStr.split(' ') : dtStr.split('T');
+      const date = parts[0] || new Date().toISOString().split('T')[0];
+      const time = (parts[1] || '00:00').substring(0, 5);
+      return { date, time };
+    };
+
+    const start = parseDateTime(log.startdate);
+    const end = parseDateTime(log.enddate);
+    
     setFormData({
-      date: log.date.split(' ')[0],
+      startDate: start.date,
+      startTime: start.time,
+      endDate: end.date,
+      endTime: end.time,
       area: log.area,
       shift: log.shift,
       main_duty: log.main_duty,
@@ -184,11 +218,27 @@ export default function HandoverManager() {
   };
 
   const saveLog = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
+      const start = new Date(`${formData.startDate}T${formData.startTime}:00`);
+      const end = new Date(`${formData.endDate}T${formData.endTime}:00`);
+
       const data = {
-        ...formData,
+        startdate: start.toISOString().replace('T', ' ').replace('Z', ''),
+        enddate: end.toISOString().replace('T', ' ').replace('Z', ''),
+        area: formData.area,
+        shift: formData.shift,
+        main_duty: formData.main_duty,
+        sub_duty: formData.sub_duty,
+        main_power: formData.main_power,
+        sub_power: formData.sub_power,
+        notes: formData.notes,
+        equipment: formData.equipment,
+        opinions: formData.opinions,
         situations: situationRows.filter(r => r.time || r.content)
       };
+
       if (editingLogId) {
         await pb.collection('handovers').update(editingLogId, data);
       } else {
@@ -198,6 +248,9 @@ export default function HandoverManager() {
       loadLogs();
     } catch (err) {
       console.error('Save log error:', err);
+      alert('Lỗi khi lưu lịch trực. Vui lòng thử lại.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -213,7 +266,7 @@ export default function HandoverManager() {
   const handleAutoAssign = () => {
     if (staffList.length < 6) return;
     
-    const date = new Date(formData.date);
+    const date = new Date(formData.startDate);
     if (isNaN(date.getTime())) return;
 
     const epoch = new Date(2026, 0, 1);
@@ -245,20 +298,45 @@ export default function HandoverManager() {
     setFormData(prev => ({ ...prev, main_duty: main, sub_duty: sub }));
   };
 
+  const formatTime = (dateStr: string) => {
+    try {
+      // PocketBase returns UTC, we convert to local
+      const date = new Date(dateStr.includes('Z') ? dateStr : dateStr + 'Z');
+      return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch (e) {
+      return '--:--';
+    }
+  };
+
+  const formatFullDateTime = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr.includes('Z') ? dateStr : dateStr + 'Z');
+      const time = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      return `${time} ngày ${day}/${month}/${year}`;
+    } catch (e) {
+      return '---';
+    }
+  };
+
   // PDF Export Logic (Copied from Dashboard.tsx)
   const getLogPDFContent = (log: Handover) => {
-    let caTime = '';
-    const start = new Date(log.date);
-    let end = new Date(log.date);
-    if (log.shift === 'Ca 1') caTime = `Từ 06:00 ngày ${start.toLocaleDateString('vi-VN')} đến 14:00 ngày ${start.toLocaleDateString('vi-VN')}`;
-    else if (log.shift === 'Ca 2') caTime = `Từ 14:00 ngày ${start.toLocaleDateString('vi-VN')} đến 22:00 ngày ${start.toLocaleDateString('vi-VN')}`;
-    else if (log.shift === 'Ca 3') {
-      end.setDate(end.getDate() + 1);
-      caTime = `Từ 22:00 ngày ${start.toLocaleDateString('vi-VN')} đến 06:00 ngày ${end.toLocaleDateString('vi-VN')}`;
-    }
-    const giaoCaStr = log.shift === 'Ca 1' ? `14:00 ngày ${start.toLocaleDateString('vi-VN')}`
-      : log.shift === 'Ca 2' ? `22:00 ngày ${start.toLocaleDateString('vi-VN')}`
-      : `06:00 ngày ${end.toLocaleDateString('vi-VN')}`;
+    const start = new Date(log.startdate);
+    const end = new Date(log.enddate);
+    
+    const formatDateTime = (date: Date) => {
+      const time = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      return `${time} ngày ${day}/${month}/${year}`;
+    };
+
+    const caTime = `Từ ${formatDateTime(start)} đến ${formatDateTime(end)}`;
+    const giaoCaStr = formatDateTime(end);
+
     const showSituations = (log.situations || []).slice(0, 6);
     const padRows = Array.from({ length: 6 - showSituations.length }, () => ['', '']);
     const displaySituations = showSituations.map(s => [
@@ -338,7 +416,7 @@ export default function HandoverManager() {
         }
       };
       pdfMake.fonts = TINOS_FONTS;
-      pdfMake.createPdf(docDefinition).download(`SoTruc_${log.area}_${log.shift}_${new Date(log.date).toLocaleDateString('vi-VN').replace(/\//g, '-')}.pdf`);
+      pdfMake.createPdf(docDefinition).download(`SoTruc_${log.area}_${log.shift}_${new Date(log.startdate).toLocaleDateString('vi-VN').replace(/\//g, '-')}.pdf`);
     } catch (err) {
       console.error(err);
     }
@@ -349,7 +427,7 @@ export default function HandoverManager() {
     try {
       const selectedLogs = logs
         .filter(log => selectedIds.has(log.id))
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        .sort((a, b) => new Date(a.startdate).getTime() - new Date(b.startdate).getTime());
       const combinedContent: any[] = [];
       selectedLogs.forEach((log, index) => {
         combinedContent.push(...getLogPDFContent(log));
@@ -397,7 +475,21 @@ export default function HandoverManager() {
     setSelectedIds(newSelection);
   };
 
-  const uniqueDaysCount = new Set(logs.map(log => log.date.split(' ')[0])).size;
+  const selectAllInMonth = () => {
+    const allIds = new Set(logs.map(log => log.id));
+    setSelectedIds(allIds);
+  };
+
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const uniqueDaysCount = React.useMemo(() => {
+    return new Set(logs.map(log => {
+      const dateObj = new Date(log.startdate.includes('Z') ? log.startdate : log.startdate + 'Z');
+      return `${dateObj.getFullYear()}-${(dateObj.getMonth() + 1).toString().padStart(2, '0')}-${dateObj.getDate().toString().padStart(2, '0')}`;
+    })).size;
+  }, [logs]);
 
   return (
     <div className="space-y-8 relative">
@@ -410,7 +502,7 @@ export default function HandoverManager() {
           <select 
             value={filter.area} 
             onChange={(e) => setFilter({ ...filter, area: e.target.value })}
-            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
           >
             <option value="">Tất cả khu vực</option>
             {effectiveAreas.map(area => (
@@ -420,7 +512,7 @@ export default function HandoverManager() {
           <select 
             value={filter.month} 
             onChange={(e) => setFilter({ ...filter, month: e.target.value })}
-            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
           >
             {Array.from({ length: 12 }, (_, i) => {
               const m = (i + 1).toString().padStart(2, '0');
@@ -428,8 +520,26 @@ export default function HandoverManager() {
             })}
           </select>
           <button 
+            onClick={selectAllInMonth}
+            disabled={logs.length === 0}
+            className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 hover:bg-slate-50 transition-all disabled:opacity-50"
+            title="Chọn tất cả trong tháng"
+          >
+            <CheckSquare className="w-5 h-5" />
+            Chọn hết
+          </button>
+          <button 
+            onClick={deselectAll}
+            disabled={selectedIds.size === 0}
+            className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 hover:bg-slate-50 transition-all disabled:opacity-50"
+            title="Bỏ chọn tất cả"
+          >
+            <Square className="w-5 h-5" />
+            Bỏ chọn
+          </button>
+          <button 
             onClick={startAddLog}
-            className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+            className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
           >
             <Plus className="w-5 h-5" />
             Tạo lịch trực
@@ -479,11 +589,7 @@ export default function HandoverManager() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Ngày trực</label>
-                      <input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500" />
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Khu vực</label>
                       <select value={formData.area} onChange={(e) => setFormData({ ...formData, area: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500">
@@ -492,11 +598,91 @@ export default function HandoverManager() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Ca trực</label>
-                      <select value={formData.shift} onChange={(e) => setFormData({ ...formData, shift: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500">
+                      <select 
+                        value={formData.shift} 
+                        onChange={(e) => {
+                          const newShift = e.target.value;
+                          let newStartTime = formData.startTime;
+                          let newEndTime = formData.endTime;
+                          let newEndDate = formData.startDate;
+
+                          if (newShift === 'Ca 1') {
+                            newStartTime = '06:00';
+                            newEndTime = '14:00';
+                            newEndDate = formData.startDate;
+                          } else if (newShift === 'Ca 2') {
+                            newStartTime = '14:00';
+                            newEndTime = '22:00';
+                            newEndDate = formData.startDate;
+                          } else if (newShift === 'Ca 3') {
+                            newStartTime = '22:00';
+                            newEndTime = '06:00';
+                            const date = new Date(formData.startDate + 'T00:00:00');
+                            date.setDate(date.getDate() + 1);
+                            newEndDate = date.toISOString().split('T')[0];
+                          }
+
+                          setFormData({ 
+                            ...formData, 
+                            shift: newShift,
+                            startTime: newStartTime,
+                            endTime: newEndTime,
+                            endDate: newEndDate
+                          });
+                        }} 
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
                         <option value="Ca 1">Ca 1 (06:00 - 14:00)</option>
                         <option value="Ca 2">Ca 2 (14:00 - 22:00)</option>
                         <option value="Ca 3">Ca 3 (22:00 - 06:00)</option>
                       </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                      <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Thời gian bắt đầu</label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <input 
+                          type="date" 
+                          value={formData.startDate} 
+                          onChange={(e) => {
+                            const newStartDate = e.target.value;
+                            let newEndDate = newStartDate;
+                            if (formData.shift === 'Ca 3') {
+                              const date = new Date(newStartDate + 'T00:00:00');
+                              date.setDate(date.getDate() + 1);
+                              newEndDate = date.toISOString().split('T')[0];
+                            }
+                            setFormData({ ...formData, startDate: newStartDate, endDate: newEndDate });
+                          }} 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500" 
+                        />
+                        <input 
+                          type="time" 
+                          value={formData.startTime} 
+                          onChange={(e) => setFormData({ ...formData, startTime: e.target.value })} 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500" 
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Thời gian kết thúc</label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <input 
+                          type="date" 
+                          value={formData.endDate} 
+                          onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500" 
+                        />
+                        <input 
+                          type="time" 
+                          value={formData.endTime} 
+                          onChange={(e) => setFormData({ ...formData, endTime: e.target.value })} 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500" 
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -602,8 +788,27 @@ export default function HandoverManager() {
                 </div>
 
                 <div className="p-8 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
-                  <button onClick={closeModal} className="px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-100 transition-all">Hủy bỏ</button>
-                  <button onClick={saveLog} className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20">Lưu lịch trực</button>
+                  <button 
+                    onClick={closeModal} 
+                    disabled={isSaving}
+                    className="px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-100 transition-all disabled:opacity-50"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button 
+                    onClick={saveLog} 
+                    disabled={isSaving}
+                    className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isSaving ? (
+                      <>
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                        Đang lưu...
+                      </>
+                    ) : (
+                      'Lưu lịch trực'
+                    )}
+                  </button>
                 </div>
               </motion.div>
             </div>
@@ -634,7 +839,9 @@ export default function HandoverManager() {
                     </div>
                     <div>
                       <h3 className="text-xl font-bold text-slate-800">Chi tiết lịch trực</h3>
-                      <p className="text-slate-500 text-xs mt-0.5">{new Date(selectedLog.date).toLocaleDateString('vi-VN')} - {selectedLog.shift} - {selectedLog.area}</p>
+                      <p className="text-slate-500 text-xs mt-0.5">
+                        {formatFullDateTime(selectedLog.startdate)} — {formatFullDateTime(selectedLog.enddate)}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -646,18 +853,39 @@ export default function HandoverManager() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                  {/* Row 1: Personnel */}
+                  {/* Row 1: Time and Personnel */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-emerald-50/50 p-6 rounded-3xl border border-emerald-100 space-y-4">
+                      <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-2"><Clock className="w-4 h-4" /> Thời gian giao nhận ca</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-bold text-emerald-500 uppercase">Bắt đầu (Nhận ca)</div>
+                          <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.startdate)}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-bold text-emerald-500 uppercase">Kết thúc (Giao ca)</div>
+                          <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.enddate)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users className="w-4 h-4" /> Nhân sự trực</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase">Trực chính QLVH</div>
+                          <p className="text-sm font-bold text-slate-700">{selectedLog.main_duty || '—'}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase">Trực phụ QLVH</div>
+                          <p className="text-sm font-bold text-slate-700">{selectedLog.sub_duty || '—'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users className="w-4 h-4" /> Nhân sự trực</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                      <div className="space-y-1">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">Trực chính QLVH</div>
-                        <p className="text-sm font-bold text-slate-700">{selectedLog.main_duty || '—'}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">Trực phụ QLVH</div>
-                        <p className="text-sm font-bold text-slate-700">{selectedLog.sub_duty || '—'}</p>
-                      </div>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Zap className="w-4 h-4" /> Trực điều độ điện lực</h4>
+                    <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-1">
                         <div className="text-[10px] font-bold text-slate-400 uppercase">Trực chính Điện lực</div>
                         <p className="text-sm font-bold text-slate-700">{selectedLog.main_power || '—'}</p>
@@ -730,7 +958,10 @@ export default function HandoverManager() {
                 </div>
 
                 <div className="p-8 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
-                  <button onClick={() => { closeModal(); startEditLog(selectedLog); }} className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all flex items-center gap-2">
+                  <button onClick={() => { 
+                    setIsDetailOpen(false); 
+                    if (selectedLog) startEditLog(selectedLog); 
+                  }} className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all flex items-center gap-2">
                     <Edit2 className="w-5 h-5" /> Sửa lịch trực
                   </button>
                   <button onClick={closeModal} className="px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-100 transition-all">Đóng</button>
@@ -763,7 +994,16 @@ export default function HandoverManager() {
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-3">
-                      <h3 className="font-bold text-slate-800 text-lg">{new Date(group.date).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</h3>
+                      <h3 className="font-bold text-slate-800 text-lg">
+                        {(() => {
+                          const date = new Date(group.date.includes('Z') ? group.date : group.date + 'Z');
+                          const day = date.getDate().toString().padStart(2, '0');
+                          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                          const year = date.getFullYear();
+                          const weekday = date.toLocaleDateString('vi-VN', { weekday: 'long' });
+                          return `${weekday}, ${day}/${month}/${year}`;
+                        })()}
+                      </h3>
                       <span className={`kcn-badge kcn-${AREA_TO_CLASS[group.area] || 'default'}`}>
                         {group.area}
                       </span>
@@ -803,8 +1043,9 @@ export default function HandoverManager() {
                             className="p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-white transition-colors"
                           >
                             <div className="flex items-center gap-6 flex-1">
-                              <div className="w-20 text-center">
+                              <div className="w-24 text-center">
                                 <div className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg uppercase tracking-tight">{log.shift}</div>
+                                <div className="text-[10px] font-bold text-slate-400 mt-1">{formatTime(log.startdate)} - {formatTime(log.enddate)}</div>
                               </div>
                               <div className="hidden md:flex items-center gap-4 flex-1">
                                 <div className="flex items-center gap-2 text-xs text-slate-500">
