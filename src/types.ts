@@ -7,7 +7,8 @@ export interface Handover {
   id: string;
   created: string;
   updated: string;
-  date: string;
+  startdate: string;
+  enddate: string;
   area: string;
   shift: string;
   main_duty: string;
