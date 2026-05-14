@@ -8,24 +8,12 @@ import {
   Activity, Cpu, Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import pdfMake from 'pdfmake/build/pdfmake';
-import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 import ElectricShiftManager from './ElectricShiftManager';
 import SummaryDashboard from './SummaryDashboard';
 import CustomerManager from './CustomerManager';
 import HandoverManager from './HandoverManager';
 import HesReadingManager from './HesReadingManager';
 import { LayoutDashboard } from 'lucide-react';
-
-// Initialize pdfMake fonts with Times New Roman from CDN
-const TINOS_FONTS = {
-  Tinos: {
-    normal: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-Regular.ttf',
-    bold: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-Bold.ttf',
-    italics: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-Italic.ttf',
-    bolditalics: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-BoldItalic.ttf'
-  }
-};
 
 export default function Dashboard() {
   const [topTab, setTopTab] = useState<'summary' | 'journal' | 'operating' | 'later'>('summary');
