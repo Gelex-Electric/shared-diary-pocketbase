@@ -9,14 +9,17 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pdfMake from 'pdfmake/build/pdfmake';
+import timesUrl from '../font/times.ttf?url';
+import timesBdUrl from '../font/timesbd.ttf?url';
+import timesBiUrl from '../font/timesbi.ttf?url';
+import timesIUrl from '../font/timesi.ttf?url';
 
-// Initialize pdfMake fonts with Times New Roman from CDN
-const TINOS_FONTS = {
-  Tinos: {
-    normal: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-Regular.ttf',
-    bold: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-Bold.ttf',
-    italics: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-Italic.ttf',
-    bolditalics: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-BoldItalic.ttf'
+const TIMES_FONTS = {
+  Times: {
+    normal: timesUrl,
+    bold: timesBdUrl,
+    italics: timesIUrl,
+    bolditalics: timesBiUrl,
   }
 };
 
@@ -429,7 +432,7 @@ export default function HandoverManager() {
       const docDefinition: any = {
         pageSize: 'A4',
         pageMargins: [35, 30, 35, 30],
-        defaultStyle: { font: 'Tinos', fontSize: 12, lineHeight: 1.4 },
+        defaultStyle: { font: 'Times', fontSize: 12, lineHeight: 1.4 },
         content: getLogPDFContent(log),
         styles: {
           header: { fontSize: 13, bold: true },
@@ -437,7 +440,7 @@ export default function HandoverManager() {
           boldSection: { bold: true, fontSize: 12 }
         }
       };
-      pdfMake.fonts = TINOS_FONTS;
+      pdfMake.fonts = TIMES_FONTS;
       pdfMake.createPdf(docDefinition).download(`SoTruc_${log.area}_${log.shift}_${log.startdate.split(' ')[0]}.pdf`);
     } catch (err) {
       console.error(err);
@@ -460,7 +463,7 @@ export default function HandoverManager() {
       const docDefinition: any = {
         pageSize: 'A4',
         pageMargins: [35, 30, 35, 30],
-        defaultStyle: { font: 'Tinos', fontSize: 12, lineHeight: 1.4 },
+        defaultStyle: { font: 'Times', fontSize: 12, lineHeight: 1.4 },
         content: combinedContent,
         styles: {
           header: { fontSize: 13, bold: true },
@@ -468,7 +471,7 @@ export default function HandoverManager() {
           boldSection: { bold: true, fontSize: 12 }
         }
       };
-      pdfMake.fonts = TINOS_FONTS;
+      pdfMake.fonts = TIMES_FONTS;
       pdfMake.createPdf(docDefinition).download(`SoTruc_TongHop_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.pdf`);
     } catch (err) {
       console.error(err);
