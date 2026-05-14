@@ -24,16 +24,14 @@ const loadFontsToVfs = async () => {
     ['timesbi.ttf', timesBiUrl],
     ['timesi.ttf', timesIUrl],
   ];
-  const vfs: Record<string, string> = {};
   await Promise.all(entries.map(async ([name, url]) => {
     const res = await fetch(url);
     const buf = await res.arrayBuffer();
     const bytes = new Uint8Array(buf);
     let binary = '';
     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    vfs[name] = btoa(binary);
+    (pdfMake as any).virtualfs.writeFileSync(name, btoa(binary));
   }));
-  (pdfMake as any).vfs = vfs;
   pdfMake.fonts = {
     Times: { normal: 'times.ttf', bold: 'timesbd.ttf', italics: 'timesi.ttf', bolditalics: 'timesbi.ttf' }
   };
