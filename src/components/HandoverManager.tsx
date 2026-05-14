@@ -14,13 +14,30 @@ import timesBdUrl from '../font/timesbd.ttf?url';
 import timesBiUrl from '../font/timesbi.ttf?url';
 import timesIUrl from '../font/timesi.ttf?url';
 
-const TIMES_FONTS = {
-  Times: {
-    normal: timesUrl,
-    bold: timesBdUrl,
-    italics: timesIUrl,
-    bolditalics: timesBiUrl,
-  }
+let fontsLoaded = false;
+
+const loadFontsToVfs = async () => {
+  if (fontsLoaded) return;
+  const entries: [string, string][] = [
+    ['times.ttf', timesUrl],
+    ['timesbd.ttf', timesBdUrl],
+    ['timesbi.ttf', timesBiUrl],
+    ['timesi.ttf', timesIUrl],
+  ];
+  const vfs: Record<string, string> = {};
+  await Promise.all(entries.map(async ([name, url]) => {
+    const res = await fetch(url);
+    const buf = await res.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    vfs[name] = btoa(binary);
+  }));
+  (pdfMake as any).vfs = vfs;
+  pdfMake.fonts = {
+    Times: { normal: 'times.ttf', bold: 'timesbd.ttf', italics: 'timesi.ttf', bolditalics: 'timesbi.ttf' }
+  };
+  fontsLoaded = true;
 };
 
 export default function HandoverManager() {
@@ -429,6 +446,7 @@ export default function HandoverManager() {
 
   const exportToPDF = async (log: Handover) => {
     try {
+      await loadFontsToVfs();
       const docDefinition: any = {
         pageSize: 'A4',
         pageMargins: [35, 30, 35, 30],
@@ -440,7 +458,6 @@ export default function HandoverManager() {
           boldSection: { bold: true, fontSize: 12 }
         }
       };
-      pdfMake.fonts = TIMES_FONTS;
       pdfMake.createPdf(docDefinition).download(`SoTruc_${log.area}_${log.shift}_${log.startdate.split(' ')[0]}.pdf`);
     } catch (err) {
       console.error(err);
@@ -450,6 +467,7 @@ export default function HandoverManager() {
   const exportMultipleToPDF = async () => {
     if (selectedIds.size === 0) return;
     try {
+      await loadFontsToVfs();
       const selectedLogs = logs
         .filter(log => selectedIds.has(log.id))
         .sort((a, b) => new Date(a.startdate).getTime() - new Date(b.startdate).getTime());
@@ -471,7 +489,6 @@ export default function HandoverManager() {
           boldSection: { bold: true, fontSize: 12 }
         }
       };
-      pdfMake.fonts = TIMES_FONTS;
       pdfMake.createPdf(docDefinition).download(`SoTruc_TongHop_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.pdf`);
     } catch (err) {
       console.error(err);
