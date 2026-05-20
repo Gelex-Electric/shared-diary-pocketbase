@@ -382,7 +382,6 @@ export default function HesReadingManager() {
               </div>
             </div>
 
-
             <div className="flex-1 overflow-x-auto max-h-[500px]">
               <table className="w-full text-left border-collapse">
                 <thead className="sticky top-0 bg-slate-50 z-10">
@@ -500,13 +499,13 @@ export default function HesReadingManager() {
             <thead className="sticky top-0 bg-slate-50 z-10">
               <tr className="border-b border-slate-100">
                 <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Số công tơ</th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Trạm (Line)</th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">HSN</th>
-                <th className="px-4 py-4 text-[10px] font-bold text-emerald-600 uppercase tracking-widest text-center">Tổng (kWh)</th>
-                <th className="px-4 py-4 text-[10px] font-bold text-blue-600 uppercase tracking-widest text-center">Biểu 1 (kWh)</th>
-                <th className="px-4 py-4 text-[10px] font-bold text-orange-600 uppercase tracking-widest text-center">Biểu 2 (kWh)</th>
-                <th className="px-4 py-4 text-[10px] font-bold text-purple-600 uppercase tracking-widest text-center">Biểu 3 (kWh)</th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-widest text-center">Vô công (kVarh)</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trạm (Line)</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">HSN</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-emerald-600 uppercase tracking-wider text-center">Tổng (kWh)</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-center">Biểu 1 (kWh)</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-orange-600 uppercase tracking-wider text-center">Biểu 2 (kWh)</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-purple-600 uppercase tracking-wider text-center">Biểu 3 (kWh)</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-slate-600 uppercase tracking-wider text-center">Vô công (kVarh)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -551,6 +550,3 @@ export default function HesReadingManager() {
     </div>
   );
 }
-
-
-
