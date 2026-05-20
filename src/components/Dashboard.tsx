@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { pb, AREAS, AREA_TO_CLASS } from '../lib/pocketbase';
-import { Handover, Situation, ElectricShift } from '../types';
+import React, { useState } from 'react';
+import { pb, AREAS } from '../lib/pocketbase';
 import { 
-  Plus, RefreshCw, LogOut, FileText, Edit, Trash2, 
-  Search, Calendar, Clock, User, Zap, MessageSquare, 
-  Package, ChevronRight, X, Download, ClipboardList, Users, Menu, ChevronDown,
-  Activity, Cpu, Database
+  RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ElectricShiftManager from './ElectricShiftManager';
@@ -28,8 +25,6 @@ export default function Dashboard() {
     return areas;
   }, [JSON.stringify(pb.authStore.model?.area)]);
   
-  const effectiveAreas = React.useMemo(() => userAreas.length > 0 ? userAreas : AREAS, [userAreas]);
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isJournalExpanded, setIsJournalExpanded] = useState(true);
   const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
@@ -235,7 +230,7 @@ export default function Dashboard() {
       </aside>
 
       <div className="flex-1 p-4 md:p-8 lg:max-w-[calc(100vw-320px)]">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-[1650px] mx-auto w-full">
           <div className="lg:hidden mb-6 flex items-center justify-between">
             <button onClick={() => setIsSidebarOpen(true)} className="p-3 bg-white hover:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 transition-all">
               <Menu className="w-6 h-6 text-slate-600" />
@@ -258,7 +253,7 @@ export default function Dashboard() {
             )
           ) : (
             <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2rem] shadow-sm">
-              <RefreshCw className="w-16 h-16 text-slate-200 mb-4 animate-spin-slow" />
+              <RefreshCw className="w-16 h-16 text-slate-200 mb-4 animate-[spin_3s_linear_infinite]" />
               <h3 className="text-xl font-bold text-slate-400">Tính năng đang được phát triển</h3>
               <p className="text-slate-400">Vui lòng quay lại sau</p>
             </div>
