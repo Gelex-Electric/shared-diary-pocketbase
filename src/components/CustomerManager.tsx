@@ -83,10 +83,8 @@ export default function CustomerManager() {
   const loadHesAccount = useCallback(async () => {
     if (!pb.authStore.isValid) return;
     try {
-      // Fetch the first available record. PocketBase rules (area = @request.auth.area) 
-      // will ensure the user only gets the record for their area.
       const result = await pb.collection('AccountHes').getFirstListItem('');
-      setHesAccount(result);
+      setHesAccount(result as any);
     } catch (err) {
       console.log('AccountHes not found or access denied');
     }
