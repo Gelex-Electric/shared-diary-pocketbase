@@ -9,10 +9,11 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pdfMake from 'pdfmake/build/pdfmake';
-import timesUrl from '../font/times.ttf?url';
-import timesBdUrl from '../font/timesbd.ttf?url';
-import timesBiUrl from '../font/timesbi.ttf?url';
-import timesIUrl from '../font/timesi.ttf?url';
+
+const timesUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Regular.ttf';
+const timesBdUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Bold.ttf';
+const timesBiUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-BoldItalic.ttf';
+const timesIUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Italic.ttf';
 
 let fontsLoaded = false;
 
@@ -96,7 +97,6 @@ export default function HandoverManager() {
       setStaffList(result);
     } catch (err: any) {
       console.error('Error loading staff:', err);
-      // Optional: set an error state if you want to show it in UI
     }
   }, []);
 
@@ -290,6 +290,7 @@ export default function HandoverManager() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm('Bạn có chắc muốn xóa lịch trực này?')) return;
     try {
       await pb.collection('handovers').delete(id);
       loadLogs();
@@ -299,7 +300,10 @@ export default function HandoverManager() {
   };
 
   const handleAutoAssign = () => {
-    if (staffList.length < 6) return;
+    if (staffList.length < 6) {
+      alert('Cần ít nhất 6 nhân sự trực để tự động xoay ca!');
+      return;
+    }
     
     const date = new Date(formData.startDate);
     if (isNaN(date.getTime())) return;
@@ -335,7 +339,6 @@ export default function HandoverManager() {
 
   const formatTime = (dateStr: string) => {
     try {
-      // Treat stored date as "wall clock" time by using UTC methods
       const date = new Date(dateStr.includes('Z') ? dateStr : dateStr + 'Z');
       const hours = date.getUTCHours().toString().padStart(2, '0');
       const minutes = date.getUTCMinutes().toString().padStart(2, '0');
@@ -358,7 +361,7 @@ export default function HandoverManager() {
     }
   };
 
-  // PDF Export Logic (Copied from Dashboard.tsx)
+  // PDF Export Logic
   const getLogPDFContent = (log: Handover) => {
     const start = new Date(log.startdate.includes('Z') ? log.startdate : log.startdate + 'Z');
     const end = new Date(log.enddate.includes('Z') ? log.enddate : log.enddate + 'Z');
@@ -602,7 +605,7 @@ export default function HandoverManager() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={closeModal}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               />
               <motion.div 
                 initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -637,41 +640,41 @@ export default function HandoverManager() {
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Ca trực</label>
                       <select 
                         value={formData.shift} 
-                          onChange={(e) => {
-                            const newShift = e.target.value;
-                            let newStartTime = formData.startTime;
-                            let newEndTime = formData.endTime;
-                            let newEndDate = formData.startDate;
+                        onChange={(e) => {
+                          const newShift = e.target.value;
+                          let newStartTime = formData.startTime;
+                          let newEndTime = formData.endTime;
+                          let newEndDate = formData.startDate;
 
-                            const getNextDay = (dateStr: string) => {
-                              const [year, month, day] = dateStr.split('-').map(Number);
-                              const date = new Date(year, month - 1, day);
-                              date.setDate(date.getDate() + 1);
-                              return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
-                            };
+                          const getNextDay = (dateStr: string) => {
+                            const [year, month, day] = dateStr.split('-').map(Number);
+                            const date = new Date(year, month - 1, day);
+                            date.setDate(date.getDate() + 1);
+                            return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                          };
 
-                            if (newShift === 'Ca 1') {
-                              newStartTime = '06:00';
-                              newEndTime = '14:00';
-                              newEndDate = formData.startDate;
-                            } else if (newShift === 'Ca 2') {
-                              newStartTime = '14:00';
-                              newEndTime = '22:00';
-                              newEndDate = formData.startDate;
-                            } else if (newShift === 'Ca 3') {
-                              newStartTime = '22:00';
-                              newEndTime = '06:00';
-                              newEndDate = getNextDay(formData.startDate);
-                            }
+                          if (newShift === 'Ca 1') {
+                            newStartTime = '06:00';
+                            newEndTime = '14:00';
+                            newEndDate = formData.startDate;
+                          } else if (newShift === 'Ca 2') {
+                            newStartTime = '14:00';
+                            newEndTime = '22:00';
+                            newEndDate = formData.startDate;
+                          } else if (newShift === 'Ca 3') {
+                            newStartTime = '22:00';
+                            newEndTime = '06:00';
+                            newEndDate = getNextDay(formData.startDate);
+                          }
 
-                            setFormData({ 
-                              ...formData, 
-                              shift: newShift,
-                              startTime: newStartTime,
-                              endTime: newEndTime,
-                              endDate: newEndDate
-                            });
-                          }} 
+                          setFormData({ 
+                            ...formData, 
+                            shift: newShift,
+                            startTime: newStartTime,
+                            endTime: newEndTime,
+                            endDate: newEndDate
+                          });
+                        }} 
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500"
                       >
                         <option value="Ca 1">Ca 1 (06:00 - 14:00)</option>
@@ -867,7 +870,7 @@ export default function HandoverManager() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={closeModal}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               />
               <motion.div 
                 initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -912,56 +915,44 @@ export default function HandoverManager() {
                       </div>
                     </div>
                     <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users className="w-4 h-4" /> Nhân sự trực</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <div className="text-[10px] font-bold text-slate-400 uppercase">Trực chính QLVH</div>
-                          <p className="text-sm font-bold text-slate-700">{selectedLog.main_duty || '—'}</p>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users className="w-4 h-4" /> Nhân viên vận hành các đơn vị</h4>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase">Trực đội QLVH</div>
+                          <p className="text-sm font-bold text-slate-700">Chính: {selectedLog.main_duty || 'N/A'}</p>
+                          <p className="text-xs text-slate-500">Phụ: {selectedLog.sub_duty || 'N/A'}</p>
                         </div>
-                        <div className="space-y-1">
-                          <div className="text-[10px] font-bold text-slate-400 uppercase">Trực phụ QLVH</div>
-                          <p className="text-sm font-bold text-slate-700">{selectedLog.sub_duty || '—'}</p>
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase">Trực điều độ điện lực</div>
+                          <p className="text-sm font-bold text-slate-700">Chính: {selectedLog.main_power || 'N/A'}</p>
+                          <p className="text-xs text-slate-500">Phụ: {selectedLog.sub_power || 'N/A'}</p>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Zap className="w-4 h-4" /> Trực điều độ điện lực</h4>
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="space-y-1">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">Trực chính Điện lực</div>
-                        <p className="text-sm font-bold text-slate-700">{selectedLog.main_power || '—'}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">Trực phụ Điện lực</div>
-                        <p className="text-sm font-bold text-slate-700">{selectedLog.sub_power || '—'}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Situations Table */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Activity className="w-4 h-4" /> Tình hình vận hành trong ca</h4>
-                    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
+                  {/* Row 2: Operation situation */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-600" /> I. Tình hình vận hành trong ca</h4>
+                    <div className="border border-slate-100 rounded-3xl overflow-hidden bg-slate-50/50">
+                      <table className="w-full text-sm border-collapse">
+                        <thead className="bg-slate-100 border-b border-slate-200">
                           <tr>
-                            <th className="px-6 py-3 text-left font-bold text-slate-500 w-32">Thời gian</th>
-                            <th className="px-6 py-3 text-left font-bold text-slate-500">Nội dung công việc</th>
+                            <th className="px-6 py-3.5 text-left font-bold text-slate-500 w-32">Thời gian</th>
+                            <th className="px-6 py-3.5 text-left font-bold text-slate-500">Nội dung</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {selectedLog.situations && selectedLog.situations.length > 0 ? (
-                            selectedLog.situations.map((s, idx) => (
-                              <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                <td className="px-6 py-4 font-bold text-emerald-600">{s.time}</td>
-                                <td className="px-6 py-4 text-slate-600 leading-relaxed">{s.content}</td>
+                            selectedLog.situations.map((row, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="px-6 py-4 font-semibold text-slate-600">{row.time}</td>
+                                <td className="px-6 py-4 text-slate-800 font-medium">{row.content}</td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={2} className="px-6 py-12 text-center text-slate-400 italic">Không có ghi nhận tình hình vận hành</td>
+                              <td colSpan={2} className="px-6 py-6 text-center text-slate-400 italic">Không có ghi chép tình hình vận hành</td>
                             </tr>
                           )}
                         </tbody>
@@ -969,184 +960,155 @@ export default function HandoverManager() {
                     </div>
                   </div>
 
-                  {/* Rows 3, 4, 5: Notes, Equipment, Opinions */}
-                  <div className="space-y-8">
-                    <div className="space-y-3">
-                      <h5 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <MessageSquare className="w-4 h-4" /> 1. Những lưu ý và tồn tại ca sau cần giải quyết
-                      </h5>
-                      <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 text-sm text-slate-600 leading-relaxed min-h-[100px] whitespace-pre-wrap">
-                        {selectedLog.notes || 'Không có ghi chú nào cho ca sau.'}
-                      </div>
+                  {/* Row 3: Notes & Equipment & Leader comments */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-2">
+                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">1. Những lưu ý ca sau giải quyết</h4>
+                      <p className="text-sm text-slate-750 font-medium whitespace-pre-wrap">{selectedLog.notes || 'Không có'}</p>
                     </div>
-
-                    <div className="space-y-3">
-                      <h5 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <Package className="w-4 h-4" /> 2. Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp
-                      </h5>
-                      <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 text-sm text-slate-600 leading-relaxed min-h-[100px] whitespace-pre-wrap">
-                        {selectedLog.equipment || 'Tình trạng trang thiết bị và vệ sinh bình thường.'}
-                      </div>
+                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-2">
+                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">2. Trang bị vận hành, vệ sinh</h4>
+                      <p className="text-sm text-slate-750 font-medium whitespace-pre-wrap">{selectedLog.equipment || 'Không có'}</p>
                     </div>
-
-                    <div className="space-y-3">
-                      <h5 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <User className="w-4 h-4" /> 3. Ý kiến lãnh đạo đơn vị
-                      </h5>
-                      <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 text-sm text-slate-600 leading-relaxed min-h-[100px] whitespace-pre-wrap font-medium italic">
-                        {selectedLog.opinions || 'Chưa có ý kiến chỉ đạo từ lãnh đạo.'}
-                      </div>
+                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-2">
+                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">3. Ý kiến lãnh đạo đơn vị</h4>
+                      <p className="text-sm text-slate-750 font-medium whitespace-pre-wrap">{selectedLog.opinions || 'Không có'}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-8 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
-                  <button onClick={() => { 
-                    setIsDetailOpen(false); 
-                    if (selectedLog) startEditLog(selectedLog); 
-                  }} className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all flex items-center gap-2">
-                    <Edit2 className="w-5 h-5" /> Sửa lịch trực
-                  </button>
-                  <button onClick={closeModal} className="px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-100 transition-all">Đóng</button>
+                <div className="p-8 border-t border-slate-100 flex justify-end bg-slate-50/50">
+                  <button onClick={closeModal} className="px-8 py-3 bg-slate-800 text-white rounded-2xl font-bold hover:bg-slate-950 transition-all shadow-lg active:scale-95">Đóng cửa sổ</button>
                 </div>
               </motion.div>
             </div>
           )}
         </AnimatePresence>
 
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-            <RefreshCw className="w-10 h-10 animate-spin mb-4" />
-            <p>Đang tải dữ liệu...</p>
-          </div>
-        ) : groupedLogs.length === 0 ? (
-          <div className="bg-white rounded-[2rem] p-20 text-center text-slate-400 border border-dashed border-slate-200">
-            <ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-20" />
-            <p>Chưa có lịch trực nào trong tháng này</p>
-          </div>
-        ) : (
-          groupedLogs.map((group) => (
-            <div key={group.id} className={`bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm transition-all card-${AREA_TO_CLASS[group.area] || 'default'}`}>
-              <div 
-                onClick={() => toggleGroupExpand(group.id)}
-                className="p-5 flex items-center justify-between gap-4 cursor-pointer hover:bg-white/50 transition-colors"
-              >
-                <div className="flex items-center gap-5">
-                  <div className="p-3 bg-white rounded-2xl shadow-sm">
-                    <Calendar className="w-6 h-6 text-slate-500" />
-                  </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h3 className="font-bold text-slate-800 text-lg">
-                        {(() => {
-                          const date = new Date(group.date.includes('Z') ? group.date : group.date + 'Z');
-                          const day = date.getDate().toString().padStart(2, '0');
-                          const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                          const year = date.getFullYear();
-                          const weekday = date.toLocaleDateString('vi-VN', { weekday: 'long' });
-                          return `${weekday}, ${day}/${month}/${year}`;
-                        })()}
-                      </h3>
-                      <span className={`kcn-badge kcn-${AREA_TO_CLASS[group.area] || 'default'}`}>
-                        {group.area}
-                      </span>
-                    </div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{group.records.length} ca trực ghi nhận</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="checkbox" 
-                      checked={group.records.every(r => selectedIds.has(r.id))} 
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        toggleGroupSelection(group.records);
-                      }} 
-                      className="w-5 h-5 rounded-lg border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" 
-                    />
-                  </div>
-                  {expandedGroups.has(group.id) ? <ChevronDown className="w-6 h-6 text-slate-400" /> : <ChevronRight className="w-6 h-6 text-slate-400" />}
-                </div>
-              </div>
-
-              <AnimatePresence>
-                {expandedGroups.has(group.id) && (
-                  <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="border-t border-slate-100 bg-white/30"
-                  >
-                    <div className="divide-y divide-slate-100">
-                      {group.records.map((log) => (
-                        <div key={log.id} className="flex flex-col">
-                          <div 
-                            onClick={() => openDetail(log)}
-                            className="p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-white transition-colors"
-                          >
-                            <div className="flex items-center gap-6 flex-1">
-                              <div className="w-24 text-center">
-                                <div className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg uppercase tracking-tight">{log.shift}</div>
-                                <div className="text-[10px] font-bold text-slate-400 mt-1">{formatTime(log.startdate)} - {formatTime(log.enddate)}</div>
-                              </div>
-                              <div className="hidden md:flex items-center gap-4 flex-1">
-                                <div className="flex items-center gap-2 text-xs text-slate-500">
-                                  <User className="w-3.5 h-3.5" />
-                                  <span className="font-medium truncate max-w-[150px]">{log.main_duty}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs text-slate-400">
-                                  <Users className="w-3.5 h-3.5" />
-                                  <span className="truncate max-w-[150px]">{log.sub_duty || '—'}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button onClick={(e) => { e.stopPropagation(); exportToPDF(log); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Tải PDF"><Download className="w-4 h-4" /></button>
-                              <button onClick={(e) => { e.stopPropagation(); startEditLog(log); }} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Sửa"><Edit2 className="w-4 h-4" /></button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDelete(log.id); }} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Xóa"><Trash2 className="w-4 h-4" /></button>
-                              <input 
-                                type="checkbox" 
-                                checked={selectedIds.has(log.id)} 
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  toggleSelection(log.id);
-                                }} 
-                                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" 
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+        {/* Data List grouped by Date & Industrial park */}
+        <div className="space-y-6">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl shadow-xs text-slate-400 border border-slate-200">
+              <RefreshCw className="w-10 h-10 animate-spin mb-4" />
+              <p className="text-sm">Đang tải nhật ký lịch trực...</p>
             </div>
-          ))
-        )}
+          ) : logs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl shadow-xs text-slate-400 border border-slate-200">
+              <Calendar className="w-16 h-16 opacity-20 mb-4" />
+              <p className="text-sm font-semibold">Chưa có lịch trực nào được ghi nhận cho bộ lọc hiện tại</p>
+            </div>
+          ) : (
+            groupedLogs.map((group) => {
+              const isExpanded = expandedGroups.has(group.id);
+              const groupSelected = group.records.every(r => selectedIds.has(r.id));
+              
+              const formatGroupHeaderDate = (dateStr: string) => {
+                const parts = dateStr.split('-');
+                return `Ngày ${parts[2]}/${parts[1]}/${parts[0]}`;
+              };
+
+              return (
+                <div key={group.id} className="bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-xs">
+                  {/* Group Header */}
+                  <div className="p-6 flex items-center justify-between bg-slate-50/60 border-b border-slate-100 flex-wrap gap-4">
+                    <div className="flex items-center gap-4">
+                      <input 
+                        type="checkbox" 
+                        checked={groupSelected}
+                        onChange={() => toggleGroupSelection(group.records)}
+                        className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div className="p-2 bg-white rounded-xl shadow-xs">
+                        <Calendar className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-[15px]">{formatGroupHeaderDate(group.date)}</h3>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full font-bold text-[10px] uppercase tracking-wider mt-1">{group.area}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-slate-400 uppercase bg-white border border-slate-100 px-3 py-1.5 rounded-lg">{group.records.length} ca trực</span>
+                      <button 
+                        onClick={() => toggleGroupExpand(group.id)}
+                        className="p-2 hover:bg-slate-200 rounded-xl transition-all"
+                      >
+                        {isExpanded ? <ChevronDown className="w-5 h-5 text-slate-400 rotate-180 transition-transform" /> : <ChevronDown className="w-5 h-5 text-slate-400 transition-transform" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Group Rows */}
+                  <AnimatePresence initial={false}>
+                    {isExpanded && (
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden bg-white divide-y divide-slate-100"
+                      >
+                        {group.records.map((log) => {
+                          const isSelected = selectedIds.has(log.id);
+
+                          return (
+                            <div key={log.id} className={`p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-50/40 transition-colors ${isSelected ? 'bg-emerald-50/10' : ''}`}>
+                              <div className="flex items-start gap-4">
+                                <input 
+                                  type="checkbox" 
+                                  checked={isSelected}
+                                  onChange={() => toggleSelection(log.id)}
+                                  className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 mt-1"
+                                />
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-extrabold text-slate-800 text-sm">{log.shift}</span>
+                                    <span className="text-xs text-slate-400 font-medium">({formatTime(log.startdate)} - {formatTime(log.enddate)})</span>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                                    <div className="flex items-center gap-2 text-slate-600">
+                                      <Users className="w-4 h-4 text-slate-400" />
+                                      <span>Tổ QLVH: <strong className="text-slate-700">{log.main_duty || '—'}</strong> (Chính) / <span className="text-slate-500">{log.sub_duty || '—'}</span> (Phụ)</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-slate-600">
+                                      <Zap className="w-4 h-4 text-slate-400" />
+                                      <span>Điều độ: <strong className="text-slate-700">{log.main_power || '—'}</strong> (Chính) / <span className="text-slate-500">{log.sub_power || '—'}</span> (Phụ)</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 self-end md:self-auto">
+                                <button 
+                                  onClick={() => openDetail(log)}
+                                  className="px-4 py-2 hover:bg-slate-100 rounded-xl font-bold text-xs text-slate-600 border border-slate-200 transition-all shadow-xs"
+                                >
+                                  Chi tiết
+                                </button>
+                                <button 
+                                  onClick={() => startEditLog(log)}
+                                  className="p-2 hover:bg-slate-100 hover:text-blue-600 text-slate-400 rounded-xl border border-slate-100 transition-all shadow-xs"
+                                  title="Chỉnh sửa"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDelete(log.id)}
+                                  className="p-2 hover:bg-slate-100 hover:text-red-500 text-slate-400 rounded-xl border border-slate-100 transition-all shadow-xs"
+                                  title="Xóa bỏ"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
-
-      {/* Floating Stats Notification */}
-      {!isLoading && logs.length > 0 && (
-        <motion.div 
-          initial={{ opacity: 0, y: 20, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          className="fixed bottom-8 right-8 z-40"
-        >
-          <div className="bg-white/80 backdrop-blur-md border border-emerald-100 shadow-2xl shadow-emerald-600/10 rounded-2xl px-5 py-3 flex items-center gap-3 group hover:bg-white transition-all">
-            <div className="p-2 bg-emerald-600 rounded-xl shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
-              <Calendar className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">Thống kê tháng {filter.month}</p>
-              <p className="text-sm font-black text-slate-800">
-                <span className="text-emerald-600">{uniqueDaysCount}</span> ngày trực <span className="text-slate-300 mx-1">•</span> <span className="text-blue-600">{logs.length}</span> ca
-              </p>
-            </div>
-          </div>
-        </motion.div>
-      )}
     </div>
   );
 }
