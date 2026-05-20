@@ -9,15 +9,30 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pdfMake from 'pdfmake/build/pdfmake';
+import timesUrl from '../font/times.ttf?url';
+import timesBdUrl from '../font/timesbd.ttf?url';
+import timesBiUrl from '../font/timesbi.ttf?url';
+import timesIUrl from '../font/timesi.ttf?url';
 
-// Initialize pdfMake fonts with Times New Roman from CDN
-const TINOS_FONTS = {
-  Tinos: {
-    normal: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-Regular.ttf',
-    bold: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-Bold.ttf',
-    italics: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-Italic.ttf',
-    bolditalics: 'https://cdn.jsdelivr.net/gh/google/fonts@master/apache/tinos/Tinos-BoldItalic.ttf'
-  }
+let fontsLoaded = false;
+
+const loadFontsToVfs = async () => {
+  if (fontsLoaded) return;
+  const entries: [string, string][] = [
+    ['times.ttf', timesUrl],
+    ['timesbd.ttf', timesBdUrl],
+    ['timesbi.ttf', timesBiUrl],
+    ['timesi.ttf', timesIUrl],
+  ];
+  await Promise.all(entries.map(async ([name, url]) => {
+    const res = await fetch(url);
+    const buf = await res.arrayBuffer();
+    (pdfMake as any).virtualfs.writeFileSync(name, new Uint8Array(buf));
+  }));
+  pdfMake.fonts = {
+    Times: { normal: 'times.ttf', bold: 'timesbd.ttf', italics: 'timesi.ttf', bolditalics: 'timesbi.ttf' }
+  };
+  fontsLoaded = true;
 };
 
 export default function HandoverManager() {
@@ -426,10 +441,11 @@ export default function HandoverManager() {
 
   const exportToPDF = async (log: Handover) => {
     try {
+      await loadFontsToVfs();
       const docDefinition: any = {
         pageSize: 'A4',
         pageMargins: [35, 30, 35, 30],
-        defaultStyle: { font: 'Tinos', fontSize: 12, lineHeight: 1.4 },
+        defaultStyle: { font: 'Times', fontSize: 12, lineHeight: 1.4 },
         content: getLogPDFContent(log),
         styles: {
           header: { fontSize: 13, bold: true },
@@ -437,7 +453,6 @@ export default function HandoverManager() {
           boldSection: { bold: true, fontSize: 12 }
         }
       };
-      pdfMake.fonts = TINOS_FONTS;
       pdfMake.createPdf(docDefinition).download(`SoTruc_${log.area}_${log.shift}_${log.startdate.split(' ')[0]}.pdf`);
     } catch (err) {
       console.error(err);
@@ -447,6 +462,7 @@ export default function HandoverManager() {
   const exportMultipleToPDF = async () => {
     if (selectedIds.size === 0) return;
     try {
+      await loadFontsToVfs();
       const selectedLogs = logs
         .filter(log => selectedIds.has(log.id))
         .sort((a, b) => new Date(a.startdate).getTime() - new Date(b.startdate).getTime());
@@ -460,7 +476,7 @@ export default function HandoverManager() {
       const docDefinition: any = {
         pageSize: 'A4',
         pageMargins: [35, 30, 35, 30],
-        defaultStyle: { font: 'Tinos', fontSize: 12, lineHeight: 1.4 },
+        defaultStyle: { font: 'Times', fontSize: 12, lineHeight: 1.4 },
         content: combinedContent,
         styles: {
           header: { fontSize: 13, bold: true },
@@ -468,7 +484,6 @@ export default function HandoverManager() {
           boldSection: { bold: true, fontSize: 12 }
         }
       };
-      pdfMake.fonts = TINOS_FONTS;
       pdfMake.createPdf(docDefinition).download(`SoTruc_TongHop_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.pdf`);
     } catch (err) {
       console.error(err);
