@@ -313,10 +313,13 @@ export default function HandoverManager() {
     const dayIndex = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
     const monthOffset = date.getMonth() * 2;
-    const rotation = Math.abs(dayIndex + monthOffset) % 6;
-    
+
+    // Sắp xếp trước để lấy độ dài thực tế làm modulo
+    // → 6 người: % 6 (giữ nguyên hành vi cũ), 7+ người: tự thích nghi
     const rotatedStaff = [...staffList].sort((a, b) => a.IDnum - b.IDnum);
-    for(let i = 0; i < rotation; i++) {
+    const rotation = Math.abs(dayIndex + monthOffset) % rotatedStaff.length;
+
+    for (let i = 0; i < rotation; i++) {
       rotatedStaff.push(rotatedStaff.shift()!);
     }
 
