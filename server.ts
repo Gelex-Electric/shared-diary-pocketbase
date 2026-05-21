@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;   // ← BẮT BUỘC phải giữ dòng này cho Railway
+  const PORT = Number(process.env.PORT) || 3000;   // ← BẮT BUỘC phải giữ dòng này cho Railway
 
   // ==================== PROXY POCKETBASE ====================
   app.use('/pb', createProxyMiddleware({
@@ -19,10 +19,12 @@ async function startServer() {
     pathRewrite: { '^/pb': '' },
     timeout: 30000,
     proxyTimeout: 30000,
-    onError: (err, req, res) => {
-      console.error('Proxy PocketBase error:', err.message);
-      // @ts-ignore
-      res.status(502).send('PocketBase chưa sẵn sàng. Vui lòng chờ 10-15 giây rồi refresh lại.');
+    on: {
+      error: (err, req, res) => {
+        console.error('Proxy PocketBase error:', err.message);
+        // @ts-ignore
+        res.status(502).send('PocketBase chưa sẵn sàng. Vui lòng chờ 10-15 giây rồi refresh lại.');
+      }
     }
   }));
 
@@ -33,10 +35,12 @@ async function startServer() {
     pathRewrite: { '^/hes': '' },
     timeout: 30000,
     proxyTimeout: 30000,
-    onError: (err, req, res) => {
-      console.error('Proxy HES error:', err.message);
-      // @ts-ignore
-      res.status(502).send('HES API không phản hồi. Vui lòng kiểm tra kết nối.');
+    on: {
+      error: (err, req, res) => {
+        console.error('Proxy HES error:', err.message);
+        // @ts-ignore
+        res.status(502).send('HES API không phản hồi. Vui lòng kiểm tra kết nối.');
+      }
     }
   }));
 
