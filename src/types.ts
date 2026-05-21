@@ -19,7 +19,7 @@ export interface Handover {
   equipment: string;
   opinions: string;
   situations: Situation[];
-  type_shift: string;
+  type_shift: string[];
 }
 
 export interface ElectricShift {
