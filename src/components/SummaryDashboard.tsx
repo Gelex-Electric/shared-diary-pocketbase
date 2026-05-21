@@ -242,11 +242,10 @@ export default function SummaryDashboard() {
     return [...uniqueYears].sort((a, b) => a - b);
   }, [uniqueYears]);
 
-  // Synchronize visibleYears dynamically (Default to 2 newest years)
+  // Synchronize visibleYears dynamically (Default to ALL years)
   useEffect(() => {
     if (uniqueYears.length > 0) {
-      const newestTwo = uniqueYears.slice(0, 2);
-      setVisibleYears(newestTwo);
+      setVisibleYears([...uniqueYears]);
     }
   }, [uniqueYears]);
 
