@@ -89,7 +89,7 @@ export default function HandoverManager() {
       endTime: '14:00',
       area: AREAS[0],
       shift: 'Ca 1',
-      type_shift: 'Bình thường',
+      type_shift: ['Bình thường'] as string[],
       main_duty: '',
       sub_duty: '',
       main_power: '',
@@ -222,7 +222,7 @@ export default function HandoverManager() {
       endTime: '14:00',
       area: effectiveAreas[0] || AREAS[0],
       shift: 'Ca 1',
-      type_shift: 'Bình thường',
+      type_shift: ['Bình thường'] as string[],
       main_duty: '',
       sub_duty: '',
       main_power: '',
@@ -257,7 +257,9 @@ export default function HandoverManager() {
       endTime: end.time,
       area: log.area,
       shift: log.shift,
-      type_shift: log.type_shift || 'Bình thường',
+      type_shift: Array.isArray(log.type_shift)
+        ? (log.type_shift.length > 0 ? log.type_shift : ['Bình thường'])
+        : (log.type_shift ? [log.type_shift as unknown as string] : ['Bình thường']),
       main_duty: log.main_duty,
       sub_duty: log.sub_duty,
       main_power: log.main_power,
@@ -294,7 +296,7 @@ export default function HandoverManager() {
         enddate,
         area: formData.area,
         shift: formData.shift,
-        type_shift: formData.type_shift || 'Bình thường',
+        type_shift: formData.type_shift.length > 0 ? formData.type_shift : ['Bình thường'],
         main_duty: formData.main_duty,
         sub_duty: formData.sub_duty,
         main_power: formData.main_power,
@@ -707,12 +709,6 @@ export default function HandoverManager() {
                         <option value="Ca 2">Ca 2 (14:00 - 22:00)</option>
                         <option value="Ca 3">Ca 3 (22:00 - 06:00)</option>
                       </select>
-                      {formData.shift === 'Ca 3' && (
-                        <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-2 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 flex-shrink-0" />
-                          Ca 3 kết thúc lúc 06:00 <strong>ngày hôm sau</strong> — ngày kết thúc được tự động cập nhật.
-                        </p>
-                      )}
                     </div>
                   </div>
 
@@ -764,25 +760,37 @@ export default function HandoverManager() {
                     </div>
                   </div>
 
-                  {/* Loại ca */}
+                  {/* Loại ca – multi-select */}
                   <div className="space-y-3">
-                    <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Loại ca trực</label>
+                    <div className="flex items-center gap-2 ml-1">
+                      <label className="text-xs font-bold text-slate-400 uppercase">Loại ca trực</label>
+                      <span className="text-[10px] text-slate-400 font-medium">(có thể chọn nhiều)</span>
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {TYPE_SHIFT_OPTIONS.map((key) => {
                         const cfg = TYPE_SHIFT_CONFIG[key];
                         const Icon = cfg.icon;
-                        const isSelected = formData.type_shift === key;
+                        const isSelected = formData.type_shift.includes(key);
                         return (
                           <button
                             key={key}
                             type="button"
-                            onClick={() => setFormData({ ...formData, type_shift: key })}
-                            className={`flex flex-col items-center gap-2 p-3.5 rounded-2xl border-2 transition-all select-none ${
+                            onClick={() => {
+                              const cur = formData.type_shift;
+                              const next = isSelected
+                                ? cur.filter(k => k !== key)
+                                : [...cur, key];
+                              setFormData({ ...formData, type_shift: next.length > 0 ? next : ['Bình thường'] });
+                            }}
+                            className={`relative flex flex-col items-center gap-2 p-3.5 rounded-2xl border-2 transition-all select-none ${
                               isSelected
                                 ? `${cfg.bg} ${cfg.border} ${cfg.color} shadow-sm`
                                 : 'border-slate-200 text-slate-400 bg-white hover:border-slate-300 hover:bg-slate-50'
                             }`}
                           >
+                            {isSelected && (
+                              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-current opacity-70" />
+                            )}
                             <Icon className="w-5 h-5" />
                             <span className="text-[11px] font-bold leading-tight text-center">{key}</span>
                           </button>
@@ -945,17 +953,16 @@ export default function HandoverManager() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <h3 className="text-xl font-bold text-slate-800">Chi tiết lịch trực</h3>
-                        {(() => {
-                          const ts = selectedLog.type_shift || 'Bình thường';
+                        {(Array.isArray(selectedLog.type_shift) ? selectedLog.type_shift : [selectedLog.type_shift || 'Bình thường']).map(ts => {
                           const cfg = TYPE_SHIFT_CONFIG[ts] ?? TYPE_SHIFT_CONFIG['Bình thường'];
                           const Icon = cfg.icon;
                           return (
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
+                            <span key={ts} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
                               <Icon className="w-3.5 h-3.5" />
                               {ts}
                             </span>
                           );
-                        })()}
+                        })}
                       </div>
                       <p className="text-slate-500 text-xs">
                         {formatFullDateTime(selectedLog.startdate)} — {formatFullDateTime(selectedLog.enddate)}
@@ -970,49 +977,49 @@ export default function HandoverManager() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                  {/* Row 1: Time and Personnel */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-emerald-50/50 p-6 rounded-3xl border border-emerald-100 space-y-4">
-                      <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-2"><Clock className="w-4 h-4" /> Thời gian giao nhận ca</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <div className="text-[10px] font-bold text-emerald-500 uppercase">Bắt đầu (Nhận ca)</div>
-                          <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.startdate)}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="text-[10px] font-bold text-emerald-500 uppercase">Kết thúc (Giao ca)</div>
-                          <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.enddate)}</p>
-                        </div>
+                <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                  {/* Row 1: Thời gian giao nhận ca */}
+                  <div className="bg-emerald-50/50 p-5 rounded-3xl border border-emerald-100">
+                    <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-2 mb-4"><Clock className="w-4 h-4" /> Thời gian giao nhận ca</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-bold text-emerald-500 uppercase">Bắt đầu (Nhận ca)</div>
+                        <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.startdate)}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-bold text-emerald-500 uppercase">Kết thúc (Giao ca)</div>
+                        <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.enddate)}</p>
                       </div>
                     </div>
-                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users className="w-4 h-4" /> Nhân viên vận hành các đơn vị</h4>
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <div className="text-[10px] font-bold text-slate-400 uppercase">Trực đội QLVH</div>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
-                              <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-bold">{selectedLog.main_duty || '—'}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
-                              <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-semibold">{selectedLog.sub_duty || '—'}</span>
-                            </div>
+                  </div>
+
+                  {/* Row 2: Nhân viên vận hành */}
+                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><Users className="w-4 h-4" /> Nhân viên vận hành các đơn vị</h4>
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">Trực đội QLVH</div>
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
+                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-bold">{selectedLog.main_duty || '—'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
+                            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-semibold">{selectedLog.sub_duty || '—'}</span>
                           </div>
                         </div>
-                        <div className="space-y-2">
-                          <div className="text-[10px] font-bold text-slate-400 uppercase">Trực điều độ điện lực</div>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
-                              <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-bold">{selectedLog.main_power || '—'}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
-                              <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-semibold">{selectedLog.sub_power || '—'}</span>
-                            </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">Trực điều độ điện lực</div>
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
+                            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-bold">{selectedLog.main_power || '—'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
+                            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-semibold">{selectedLog.sub_power || '—'}</span>
                           </div>
                         </div>
                       </div>
@@ -1091,7 +1098,6 @@ export default function HandoverManager() {
                 <ChevronRight className="w-3.5 h-3.5" />
                 Thu tất cả
               </button>
-              <span className="text-xs text-slate-400 font-medium pl-1">{groupedLogs.length} ngày · {logs.length} ca trực</span>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -1190,17 +1196,16 @@ export default function HandoverManager() {
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className={`px-2.5 py-1 rounded-lg text-xs font-extrabold ${shiftBadgeClass(log.shift)}`}>{log.shift}</span>
-                                    {(() => {
-                                      const ts = log.type_shift || 'Bình thường';
+                                    {(Array.isArray(log.type_shift) ? log.type_shift : [log.type_shift || 'Bình thường']).map(ts => {
                                       const cfg = TYPE_SHIFT_CONFIG[ts] ?? TYPE_SHIFT_CONFIG['Bình thường'];
                                       const Icon = cfg.icon;
                                       return (
-                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
+                                        <span key={ts} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
                                           <Icon className="w-3.5 h-3.5" />
                                           {ts}
                                         </span>
                                       );
-                                    })()}
+                                    })}
                                     <span className="text-xs text-slate-400 font-medium">{formatTime(log.startdate)} — {formatTime(log.enddate)}</span>
                                   </div>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
@@ -1252,11 +1257,11 @@ export default function HandoverManager() {
 
       {/* Floating stats badge – bottom-right, always visible */}
       <div className="fixed bottom-6 right-6 z-40 pointer-events-none">
-        <div className="bg-slate-800/90 backdrop-blur-sm text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2.5">
-          <Calendar className="w-4 h-4 text-emerald-400" />
-          <div className="text-xs leading-tight">
-            <div className="font-bold text-sm">{uniqueDaysCount} ngày</div>
-            <div className="text-slate-400 font-medium">đã tạo ca tháng {filter.month}</div>
+        <div className="bg-slate-800/90 backdrop-blur-sm text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-3">
+          <Calendar className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <div className="text-xs leading-snug">
+            <div className="font-bold text-sm">{uniqueDaysCount} ngày · {logs.length} ca</div>
+            <div className="text-slate-400 font-medium">tháng {filter.month}</div>
           </div>
         </div>
       </div>
