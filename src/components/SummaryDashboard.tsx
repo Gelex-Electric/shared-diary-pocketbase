@@ -645,7 +645,7 @@ export default function SummaryDashboard() {
           </div>
           
           <div className="w-full sm:w-[240px] sm:border-l border-dashed border-slate-250 sm:pl-6 flex flex-col justify-center">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Doanh thu năm chọn:</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Doanh thu năm:</span>
             <div className="space-y-1.5">
               {visibleYears.map(yr => {
                 const rev = selectedYearsKpis[yr]?.revenue || 0;
@@ -683,7 +683,7 @@ export default function SummaryDashboard() {
           </div>
 
           <div className="w-full sm:w-[240px] sm:border-l border-dashed border-slate-250 sm:pl-6 flex flex-col justify-center">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Sản lượng năm chọn:</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Sản lượng năm:</span>
             <div className="space-y-1.5">
               {visibleYears.map(yr => {
                 const val = selectedYearsKpis[yr]?.load || 0;
