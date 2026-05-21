@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, AREA_TO_CLASS, ID_TO_AREA } from '../lib/pocketbase';
 import { Handover, Situation, ElectricShift } from '../types';
-import { 
-  Plus, Trash2, Edit2, X, CheckCircle2, Search, 
-  Calendar, Clock, User, Users, Zap, Download, ChevronDown, 
+import {
+  Plus, Trash2, Edit2, X, CheckCircle2, Search,
+  Calendar, Clock, User, Users, Zap, Download, ChevronDown,
   ChevronRight, RefreshCw, ClipboardList, Package,
-  MessageSquare, FileText, Activity, CheckSquare, Square
+  MessageSquare, FileText, Activity, CheckSquare, Square,
+  AlertTriangle, ZapOff, ClipboardCheck, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -35,6 +36,21 @@ const loadFontsToVfs = async () => {
   };
   fontsLoaded = true;
 };
+
+const TYPE_SHIFT_CONFIG: Record<string, {
+  icon: React.ElementType;
+  color: string;
+  bg: string;
+  border: string;
+  label: string;
+}> = {
+  'Bình thường':        { icon: ShieldCheck,     color: 'text-emerald-600', bg: 'bg-emerald-50',  border: 'border-emerald-200', label: 'Bình thường' },
+  'Sự cố':              { icon: AlertTriangle,    color: 'text-red-600',     bg: 'bg-red-50',      border: 'border-red-200',     label: 'Sự cố' },
+  'Đóng cắt':           { icon: ZapOff,           color: 'text-amber-600',   bg: 'bg-amber-50',    border: 'border-amber-200',   label: 'Đóng cắt' },
+  'Kiểm tra định kỳ':   { icon: ClipboardCheck,   color: 'text-blue-600',    bg: 'bg-blue-50',     border: 'border-blue-200',    label: 'Kiểm tra định kỳ' },
+};
+
+const TYPE_SHIFT_OPTIONS = Object.keys(TYPE_SHIFT_CONFIG);
 
 export default function HandoverManager() {
   const [logs, setLogs] = useState<Handover[]>([]);
@@ -73,6 +89,7 @@ export default function HandoverManager() {
       endTime: '14:00',
       area: AREAS[0],
       shift: 'Ca 1',
+      type_shift: 'Bình thường',
       main_duty: '',
       sub_duty: '',
       main_power: '',
@@ -205,6 +222,7 @@ export default function HandoverManager() {
       endTime: '14:00',
       area: effectiveAreas[0] || AREAS[0],
       shift: 'Ca 1',
+      type_shift: 'Bình thường',
       main_duty: '',
       sub_duty: '',
       main_power: '',
@@ -239,6 +257,7 @@ export default function HandoverManager() {
       endTime: end.time,
       area: log.area,
       shift: log.shift,
+      type_shift: log.type_shift || 'Bình thường',
       main_duty: log.main_duty,
       sub_duty: log.sub_duty,
       main_power: log.main_power,
@@ -275,6 +294,7 @@ export default function HandoverManager() {
         enddate,
         area: formData.area,
         shift: formData.shift,
+        type_shift: formData.type_shift || 'Bình thường',
         main_duty: formData.main_duty,
         sub_duty: formData.sub_duty,
         main_power: formData.main_power,
@@ -744,6 +764,33 @@ export default function HandoverManager() {
                     </div>
                   </div>
 
+                  {/* Loại ca */}
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Loại ca trực</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {TYPE_SHIFT_OPTIONS.map((key) => {
+                        const cfg = TYPE_SHIFT_CONFIG[key];
+                        const Icon = cfg.icon;
+                        const isSelected = formData.type_shift === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, type_shift: key })}
+                            className={`flex flex-col items-center gap-2 p-3.5 rounded-2xl border-2 transition-all select-none ${
+                              isSelected
+                                ? `${cfg.bg} ${cfg.border} ${cfg.color} shadow-sm`
+                                : 'border-slate-200 text-slate-400 bg-white hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <Icon className="w-5 h-5" />
+                            <span className="text-[11px] font-bold leading-tight text-center">{key}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-6">
                     <div className="flex items-center justify-between">
                       <h4 className="font-bold text-slate-800 flex items-center gap-2"><Users className="w-5 h-5 text-emerald-600" /> Nhân sự trực</h4>
@@ -896,8 +943,21 @@ export default function HandoverManager() {
                       <FileText className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-slate-800">Chi tiết lịch trực</h3>
-                      <p className="text-slate-500 text-xs mt-0.5">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h3 className="text-xl font-bold text-slate-800">Chi tiết lịch trực</h3>
+                        {(() => {
+                          const ts = selectedLog.type_shift || 'Bình thường';
+                          const cfg = TYPE_SHIFT_CONFIG[ts] ?? TYPE_SHIFT_CONFIG['Bình thường'];
+                          const Icon = cfg.icon;
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
+                              <Icon className="w-3.5 h-3.5" />
+                              {ts}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <p className="text-slate-500 text-xs">
                         {formatFullDateTime(selectedLog.startdate)} — {formatFullDateTime(selectedLog.enddate)}
                       </p>
                     </div>
@@ -1128,8 +1188,19 @@ export default function HandoverManager() {
                                   className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 mt-1"
                                 />
                                 <div className="space-y-2">
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <span className={`px-2.5 py-1 rounded-lg text-xs font-extrabold ${shiftBadgeClass(log.shift)}`}>{log.shift}</span>
+                                    {(() => {
+                                      const ts = log.type_shift || 'Bình thường';
+                                      const cfg = TYPE_SHIFT_CONFIG[ts] ?? TYPE_SHIFT_CONFIG['Bình thường'];
+                                      const Icon = cfg.icon;
+                                      return (
+                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
+                                          <Icon className="w-3.5 h-3.5" />
+                                          {ts}
+                                        </span>
+                                      );
+                                    })()}
                                     <span className="text-xs text-slate-400 font-medium">{formatTime(log.startdate)} — {formatTime(log.enddate)}</span>
                                   </div>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
