@@ -108,10 +108,11 @@ const formatChartLabel = (value: any) => {
 };
 
 const ACCOUNT_MAP: Record<string, string> = {
-  'all': 'Tất cả tài khoản (KCN)',
+  'all':   'Tất cả tài khoản (KCN)',
   'KCNTH': 'KCN Tiền Hải (KCNTH)',
+  'KCNPĐ': 'KCN Phong Điền (KCNPĐ)',
+  'KCNTTI':'KCN Thuận Thành I (KCNTTI)',
   'KCNYM': 'KCN Yên Mỹ (KCNYM)',
-  'KCNTTI': 'KCN Thuận Thành I (KCNTTI)',
   'KCN03': 'KCN Số 3 (KCN03)'
 };
 
@@ -120,11 +121,12 @@ export default function SummaryDashboard() {
   const defaultAccount = useMemo(() => {
     const rawArea = pb.authStore.model?.area || '';
     const norm = typeof rawArea === 'string' ? rawArea.toLowerCase() : '';
-    if (norm.includes('tiền hải') || norm.includes('kcnth')) return 'KCNTH';
-    if (norm.includes('yên mỹ') || norm.includes('kcnym')) return 'KCNYM';
-    if (norm.includes('thuận thành') || norm.includes('kcntti')) return 'KCNTTI';
-    if (norm.includes('số 3') || norm.includes('kcn03')) return 'KCN03';
-    return 'all'; // default to all if admin or unspecified
+    if (norm.includes('tiền hải')   || norm.includes('kcnth'))  return 'KCNTH';
+    if (norm.includes('phong điền') || norm.includes('kcnpđ') || norm.includes('kcnpd')) return 'KCNPĐ';
+    if (norm.includes('thuận thành')|| norm.includes('kcntti')) return 'KCNTTI';
+    if (norm.includes('yên mỹ')     || norm.includes('kcnym'))  return 'KCNYM';
+    if (norm.includes('số 3')       || norm.includes('kcn03'))  return 'KCN03';
+    return 'all'; // admin hoặc không xác định
   }, []);
 
   // Secure: Lock active account selection to defaultAccount (no selection option)
