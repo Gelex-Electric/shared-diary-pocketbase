@@ -1,17 +1,18 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  ResponsiveContainer, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  BarChart, 
+import {
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  BarChart,
   Bar,
   AreaChart,
   Area,
   LineChart,
   Line,
-  Legend
+  Legend,
+  LabelList
 } from 'recharts';
 import { 
   Zap, 
@@ -36,12 +37,13 @@ interface BillRecord {
   tenKH: string;
   ngayXuat: string;
   ngayChotChiSo?: string;
+  chartDate: string;   // ngayChotChiSo nếu có, fallback ngayXuat — dùng cho tất cả biểu đồ
   ngayThanhToan: string;
   ky: string;
   sanLuong: number;
   doanhThu: number;
   sauThue: number;
-  thangNam: string; // e.g. "05/2026"
+  thangNam: string; // e.g. "05/2026" — lấy từ chartDate
   daThanhToan: boolean;
   diaChi: string; // e.g., "KCNTH"
 }
@@ -96,6 +98,13 @@ const formatVND = (num: number) => {
 
 const formatKWh = (num: number) => {
   return new Intl.NumberFormat('vi-VN').format(num) + ' kWh';
+};
+
+// Label formatter for chart tops — shows ###.### (vi-VN thousands separator), hides 0
+const formatChartLabel = (value: any) => {
+  const num = Number(value);
+  if (!num || num === 0) return '';
+  return new Intl.NumberFormat('vi-VN').format(num);
 };
 
 const ACCOUNT_MAP: Record<string, string> = {
@@ -182,7 +191,9 @@ export default function SummaryDashboard() {
       const doanhThu = parseVal(cols[doanhThuIdx]);
       const sauThue = parseVal(cols[sauThueIdx]);
 
-      const parts = ngayXuat.split('/');
+      // Dùng ngayChotChiSo làm mốc cho biểu đồ; fallback sang ngayXuat nếu trống
+      const chartDate = (ngayChotChiSo && ngayChotChiSo.trim()) ? ngayChotChiSo.trim() : ngayXuat;
+      const parts = chartDate.split('/');
       const thangNam = parts.length >= 3 ? `${parts[1]}/${parts[2]}` : 'Khác';
 
       records.push({
@@ -190,6 +201,7 @@ export default function SummaryDashboard() {
         tenKH,
         ngayXuat,
         ngayChotChiSo,
+        chartDate,
         ngayThanhToan,
         ky,
         sanLuong,
@@ -213,14 +225,14 @@ export default function SummaryDashboard() {
   const uniqueYears = useMemo(() => {
     const yearsSet = new Set<number>();
     accountFilteredRecords.forEach(r => {
-      const parts = r.ngayXuat.split('/');
+      const parts = r.chartDate.split('/');
       if (parts.length >= 3) {
         const yr = parseInt(parts[2], 10);
         if (yr) yearsSet.add(yr);
       }
     });
     const sorted = Array.from(yearsSet).sort((a, b) => b - a);
-    return sorted.length > 0 ? sorted : [2026];
+    return sorted.length > 0 ? sorted : [new Date().getFullYear()];
   }, [accountFilteredRecords]);
 
   // Chronological years (e.g. 2024, 2025, 2026) for chart sidebar columns
@@ -395,7 +407,7 @@ export default function SummaryDashboard() {
     });
 
     accountFilteredRecords.forEach(r => {
-      const parts = r.ngayXuat.split('/');
+      const parts = r.chartDate.split('/');
       if (parts.length >= 3) {
         const yr = parseInt(parts[2], 10);
         if (visibleYears.includes(yr)) {
@@ -469,7 +481,7 @@ export default function SummaryDashboard() {
 
     accountFilteredRecords.forEach(r => {
       if (r.maKH === custId) {
-        const parts = r.ngayXuat.split('/');
+        const parts = r.chartDate.split('/');
         if (parts.length >= 3) {
           const m = parseInt(parts[1], 10);
           const y = parseInt(parts[2], 10);
@@ -502,7 +514,7 @@ export default function SummaryDashboard() {
     });
 
     accountFilteredRecords.forEach(r => {
-      const parts = r.ngayXuat.split('/');
+      const parts = r.chartDate.split('/');
       if (parts.length >= 3) {
         const m = parseInt(parts[1], 10);
         const y = parseInt(parts[2], 10);
@@ -558,10 +570,12 @@ export default function SummaryDashboard() {
       {overallUnpaidKpis.isAnyUnpaid && (
         <div 
           onClick={() => {
-            const tableEl = document.getElementById('debt-table-section');
-            if (tableEl) {
-              tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+            setPaymentFilter('unpaid');
+            setCurrentPage(1);
+            setTimeout(() => {
+              const tableEl = document.getElementById('debt-table-section');
+              if (tableEl) tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
           }}
           className="md:fixed absolute top-4 md:top-24 right-4 md:right-10 z-[100] max-w-sm bg-rose-50 border-2 border-rose-400 rounded-2xl p-4 shadow-xl shadow-rose-100 cursor-pointer hover:shadow-2xl hover:border-rose-500 transition-all duration-300 flex items-start gap-4 mx-4 md:mx-0 backdrop-blur-md"
         >
@@ -733,13 +747,20 @@ export default function SummaryDashboard() {
                 formatter={(value: any, name: any) => [new Intl.NumberFormat('vi-VN').format(Number(value)) + ' kWh', `Năm ${name}`]}
               />
               {visibleChronologicalYears.map((yr) => (
-                <Bar 
+                <Bar
                   key={yr}
-                  dataKey={yr.toString()} 
-                  fill={yearColors[chronologicalYears.indexOf(yr) % yearColors.length]} 
+                  dataKey={yr.toString()}
+                  fill={yearColors[chronologicalYears.indexOf(yr) % yearColors.length]}
                   radius={[5, 5, 0, 0]}
                   name={`${yr}`}
-                />
+                >
+                  <LabelList
+                    dataKey={yr.toString()}
+                    position="top"
+                    formatter={formatChartLabel}
+                    style={{ fontSize: '9px', fontWeight: '700', fill: '#475569' }}
+                  />
+                </Bar>
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -784,24 +805,31 @@ export default function SummaryDashboard() {
           <div className="h-64 w-full text-slate-700">
             {cust1 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={cust1Data} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                <LineChart data={cust1Data} margin={{ top: 22, right: 16, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="monthLabel" tickLine={false} stroke="#94a3b8" style={{ fontSize: '10px' }} />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
                     cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
                     formatter={(value: any, name: any) => [new Intl.NumberFormat('vi-VN').format(Number(value)) + ' kWh', `Năm ${name}`]}
                   />
                   {visibleChronologicalYears.map((yr) => (
-                    <Line 
+                    <Line
                       key={yr}
                       type="monotone"
-                      dataKey={yr.toString()} 
-                      stroke={yearColors[chronologicalYears.indexOf(yr) % yearColors.length]} 
+                      dataKey={yr.toString()}
+                      stroke={yearColors[chronologicalYears.indexOf(yr) % yearColors.length]}
                       strokeWidth={2.5}
                       activeDot={{ r: 5 }}
                       name={`${yr}`}
-                    />
+                    >
+                      <LabelList
+                        dataKey={yr.toString()}
+                        position="top"
+                        formatter={formatChartLabel}
+                        style={{ fontSize: '9px', fontWeight: '700', fill: '#475569' }}
+                      />
+                    </Line>
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -849,24 +877,31 @@ export default function SummaryDashboard() {
           <div className="h-64 w-full text-slate-700">
             {cust2 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={cust2Data} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                <LineChart data={cust2Data} margin={{ top: 22, right: 16, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="monthLabel" tickLine={false} stroke="#94a3b8" style={{ fontSize: '10px' }} />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
                     cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
                     formatter={(value: any, name: any) => [new Intl.NumberFormat('vi-VN').format(Number(value)) + ' kWh', `Năm ${name}`]}
                   />
                   {visibleChronologicalYears.map((yr) => (
-                    <Line 
+                    <Line
                       key={yr}
                       type="monotone"
-                      dataKey={yr.toString()} 
-                      stroke={yearColors[chronologicalYears.indexOf(yr) % yearColors.length]} 
+                      dataKey={yr.toString()}
+                      stroke={yearColors[chronologicalYears.indexOf(yr) % yearColors.length]}
                       strokeWidth={2.5}
                       activeDot={{ r: 5 }}
                       name={`${yr}`}
-                    />
+                    >
+                      <LabelList
+                        dataKey={yr.toString()}
+                        position="top"
+                        formatter={formatChartLabel}
+                        style={{ fontSize: '9px', fontWeight: '700', fill: '#475569' }}
+                      />
+                    </Line>
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -948,7 +983,7 @@ export default function SummaryDashboard() {
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="py-4 px-4 w-[130px]">Mã khách hàng</th>
-                <th className="py-4 px-4 w-[24%]">Tên doanh nghiệp</th>
+                <th className="py-4 px-4 w-[28%]">Tên doanh nghiệp</th>
                 <th className="py-4 px-4 w-[14%] text-center">Ngày chốt chỉ số</th>
                 <th className="py-4 px-4 w-[14%] text-center">Ngày thanh toán</th>
                 <th className="py-4 px-4 w-[12%] text-right">Sản lượng điện</th>
@@ -971,7 +1006,7 @@ export default function SummaryDashboard() {
                     <td className="py-4 px-4 font-mono font-bold text-xs text-slate-500">
                       {bill.maKH}
                     </td>
-                    <td className="py-4 px-4 font-semibold text-slate-800 truncate" title={bill.tenKH}>
+                    <td className="py-4 px-4 font-semibold text-slate-800 whitespace-normal break-words leading-snug">
                       {bill.tenKH}
                     </td>
                     <td className="py-4 px-4 text-center font-mono text-xs text-slate-500">
