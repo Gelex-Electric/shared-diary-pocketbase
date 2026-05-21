@@ -46,6 +46,17 @@ export default function HandoverManager() {
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const shiftBadgeClass = (shift: string) => {
+    if (shift === 'Ca 1') return 'bg-blue-100 text-blue-700 border border-blue-200';
+    if (shift === 'Ca 2') return 'bg-amber-100 text-amber-700 border border-amber-200';
+    if (shift === 'Ca 3') return 'bg-purple-100 text-purple-700 border border-purple-200';
+    return 'bg-slate-100 text-slate-600 border border-slate-200';
+  };
+
+  const expandAll = () => setExpandedGroups(new Set(groupedLogs.map(g => g.id)));
+  const collapseAll = () => setExpandedGroups(new Set());
   
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -446,6 +457,7 @@ export default function HandoverManager() {
   };
 
   const exportToPDF = async (log: Handover) => {
+    setIsExportingPdf(true);
     try {
       await loadFontsToVfs();
       const docDefinition: any = {
@@ -462,11 +474,14 @@ export default function HandoverManager() {
       pdfMake.createPdf(docDefinition).download(`SoTruc_${log.area}_${log.shift}_${log.startdate.split(' ')[0]}.pdf`);
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
   const exportMultipleToPDF = async () => {
     if (selectedIds.size === 0) return;
+    setIsExportingPdf(true);
     try {
       await loadFontsToVfs();
       const selectedLogs = logs
@@ -493,6 +508,8 @@ export default function HandoverManager() {
       pdfMake.createPdf(docDefinition).download(`SoTruc_TongHop_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.pdf`);
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -562,38 +579,24 @@ export default function HandoverManager() {
               return <option key={m} value={m}>Tháng {i + 1}</option>;
             })}
           </select>
-          <button 
-            onClick={selectAllInMonth}
-            disabled={logs.length === 0}
-            className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 hover:bg-slate-50 transition-all disabled:opacity-50"
-            title="Chọn tất cả trong tháng"
-          >
-            <CheckSquare className="w-5 h-5" />
-            Chọn hết
-          </button>
-          <button 
-            onClick={deselectAll}
-            disabled={selectedIds.size === 0}
-            className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 hover:bg-slate-50 transition-all disabled:opacity-50"
-            title="Bỏ chọn tất cả"
-          >
-            <Square className="w-5 h-5" />
-            Bỏ chọn
-          </button>
-          <button 
+          <button
             onClick={startAddLog}
             className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
           >
             <Plus className="w-5 h-5" />
             Tạo lịch trực
           </button>
-          <button 
-            disabled={selectedIds.size === 0}
+          <button
+            disabled={selectedIds.size === 0 || isExportingPdf}
             onClick={exportMultipleToPDF}
-            className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${selectedIds.size > 0 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+            className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 transition-all ${selectedIds.size > 0 && !isExportingPdf ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
           >
-            <Download className="w-5 h-5" />
-            PDF {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+            {isExportingPdf ? (
+              <RefreshCw className="w-5 h-5 animate-spin" />
+            ) : (
+              <Download className="w-5 h-5" />
+            )}
+            {isExportingPdf ? 'Đang xuất...' : `PDF${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
           </button>
         </div>
       </div>
@@ -684,6 +687,12 @@ export default function HandoverManager() {
                         <option value="Ca 2">Ca 2 (14:00 - 22:00)</option>
                         <option value="Ca 3">Ca 3 (22:00 - 06:00)</option>
                       </select>
+                      {formData.shift === 'Ca 3' && (
+                        <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-2 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                          Ca 3 kết thúc lúc 06:00 <strong>ngày hôm sau</strong> — ngày kết thúc được tự động cập nhật.
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -796,16 +805,16 @@ export default function HandoverManager() {
                                 />
                               </td>
                               <td className="p-2">
-                                <input 
-                                  type="text" 
+                                <textarea
+                                  rows={2}
                                   placeholder="Nội dung công việc..."
-                                  value={row.content} 
+                                  value={row.content}
                                   onChange={(e) => {
                                     const newRows = [...situationRows];
                                     newRows[idx].content = e.target.value;
                                     setSituationRows(newRows);
                                   }}
-                                  className="w-full p-2 bg-transparent outline-none focus:bg-slate-50 rounded-lg"
+                                  className="w-full p-2 bg-transparent outline-none focus:bg-slate-50 rounded-lg resize-none text-sm leading-relaxed"
                                 />
                               </td>
                               <td className="p-2">
@@ -920,15 +929,31 @@ export default function HandoverManager() {
                     <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
                       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users className="w-4 h-4" /> Nhân viên vận hành các đơn vị</h4>
                       <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-1.5">
+                        <div className="space-y-2">
                           <div className="text-[10px] font-bold text-slate-400 uppercase">Trực đội QLVH</div>
-                          <p className="text-sm font-bold text-slate-700">Chính: {selectedLog.main_duty || 'N/A'}</p>
-                          <p className="text-xs text-slate-500">Phụ: {selectedLog.sub_duty || 'N/A'}</p>
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
+                              <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-bold">{selectedLog.main_duty || '—'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
+                              <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-semibold">{selectedLog.sub_duty || '—'}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-2">
                           <div className="text-[10px] font-bold text-slate-400 uppercase">Trực điều độ điện lực</div>
-                          <p className="text-sm font-bold text-slate-700">Chính: {selectedLog.main_power || 'N/A'}</p>
-                          <p className="text-xs text-slate-500">Phụ: {selectedLog.sub_power || 'N/A'}</p>
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
+                              <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-bold">{selectedLog.main_power || '—'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
+                              <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-semibold">{selectedLog.sub_power || '—'}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -987,6 +1012,47 @@ export default function HandoverManager() {
             </div>
           )}
         </AnimatePresence>
+
+        {/* Sub-header strip: expand/collapse + select/deselect + count */}
+        {!isLoading && logs.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-1">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={expandAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-xs"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+                Mở tất cả
+              </button>
+              <button
+                onClick={collapseAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-xs"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+                Thu tất cả
+              </button>
+              <span className="text-xs text-slate-400 font-medium pl-1">{groupedLogs.length} ngày · {logs.length} ca trực</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={selectAllInMonth}
+                disabled={logs.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-xs disabled:opacity-50"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                Chọn hết
+              </button>
+              <button
+                onClick={deselectAll}
+                disabled={selectedIds.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-xs disabled:opacity-50"
+              >
+                <Square className="w-3.5 h-3.5" />
+                Bỏ chọn {selectedIds.size > 0 && `(${selectedIds.size})`}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Data List grouped by Date & Industrial park */}
         <div className="space-y-6">
@@ -1063,8 +1129,8 @@ export default function HandoverManager() {
                                 />
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-3">
-                                    <span className="font-extrabold text-slate-800 text-sm">{log.shift}</span>
-                                    <span className="text-xs text-slate-400 font-medium">({formatTime(log.startdate)} - {formatTime(log.enddate)})</span>
+                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-extrabold ${shiftBadgeClass(log.shift)}`}>{log.shift}</span>
+                                    <span className="text-xs text-slate-400 font-medium">{formatTime(log.startdate)} — {formatTime(log.enddate)}</span>
                                   </div>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
                                     <div className="flex items-center gap-2 text-slate-600">
@@ -1110,6 +1176,17 @@ export default function HandoverManager() {
               );
             })
           )}
+        </div>
+      </div>
+
+      {/* Floating stats badge – bottom-right, always visible */}
+      <div className="fixed bottom-6 right-6 z-40 pointer-events-none">
+        <div className="bg-slate-800/90 backdrop-blur-sm text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2.5">
+          <Calendar className="w-4 h-4 text-emerald-400" />
+          <div className="text-xs leading-tight">
+            <div className="font-bold text-sm">{uniqueDaysCount} ngày</div>
+            <div className="text-slate-400 font-medium">đã tạo ca tháng {filter.month}</div>
+          </div>
         </div>
       </div>
     </div>
