@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { pb, AREAS } from '../lib/pocketbase';
 import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity, FileText, ExternalLink
+  Activity, FileText, ExternalLink, Sparkles, ArrowDownLeft, Check
 } from 'lucide-react';
+import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import ElectricShiftManager from './ElectricShiftManager';
 import SummaryDashboard from './SummaryDashboard';
@@ -29,13 +30,130 @@ export default function Dashboard() {
   const [isJournalExpanded, setIsJournalExpanded] = useState(true);
   const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
 
+  // New update announcement
+  const [showNewUpdate, setShowNewUpdate] = useState(false);
+  const [newUpdateId, setNewUpdateId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkNewUpdate = async () => {
+      if (!pb.authStore.isValid) return;
+      const area = userAreas[0];
+      if (!area) return;
+      try {
+        const record = await pb.collection('New_update').getFirstListItem<NewUpdate>(
+          `area = "${area}" && status = true`,
+          { requestKey: null }
+        );
+        setNewUpdateId(record.id);
+        setShowNewUpdate(true);
+      } catch {
+        // No pending update for this area
+      }
+    };
+    checkNewUpdate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const dismissNewUpdate = async () => {
+    setShowNewUpdate(false);
+    if (newUpdateId) {
+      try {
+        await pb.collection('New_update').update(newUpdateId, { status: false });
+      } catch (err) {
+        console.error('Failed to dismiss new update:', err);
+      }
+    }
+  };
+
   const handleLogout = () => {
     pb.authStore.clear();
     window.location.reload();
   };
 
+  const newFeatures = [
+    'Giao diện đăng nhập được thiết kế lại, chủ đề trắng hiện đại',
+    'Đổi tên thành "Ứng dụng quản lý vận hành" với màu xanh đồng bộ toàn hệ thống',
+    'Đồng bộ HES thông minh: tự động cập nhật khi có thay đổi, bỏ qua nếu không đổi',
+    'Bổ sung trường Email khách hàng — lấy từ HES và chỉnh sửa thủ công',
+    'Bảng xem trước HES với 3 trạng thái: Mới · Cập nhật · Không đổi',
+    'Thông báo inline có animation thay thế hộp thoại alert thô',
+    'Nút "Hướng dẫn sử dụng" trong thanh điều hướng bên trái',
+  ];
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col lg:flex-row">
+      {/* New update announcement modal */}
+      <AnimatePresence>
+        {showNewUpdate && (
+          <motion.div
+            key="new-update-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              transition={{ type: 'spring', damping: 22, stiffness: 260 }}
+              className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden"
+            >
+              {/* Gradient header */}
+              <div className="relative bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 px-7 py-6 text-white overflow-hidden">
+                <div className="absolute -top-6 -right-6 w-32 h-32 bg-white/10 rounded-full" />
+                <div className="absolute -bottom-8 -left-4 w-24 h-24 bg-white/10 rounded-full" />
+                <div className="relative">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 opacity-90" />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Phiên bản mới</span>
+                  </div>
+                  <h2 className="text-2xl font-black leading-tight">Cập nhật tính năng</h2>
+                  <p className="text-sm opacity-75 mt-1">Những cải tiến mới nhất trong hệ thống</p>
+                </div>
+              </div>
+
+              {/* Feature list */}
+              <div className="px-7 py-5 space-y-3 max-h-64 overflow-y-auto">
+                {newFeatures.map((feat, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center">
+                      <Check className="w-3 h-3 text-blue-600" strokeWidth={3} />
+                    </span>
+                    <p className="text-sm text-slate-700 leading-snug">{feat}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Arrow callout → Hướng dẫn sử dụng */}
+              <div className="mx-7 mb-5 p-3.5 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3">
+                <div className="shrink-0 w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center">
+                  <ArrowDownLeft className="w-4 h-4 text-blue-600" />
+                </div>
+                <p className="text-sm text-blue-800 leading-snug">
+                  Xem hướng dẫn sử dụng đầy đủ tại nút{' '}
+                  <span className="font-bold inline-flex items-center gap-1">
+                    <FileText className="w-3.5 h-3.5" /> Hướng dẫn sử dụng
+                  </span>{' '}
+                  ở cuối thanh bên trái.
+                </p>
+              </div>
+
+              {/* Dismiss button */}
+              <div className="px-7 pb-7">
+                <button
+                  onClick={dismissNewUpdate}
+                  className="w-full py-3.5 rounded-2xl font-bold text-sm text-white transition-all active:scale-[0.98]"
+                  style={{ background: 'linear-gradient(135deg, #1d4ed8 0%, #0891b2 100%)', boxShadow: '0 4px 20px rgba(29,78,216,0.35)' }}
+                >
+                  Đã hiểu, không hiển thị lại
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isSidebarOpen && (
           <>
@@ -135,11 +253,15 @@ export default function Dashboard() {
                   href="/document.pdf"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-semibold text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all group"
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-semibold transition-all group ${
+                    showNewUpdate
+                      ? 'bg-blue-50 text-blue-600 ring-2 ring-blue-400 ring-offset-2 animate-pulse'
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-blue-600'
+                  }`}
                 >
-                  <FileText className="w-4 h-4 group-hover:text-blue-500 transition-colors" />
+                  <FileText className="w-4 h-4 transition-colors text-blue-500" />
                   <span>Hướng dẫn sử dụng</span>
-                  <ExternalLink className="w-3 h-3 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <ExternalLink className={`w-3 h-3 ml-auto transition-opacity ${showNewUpdate ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
                 </a>
                 <div className="bg-slate-50 rounded-2xl p-5">
                   <div className="flex items-center gap-3 mb-3">
@@ -228,11 +350,15 @@ export default function Dashboard() {
             href="/document.pdf"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-semibold text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all group"
+            className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-semibold transition-all group ${
+              showNewUpdate
+                ? 'bg-blue-50 text-blue-600 ring-2 ring-blue-400 ring-offset-2 animate-pulse'
+                : 'text-slate-500 hover:bg-slate-50 hover:text-blue-600'
+            }`}
           >
-            <FileText className="w-4 h-4 group-hover:text-blue-500 transition-colors" />
+            <FileText className="w-4 h-4 text-blue-500 transition-colors" />
             <span>Hướng dẫn sử dụng</span>
-            <ExternalLink className="w-3 h-3 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+            <ExternalLink className={`w-3 h-3 ml-auto transition-opacity ${showNewUpdate ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
           </a>
           <div className="bg-slate-50 rounded-2xl p-5">
             <div className="flex items-center gap-3 mb-3">
