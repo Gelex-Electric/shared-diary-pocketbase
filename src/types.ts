@@ -83,6 +83,14 @@ export interface HesReading {
   updated: string;
 }
 
+export interface NewUpdate {
+  id: string;
+  area: string;
+  status: boolean;
+  created: string;
+  updated: string;
+}
+
 export interface HesItem {
   METER_NO: string;
   METER_NAME: string;
