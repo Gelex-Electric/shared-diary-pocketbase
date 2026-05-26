@@ -620,7 +620,7 @@ export default function HandoverManager() {
           <button
             disabled={selectedIds.size === 0 || isExportingPdf}
             onClick={exportMultipleToPDF}
-            className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 transition-all ${selectedIds.size > 0 && !isExportingPdf ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+            className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 transition-all ${selectedIds.size > 0 && !isExportingPdf ? 'bg-slate-700 hover:bg-slate-800 text-white shadow-lg shadow-slate-700/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
           >
             {isExportingPdf ? (
               <RefreshCw className="w-5 h-5 animate-spin" />
