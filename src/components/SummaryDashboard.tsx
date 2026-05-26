@@ -602,7 +602,7 @@ export default function SummaryDashboard() {
       <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-emerald-100 rounded-2xl text-emerald-600">
+            <div className="p-2.5 bg-blue-100 rounded-2xl text-blue-600">
               <TrendingUp className="w-6 h-6" />
             </div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Báo cáo tổng quan</h1>
@@ -613,8 +613,8 @@ export default function SummaryDashboard() {
           
           {/* Read Only Active Account Badge (instead of Selector) */}
           <div className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs font-semibold">
-            <Building2 className="w-4 h-4 text-emerald-600" />
-            <span>Khu vực giám sát: <strong className="text-emerald-700">{activeAreaName}</strong></span>
+            <Building2 className="w-4 h-4 text-blue-600" />
+            <span>Khu vực giám sát: <strong className="text-blue-700">{activeAreaName}</strong></span>
           </div>
         </div>
       </div>
@@ -626,10 +626,10 @@ export default function SummaryDashboard() {
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4">
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Doanh thu trước thuế</span>
+                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Doanh thu trước thuế</span>
                 <span className="text-xs font-black text-slate-500 uppercase mt-0.5">Lũy kế hệ thống</span>
               </div>
-              <div className="p-2.5 bg-emerald-50 rounded-2xl text-emerald-600 group-hover:scale-110 transition-transform">
+              <div className="p-2.5 bg-blue-50 rounded-2xl text-blue-600 group-hover:scale-110 transition-transform">
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
@@ -638,7 +638,7 @@ export default function SummaryDashboard() {
                 {formatVND(allTimeRevenue)}
               </h3>
               <p className="text-[11px] text-slate-400 mt-2 font-bold flex items-center gap-1 font-sans">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                 <span>Tổng tất cả chu kỳ</span>
               </p>
             </div>
@@ -718,7 +718,7 @@ export default function SummaryDashboard() {
                     onClick={() => toggleYear(yr)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all duration-250 cursor-pointer ${
                       isActive 
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' 
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
                         : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50 hover:text-slate-600'
                     }`}
                   >
@@ -777,13 +777,13 @@ export default function SummaryDashboard() {
             <div className="flex flex-col gap-3 mb-6">
               <label className="block text-[10px] font-black text-slate-400 tracking-wider uppercase font-mono">Biểu đồ phụ tải khách hàng A</label>
               
-              {/* Selector is styled beautifully with emerald theme when selected */}
+              {/* Selector is styled beautifully with blue theme when selected */}
               <div className={`border rounded-2xl p-3 flex items-center gap-3 transition-colors ${
                 cust1 
-                  ? 'bg-emerald-50/20 border-emerald-500 ring-4 ring-emerald-100' 
+                  ? 'bg-blue-50/20 border-blue-500 ring-4 ring-blue-100' 
                   : 'bg-slate-50 border-slate-200 hover:border-slate-300'
               }`}>
-                <Building2 className={`w-5 h-5 shrink-0 ${cust1 ? 'text-emerald-500' : 'text-slate-400'}`} />
+                <Building2 className={`w-5 h-5 shrink-0 ${cust1 ? 'text-blue-500' : 'text-slate-400'}`} />
                 <div className="flex-1 min-w-0">
                   <select
                     value={cust1}
@@ -849,13 +849,13 @@ export default function SummaryDashboard() {
             <div className="flex flex-col gap-3 mb-6">
               <label className="block text-[10px] font-black text-slate-400 tracking-wider uppercase font-mono">Biểu đồ phụ tải khách hàng B</label>
               
-              {/* Selector is styled beautifully with emerald theme when selected */}
+              {/* Selector is styled beautifully with blue theme when selected */}
               <div className={`border rounded-2xl p-3 flex items-center gap-3 transition-colors ${
                 cust2 
-                  ? 'bg-emerald-50/20 border-emerald-500 ring-4 ring-emerald-100' 
+                  ? 'bg-blue-50/20 border-blue-500 ring-4 ring-blue-100' 
                   : 'bg-slate-50 border-slate-200 hover:border-slate-300'
               }`}>
-                <Building2 className={`w-5 h-5 shrink-0 ${cust2 ? 'text-emerald-500' : 'text-slate-400'}`} />
+                <Building2 className={`w-5 h-5 shrink-0 ${cust2 ? 'text-blue-500' : 'text-slate-400'}`} />
                 <div className="flex-1 min-w-0">
                   <select
                     value={cust2}
@@ -933,13 +933,13 @@ export default function SummaryDashboard() {
                 placeholder="Tìm Mã KH, tên công ty..."
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-xl text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-[240px]"
+                className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-xl text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 w-full sm:w-[240px]"
               />
             </div>
 
             {/* Month Filter Selector moved down here */}
             <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm min-w-[170px]">
-              <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />
+              <Calendar className="w-4 h-4 text-blue-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <select 
                   value={selectedMonth}
@@ -964,7 +964,7 @@ export default function SummaryDashboard() {
               </button>
               <button 
                 onClick={() => { setPaymentFilter('paid'); setCurrentPage(1); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'paid' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-emerald-600'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'paid' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-blue-600'}`}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-current" /> Đã xong
               </button>
@@ -1024,7 +1024,7 @@ export default function SummaryDashboard() {
                     </td>
                     <td className="py-4 px-4 text-center">
                       {bill.daThanhToan ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-700 text-[11px] font-bold rounded-lg border border-green-100">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 text-[11px] font-bold rounded-lg border border-blue-100">
                           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                           Đã thanh toán
                         </span>
