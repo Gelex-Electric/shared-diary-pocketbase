@@ -32,60 +32,15 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center overflow-hidden bg-[#0a0f1e]">
-      {/* Animated background orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <motion.div
-          animate={{ x: [0, 40, 0], y: [0, -30, 0], scale: [1, 1.1, 1] }}
-          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, #3b82f6 0%, transparent 70%)' }}
-        />
-        <motion.div
-          animate={{ x: [0, -40, 0], y: [0, 30, 0], scale: [1, 1.15, 1] }}
-          transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
-          className="absolute -bottom-40 -right-32 w-[32rem] h-[32rem] rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, #06b6d4 0%, transparent 70%)' }}
-        />
-        <motion.div
-          animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
-          transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut', delay: 4 }}
-          className="absolute top-1/3 right-1/4 w-64 h-64 rounded-full opacity-10"
-          style={{ background: 'radial-gradient(circle, #10b981 0%, transparent 70%)' }}
-        />
-        {/* Grid lines */}
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `linear-gradient(#60a5fa 1px, transparent 1px), linear-gradient(90deg, #60a5fa 1px, transparent 1px)`,
-            backgroundSize: '60px 60px',
-          }}
-        />
-      </div>
-
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center p-4">
       {/* Main card */}
       <motion.div
-        initial={{ opacity: 0, y: 32, scale: 0.96 }}
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-md mx-4"
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="w-full max-w-md"
       >
-        {/* Glow border */}
-        <div
-          className="absolute -inset-px rounded-3xl opacity-60"
-          style={{
-            background: 'linear-gradient(135deg, rgba(59,130,246,0.5), rgba(6,182,212,0.3), rgba(16,185,129,0.3))',
-          }}
-        />
-
-        <div
-          className="relative rounded-3xl p-8 sm:p-10"
-          style={{
-            background: 'rgba(15, 23, 42, 0.85)',
-            backdropFilter: 'blur(24px)',
-            border: '1px solid rgba(148, 163, 184, 0.1)',
-          }}
-        >
+        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/80 p-8 sm:p-10 border border-slate-100">
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -107,11 +62,11 @@ export default function Login() {
                 </div>
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              Sổ nhật ký vận hành
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+              Ứng dụng quản lý vận hành
             </h1>
-            <p className="text-slate-400 mt-1.5 text-sm">
-              Hệ thống bàn giao ca trực vận hành điện tử
+            <p className="text-slate-500 mt-1.5 text-sm">
+              Quản lý ca trực, nhật ký, chỉ số & khách hàng điện
             </p>
           </motion.div>
 
@@ -126,7 +81,7 @@ export default function Login() {
             {/* Username field */}
             <div className="group relative">
               <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                <User className="w-4 h-4 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
+                <User className="w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               </div>
               <input
                 type="text"
@@ -134,18 +89,20 @@ export default function Login() {
                 required
                 value={username}
                 onChange={(e) => { setUsername(e.target.value); setError(''); }}
-                className="w-full pl-11 pr-4 py-3.5 rounded-xl text-white placeholder-slate-500 text-sm transition-all outline-none"
+                className="w-full pl-11 pr-4 py-3.5 rounded-xl text-slate-800 placeholder-slate-400 text-sm transition-all outline-none"
                 style={{
-                  background: 'rgba(30, 41, 59, 0.8)',
-                  border: '1px solid rgba(71, 85, 105, 0.5)',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.border = '1px solid rgba(59, 130, 246, 0.6)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.08)';
+                  e.currentTarget.style.background = '#fff';
                 }}
                 onBlur={(e) => {
-                  e.currentTarget.style.border = '1px solid rgba(71, 85, 105, 0.5)';
+                  e.currentTarget.style.border = '1px solid #e2e8f0';
                   e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.background = '#f8fafc';
                 }}
               />
             </div>
@@ -153,7 +110,7 @@ export default function Login() {
             {/* Password field */}
             <div className="group relative">
               <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                <Lock className="w-4 h-4 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
+                <Lock className="w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -161,24 +118,26 @@ export default function Login() {
                 required
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                className="w-full pl-11 pr-12 py-3.5 rounded-xl text-white placeholder-slate-500 text-sm transition-all outline-none"
+                className="w-full pl-11 pr-12 py-3.5 rounded-xl text-slate-800 placeholder-slate-400 text-sm transition-all outline-none"
                 style={{
-                  background: 'rgba(30, 41, 59, 0.8)',
-                  border: '1px solid rgba(71, 85, 105, 0.5)',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.border = '1px solid rgba(59, 130, 246, 0.6)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.08)';
+                  e.currentTarget.style.background = '#fff';
                 }}
                 onBlur={(e) => {
-                  e.currentTarget.style.border = '1px solid rgba(71, 85, 105, 0.5)';
+                  e.currentTarget.style.border = '1px solid #e2e8f0';
                   e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.background = '#f8fafc';
                 }}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-4 flex items-center text-slate-500 hover:text-slate-300 transition-colors"
+                className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-slate-700 transition-colors"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -192,7 +151,7 @@ export default function Login() {
                   animate={{ opacity: 1, y: 0, height: 'auto' }}
                   exit={{ opacity: 0, y: -6, height: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-red-400"
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-red-600"
                   style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}
                 >
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -247,7 +206,7 @@ export default function Login() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
-            className="text-center text-slate-600 text-xs mt-8"
+            className="text-center text-slate-400 text-xs mt-8"
           >
             Chỉ dành cho thành viên nhóm vận hành
           </motion.p>
