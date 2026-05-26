@@ -122,7 +122,7 @@ export default function ElectricShiftManager() {
           <select 
             value={filterArea} 
             onChange={(e) => setFilterArea(e.target.value)}
-            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
           >
             <option value="">Tất cả khu vực</option>
             {effectiveAreas.map(area => (
@@ -131,7 +131,7 @@ export default function ElectricShiftManager() {
           </select>
           <button 
             onClick={handleOpenAdd}
-            className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+            className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
           >
             <Plus className="w-5 h-5" />
             Thêm nhân sự
@@ -156,7 +156,7 @@ export default function ElectricShiftManager() {
                 <tr>
                   <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
                     <div className="flex justify-center items-center gap-3">
-                      <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                       <span>Đang tải danh sách...</span>
                     </div>
                   </td>
@@ -233,7 +233,7 @@ export default function ElectricShiftManager() {
                     required
                     value={formData.IDnum} 
                     onChange={(e) => setFormData({ ...formData, IDnum: parseInt(e.target.value) || 1 })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm font-bold font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm font-bold font-mono"
                   />
                 </div>
 
@@ -245,7 +245,7 @@ export default function ElectricShiftManager() {
                     required
                     value={formData.Name} 
                     onChange={(e) => setFormData({ ...formData, Name: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm font-bold"
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm font-bold"
                   />
                 </div>
 
@@ -254,7 +254,7 @@ export default function ElectricShiftManager() {
                   <select 
                     value={formData.area} 
                     onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm font-bold"
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm font-bold"
                   >
                     {effectiveAreas.map(area => (
                       <option key={area} value={area}>{area}</option>
@@ -272,7 +272,7 @@ export default function ElectricShiftManager() {
                   </button>
                   <button 
                     type="submit" 
-                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-emerald-600/10 text-sm flex items-center gap-2"
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/10 text-sm flex items-center gap-2"
                   >
                     <Check className="w-4 h-4" />
                     Lưu lại
