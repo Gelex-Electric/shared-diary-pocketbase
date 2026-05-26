@@ -20,7 +20,7 @@ export default function CustomerManager() {
   // Inline Editing States
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [isAddingCustomer, setIsAddingCustomer] = useState(false);
-  const [tempCustomerData, setTempCustomerData] = useState({ Name: '', MKH: '', area: '' });
+  const [tempCustomerData, setTempCustomerData] = useState({ Name: '', MKH: '', area: '', Email: '' });
 
   const [editingMeterId, setEditingMeterId] = useState<string | null>(null);
   const [isAddingMeter, setIsAddingMeter] = useState(false);
@@ -153,13 +153,13 @@ export default function CustomerManager() {
   const startAddCustomer = () => {
     setIsAddingCustomer(true);
     setEditingCustomerId(null);
-    setTempCustomerData({ Name: '', MKH: '', area: effectiveAreas[0] || AREAS[0] });
+    setTempCustomerData({ Name: '', MKH: '', area: effectiveAreas[0] || AREAS[0], Email: '' });
   };
 
   const startEditCustomer = (c: Customer) => {
     setEditingCustomerId(c.id);
     setIsAddingCustomer(false);
-    setTempCustomerData({ Name: c.Name, MKH: c.MKH, area: c.area });
+    setTempCustomerData({ Name: c.Name, MKH: c.MKH, area: c.area, Email: c.Email || '' });
   };
 
   const cancelCustomerEdit = () => {
@@ -761,22 +761,29 @@ export default function CustomerManager() {
               exit={{ opacity: 0, y: -20 }}
               className="bg-blue-50 border-2 border-blue-200 rounded-3xl p-6 flex flex-col sm:flex-row items-center gap-4 shadow-lg"
             >
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-4 w-full">
-                <input 
-                  type="text" 
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_2fr_1fr] gap-4 w-full">
+                <input
+                  type="text"
                   placeholder="Tên khách hàng"
                   value={tempCustomerData.Name}
                   onChange={(e) => setTempCustomerData({ ...tempCustomerData, Name: e.target.value })}
                   className="p-3 bg-white border border-blue-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Mã khách hàng"
                   value={tempCustomerData.MKH}
                   onChange={(e) => setTempCustomerData({ ...tempCustomerData, MKH: e.target.value })}
                   className="p-3 bg-white border border-blue-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <select 
+                <input
+                  type="email"
+                  placeholder="Email khách hàng"
+                  value={tempCustomerData.Email}
+                  onChange={(e) => setTempCustomerData({ ...tempCustomerData, Email: e.target.value })}
+                  className="p-3 bg-white border border-blue-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <select
                   value={tempCustomerData.area}
                   onChange={(e) => setTempCustomerData({ ...tempCustomerData, area: e.target.value })}
                   className="p-3 bg-white border border-blue-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
@@ -885,6 +892,7 @@ export default function CustomerManager() {
                 <tr className="bg-slate-50/50 border-b border-slate-100">
                   <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Mã khách hàng</th>
                   <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Tên khách hàng</th>
+                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Email</th>
                   <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Khu vực</th>
                   <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Thao tác</th>
                 </tr>
@@ -892,7 +900,7 @@ export default function CustomerManager() {
               <tbody className="divide-y divide-slate-50">
                 {customers.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-20 text-center text-slate-400">
+                    <td colSpan={5} className="p-20 text-center text-slate-400">
                       <Users className="w-12 h-12 mx-auto mb-4 opacity-20" />
                       <p>Chưa có khách hàng nào</p>
                     </td>
@@ -914,8 +922,8 @@ export default function CustomerManager() {
                       </td>
                       <td className="p-4">
                         {editingCustomerId === customer.id ? (
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             value={tempCustomerData.Name}
                             onChange={(e) => setTempCustomerData({ ...tempCustomerData, Name: e.target.value })}
                             className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -926,7 +934,28 @@ export default function CustomerManager() {
                       </td>
                       <td className="p-4">
                         {editingCustomerId === customer.id ? (
-                          <select 
+                          <input
+                            type="email"
+                            placeholder="Email"
+                            value={tempCustomerData.Email}
+                            onChange={(e) => setTempCustomerData({ ...tempCustomerData, Email: e.target.value })}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          />
+                        ) : customer.Email ? (
+                          <a
+                            href={`mailto:${customer.Email}`}
+                            className="text-sm text-blue-600 hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {customer.Email}
+                          </a>
+                        ) : (
+                          <span className="text-slate-300 text-sm italic">—</span>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        {editingCustomerId === customer.id ? (
+                          <select
                             value={tempCustomerData.area}
                             onChange={(e) => setTempCustomerData({ ...tempCustomerData, area: e.target.value })}
                             className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm"
