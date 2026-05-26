@@ -36,7 +36,7 @@ export interface Customer {
   Name: string;
   MKH: string;
   area: string;
-  Email?: string;
+  email?: string;
   created: string;
   updated: string;
 }
