@@ -37,20 +37,11 @@ export default function Dashboard() {
   useEffect(() => {
     const checkNewUpdate = async () => {
       if (!pb.authStore.isValid) return;
-      // Read area directly from authStore to avoid stale closure
-      const raw = pb.authStore.model?.area;
-      const areas: string[] = Array.isArray(raw)
-        ? raw
-        : (typeof raw === 'string' ? raw.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
-
       try {
-        let filter = 'status = true';
-        if (areas.length > 0) {
-          const areaFilters = areas.map(a => `area = "${a}"`).join(' || ');
-          filter = `(${areaFilters}) && status = true`;
-        }
+        // API rule "area = @request.auth.area" already filters by user's area.
+        // We only need to check status = true here.
         const record = await pb.collection('New_update').getFirstListItem<NewUpdate>(
-          filter,
+          'status = true',
           { requestKey: null }
         );
         setNewUpdateId(record.id);
@@ -59,10 +50,10 @@ export default function Dashboard() {
         if (!err?.isAbort && err?.status !== 404) {
           console.warn('New_update check failed:', err?.message ?? err);
         }
+        // 404 = no record with status=true → nothing to show
       }
     };
     checkNewUpdate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const dismissNewUpdate = async () => {
