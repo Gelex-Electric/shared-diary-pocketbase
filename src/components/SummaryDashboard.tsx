@@ -1024,7 +1024,7 @@ export default function SummaryDashboard() {
                     </td>
                     <td className="py-4 px-4 text-center">
                       {bill.daThanhToan ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 text-[11px] font-bold rounded-lg border border-blue-100">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-100">
                           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                           Đã thanh toán
                         </span>
