@@ -444,7 +444,7 @@ export default function CustomerManager() {
               placeholder={activeTab === 'customers' ? "Tìm tên, mã KH..." : "Tìm số công tơ, tên KH..."}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
             />
           </div>
           
@@ -470,7 +470,7 @@ export default function CustomerManager() {
             <select 
               value={filterArea} 
               onChange={(e) => setFilterArea(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+              className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
             >
               <option value="">Tất cả khu vực</option>
               {effectiveAreas.map(area => (
@@ -482,7 +482,7 @@ export default function CustomerManager() {
           {activeTab === 'customers' ? (
             <button 
               onClick={startAddCustomer}
-              className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+              className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
             >
               <Plus className="w-5 h-5" />
               Thêm khách hàng
@@ -490,7 +490,7 @@ export default function CustomerManager() {
           ) : (
             <button 
               onClick={startAddMeter}
-              className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+              className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
             >
               <Plus className="w-5 h-5" />
               Thêm công tơ
@@ -503,7 +503,7 @@ export default function CustomerManager() {
       <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
         <button 
           onClick={() => setActiveTab('customers')}
-          className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'customers' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'customers' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
         >
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4" />
@@ -598,7 +598,7 @@ export default function CustomerManager() {
                                 <RefreshCw className="w-3 h-3" /> Đã tồn tại
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold">
                                 <CheckCircle2 className="w-3 h-3" /> Mới
                               </span>
                             )}
@@ -652,7 +652,7 @@ export default function CustomerManager() {
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="bg-emerald-50 border-2 border-emerald-200 rounded-3xl p-6 flex flex-col sm:flex-row items-center gap-4 shadow-lg"
+              className="bg-blue-50 border-2 border-blue-200 rounded-3xl p-6 flex flex-col sm:flex-row items-center gap-4 shadow-lg"
             >
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-4 w-full">
                 <input 
@@ -660,19 +660,19 @@ export default function CustomerManager() {
                   placeholder="Tên khách hàng"
                   value={tempCustomerData.Name}
                   onChange={(e) => setTempCustomerData({ ...tempCustomerData, Name: e.target.value })}
-                  className="p-3 bg-white border border-emerald-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="p-3 bg-white border border-blue-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <input 
                   type="text" 
                   placeholder="Mã khách hàng"
                   value={tempCustomerData.MKH}
                   onChange={(e) => setTempCustomerData({ ...tempCustomerData, MKH: e.target.value })}
-                  className="p-3 bg-white border border-emerald-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="p-3 bg-white border border-blue-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <select 
                   value={tempCustomerData.area}
                   onChange={(e) => setTempCustomerData({ ...tempCustomerData, area: e.target.value })}
-                  className="p-3 bg-white border border-emerald-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="p-3 bg-white border border-blue-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {effectiveAreas.map(area => (
                     <option key={area} value={area}>{area}</option>
@@ -680,7 +680,7 @@ export default function CustomerManager() {
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => saveCustomer()} className="p-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"><CheckCircle2 className="w-6 h-6" /></button>
+                <button onClick={() => saveCustomer()} className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"><CheckCircle2 className="w-6 h-6" /></button>
                 <button onClick={cancelCustomerEdit} className="p-3 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 transition-colors"><X className="w-6 h-6" /></button>
               </div>
             </motion.div>
@@ -744,7 +744,7 @@ export default function CustomerManager() {
                     <button 
                       type="button"
                       onClick={() => setTempMeterData({ ...tempMeterData, Activate: !tempMeterData.Activate })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${tempMeterData.Activate ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${tempMeterData.Activate ? 'bg-blue-500' : 'bg-slate-300'}`}
                     >
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${tempMeterData.Activate ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
@@ -769,7 +769,7 @@ export default function CustomerManager() {
           <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <Users className="w-5 h-5 text-emerald-600" />
+                <Users className="w-5 h-5 text-blue-600" />
                 Danh sách khách hàng
               </h3>
             </div>
@@ -799,7 +799,7 @@ export default function CustomerManager() {
                             type="text" 
                             value={tempCustomerData.MKH}
                             onChange={(e) => setTempCustomerData({ ...tempCustomerData, MKH: e.target.value })}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
                         ) : (
                           <span className="font-mono text-sm font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded">{customer.MKH}</span>
@@ -811,7 +811,7 @@ export default function CustomerManager() {
                             type="text" 
                             value={tempCustomerData.Name}
                             onChange={(e) => setTempCustomerData({ ...tempCustomerData, Name: e.target.value })}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
                         ) : (
                           <span className="font-bold text-slate-800">{customer.Name}</span>
@@ -822,7 +822,7 @@ export default function CustomerManager() {
                           <select 
                             value={tempCustomerData.area}
                             onChange={(e) => setTempCustomerData({ ...tempCustomerData, area: e.target.value })}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           >
                             {effectiveAreas.map(area => (
                               <option key={area} value={area}>{area}</option>
@@ -836,7 +836,7 @@ export default function CustomerManager() {
                         <div className="flex items-center justify-end gap-2">
                           {editingCustomerId === customer.id ? (
                             <>
-                              <button onClick={() => saveCustomer(customer.id)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"><CheckCircle2 className="w-5 h-5" /></button>
+                              <button onClick={() => saveCustomer(customer.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><CheckCircle2 className="w-5 h-5" /></button>
                               <button onClick={cancelCustomerEdit} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-all"><X className="w-5 h-5" /></button>
                             </>
                           ) : (
@@ -997,7 +997,7 @@ export default function CustomerManager() {
                             <div className="flex items-center gap-2">
                               <button 
                                 onClick={() => toggleMeterActivate(meter)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isActivated ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isActivated ? 'bg-blue-500' : 'bg-slate-300'}`}
                               >
                                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isActivated ? 'translate-x-6' : 'translate-x-1'}`} />
                               </button>
