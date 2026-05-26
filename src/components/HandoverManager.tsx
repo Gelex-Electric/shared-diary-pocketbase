@@ -44,7 +44,7 @@ const TYPE_SHIFT_CONFIG: Record<string, {
   border: string;
   label: string;
 }> = {
-  'Bình thường':        { icon: ShieldCheck,     color: 'text-blue-600', bg: 'bg-blue-50',  border: 'border-blue-200', label: 'Bình thường' },
+  'Bình thường':        { icon: ShieldCheck,     color: 'text-emerald-600', bg: 'bg-emerald-50',  border: 'border-emerald-200', label: 'Bình thường' },
   'Sự cố':              { icon: AlertTriangle,    color: 'text-red-600',     bg: 'bg-red-50',      border: 'border-red-200',     label: 'Sự cố' },
   'Đóng cắt':           { icon: ZapOff,           color: 'text-amber-600',   bg: 'bg-amber-50',    border: 'border-amber-200',   label: 'Đóng cắt' },
   'Kiểm tra định kỳ':   { icon: ClipboardCheck,   color: 'text-blue-600',    bg: 'bg-blue-50',     border: 'border-blue-200',    label: 'Kiểm tra định kỳ' },
@@ -571,6 +571,15 @@ export default function HandoverManager() {
       const dateObj = new Date(log.startdate.includes('Z') ? log.startdate : log.startdate + 'Z');
       return `${dateObj.getUTCFullYear()}-${(dateObj.getUTCMonth() + 1).toString().padStart(2, '0')}-${dateObj.getUTCDate().toString().padStart(2, '0')}`;
     })).size;
+  }, [logs]);
+
+  const typeShiftCounts = React.useMemo(() => {
+    const counts: Record<string, number> = { 'Bình thường': 0, 'Sự cố': 0, 'Đóng cắt': 0, 'Kiểm tra định kỳ': 0 };
+    logs.forEach(log => {
+      const types = Array.isArray(log.type_shift) ? log.type_shift : [log.type_shift || 'Bình thường'];
+      types.forEach(t => { if (t in counts) counts[t]++; });
+    });
+    return counts;
   }, [logs]);
 
   return (
@@ -1257,11 +1266,25 @@ export default function HandoverManager() {
 
       {/* Floating stats badge – bottom-right, always visible */}
       <div className="fixed bottom-6 right-6 z-40 pointer-events-none">
-        <div className="bg-slate-800/90 backdrop-blur-sm text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-3">
-          <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
-          <div className="text-xs leading-snug">
-            <div className="font-bold text-sm">{uniqueDaysCount} ngày · {logs.length} ca</div>
-            <div className="text-slate-400 font-medium">tháng {filter.month}</div>
+        <div className="bg-white border border-slate-200 shadow-xl rounded-2xl px-4 py-3 min-w-[220px]">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Calendar className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+            <span className="text-xs font-bold text-slate-700">{uniqueDaysCount} ngày · {logs.length} ca</span>
+            <span className="ml-auto text-[10px] font-bold text-slate-400 uppercase tracking-wider">T{filter.month}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {([
+              { key: 'Bình thường', dot: 'bg-emerald-500', label: 'Bình thường' },
+              { key: 'Sự cố',       dot: 'bg-red-500',     label: 'Sự cố' },
+              { key: 'Đóng cắt',   dot: 'bg-amber-500',   label: 'Đóng cắt' },
+              { key: 'Kiểm tra định kỳ', dot: 'bg-blue-500', label: 'Kiểm tra ĐK' },
+            ] as const).map(({ key, dot, label }) => (
+              <div key={key} className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                <span className="text-[11px] text-slate-500 font-medium truncate">{label}</span>
+                <span className="ml-auto text-[11px] font-bold text-slate-700">{typeShiftCounts[key]}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
