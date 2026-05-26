@@ -20,7 +20,7 @@ export default function CustomerManager() {
   // Inline Editing States
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [isAddingCustomer, setIsAddingCustomer] = useState(false);
-  const [tempCustomerData, setTempCustomerData] = useState({ Name: '', MKH: '', area: '', Email: '' });
+  const [tempCustomerData, setTempCustomerData] = useState({ Name: '', MKH: '', area: '', email: '' });
 
   const [editingMeterId, setEditingMeterId] = useState<string | null>(null);
   const [isAddingMeter, setIsAddingMeter] = useState(false);
@@ -153,13 +153,13 @@ export default function CustomerManager() {
   const startAddCustomer = () => {
     setIsAddingCustomer(true);
     setEditingCustomerId(null);
-    setTempCustomerData({ Name: '', MKH: '', area: effectiveAreas[0] || AREAS[0], Email: '' });
+    setTempCustomerData({ Name: '', MKH: '', area: effectiveAreas[0] || AREAS[0], email: '' });
   };
 
   const startEditCustomer = (c: Customer) => {
     setEditingCustomerId(c.id);
     setIsAddingCustomer(false);
-    setTempCustomerData({ Name: c.Name, MKH: c.MKH, area: c.area, Email: c.Email || '' });
+    setTempCustomerData({ Name: c.Name, MKH: c.MKH, area: c.area, email: c.email || '' });
   };
 
   const cancelCustomerEdit = () => {
@@ -363,7 +363,7 @@ export default function CustomerManager() {
           (existing.Type ?? '') !== (item.METER_MODEL_DESC ?? '') ||
           (existing.Line ?? '') !== (item.LINE_NAME ?? '') ||
           (existing.expand?.Customer?.Name ?? '') !== (item.CUSTOMER_NAME ?? '') ||
-          (existing.expand?.Customer?.Email ?? '') !== (item.EMAIL ?? '');
+          (existing.expand?.Customer?.email ?? '') !== (item.EMAIL ?? '');
         return {
           ...item,
           syncStatus: hasChanged ? 'update' as const : 'unchanged' as const,
@@ -412,7 +412,7 @@ export default function CustomerManager() {
             Name: item.CUSTOMER_NAME,
             MKH: item.CUSTOMER_CODE,
             area,
-            Email: item.EMAIL || '',
+            email: item.EMAIL || '',
           };
 
           // Upsert Customer
@@ -779,8 +779,8 @@ export default function CustomerManager() {
                 <input
                   type="email"
                   placeholder="Email khách hàng"
-                  value={tempCustomerData.Email}
-                  onChange={(e) => setTempCustomerData({ ...tempCustomerData, Email: e.target.value })}
+                  value={tempCustomerData.email}
+                  onChange={(e) => setTempCustomerData({ ...tempCustomerData, email: e.target.value })}
                   className="p-3 bg-white border border-blue-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <select
@@ -937,17 +937,17 @@ export default function CustomerManager() {
                           <input
                             type="email"
                             placeholder="Email"
-                            value={tempCustomerData.Email}
-                            onChange={(e) => setTempCustomerData({ ...tempCustomerData, Email: e.target.value })}
+                            value={tempCustomerData.email}
+                            onChange={(e) => setTempCustomerData({ ...tempCustomerData, email: e.target.value })}
                             className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
-                        ) : customer.Email ? (
+                        ) : customer.email ? (
                           <a
-                            href={`mailto:${customer.Email}`}
+                            href={`mailto:${customer.email}`}
                             className="text-sm text-blue-600 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {customer.Email}
+                            {customer.email}
                           </a>
                         ) : (
                           <span className="text-slate-300 text-sm italic">—</span>
