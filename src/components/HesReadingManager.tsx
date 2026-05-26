@@ -340,7 +340,7 @@ export default function HesReadingManager() {
                     type="number" 
                     value={section.dateTime.day}
                     onChange={(e) => updateSectionDateTime(section.id, 'day', e.target.value)}
-                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 text-center"
+                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 text-center"
                   />
                 </div>
                 <div className="space-y-1">
@@ -349,7 +349,7 @@ export default function HesReadingManager() {
                     type="number" 
                     value={section.dateTime.month}
                     onChange={(e) => updateSectionDateTime(section.id, 'month', e.target.value)}
-                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 text-center"
+                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 text-center"
                   />
                 </div>
                 <div className="space-y-1">
@@ -358,7 +358,7 @@ export default function HesReadingManager() {
                     type="number" 
                     value={section.dateTime.year}
                     onChange={(e) => updateSectionDateTime(section.id, 'year', e.target.value)}
-                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 text-center"
+                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 text-center"
                   />
                 </div>
                 <div className="space-y-1">
@@ -367,7 +367,7 @@ export default function HesReadingManager() {
                     type="number" 
                     value={section.dateTime.hour}
                     onChange={(e) => updateSectionDateTime(section.id, 'hour', e.target.value)}
-                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 text-center"
+                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 text-center"
                   />
                 </div>
                 <div className="space-y-1">
@@ -376,7 +376,7 @@ export default function HesReadingManager() {
                     type="number" 
                     value={section.dateTime.minute}
                     onChange={(e) => updateSectionDateTime(section.id, 'minute', e.target.value)}
-                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 text-center"
+                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 text-center"
                   />
                 </div>
               </div>
@@ -409,7 +409,7 @@ export default function HesReadingManager() {
                             {reading?.status === 'loading' ? (
                               <RefreshCw className="w-3 h-3 animate-spin mx-auto text-slate-300" />
                             ) : (
-                              <span className={reading?.status === 'error' ? 'text-red-400' : 'text-emerald-600'}>
+                              <span className={reading?.status === 'error' ? 'text-red-400' : 'text-blue-600'}>
                                 {reading?.pg || '-'}
                               </span>
                             )}
@@ -465,7 +465,7 @@ export default function HesReadingManager() {
       <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm">
         <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/30">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-600/20">
+            <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/20">
               <TableIcon className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -477,7 +477,7 @@ export default function HesReadingManager() {
             <button 
               onClick={exportToExcel}
               disabled={meters.length === 0}
-              className="px-4 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 disabled:opacity-50 text-sm"
+              className="px-4 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50 text-sm"
             >
               <Download className="w-4 h-4" />
               Xuất Excel
@@ -485,7 +485,7 @@ export default function HesReadingManager() {
             <select 
               value={filterArea} 
               onChange={(e) => setFilterArea(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+              className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
             >
               <option value="">Tất cả khu vực</option>
               {effectiveAreas.map(area => (
@@ -501,7 +501,7 @@ export default function HesReadingManager() {
                 <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Số công tơ</th>
                 <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trạm (Line)</th>
                 <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">HSN</th>
-                <th className="px-4 py-4 text-[10px] font-bold text-emerald-600 uppercase tracking-wider text-center">Tổng (kWh)</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-center">Tổng (kWh)</th>
                 <th className="px-4 py-4 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-center">Biểu 1 (kWh)</th>
                 <th className="px-4 py-4 text-[10px] font-bold text-orange-600 uppercase tracking-wider text-center">Biểu 2 (kWh)</th>
                 <th className="px-4 py-4 text-[10px] font-bold text-purple-600 uppercase tracking-wider text-center">Biểu 3 (kWh)</th>
@@ -525,7 +525,7 @@ export default function HesReadingManager() {
                     <td className="px-4 py-3 font-bold text-slate-700 text-xs">{m.MeterNo}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs">{m.Line || '—'}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs text-center font-mono">{m.HSN || '—'}</td>
-                    <td className="px-4 py-3 text-center font-bold text-emerald-600 text-xs">
+                    <td className="px-4 py-3 text-center font-bold text-blue-600 text-xs">
                       {formatConsumption(getConsumptionValue(m.MeterNo, 'pg', m.HSN))}
                     </td>
                     <td className="px-4 py-3 text-center font-bold text-blue-600 text-xs">
