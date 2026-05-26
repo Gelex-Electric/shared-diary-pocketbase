@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, AREA_TO_CLASS } from '../lib/pocketbase';
 import { Customer, Meter, AccountHes, HesItem } from '../types';
-import { 
-  Plus, Trash2, User, Hash, MapPin, RefreshCw, Edit2, X, 
+import {
+  Plus, Trash2, User, Hash, MapPin, RefreshCw, Edit2, X,
   ChevronDown, ChevronRight, CheckCircle2, XCircle, Search,
-  CreditCard, Gauge, Users, CloudDownload
+  CreditCard, Gauge, Users, CloudDownload, AlertCircle, Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -39,6 +39,13 @@ export default function CustomerManager() {
   // Batch Meter Status Changes
   const [pendingMeterChanges, setPendingMeterChanges] = useState<Record<string, boolean>>({});
   const [isBatchUpdating, setIsBatchUpdating] = useState(false);
+
+  // Toast
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
+  const showToast = React.useCallback((message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
   // User areas handling - stabilize with JSON stringification for dependency tracking
   const userAreas = React.useMemo(() => {
@@ -261,7 +268,7 @@ export default function CustomerManager() {
       await loadAllMeters();
     } catch (err) {
       console.error('Batch update error:', err);
-      alert('Lỗi khi cập nhật trạng thái hàng loạt');
+      showToast('Lỗi khi cập nhật trạng thái hàng loạt', 'error');
     } finally {
       setIsBatchUpdating(false);
     }
@@ -281,7 +288,7 @@ export default function CustomerManager() {
   // HES Handlers
   const getToken = async () => {
     if (!hesAccount) {
-      alert('Không tìm thấy thông tin tài khoản HES.');
+      showToast('Không tìm thấy thông tin tài khoản HES.', 'error');
       return;
     }
 
@@ -290,18 +297,18 @@ export default function CustomerManager() {
       const url = `/hes/api/Login?UserAccount=${hesAccount.Account}&Password=${hesAccount.Password}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error('Lỗi kết nối API lấy Token');
-      
+
       const data = await res.json();
       if (data && data.TOKEN) {
         const updated = await pb.collection('AccountHes').update(hesAccount.id, { Token: data.TOKEN });
         setHesAccount(updated as any);
-        alert('Lấy Token thành công!');
+        showToast('Lấy Token thành công!', 'success');
       } else {
         throw new Error('Không nhận được Token từ phản hồi');
       }
     } catch (err: any) {
       console.error('Get Token error:', err);
-      alert('Lỗi lấy Token: ' + err.message);
+      showToast('Lỗi lấy Token: ' + err.message, 'error');
     } finally {
       setIsGettingToken(false);
     }
@@ -309,7 +316,7 @@ export default function CustomerManager() {
 
   const syncFromHes = async () => {
     if (!hesAccount) {
-      alert('Không tìm thấy thông tin tài khoản HES trong hệ thống. Vui lòng kiểm tra collection AccountHes.');
+      showToast('Không tìm thấy thông tin tài khoản HES trong hệ thống.', 'error');
       return;
     }
 
@@ -317,13 +324,12 @@ export default function CustomerManager() {
     try {
       const url = `/hes/api/GetMeterAccount?UserID=${hesAccount.HesID}&Token=${hesAccount.Token || 'Token'}`;
       const dataRes = await fetch(url);
-      
+
       if (!dataRes.ok) throw new Error(`Lỗi kết nối HES API: ${dataRes.status}`);
       const hesData: any = await dataRes.json();
 
-      // Check for invalid token error
       if (hesData && hesData.CODE === "0" && hesData.MESSAGE === "invalid token") {
-        alert('Token đã hết hạn hoặc không hợp lệ. Vui lòng nhấn "Lấy Token" và thử lại.');
+        showToast('Token đã hết hạn. Vui lòng nhấn "Lấy Token" và thử lại.', 'warning');
         setIsSyncing(false);
         return;
       }
@@ -333,15 +339,13 @@ export default function CustomerManager() {
       }
 
       const hesItems: HesItem[] = hesData;
-      // Filter by ADDRESS matching hesAccount.area
       const filteredData = hesItems.filter(item => item.ADDRESS === hesAccount.area);
-      
+
       if (filteredData.length === 0) {
-        alert(`Không tìm thấy bản ghi nào có địa chỉ trùng với khu vực "${hesAccount.area}"`);
+        showToast(`Không tìm thấy bản ghi nào thuộc khu vực "${hesAccount.area}"`, 'warning');
         return;
       }
 
-      // Check for duplicates in PocketBase
       const existingMeters = await pb.collection('Meter').getFullList({
         fields: 'MeterNo',
         filter: `area = "${hesAccount.area}"`
@@ -358,7 +362,7 @@ export default function CustomerManager() {
       setShowHesPreview(true);
     } catch (err: any) {
       console.error('HES Sync error:', err);
-      alert('Lỗi đồng bộ HES: ' + err.message);
+      showToast('Lỗi đồng bộ HES: ' + err.message, 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -366,7 +370,7 @@ export default function CustomerManager() {
 
   const saveSelectedHesData = async () => {
     if (selectedHesIds.length === 0) {
-      alert('Vui lòng chọn ít nhất một bản ghi để lưu.');
+      showToast('Vui lòng chọn ít nhất một bản ghi để lưu.', 'warning');
       return;
     }
 
@@ -414,8 +418,8 @@ export default function CustomerManager() {
         }
       }
 
-      alert(`Đã lưu thành công ${successCount} bản ghi.`);
       setShowHesPreview(false);
+      showToast(`Đã lưu thành công ${successCount} bản ghi.`, 'success');
       if (activeTab === 'customers') {
         loadCustomers();
       } else {
@@ -423,14 +427,45 @@ export default function CustomerManager() {
       }
     } catch (err: any) {
       console.error('Save HES data error:', err);
-      alert('Lỗi khi lưu dữ liệu: ' + err.message);
+      showToast('Lỗi khi lưu dữ liệu: ' + err.message, 'error');
     } finally {
       setIsSavingHes(false);
     }
   };
 
+  const toastConfig = {
+    success: { icon: CheckCircle2, bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', icon_class: 'text-emerald-500' },
+    error:   { icon: XCircle,      bg: 'bg-red-50',     border: 'border-red-200',     text: 'text-red-700',     icon_class: 'text-red-500' },
+    warning: { icon: AlertCircle,  bg: 'bg-amber-50',   border: 'border-amber-200',   text: 'text-amber-700',   icon_class: 'text-amber-500' },
+    info:    { icon: Info,         bg: 'bg-blue-50',    border: 'border-blue-200',     text: 'text-blue-700',    icon_class: 'text-blue-500' },
+  };
+
   return (
     <div className="space-y-8">
+      {/* Inline toast */}
+      <AnimatePresence>
+        {toast && (() => {
+          const cfg = toastConfig[toast.type];
+          const Icon = cfg.icon;
+          return (
+            <motion.div
+              key="toast"
+              initial={{ opacity: 0, y: -12, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ duration: 0.22 }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-sm font-medium shadow-sm ${cfg.bg} ${cfg.border} ${cfg.text}`}
+            >
+              <Icon className={`w-4 h-4 shrink-0 ${cfg.icon_class}`} />
+              <span className="flex-1">{toast.message}</span>
+              <button onClick={() => setToast(null)} className="p-0.5 hover:opacity-60 transition-opacity">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Quản lý khách hàng & Công tơ</h2>
@@ -482,7 +517,7 @@ export default function CustomerManager() {
           {activeTab === 'customers' ? (
             <button 
               onClick={startAddCustomer}
-              className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+              className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
             >
               <Plus className="w-5 h-5" />
               Thêm khách hàng
@@ -490,7 +525,7 @@ export default function CustomerManager() {
           ) : (
             <button 
               onClick={startAddMeter}
-              className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+              className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
             >
               <Plus className="w-5 h-5" />
               Thêm công tơ
