@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { pb, AREAS } from '../lib/pocketbase';
-import { 
+import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity
+  Activity, FileText, ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ElectricShiftManager from './ElectricShiftManager';
@@ -130,7 +130,17 @@ export default function Dashboard() {
                   </button>
                 </nav>
               </div>
-              <div className="mt-auto pt-8 border-t border-slate-100">
+              <div className="mt-auto pt-8 border-t border-slate-100 space-y-3">
+                <a
+                  href="/document.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-semibold text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all group"
+                >
+                  <FileText className="w-4 h-4 group-hover:text-blue-500 transition-colors" />
+                  <span>Hướng dẫn sử dụng</span>
+                  <ExternalLink className="w-3 h-3 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                </a>
                 <div className="bg-slate-50 rounded-2xl p-5">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">{pb.authStore.model?.name?.[0] || 'U'}</div>
@@ -213,7 +223,17 @@ export default function Dashboard() {
             </button>
           </nav>
         </div>
-        <div className="mt-auto pt-8 border-t border-slate-100">
+        <div className="mt-auto pt-8 border-t border-slate-100 space-y-3">
+          <a
+            href="/document.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-semibold text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all group"
+          >
+            <FileText className="w-4 h-4 group-hover:text-blue-500 transition-colors" />
+            <span>Hướng dẫn sử dụng</span>
+            <ExternalLink className="w-3 h-3 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+          </a>
           <div className="bg-slate-50 rounded-2xl p-5">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">{pb.authStore.model?.name?.[0] || 'U'}</div>
