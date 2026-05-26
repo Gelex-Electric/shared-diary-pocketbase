@@ -37,17 +37,28 @@ export default function Dashboard() {
   useEffect(() => {
     const checkNewUpdate = async () => {
       if (!pb.authStore.isValid) return;
-      const area = userAreas[0];
-      if (!area) return;
+      // Read area directly from authStore to avoid stale closure
+      const raw = pb.authStore.model?.area;
+      const areas: string[] = Array.isArray(raw)
+        ? raw
+        : (typeof raw === 'string' ? raw.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+
       try {
+        let filter = 'status = true';
+        if (areas.length > 0) {
+          const areaFilters = areas.map(a => `area = "${a}"`).join(' || ');
+          filter = `(${areaFilters}) && status = true`;
+        }
         const record = await pb.collection('New_update').getFirstListItem<NewUpdate>(
-          `area = "${area}" && status = true`,
+          filter,
           { requestKey: null }
         );
         setNewUpdateId(record.id);
         setShowNewUpdate(true);
-      } catch {
-        // No pending update for this area
+      } catch (err: any) {
+        if (!err?.isAbort && err?.status !== 404) {
+          console.warn('New_update check failed:', err?.message ?? err);
+        }
       }
     };
     checkNewUpdate();
