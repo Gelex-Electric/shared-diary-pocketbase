@@ -55,7 +55,7 @@ export default function Dashboard() {
             >
               <div className="flex items-center justify-between gap-3 mb-2">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-600/20">
+                  <div className="p-2 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/20">
                     <ClipboardList className="w-6 h-6 text-white" />
                   </div>
                   <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">QUẢN LÝ VẬN HÀNH</h2>
@@ -74,7 +74,7 @@ export default function Dashboard() {
                     }}
                     className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center gap-4 transition-all ${
                       topTab === 'summary' 
-                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' 
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
                         : 'text-slate-500 hover:bg-slate-50'
                     }`}
                   >
@@ -85,7 +85,7 @@ export default function Dashboard() {
                   <div className="space-y-1">
                     <button 
                       onClick={() => { setTopTab('journal'); setIsJournalExpanded(!isJournalExpanded); }}
-                      className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'journal' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'text-slate-500 hover:bg-slate-50'}`}
+                      className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'journal' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}
                     >
                       <div className="flex items-center gap-4"><ClipboardList className="w-5 h-5" />Sổ nhật ký điện tử</div>
                       <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isJournalExpanded ? 'rotate-180' : ''}`} />
@@ -93,11 +93,11 @@ export default function Dashboard() {
                     <AnimatePresence>
                       {isJournalExpanded && (
                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                          <button onClick={() => { setTopTab('journal'); setSubTab('create'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'create' ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'create' ? 'bg-emerald-600' : 'bg-slate-300'}`} />Tạo lịch trực
+                          <button onClick={() => { setTopTab('journal'); setSubTab('create'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'create' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'create' ? 'bg-blue-600' : 'bg-slate-300'}`} />Tạo lịch trực
                           </button>
-                          <button onClick={() => { setTopTab('journal'); setSubTab('staff'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'staff' ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'staff' ? 'bg-emerald-600' : 'bg-slate-300'}`} />Quản lý nhân sự trực
+                          <button onClick={() => { setTopTab('journal'); setSubTab('staff'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'staff' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'staff' ? 'bg-blue-600' : 'bg-slate-300'}`} />Quản lý nhân sự trực
                           </button>
                         </motion.div>
                       )}
@@ -107,7 +107,7 @@ export default function Dashboard() {
                   <div className="space-y-1">
                     <button 
                       onClick={() => { setTopTab('operating'); setIsOperatingExpanded(!isOperatingExpanded); }}
-                      className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'operating' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'text-slate-500 hover:bg-slate-50'}`}
+                      className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'operating' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}
                     >
                       <div className="flex items-center gap-4"><Activity className="w-5 h-5" />Thông số vận hành</div>
                       <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isOperatingExpanded ? 'rotate-180' : ''}`} />
@@ -115,17 +115,17 @@ export default function Dashboard() {
                     <AnimatePresence>
                       {isOperatingExpanded && (
                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                          <button onClick={() => { setTopTab('operating'); setSubTab('customer'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'customer' ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'customer' ? 'bg-emerald-600' : 'bg-slate-300'}`} />Thông tin chung
+                          <button onClick={() => { setTopTab('operating'); setSubTab('customer'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'customer' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'customer' ? 'bg-blue-600' : 'bg-slate-300'}`} />Thông tin chung
                           </button>
-                          <button onClick={() => { setTopTab('operating'); setSubTab('hes'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'hes' ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'hes' ? 'bg-emerald-600' : 'bg-slate-300'}`} />Lấy chỉ số từ HES
+                          <button onClick={() => { setTopTab('operating'); setSubTab('hes'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'hes' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'hes' ? 'bg-blue-600' : 'bg-slate-300'}`} />Lấy chỉ số từ HES
                           </button>
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
-                  <button onClick={() => { setTopTab('later'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center gap-4 transition-all ${topTab === 'later' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  <button onClick={() => { setTopTab('later'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center gap-4 transition-all ${topTab === 'later' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
                     <RefreshCw className="w-5 h-5" />Cập nhật sau
                   </button>
                 </nav>
@@ -133,7 +133,7 @@ export default function Dashboard() {
               <div className="mt-auto pt-8 border-t border-slate-100">
                 <div className="bg-slate-50 rounded-2xl p-5">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-xs">{pb.authStore.model?.name?.[0] || 'U'}</div>
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">{pb.authStore.model?.name?.[0] || 'U'}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-800 truncate">{pb.authStore.model?.name || 'Người dùng'}</p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase truncate">{pb.authStore.model?.area || 'Khu vực'}</p>
@@ -151,7 +151,7 @@ export default function Dashboard() {
 
       <aside className="hidden lg:flex sticky top-0 left-0 w-80 h-screen bg-white border-r border-slate-200 p-8 flex-col gap-8 overflow-y-auto">
         <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-600/20">
+          <div className="p-2 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/20">
             <ClipboardList className="w-6 h-6 text-white" />
           </div>
           <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">QUẢN LÝ VẬN HÀNH</h2>
@@ -163,7 +163,7 @@ export default function Dashboard() {
               onClick={() => setTopTab('summary')}
               className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center gap-4 transition-all ${
                 topTab === 'summary' 
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' 
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
                   : 'text-slate-500 hover:bg-slate-50'
               }`}
             >
@@ -172,43 +172,43 @@ export default function Dashboard() {
             </button>
 
             <div className="space-y-1">
-              <button onClick={() => { setTopTab('journal'); setIsJournalExpanded(!isJournalExpanded); }} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'journal' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <button onClick={() => { setTopTab('journal'); setIsJournalExpanded(!isJournalExpanded); }} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'journal' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
                 <div className="flex items-center gap-4"><ClipboardList className="w-5 h-5" />Sổ nhật ký điện tử</div>
                 <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isJournalExpanded ? 'rotate-180' : ''}`} />
               </button>
               <AnimatePresence>
                 {isJournalExpanded && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                    <button onClick={() => { setTopTab('journal'); setSubTab('create'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'create' ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'create' ? 'bg-emerald-600' : 'bg-slate-300'}`} />Tạo lịch trực
+                    <button onClick={() => { setTopTab('journal'); setSubTab('create'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'create' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'create' ? 'bg-blue-600' : 'bg-slate-300'}`} />Tạo lịch trực
                     </button>
-                    <button onClick={() => { setTopTab('journal'); setSubTab('staff'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'staff' ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'staff' ? 'bg-emerald-600' : 'bg-slate-300'}`} />Quản lý nhân sự trực
+                    <button onClick={() => { setTopTab('journal'); setSubTab('staff'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'staff' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'staff' ? 'bg-blue-600' : 'bg-slate-300'}`} />Quản lý nhân sự trực
                     </button>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
             <div className="space-y-1">
-              <button onClick={() => { setTopTab('operating'); setIsOperatingExpanded(!isOperatingExpanded); }} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'operating' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <button onClick={() => { setTopTab('operating'); setIsOperatingExpanded(!isOperatingExpanded); }} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'operating' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
                 <div className="flex items-center gap-4"><Activity className="w-5 h-5" />Thông số vận hành</div>
                 <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isOperatingExpanded ? 'rotate-180' : ''}`} />
               </button>
               <AnimatePresence>
                 {isOperatingExpanded && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                    <button onClick={() => { setTopTab('operating'); setSubTab('customer'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'customer' ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'customer' ? 'bg-emerald-600' : 'bg-slate-300'}`} />Thông tin chung
+                    <button onClick={() => { setTopTab('operating'); setSubTab('customer'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'customer' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'customer' ? 'bg-blue-600' : 'bg-slate-300'}`} />Thông tin chung
                     </button>
-                    <button onClick={() => { setTopTab('operating'); setSubTab('hes'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'hes' ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'hes' ? 'bg-emerald-600' : 'bg-slate-300'}`} />Lấy chỉ số từ HES
+                    <button onClick={() => { setTopTab('operating'); setSubTab('hes'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'hes' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'hes' ? 'bg-blue-600' : 'bg-slate-300'}`} />Lấy chỉ số từ HES
                     </button>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
-            <button onClick={() => setTopTab('later')} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center gap-4 transition-all ${topTab === 'later' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <button onClick={() => setTopTab('later')} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center gap-4 transition-all ${topTab === 'later' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
               <RefreshCw className="w-5 h-5" />Cập nhật sau
             </button>
           </nav>
@@ -216,7 +216,7 @@ export default function Dashboard() {
         <div className="mt-auto pt-8 border-t border-slate-100">
           <div className="bg-slate-50 rounded-2xl p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-xs">{pb.authStore.model?.name?.[0] || 'U'}</div>
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">{pb.authStore.model?.name?.[0] || 'U'}</div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-slate-800 truncate">{pb.authStore.model?.name || 'Người dùng'}</p>
                 <p className="text-[10px] font-bold text-slate-400 uppercase truncate">{pb.authStore.model?.area || 'Khu vực'}</p>
