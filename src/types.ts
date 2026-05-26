@@ -36,6 +36,7 @@ export interface Customer {
   Name: string;
   MKH: string;
   area: string;
+  Email?: string;
   created: string;
   updated: string;
 }
@@ -96,5 +97,9 @@ export interface HesItem {
   COORDINATE: string | null;
   LINE_ID: string | null;
   METER_MODEL_ID: string | null;
+  // sync metadata
   isDuplicate?: boolean;
+  syncStatus?: 'new' | 'update' | 'unchanged';
+  existingMeterId?: string;
+  existingCustomerId?: string;
 }
