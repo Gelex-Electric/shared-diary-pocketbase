@@ -346,19 +346,40 @@ export default function CustomerManager() {
         return;
       }
 
-      const existingMeters = await pb.collection('Meter').getFullList({
-        fields: 'MeterNo',
-        filter: `area = "${hesAccount.area}"`
+      const existingMeters = await pb.collection('Meter').getFullList<Meter>({
+        filter: `area = "${hesAccount.area}"`,
+        expand: 'Customer',
+        requestKey: null
       });
-      const existingMeterNos = new Set(existingMeters.map(m => m.MeterNo));
+      const existingMeterMap = new Map(existingMeters.map(m => [m.MeterNo, m]));
 
-      const previewWithDupCheck = filteredData.map(item => ({
-        ...item,
-        isDuplicate: existingMeterNos.has(item.METER_NO)
-      }));
+      const previewWithStatus = filteredData.map(item => {
+        const existing = existingMeterMap.get(item.METER_NO);
+        if (!existing) {
+          return { ...item, syncStatus: 'new' as const, isDuplicate: false };
+        }
+        const hasChanged =
+          (existing.HSN ?? '') !== (item.METER_NAME ?? '') ||
+          (existing.Type ?? '') !== (item.METER_MODEL_DESC ?? '') ||
+          (existing.Line ?? '') !== (item.LINE_NAME ?? '') ||
+          (existing.expand?.Customer?.Name ?? '') !== (item.CUSTOMER_NAME ?? '') ||
+          (existing.expand?.Customer?.Email ?? '') !== (item.EMAIL ?? '');
+        return {
+          ...item,
+          syncStatus: hasChanged ? 'update' as const : 'unchanged' as const,
+          isDuplicate: !hasChanged,
+          existingMeterId: existing.id,
+          existingCustomerId: existing.Customer,
+        };
+      });
 
-      setHesPreviewData(previewWithDupCheck);
-      setSelectedHesIds(previewWithDupCheck.filter(item => !item.isDuplicate).map(item => item.METER_NO));
+      setHesPreviewData(previewWithStatus);
+      // Pre-select new + update items
+      setSelectedHesIds(
+        previewWithStatus
+          .filter(item => item.syncStatus === 'new' || item.syncStatus === 'update')
+          .map(item => item.METER_NO)
+      );
       setShowHesPreview(true);
     } catch (err: any) {
       console.error('HES Sync error:', err);
@@ -379,47 +400,59 @@ export default function CustomerManager() {
     setSaveProgress({ current: 0, total: itemsToSave.length });
 
     try {
-      let successCount = 0;
+      let createdCount = 0;
+      let updatedCount = 0;
       for (let i = 0; i < itemsToSave.length; i++) {
         const item = itemsToSave[i];
         setSaveProgress({ current: i + 1, total: itemsToSave.length });
-        
+
         try {
-          // Find or Create Customer
+          const area = hesAccount?.area || effectiveAreas[0];
+          const customerData = {
+            Name: item.CUSTOMER_NAME,
+            MKH: item.CUSTOMER_CODE,
+            area,
+            Email: item.EMAIL || '',
+          };
+
+          // Upsert Customer
           let customer: Customer;
           try {
-            customer = await pb.collection('Customer').getFirstListItem(`MKH = '${item.CUSTOMER_CODE}'`);
-          } catch (err) {
-            customer = await pb.collection('Customer').create({
-              Name: item.CUSTOMER_NAME,
-              MKH: item.CUSTOMER_CODE,
-              area: hesAccount?.area || effectiveAreas[0]
-            });
+            const existing = await pb.collection('Customer').getFirstListItem(`MKH = '${item.CUSTOMER_CODE.replace(/'/g, "\\'")}'`, { requestKey: null });
+            customer = await pb.collection('Customer').update(existing.id, customerData) as Customer;
+          } catch {
+            customer = await pb.collection('Customer').create(customerData) as Customer;
           }
 
-          // Find or Create Meter
-          try {
-            await pb.collection('Meter').getFirstListItem(`MeterNo = '${item.METER_NO}'`);
-          } catch (err) {
-            await pb.collection('Meter').create({
-              MeterNo: item.METER_NO,
-              HSN: item.METER_NAME,
-              Type: item.METER_MODEL_DESC,
-              CreatedHES: item.CREATED,
-              Line: item.LINE_NAME,
-              Customer: customer.id,
-              area: hesAccount?.area || effectiveAreas[0],
-              Activate: true
-            });
+          // Upsert Meter
+          const meterData = {
+            MeterNo: item.METER_NO,
+            HSN: item.METER_NAME,
+            Type: item.METER_MODEL_DESC,
+            CreatedHES: item.CREATED,
+            Line: item.LINE_NAME,
+            Customer: customer.id,
+            area,
+            Activate: true,
+          };
+
+          if (item.existingMeterId) {
+            await pb.collection('Meter').update(item.existingMeterId, meterData);
+            updatedCount++;
+          } else {
+            await pb.collection('Meter').create(meterData);
+            createdCount++;
           }
-          successCount++;
         } catch (err) {
           console.error(`Lỗi khi lưu công tơ ${item.METER_NO}:`, err);
         }
       }
 
       setShowHesPreview(false);
-      showToast(`Đã lưu thành công ${successCount} bản ghi.`, 'success');
+      const parts = [];
+      if (createdCount > 0) parts.push(`${createdCount} bản ghi mới`);
+      if (updatedCount > 0) parts.push(`${updatedCount} bản ghi đã cập nhật`);
+      showToast(`Đồng bộ thành công: ${parts.join(', ')}.`, 'success');
       if (activeTab === 'customers') {
         loadCustomers();
       } else {
@@ -586,12 +619,15 @@ export default function CustomerManager() {
                     <thead className="sticky top-0 bg-white z-10">
                       <tr className="border-b border-slate-100">
                         <th className="p-3">
-                          <input 
-                            type="checkbox" 
-                            checked={selectedHesIds.length === hesPreviewData.length}
+                          <input
+                            type="checkbox"
+                            checked={
+                              hesPreviewData.filter(i => i.syncStatus !== 'unchanged').length > 0 &&
+                              hesPreviewData.filter(i => i.syncStatus !== 'unchanged').every(i => selectedHesIds.includes(i.METER_NO))
+                            }
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedHesIds(hesPreviewData.map(item => item.METER_NO));
+                                setSelectedHesIds(hesPreviewData.filter(i => i.syncStatus !== 'unchanged').map(item => item.METER_NO));
                               } else {
                                 setSelectedHesIds([]);
                               }
@@ -601,6 +637,7 @@ export default function CustomerManager() {
                         </th>
                         <th className="p-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Mã KH</th>
                         <th className="p-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Tên khách hàng</th>
+                        <th className="p-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Email</th>
                         <th className="p-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Số công tơ</th>
                         <th className="p-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Trạm</th>
                         <th className="p-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Trạng thái</th>
@@ -608,10 +645,20 @@ export default function CustomerManager() {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {hesPreviewData.map((item) => (
-                        <tr key={item.METER_NO} className={`hover:bg-slate-50 transition-colors ${item.isDuplicate ? 'opacity-60 bg-amber-50/30' : ''}`}>
+                        <tr
+                          key={item.METER_NO}
+                          className={`hover:bg-slate-50 transition-colors ${
+                            item.syncStatus === 'unchanged'
+                              ? 'opacity-50'
+                              : item.syncStatus === 'update'
+                              ? 'bg-blue-50/30'
+                              : ''
+                          }`}
+                        >
                           <td className="p-3">
-                            <input 
-                              type="checkbox" 
+                            <input
+                              type="checkbox"
+                              disabled={item.syncStatus === 'unchanged'}
                               checked={selectedHesIds.includes(item.METER_NO)}
                               onChange={(e) => {
                                 if (e.target.checked) {
@@ -620,21 +667,28 @@ export default function CustomerManager() {
                                   setSelectedHesIds(selectedHesIds.filter(id => id !== item.METER_NO));
                                 }
                               }}
-                              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
                             />
                           </td>
                           <td className="p-3 font-mono text-sm text-slate-600">{item.CUSTOMER_CODE}</td>
                           <td className="p-3 text-sm font-medium text-slate-800">{item.CUSTOMER_NAME}</td>
+                          <td className="p-3 text-sm text-slate-500">{item.EMAIL || <span className="text-slate-300 italic">—</span>}</td>
                           <td className="p-3 font-mono text-sm text-blue-600">{item.METER_NO}</td>
                           <td className="p-3 text-sm text-slate-500">{item.LINE_NAME}</td>
                           <td className="p-3">
-                            {item.isDuplicate ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold">
-                                <RefreshCw className="w-3 h-3" /> Đã tồn tại
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold">
+                            {item.syncStatus === 'new' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">
                                 <CheckCircle2 className="w-3 h-3" /> Mới
+                              </span>
+                            )}
+                            {item.syncStatus === 'update' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold">
+                                <RefreshCw className="w-3 h-3" /> Cập nhật
+                              </span>
+                            )}
+                            {item.syncStatus === 'unchanged' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-400 rounded-lg text-xs font-bold">
+                                Không đổi
                               </span>
                             )}
                           </td>
@@ -645,8 +699,26 @@ export default function CustomerManager() {
                 </div>
 
                 <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                  <div className="text-sm text-slate-500">
-                    Đã chọn <span className="font-bold text-slate-800">{selectedHesIds.length}</span> / {hesPreviewData.length} bản ghi
+                  <div className="text-sm text-slate-500 flex items-center gap-3 flex-wrap">
+                    <span>Đã chọn <span className="font-bold text-slate-800">{selectedHesIds.length}</span> / {hesPreviewData.length} bản ghi</span>
+                    {(() => {
+                      const newSelected = hesPreviewData.filter(i => i.syncStatus === 'new' && selectedHesIds.includes(i.METER_NO)).length;
+                      const updateSelected = hesPreviewData.filter(i => i.syncStatus === 'update' && selectedHesIds.includes(i.METER_NO)).length;
+                      return (
+                        <>
+                          {newSelected > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">
+                              <CheckCircle2 className="w-3 h-3" /> {newSelected} mới
+                            </span>
+                          )}
+                          {updateSelected > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold">
+                              <RefreshCw className="w-3 h-3" /> {updateSelected} cập nhật
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="flex gap-3">
                     <button 
