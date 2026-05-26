@@ -44,7 +44,7 @@ const TYPE_SHIFT_CONFIG: Record<string, {
   border: string;
   label: string;
 }> = {
-  'Bình thường':        { icon: ShieldCheck,     color: 'text-emerald-600', bg: 'bg-emerald-50',  border: 'border-emerald-200', label: 'Bình thường' },
+  'Bình thường':        { icon: ShieldCheck,     color: 'text-blue-600', bg: 'bg-blue-50',  border: 'border-blue-200', label: 'Bình thường' },
   'Sự cố':              { icon: AlertTriangle,    color: 'text-red-600',     bg: 'bg-red-50',      border: 'border-red-200',     label: 'Sự cố' },
   'Đóng cắt':           { icon: ZapOff,           color: 'text-amber-600',   bg: 'bg-amber-50',    border: 'border-amber-200',   label: 'Đóng cắt' },
   'Kiểm tra định kỳ':   { icon: ClipboardCheck,   color: 'text-blue-600',    bg: 'bg-blue-50',     border: 'border-blue-200',    label: 'Kiểm tra định kỳ' },
@@ -584,7 +584,7 @@ export default function HandoverManager() {
           <select 
             value={filter.area} 
             onChange={(e) => setFilter({ ...filter, area: e.target.value })}
-            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
           >
             <option value="">Tất cả khu vực</option>
             {effectiveAreas.map(area => (
@@ -594,7 +594,7 @@ export default function HandoverManager() {
           <select 
             value={filter.month} 
             onChange={(e) => setFilter({ ...filter, month: e.target.value })}
-            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
           >
             {Array.from({ length: 12 }, (_, i) => {
               const m = (i + 1).toString().padStart(2, '0');
@@ -603,7 +603,7 @@ export default function HandoverManager() {
           </select>
           <button
             onClick={startAddLog}
-            className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+            className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
           >
             <Plus className="w-5 h-5" />
             Tạo lịch trực
@@ -643,7 +643,7 @@ export default function HandoverManager() {
               >
                 <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <div className="flex items-center gap-4">
-                    <div className="p-3 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-600/20">
+                    <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/20">
                       <ClipboardList className="w-6 h-6 text-white" />
                     </div>
                     <div>
@@ -660,7 +660,7 @@ export default function HandoverManager() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Khu vực</label>
-                      <select value={formData.area} onChange={(e) => setFormData({ ...formData, area: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500">
+                      <select value={formData.area} onChange={(e) => setFormData({ ...formData, area: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500">
                         {effectiveAreas.map(area => <option key={area} value={area}>{area}</option>)}
                       </select>
                     </div>
@@ -703,7 +703,7 @@ export default function HandoverManager() {
                             endDate: newEndDate
                           });
                         }} 
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="Ca 1">Ca 1 (06:00 - 14:00)</option>
                         <option value="Ca 2">Ca 2 (14:00 - 22:00)</option>
@@ -730,13 +730,13 @@ export default function HandoverManager() {
                             }
                             setFormData({ ...formData, startDate: newStartDate, endDate: newEndDate });
                           }} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500" 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500" 
                         />
                         <input 
                           type="time" 
                           value={formData.startTime} 
                           onChange={(e) => setFormData({ ...formData, startTime: e.target.value })} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500" 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500" 
                         />
                       </div>
                     </div>
@@ -748,13 +748,13 @@ export default function HandoverManager() {
                           type="date" 
                           value={formData.endDate} 
                           onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500" 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500" 
                         />
                         <input 
                           type="time" 
                           value={formData.endTime} 
                           onChange={(e) => setFormData({ ...formData, endTime: e.target.value })} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500" 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500" 
                         />
                       </div>
                     </div>
@@ -801,35 +801,35 @@ export default function HandoverManager() {
 
                   <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-6">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-slate-800 flex items-center gap-2"><Users className="w-5 h-5 text-emerald-600" /> Nhân sự trực</h4>
-                      <button onClick={handleAutoAssign} className="text-xs font-bold text-emerald-600 bg-white border border-emerald-100 px-3 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors">Tự động phân ca</button>
+                      <h4 className="font-bold text-slate-800 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Nhân sự trực</h4>
+                      <button onClick={handleAutoAssign} className="text-xs font-bold text-blue-600 bg-white border border-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">Tự động phân ca</button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div className="space-y-3">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trực đội QLVH</div>
-                        <select value={formData.main_duty} onChange={(e) => setFormData({ ...formData, main_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                        <select value={formData.main_duty} onChange={(e) => setFormData({ ...formData, main_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
                           <option value="">Chọn trực chính</option>
                           {staffList.map(s => <option key={s.id} value={s.Name}>{s.Name}</option>)}
                         </select>
-                        <select value={formData.sub_duty} onChange={(e) => setFormData({ ...formData, sub_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                        <select value={formData.sub_duty} onChange={(e) => setFormData({ ...formData, sub_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
                           <option value="">Chọn trực phụ</option>
                           {staffList.map(s => <option key={s.id} value={s.Name}>{s.Name}</option>)}
                         </select>
                       </div>
                       <div className="space-y-3">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trực điều độ điện lực</div>
-                        <input type="text" placeholder="Trực chính điện lực" value={formData.main_power} onChange={(e) => setFormData({ ...formData, main_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
-                        <input type="text" placeholder="Trực phụ điện lực" value={formData.sub_power} onChange={(e) => setFormData({ ...formData, sub_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+                        <input type="text" placeholder="Trực chính điện lực" value={formData.main_power} onChange={(e) => setFormData({ ...formData, main_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="text" placeholder="Trực phụ điện lực" value={formData.sub_power} onChange={(e) => setFormData({ ...formData, sub_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-slate-800 flex items-center gap-2"><Activity className="w-5 h-5 text-emerald-600" /> Tình hình vận hành trong ca</h4>
+                      <h4 className="font-bold text-slate-800 flex items-center gap-2"><Activity className="w-5 h-5 text-blue-600" /> Tình hình vận hành trong ca</h4>
                       <button 
                         onClick={() => setSituationRows([...situationRows, { time: '', content: '' }])}
-                        className="text-xs font-bold text-emerald-600 flex items-center gap-1 hover:underline"
+                        className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"
                       >
                         <Plus className="w-4 h-4" /> Thêm dòng
                       </button>
@@ -887,15 +887,15 @@ export default function HandoverManager() {
                   <div className="grid grid-cols-1 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Những lưu ý và tồn tại ca sau cần giải quyết</label>
-                      <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px]" placeholder="Nhập các lưu ý cho ca sau..." />
+                      <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]" placeholder="Nhập các lưu ý cho ca sau..." />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp</label>
-                      <textarea value={formData.equipment} onChange={(e) => setFormData({ ...formData, equipment: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px]" placeholder="Tình trạng trang thiết bị..." />
+                      <textarea value={formData.equipment} onChange={(e) => setFormData({ ...formData, equipment: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]" placeholder="Tình trạng trang thiết bị..." />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Ý kiến lãnh đạo đơn vị</label>
-                      <textarea value={formData.opinions} onChange={(e) => setFormData({ ...formData, opinions: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px]" placeholder="Ý kiến chỉ đạo..." />
+                      <textarea value={formData.opinions} onChange={(e) => setFormData({ ...formData, opinions: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]" placeholder="Ý kiến chỉ đạo..." />
                     </div>
                   </div>
                 </div>
@@ -911,7 +911,7 @@ export default function HandoverManager() {
                   <button 
                     onClick={saveLog} 
                     disabled={isSaving}
-                    className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2"
+                    className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 flex items-center gap-2"
                   >
                     {isSaving ? (
                       <>
@@ -979,15 +979,15 @@ export default function HandoverManager() {
 
                 <div className="flex-1 overflow-y-auto p-8 space-y-6">
                   {/* Row 1: Thời gian giao nhận ca */}
-                  <div className="bg-emerald-50/50 p-5 rounded-3xl border border-emerald-100">
-                    <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-2 mb-4"><Clock className="w-4 h-4" /> Thời gian giao nhận ca</h4>
+                  <div className="bg-blue-50/50 p-5 rounded-3xl border border-blue-100">
+                    <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2 mb-4"><Clock className="w-4 h-4" /> Thời gian giao nhận ca</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <div className="text-[10px] font-bold text-emerald-500 uppercase">Bắt đầu (Nhận ca)</div>
+                        <div className="text-[10px] font-bold text-blue-500 uppercase">Bắt đầu (Nhận ca)</div>
                         <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.startdate)}</p>
                       </div>
                       <div className="space-y-1">
-                        <div className="text-[10px] font-bold text-emerald-500 uppercase">Kết thúc (Giao ca)</div>
+                        <div className="text-[10px] font-bold text-blue-500 uppercase">Kết thúc (Giao ca)</div>
                         <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.enddate)}</p>
                       </div>
                     </div>
@@ -1002,7 +1002,7 @@ export default function HandoverManager() {
                         <div className="flex flex-col gap-1.5">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
-                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-bold">{selectedLog.main_duty || '—'}</span>
+                            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-bold">{selectedLog.main_duty || '—'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
@@ -1028,7 +1028,7 @@ export default function HandoverManager() {
 
                   {/* Row 2: Operation situation */}
                   <div className="space-y-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-600" /> I. Tình hình vận hành trong ca</h4>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Activity className="w-4 h-4 text-blue-600" /> I. Tình hình vận hành trong ca</h4>
                     <div className="border border-slate-100 rounded-3xl overflow-hidden bg-slate-50/50">
                       <table className="w-full text-sm border-collapse">
                         <thead className="bg-slate-100 border-b border-slate-200">
@@ -1151,14 +1151,14 @@ export default function HandoverManager() {
                         type="checkbox" 
                         checked={groupSelected}
                         onChange={() => toggleGroupSelection(group.records)}
-                        className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
                       <div className="p-2 bg-white rounded-xl shadow-xs">
-                        <Calendar className="w-5 h-5 text-emerald-600" />
+                        <Calendar className="w-5 h-5 text-blue-600" />
                       </div>
                       <div>
                         <h3 className="font-bold text-slate-800 text-[15px]">{formatGroupHeaderDate(group.date)}</h3>
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full font-bold text-[10px] uppercase tracking-wider mt-1">{group.area}</span>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-bold text-[10px] uppercase tracking-wider mt-1">{group.area}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1185,13 +1185,13 @@ export default function HandoverManager() {
                           const isSelected = selectedIds.has(log.id);
 
                           return (
-                            <div key={log.id} className={`p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-50/40 transition-colors ${isSelected ? 'bg-emerald-50/10' : ''}`}>
+                            <div key={log.id} className={`p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-50/40 transition-colors ${isSelected ? 'bg-blue-50/10' : ''}`}>
                               <div className="flex items-start gap-4">
                                 <input 
                                   type="checkbox" 
                                   checked={isSelected}
                                   onChange={() => toggleSelection(log.id)}
-                                  className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 mt-1"
+                                  className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-1"
                                 />
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-2 flex-wrap">
@@ -1258,7 +1258,7 @@ export default function HandoverManager() {
       {/* Floating stats badge – bottom-right, always visible */}
       <div className="fixed bottom-6 right-6 z-40 pointer-events-none">
         <div className="bg-slate-800/90 backdrop-blur-sm text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-3">
-          <Calendar className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
           <div className="text-xs leading-snug">
             <div className="font-bold text-sm">{uniqueDaysCount} ngày · {logs.length} ca</div>
             <div className="text-slate-400 font-medium">tháng {filter.month}</div>
