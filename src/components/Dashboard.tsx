@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { pb, AREAS } from '../lib/pocketbase';
 import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity, FileText, ExternalLink, Sparkles, ArrowDownLeft, Check
+  Activity, FileText, ExternalLink
 } from 'lucide-react';
 import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import SummaryDashboard from './SummaryDashboard';
 import CustomerManager from './CustomerManager';
 import JournalManager from './JournalManager';
+import NewUpdateTour from './NewUpdateTour';
 import { LayoutDashboard } from 'lucide-react';
 
 export default function Dashboard() {
@@ -53,6 +54,7 @@ export default function Dashboard() {
     checkNewUpdate();
   }, []);
 
+  // Đóng vĩnh viễn: ẩn overlay + cập nhật PocketBase → không hiện lại sau refresh
   const dismissNewUpdate = async () => {
     setShowNewUpdate(false);
     if (newUpdateId) {
@@ -64,93 +66,28 @@ export default function Dashboard() {
     }
   };
 
+  // Đóng tạm: ẩn overlay phiên này → refresh sẽ hiện lại
+  const closeNewUpdateForNow = () => setShowNewUpdate(false);
+
   const handleLogout = () => {
     pb.authStore.clear();
     window.location.reload();
   };
 
-  const newFeatures = [
-    'Đổi tên mục "Sổ nhật ký điện tử" thành "Hồ sơ vận hành" cho rõ nghĩa hơn',
-    'Gộp "Tạo lịch trực" và "Quản lý nhân sự trực" thành một mục duy nhất "Sổ nhật ký vận hành" với 2 tab tiện lợi',
-    'Gộp "Lấy chỉ số từ HES" vào Thông số vận hành → Thông tin chung dưới dạng tab riêng',
-    'Thông báo hệ thống chuyển sang dạng nổi (floating) góc phải — không còn che nội dung trang',
-    'Sửa lỗi bộ lọc tháng trong Báo cáo tổng quan: mỗi tháng chỉ hiển thị đúng dữ liệu của tháng đó',
-    'Bảng công nợ hiển thị thêm số khách còn nợ ở các tháng khác ngay trong thông báo cảnh báo',
-    'Sửa lỗi đồng bộ HES: khách hàng có nhiều email hoặc email sai định dạng không còn gây lỗi lưu công tơ',
-    'Hỗ trợ lưu nhiều địa chỉ email cho mỗi khách hàng (tách nhau bởi dấu phẩy)',
-  ];
+  // Force-expand sidebar sections so tour arrows can point to sub-items
+  useEffect(() => {
+    if (showNewUpdate) {
+      setIsJournalExpanded(true);
+      setIsOperatingExpanded(true);
+    }
+  }, [showNewUpdate]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col lg:flex-row">
       {/* New update announcement modal */}
       <AnimatePresence>
         {showNewUpdate && (
-          <motion.div
-            key="new-update-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 24 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: 12 }}
-              transition={{ type: 'spring', damping: 22, stiffness: 260 }}
-              className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden"
-            >
-              {/* Gradient header */}
-              <div className="relative bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 px-7 py-6 text-white overflow-hidden">
-                <div className="absolute -top-6 -right-6 w-32 h-32 bg-white/10 rounded-full" />
-                <div className="absolute -bottom-8 -left-4 w-24 h-24 bg-white/10 rounded-full" />
-                <div className="relative">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="w-4 h-4 opacity-90" />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Phiên bản mới</span>
-                  </div>
-                  <h2 className="text-2xl font-black leading-tight">Cập nhật tính năng</h2>
-                  <p className="text-sm opacity-75 mt-1">Những cải tiến mới nhất trong hệ thống</p>
-                </div>
-              </div>
-
-              {/* Feature list */}
-              <div className="px-7 py-5 space-y-3 max-h-64 overflow-y-auto">
-                {newFeatures.map((feat, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center">
-                      <Check className="w-3 h-3 text-blue-600" strokeWidth={3} />
-                    </span>
-                    <p className="text-sm text-slate-700 leading-snug">{feat}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Arrow callout → Hướng dẫn sử dụng */}
-              <div className="mx-7 mb-5 p-3.5 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3">
-                <div className="shrink-0 w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center">
-                  <ArrowDownLeft className="w-4 h-4 text-blue-600" />
-                </div>
-                <p className="text-sm text-blue-800 leading-snug">
-                  Xem hướng dẫn sử dụng đầy đủ tại nút{' '}
-                  <span className="font-bold inline-flex items-center gap-1">
-                    <FileText className="w-3.5 h-3.5" /> Hướng dẫn sử dụng
-                  </span>{' '}
-                  ở cuối thanh bên trái.
-                </p>
-              </div>
-
-              {/* Dismiss button */}
-              <div className="px-7 pb-7">
-                <button
-                  onClick={dismissNewUpdate}
-                  className="w-full py-3.5 rounded-2xl font-bold text-sm text-white transition-all active:scale-[0.98]"
-                  style={{ background: 'linear-gradient(135deg, #1d4ed8 0%, #0891b2 100%)', boxShadow: '0 4px 20px rgba(29,78,216,0.35)' }}
-                >
-                  Đã hiểu, không hiển thị lại
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+          <NewUpdateTour onDismiss={dismissNewUpdate} onClose={closeNewUpdateForNow} />
         )}
       </AnimatePresence>
 
@@ -298,14 +235,14 @@ export default function Dashboard() {
             </button>
 
             <div className="space-y-1">
-              <button onClick={() => { setTopTab('journal'); setIsJournalExpanded(!isJournalExpanded); }} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'journal' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <button id="nav-journal" onClick={() => { setTopTab('journal'); setIsJournalExpanded(!isJournalExpanded); }} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'journal' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
                 <div className="flex items-center gap-4"><ClipboardList className="w-5 h-5" />Hồ sơ vận hành</div>
                 <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isJournalExpanded ? 'rotate-180' : ''}`} />
               </button>
               <AnimatePresence>
                 {isJournalExpanded && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                    <button onClick={() => { setTopTab('journal'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <button id="nav-journal-sub" onClick={() => { setTopTab('journal'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' ? 'bg-blue-600' : 'bg-slate-300'}`} />Sổ nhật ký vận hành
                     </button>
                   </motion.div>
@@ -320,7 +257,7 @@ export default function Dashboard() {
               <AnimatePresence>
                 {isOperatingExpanded && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                    <button onClick={() => { setTopTab('operating'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <button id="nav-operating-sub" onClick={() => { setTopTab('operating'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' ? 'bg-blue-600' : 'bg-slate-300'}`} />Thông tin chung
                     </button>
                   </motion.div>
