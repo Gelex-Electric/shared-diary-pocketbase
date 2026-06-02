@@ -6,16 +6,13 @@ import {
 } from 'lucide-react';
 import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import ElectricShiftManager from './ElectricShiftManager';
 import SummaryDashboard from './SummaryDashboard';
 import CustomerManager from './CustomerManager';
-import HandoverManager from './HandoverManager';
-import HesReadingManager from './HesReadingManager';
+import JournalManager from './JournalManager';
 import { LayoutDashboard } from 'lucide-react';
 
 export default function Dashboard() {
   const [topTab, setTopTab] = useState<'summary' | 'journal' | 'operating' | 'later'>('summary');
-  const [subTab, setSubTab] = useState<'create' | 'staff' | 'customer' | 'hes'>('create');
   
   // User areas handling - stabilize with JSON stringification for dependency tracking
   const userAreas = React.useMemo(() => {
@@ -73,13 +70,14 @@ export default function Dashboard() {
   };
 
   const newFeatures = [
-    'Giao diện đăng nhập được thiết kế lại, chủ đề trắng hiện đại',
-    'Đổi tên thành "Ứng dụng quản lý vận hành" với màu xanh đồng bộ toàn hệ thống',
-    'Đồng bộ HES thông minh: tự động cập nhật khi có thay đổi, bỏ qua nếu không đổi',
-    'Bổ sung trường Email khách hàng — lấy từ HES và chỉnh sửa thủ công',
-    'Bảng xem trước HES với 3 trạng thái: Mới · Cập nhật · Không đổi',
-    'Thông báo inline có animation thay thế hộp thoại alert thô',
-    'Nút "Hướng dẫn sử dụng" trong thanh điều hướng bên trái',
+    'Đổi tên mục "Sổ nhật ký điện tử" thành "Hồ sơ vận hành" cho rõ nghĩa hơn',
+    'Gộp "Tạo lịch trực" và "Quản lý nhân sự trực" thành một mục duy nhất "Sổ nhật ký vận hành" với 2 tab tiện lợi',
+    'Gộp "Lấy chỉ số từ HES" vào Thông số vận hành → Thông tin chung dưới dạng tab riêng',
+    'Thông báo hệ thống chuyển sang dạng nổi (floating) góc phải — không còn che nội dung trang',
+    'Sửa lỗi bộ lọc tháng trong Báo cáo tổng quan: mỗi tháng chỉ hiển thị đúng dữ liệu của tháng đó',
+    'Bảng công nợ hiển thị thêm số khách còn nợ ở các tháng khác ngay trong thông báo cảnh báo',
+    'Sửa lỗi đồng bộ HES: khách hàng có nhiều email hoặc email sai định dạng không còn gây lỗi lưu công tơ',
+    'Hỗ trợ lưu nhiều địa chỉ email cho mỗi khách hàng (tách nhau bởi dấu phẩy)',
   ];
 
   return (
@@ -207,17 +205,14 @@ export default function Dashboard() {
                       onClick={() => { setTopTab('journal'); setIsJournalExpanded(!isJournalExpanded); }}
                       className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'journal' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}
                     >
-                      <div className="flex items-center gap-4"><ClipboardList className="w-5 h-5" />Sổ nhật ký điện tử</div>
+                      <div className="flex items-center gap-4"><ClipboardList className="w-5 h-5" />Hồ sơ vận hành</div>
                       <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isJournalExpanded ? 'rotate-180' : ''}`} />
                     </button>
                     <AnimatePresence>
                       {isJournalExpanded && (
                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                          <button onClick={() => { setTopTab('journal'); setSubTab('create'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'create' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'create' ? 'bg-blue-600' : 'bg-slate-300'}`} />Tạo lịch trực
-                          </button>
-                          <button onClick={() => { setTopTab('journal'); setSubTab('staff'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'staff' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'staff' ? 'bg-blue-600' : 'bg-slate-300'}`} />Quản lý nhân sự trực
+                          <button onClick={() => { setTopTab('journal'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' ? 'bg-blue-600' : 'bg-slate-300'}`} />Sổ nhật ký vận hành
                           </button>
                         </motion.div>
                       )}
@@ -235,11 +230,8 @@ export default function Dashboard() {
                     <AnimatePresence>
                       {isOperatingExpanded && (
                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                          <button onClick={() => { setTopTab('operating'); setSubTab('customer'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'customer' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'customer' ? 'bg-blue-600' : 'bg-slate-300'}`} />Thông tin chung
-                          </button>
-                          <button onClick={() => { setTopTab('operating'); setSubTab('hes'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'hes' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'hes' ? 'bg-blue-600' : 'bg-slate-300'}`} />Lấy chỉ số từ HES
+                          <button onClick={() => { setTopTab('operating'); setIsSidebarOpen(false); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' ? 'bg-blue-600' : 'bg-slate-300'}`} />Thông tin chung
                           </button>
                         </motion.div>
                       )}
@@ -307,17 +299,14 @@ export default function Dashboard() {
 
             <div className="space-y-1">
               <button onClick={() => { setTopTab('journal'); setIsJournalExpanded(!isJournalExpanded); }} className={`w-full px-5 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-between transition-all ${topTab === 'journal' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:bg-slate-50'}`}>
-                <div className="flex items-center gap-4"><ClipboardList className="w-5 h-5" />Sổ nhật ký điện tử</div>
+                <div className="flex items-center gap-4"><ClipboardList className="w-5 h-5" />Hồ sơ vận hành</div>
                 <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isJournalExpanded ? 'rotate-180' : ''}`} />
               </button>
               <AnimatePresence>
                 {isJournalExpanded && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                    <button onClick={() => { setTopTab('journal'); setSubTab('create'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'create' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'create' ? 'bg-blue-600' : 'bg-slate-300'}`} />Tạo lịch trực
-                    </button>
-                    <button onClick={() => { setTopTab('journal'); setSubTab('staff'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' && subTab === 'staff' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' && subTab === 'staff' ? 'bg-blue-600' : 'bg-slate-300'}`} />Quản lý nhân sự trực
+                    <button onClick={() => { setTopTab('journal'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'journal' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'journal' ? 'bg-blue-600' : 'bg-slate-300'}`} />Sổ nhật ký vận hành
                     </button>
                   </motion.div>
                 )}
@@ -331,11 +320,8 @@ export default function Dashboard() {
               <AnimatePresence>
                 {isOperatingExpanded && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pl-4 space-y-1">
-                    <button onClick={() => { setTopTab('operating'); setSubTab('customer'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'customer' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'customer' ? 'bg-blue-600' : 'bg-slate-300'}`} />Thông tin chung
-                    </button>
-                    <button onClick={() => { setTopTab('operating'); setSubTab('hes'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' && subTab === 'hes' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' && subTab === 'hes' ? 'bg-blue-600' : 'bg-slate-300'}`} />Lấy chỉ số từ HES
+                    <button onClick={() => { setTopTab('operating'); }} className={`w-full px-5 py-3 rounded-xl text-xs font-bold flex items-center gap-4 transition-all ${topTab === 'operating' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${topTab === 'operating' ? 'bg-blue-600' : 'bg-slate-300'}`} />Thông tin chung
                     </button>
                   </motion.div>
                 )}
@@ -388,17 +374,9 @@ export default function Dashboard() {
           {topTab === 'summary' ? (
             <SummaryDashboard />
           ) : topTab === 'operating' ? (
-            subTab === 'customer' ? (
-              <CustomerManager />
-            ) : (
-              <HesReadingManager />
-            )
+            <CustomerManager />
           ) : topTab === 'journal' ? (
-            subTab === 'create' ? (
-              <HandoverManager />
-            ) : (
-              <ElectricShiftManager />
-            )
+            <JournalManager />
           ) : (
             <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2rem] shadow-sm">
               <RefreshCw className="w-16 h-16 text-slate-200 mb-4 animate-[spin_3s_linear_infinite]" />
