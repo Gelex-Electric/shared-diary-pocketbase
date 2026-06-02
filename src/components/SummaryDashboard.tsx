@@ -424,13 +424,7 @@ export default function SummaryDashboard() {
     return dataByYear;
   }, [accountFilteredRecords, visibleYears]);
 
-  // Construct baseline list of bills for the table:
-  // STRICTLY chỉ hóa đơn thuộc đúng tháng được chọn (kể cả khách chưa thanh toán).
-  // Công nợ các tháng khác KHÔNG còn hiển thị chung vào tháng đang chọn nữa.
-  const baselineBillsForTable = useMemo(() => {
-    if (selectedMonth === 'all') return accountFilteredRecords;
-    return accountFilteredRecords.filter(r => r.thangNam === selectedMonth);
-  }, [accountFilteredRecords, selectedMonth]);
+  // (baselineBillsForTable đã được thay bằng customerList ở tầng display)
 
   // Đếm số khách còn nợ ở CÁC THÁNG KHÁC (không tính tháng đang chọn) — dùng cho thông báo floating.
   const otherMonthsUnpaidCount = useMemo(() => {
@@ -532,31 +526,25 @@ export default function SummaryDashboard() {
     return monthsData;
   }, [accountFilteredRecords, chronologicalYears]);
 
-  // Filter main Customer List Table based on Search & Status Tab (individual bills, not aggregated)
-  const displayBills = useMemo(() => {
-    const sorted = [...baselineBillsForTable].sort((a, b: BillRecord) => {
-      return a.maKH.localeCompare(b.maKH, 'vi', { numeric: true });
-    });
-
-    return sorted.filter(r => {
-      const matchesSearch = 
-        r.maKH.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        r.tenKH.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesPayment = 
+  // Bảng hiển thị theo customer-level (1 dòng/khách hàng) — tránh trùng key và filter đúng tầng
+  const displayCustomers = useMemo(() => {
+    return customerList.filter(c => {
+      const matchesSearch =
+        c.maKH.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.tenKH.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesPayment =
         paymentFilter === 'all' ? true :
-        paymentFilter === 'paid' ? r.daThanhToan : !r.daThanhToan;
-
+        paymentFilter === 'paid' ? c.isPaid : !c.isPaid;
       return matchesSearch && matchesPayment;
     });
-  }, [baselineBillsForTable, searchQuery, paymentFilter]);
+  }, [customerList, searchQuery, paymentFilter]);
 
   // Pagination Logic
-  const totalPages = Math.ceil(displayBills.length / itemsPerPage) || 1;
-  const paginatedBills = useMemo(() => {
+  const totalPages = Math.ceil(displayCustomers.length / itemsPerPage) || 1;
+  const paginatedCustomers = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    return displayBills.slice(startIndex, startIndex + itemsPerPage);
-  }, [displayBills, currentPage]);
+    return displayCustomers.slice(startIndex, startIndex + itemsPerPage);
+  }, [displayCustomers, currentPage]);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -1002,57 +990,54 @@ export default function SummaryDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedBills.map((bill) => {
-                const isUnpaid = !bill.daThanhToan;
-                return (
-                  <tr 
-                    key={`${bill.maKH}-${bill.ngayXuat}-${bill.ky}`} 
-                    className={`transition-colors text-slate-700 text-sm hover:bg-slate-50/50 ${
-                      isUnpaid 
-                        ? 'bg-rose-50/70 border-l-4 border-l-rose-500 text-rose-950 font-semibold' 
-                        : ''
-                    }`}
-                  >
-                    <td className="py-4 px-4 font-mono font-bold text-xs text-slate-500">
-                      {bill.maKH}
-                    </td>
-                    <td className="py-4 px-4 font-semibold text-slate-800 whitespace-normal break-words leading-snug">
-                      {bill.tenKH}
-                    </td>
-                    <td className="py-4 px-4 text-center font-mono text-xs text-slate-500">
-                      {bill.ngayChotChiSo || bill.ngayXuat || '—'}
-                    </td>
-                    <td className="py-4 px-4 text-center font-mono text-xs text-slate-500">
-                      {bill.ngayThanhToan || '—'}
-                    </td>
-                    <td className="py-4 px-4 text-right font-mono font-bold text-xs text-amber-600">
-                      {formatKWh(bill.sanLuong)}
-                    </td>
-                    <td className="py-4 px-4 text-right font-mono text-slate-800 font-bold text-xs">
-                      {formatVND(bill.sauThue)}
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      {bill.daThanhToan ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-100">
-                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                          Đã thanh toán
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-100">
-                          <XCircle className="w-3.5 h-3.5 shrink-0 animate-pulse" />
-                          Chưa thanh toán
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {displayBills.length === 0 && (
+              {paginatedCustomers.map((c) => (
+                <tr
+                  key={c.maKH}
+                  className={`transition-colors text-slate-700 text-sm hover:bg-slate-50/50 ${
+                    !c.isPaid
+                      ? 'bg-rose-50/70 border-l-4 border-l-rose-500 text-rose-950 font-semibold'
+                      : ''
+                  }`}
+                >
+                  <td className="py-4 px-4 font-mono font-bold text-xs text-slate-500">
+                    {c.maKH}
+                  </td>
+                  <td className="py-4 px-4 font-semibold text-slate-800 whitespace-normal break-words leading-snug">
+                    {c.tenKH}
+                  </td>
+                  <td className="py-4 px-4 text-center font-mono text-xs text-slate-500">
+                    {c.readingDates.length > 0 ? c.readingDates.join(', ') : '—'}
+                  </td>
+                  <td className="py-4 px-4 text-center font-mono text-xs text-slate-500">
+                    {c.paymentDates.length > 0 ? c.paymentDates.join(', ') : '—'}
+                  </td>
+                  <td className="py-4 px-4 text-right font-mono font-bold text-xs text-amber-600">
+                    {formatKWh(c.totalSanLuong)}
+                  </td>
+                  <td className="py-4 px-4 text-right font-mono text-slate-800 font-bold text-xs">
+                    {formatVND(c.totalSauThue)}
+                  </td>
+                  <td className="py-4 px-4 text-center">
+                    {c.isPaid ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-100">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        Đã thanh toán
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-100">
+                        <XCircle className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+                        Chưa thanh toán
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {displayCustomers.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-16 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center">
                       <FileSpreadsheet className="w-12 h-12 text-slate-200 mb-3" />
-                      <p className="text-sm">Không tìm thấy dòng hóa đơn nào khớp bộ lọc</p>
+                      <p className="text-sm">Không tìm thấy khách hàng nào khớp bộ lọc</p>
                     </div>
                   </td>
                 </tr>
@@ -1062,10 +1047,10 @@ export default function SummaryDashboard() {
         </div>
 
         {/* Table Footer with Pagination */}
-        {displayBills.length > 0 && (
+        {displayCustomers.length > 0 && (
           <div className="p-4 md:p-6 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-xs font-semibold text-slate-500">
             <p>
-              Hiển thị <span className="font-bold text-slate-700">{Math.min(displayBills.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(displayBills.length, currentPage * itemsPerPage)}</span> trong tổng số <span className="font-bold text-slate-700">{displayBills.length}</span> hóa đơn
+              Hiển thị <span className="font-bold text-slate-700">{Math.min(displayCustomers.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(displayCustomers.length, currentPage * itemsPerPage)}</span> trong tổng số <span className="font-bold text-slate-700">{displayCustomers.length}</span> khách hàng
             </p>
 
             <div className="flex items-center gap-2 self-end sm:self-auto">
