@@ -7,9 +7,24 @@ import {
   CreditCard, Gauge, Users, CloudDownload, AlertCircle, Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import HesReadingManager from './HesReadingManager';
+
+// HES có thể trả về EMAIL chứa nhiều địa chỉ (ngăn cách bởi ; , / hoặc khoảng trắng)
+// hoặc email sai định dạng. Chuẩn hóa thành chuỗi các email hợp lệ, cách nhau bởi ", ".
+// Field "email" của collection Customer là kiểu TEXT nên lưu được nhiều email tự do.
+// Nếu không tách được email hợp lệ nào, giữ nguyên văn HES để không mất dữ liệu.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const sanitizeEmails = (raw: string | undefined | null): string => {
+  if (!raw) return '';
+  const parts = raw.split(/[;,/\s]+/).map(s => s.trim()).filter(Boolean);
+  const valid = parts.filter(p => EMAIL_RE.test(p));
+  if (valid.length === 0) return raw.trim();
+  // Loại trùng, giữ thứ tự
+  return Array.from(new Set(valid)).join(', ');
+};
 
 export default function CustomerManager() {
-  const [activeTab, setActiveTab] = useState<'customers' | 'meters'>('customers');
+  const [activeTab, setActiveTab] = useState<'customers' | 'meters' | 'hes'>('customers');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [allMeters, setAllMeters] = useState<Meter[]>([]);
   const [meters, setMeters] = useState<Record<string, Meter[]>>({});
@@ -402,27 +417,54 @@ export default function CustomerManager() {
     try {
       let createdCount = 0;
       let updatedCount = 0;
+      const failedMeters: string[] = [];
       for (let i = 0; i < itemsToSave.length; i++) {
         const item = itemsToSave[i];
         setSaveProgress({ current: i + 1, total: itemsToSave.length });
 
         try {
           const area = hesAccount?.area || effectiveAreas[0];
+          const cleanEmail = sanitizeEmails(item.EMAIL);
           const customerData = {
             Name: item.CUSTOMER_NAME,
             MKH: item.CUSTOMER_CODE,
             area,
-            email: item.EMAIL || '',
+            email: cleanEmail,
           };
 
-          // Upsert Customer
-          let customer: Customer;
-          try {
-            const existing = await pb.collection('Customer').getFirstListItem(`MKH = '${item.CUSTOMER_CODE.replace(/'/g, "\\'")}'`, { requestKey: null });
-            customer = await pb.collection('Customer').update(existing.id, customerData) as Customer;
-          } catch {
-            customer = await pb.collection('Customer').create(customerData) as Customer;
-          }
+          // Upsert Customer — chống lỗi validate email:
+          // nếu field email là kiểu EMAIL (chỉ nhận 1 email) mà HES trả nhiều email,
+          // thử lần lượt: tất cả email hợp lệ → email đầu tiên → bỏ trống, để KHÔNG chặn việc lưu công tơ.
+          const firstEmail = cleanEmail.split(', ')[0] || '';
+          const emailFallbacks = Array.from(new Set([cleanEmail, firstEmail, '']));
+
+          const upsertCustomer = async (): Promise<Customer> => {
+            let existingId: string | null = null;
+            try {
+              const existing = await pb.collection('Customer').getFirstListItem(`MKH = '${item.CUSTOMER_CODE.replace(/'/g, "\\'")}'`, { requestKey: null });
+              existingId = existing.id;
+            } catch {
+              existingId = null;
+            }
+
+            let lastErr: any = null;
+            for (const emailVal of emailFallbacks) {
+              const payload = { ...customerData, email: emailVal };
+              try {
+                return existingId
+                  ? await pb.collection('Customer').update(existingId, payload) as Customer
+                  : await pb.collection('Customer').create(payload) as Customer;
+              } catch (e: any) {
+                lastErr = e;
+                // Chỉ thử bỏ email khi lỗi đúng là do field email; lỗi khác thì dừng ngay.
+                const emailFieldFailed = !!e?.response?.data?.email;
+                if (!emailFieldFailed) throw e;
+              }
+            }
+            throw lastErr;
+          };
+
+          const customer = await upsertCustomer();
 
           // Upsert Meter
           const meterData = {
@@ -445,6 +487,7 @@ export default function CustomerManager() {
           }
         } catch (err) {
           console.error(`Lỗi khi lưu công tơ ${item.METER_NO}:`, err);
+          failedMeters.push(item.METER_NO);
         }
       }
 
@@ -452,7 +495,16 @@ export default function CustomerManager() {
       const parts = [];
       if (createdCount > 0) parts.push(`${createdCount} bản ghi mới`);
       if (updatedCount > 0) parts.push(`${updatedCount} bản ghi đã cập nhật`);
-      showToast(`Đồng bộ thành công: ${parts.join(', ')}.`, 'success');
+      if (failedMeters.length > 0) {
+        const sample = failedMeters.slice(0, 5).join(', ');
+        const more = failedMeters.length > 5 ? `… (+${failedMeters.length - 5})` : '';
+        showToast(
+          `Đã lưu ${parts.join(', ') || '0 bản ghi'}. Lỗi ${failedMeters.length} công tơ: ${sample}${more}`,
+          'warning'
+        );
+      } else {
+        showToast(`Đồng bộ thành công: ${parts.join(', ')}.`, 'success');
+      }
       if (activeTab === 'customers') {
         loadCustomers();
       } else {
@@ -475,7 +527,7 @@ export default function CustomerManager() {
 
   return (
     <div className="space-y-8">
-      {/* Inline toast */}
+      {/* Floating toast (góc trên bên phải, không chiếm chỗ trong luồng nội dung) */}
       <AnimatePresence>
         {toast && (() => {
           const cfg = toastConfig[toast.type];
@@ -487,7 +539,7 @@ export default function CustomerManager() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.97 }}
               transition={{ duration: 0.22 }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-sm font-medium shadow-sm ${cfg.bg} ${cfg.border} ${cfg.text}`}
+              className={`fixed top-4 right-4 z-[120] max-w-sm flex items-center gap-3 px-4 py-3 rounded-2xl border text-sm font-medium shadow-xl backdrop-blur-md ${cfg.bg} ${cfg.border} ${cfg.text}`}
             >
               <Icon className={`w-4 h-4 shrink-0 ${cfg.icon_class}`} />
               <span className="flex-1">{toast.message}</span>
@@ -504,6 +556,7 @@ export default function CustomerManager() {
           <h2 className="text-2xl font-bold text-slate-800">Quản lý khách hàng & Công tơ</h2>
           <p className="text-slate-500 text-sm mt-1">Hệ thống quản lý thông tin khách hàng và thiết bị đo đếm</p>
         </div>
+        {activeTab !== 'hes' && (
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -565,11 +618,12 @@ export default function CustomerManager() {
             </button>
           )}
         </div>
+        )}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
-        <button 
+      <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
+        <button
           onClick={() => setActiveTab('customers')}
           className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'customers' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
         >
@@ -578,13 +632,22 @@ export default function CustomerManager() {
             Thông tin khách hàng
           </div>
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('meters')}
           className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'meters' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
         >
           <div className="flex items-center gap-2">
             <Gauge className="w-4 h-4" />
             Thông tin công tơ
+          </div>
+        </button>
+        <button
+          onClick={() => setActiveTab('hes')}
+          className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'hes' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          <div className="flex items-center gap-2">
+            <CloudDownload className="w-4 h-4" />
+            Lấy chỉ số từ HES
           </div>
         </button>
       </div>
@@ -874,7 +937,9 @@ export default function CustomerManager() {
           )}
         </AnimatePresence>
 
-        {isLoading ? (
+        {activeTab === 'hes' ? (
+          <HesReadingManager />
+        ) : isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
             <RefreshCw className="w-10 h-10 animate-spin mb-4" />
             <p>Đang tải dữ liệu...</p>
