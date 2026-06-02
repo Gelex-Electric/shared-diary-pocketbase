@@ -425,19 +425,23 @@ export default function SummaryDashboard() {
   }, [accountFilteredRecords, visibleYears]);
 
   // Construct baseline list of bills for the table:
-  // Normal bills matching selected month, PLUS all unpaid bills of the account across all months.
+  // STRICTLY chỉ hóa đơn thuộc đúng tháng được chọn (kể cả khách chưa thanh toán).
+  // Công nợ các tháng khác KHÔNG còn hiển thị chung vào tháng đang chọn nữa.
   const baselineBillsForTable = useMemo(() => {
-    return accountFilteredRecords.filter(r => {
-      // 1. If it belongs to selectedMonth, keep it.
-      if (selectedMonth === 'all' || r.thangNam === selectedMonth) {
-        return true;
+    if (selectedMonth === 'all') return accountFilteredRecords;
+    return accountFilteredRecords.filter(r => r.thangNam === selectedMonth);
+  }, [accountFilteredRecords, selectedMonth]);
+
+  // Đếm số khách còn nợ ở CÁC THÁNG KHÁC (không tính tháng đang chọn) — dùng cho thông báo floating.
+  const otherMonthsUnpaidCount = useMemo(() => {
+    if (selectedMonth === 'all') return 0;
+    const set = new Set<string>();
+    accountFilteredRecords.forEach(r => {
+      if (!r.daThanhToan && r.thangNam !== selectedMonth) {
+        set.add(r.maKH);
       }
-      // 2. If it is unpaid, keep it anyway ("bất kể có cùng tháng công nợ hay không")
-      if (!r.daThanhToan) {
-        return true;
-      }
-      return false;
     });
+    return set.size;
   }, [accountFilteredRecords, selectedMonth]);
 
   // Dynamic Top 2 customers of selected month for default charts selection
@@ -591,6 +595,11 @@ export default function SummaryDashboard() {
             <p className="text-xs font-semibold text-slate-700 mt-1 leading-relaxed">
               Còn <span className="text-rose-600 font-extrabold font-mono text-sm">{overallUnpaidKpis.unpaidCustomers}</span> doanh nghiệp chưa thanh toán tiền điện.
             </p>
+            {otherMonthsUnpaidCount > 0 && (
+              <p className="text-[11px] font-semibold text-rose-500 mt-1 leading-relaxed">
+                Trong đó <span className="font-extrabold font-mono">{otherMonthsUnpaidCount}</span> khách còn nợ ở các tháng khác.
+              </p>
+            )}
             <p className="text-[10px] text-slate-400 mt-1.5 font-semibold flex items-center gap-0.5">
               Cuộn xuống danh sách chi tiết ↓
             </p>
