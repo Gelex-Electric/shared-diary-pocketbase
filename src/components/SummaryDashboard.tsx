@@ -25,6 +25,7 @@ import {
   Building2, 
   ChevronLeft, 
   ChevronRight,
+  ChevronDown,
   FileSpreadsheet,
   HelpCircle
 } from 'lucide-react';
@@ -49,8 +50,10 @@ interface BillRecord {
 }
 
 interface CustomerSummary {
+  id: string;
   maKH: string;
   tenKH: string;
+  thangNam: string;
   totalSanLuong: number;
   totalDoanhThu: number;
   totalSauThue: number;
@@ -58,6 +61,8 @@ interface CustomerSummary {
   paymentDates: string[];
   readingDates: string[];
   bills: BillRecord[];
+  latestReadingDate: string;
+  latestPaymentDate: string;
 }
 
 // Simple robust CSV row parser that respects quotes
@@ -107,6 +112,16 @@ const formatChartLabel = (value: any) => {
   return new Intl.NumberFormat('vi-VN').format(num);
 };
 
+const parseDateString = (dateStr?: string): number => {
+  if (!dateStr || dateStr.trim() === '') return 0;
+  const parts = dateStr.trim().split('/');
+  if (parts.length < 3) return 0;
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const year = parseInt(parts[2], 10);
+  return new Date(year, month, day).getTime();
+};
+
 const ACCOUNT_MAP: Record<string, string> = {
   'all':   'Tất cả tài khoản (KCN)',
   'KCNTH': 'KCN Tiền Hải (KCNTH)',
@@ -149,6 +164,7 @@ export default function SummaryDashboard() {
 
   // State to filter visible years in load charts
   const [visibleYears, setVisibleYears] = useState<number[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   // 1. Process Raw CSV
   const allRecords = useMemo(() => {
@@ -315,20 +331,25 @@ export default function SummaryDashboard() {
     const map: Record<string, CustomerSummary> = {};
 
     filteredRecords.forEach(r => {
-      if (!map[r.maKH]) {
-        map[r.maKH] = {
+      const key = `${r.maKH}_${r.thangNam}`;
+      if (!map[key]) {
+        map[key] = {
+          id: key,
           maKH: r.maKH,
           tenKH: r.tenKH,
+          thangNam: r.thangNam,
           totalSanLuong: 0,
           totalDoanhThu: 0,
           totalSauThue: 0,
           isPaid: true,
           paymentDates: [],
           readingDates: [],
-          bills: []
+          bills: [],
+          latestReadingDate: '',
+          latestPaymentDate: ''
         };
       }
-      const item = map[r.maKH];
+      const item = map[key];
       item.totalSanLuong += r.sanLuong;
       item.totalDoanhThu += r.doanhThu;
       item.totalSauThue += r.sauThue;
@@ -348,12 +369,36 @@ export default function SummaryDashboard() {
       }
     });
 
+    // Calculate dates from the bill with the newest indexes reading date
+    Object.values(map).forEach(item => {
+      if (item.bills.length > 0) {
+        let latestBill = item.bills[0];
+        let latestTime = parseDateString(latestBill.ngayChotChiSo || latestBill.ngayXuat);
+
+        for (let i = 1; i < item.bills.length; i++) {
+          const b = item.bills[i];
+          const bTime = parseDateString(b.ngayChotChiSo || b.ngayXuat);
+          if (bTime > latestTime) {
+            latestTime = bTime;
+            latestBill = b;
+          }
+        }
+        item.latestReadingDate = latestBill.ngayChotChiSo || latestBill.ngayXuat || '—';
+        item.latestPaymentDate = latestBill.ngayThanhToan || '—';
+      } else {
+        item.latestReadingDate = '—';
+        item.latestPaymentDate = '—';
+      }
+    });
+
     return map;
   }, [filteredRecords]);
 
   const customerList = useMemo(() => {
     return (Object.values(customerSummaryMap) as CustomerSummary[]).sort((a, b: CustomerSummary) => {
-      return a.maKH.localeCompare(b.maKH, 'vi', { numeric: true });
+      const cmp = a.maKH.localeCompare(b.maKH, 'vi', { numeric: true });
+      if (cmp !== 0) return cmp;
+      return b.thangNam.localeCompare(a.thangNam, 'vi', { numeric: true });
     });
   }, [customerSummaryMap]);
 
@@ -552,6 +597,13 @@ export default function SummaryDashboard() {
     }
   };
 
+  const toggleGroupExpansion = (id: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
   const isAnyUnpaid = kpis.unpaidCustomers > 0;
 
   // Custom pleasant color list for years
@@ -599,7 +651,7 @@ export default function SummaryDashboard() {
       <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-blue-100 rounded-2xl text-blue-600">
+            <div className="p-2.5 bg-indigo-100 rounded-2xl text-indigo-600">
               <TrendingUp className="w-6 h-6" />
             </div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Báo cáo tổng quan</h1>
@@ -610,8 +662,8 @@ export default function SummaryDashboard() {
           
           {/* Read Only Active Account Badge (instead of Selector) */}
           <div className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs font-semibold">
-            <Building2 className="w-4 h-4 text-blue-600" />
-            <span>Khu vực giám sát: <strong className="text-blue-700">{activeAreaName}</strong></span>
+            <Building2 className="w-4 h-4 text-indigo-600" />
+            <span>Khu vực giám sát: <strong className="text-indigo-700">{activeAreaName}</strong></span>
           </div>
         </div>
       </div>
@@ -623,10 +675,10 @@ export default function SummaryDashboard() {
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4">
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Doanh thu trước thuế</span>
+                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Doanh thu trước thuế</span>
                 <span className="text-xs font-black text-slate-500 uppercase mt-0.5">Lũy kế hệ thống</span>
               </div>
-              <div className="p-2.5 bg-blue-50 rounded-2xl text-blue-600 group-hover:scale-110 transition-transform">
+              <div className="p-2.5 bg-indigo-50 rounded-2xl text-indigo-600 group-hover:scale-110 transition-transform">
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
@@ -635,7 +687,7 @@ export default function SummaryDashboard() {
                 {formatVND(allTimeRevenue)}
               </h3>
               <p className="text-[11px] text-slate-400 mt-2 font-bold flex items-center gap-1 font-sans">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
                 <span>Tổng tất cả chu kỳ</span>
               </p>
             </div>
@@ -715,7 +767,7 @@ export default function SummaryDashboard() {
                     onClick={() => toggleYear(yr)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all duration-250 cursor-pointer ${
                       isActive 
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+                        ? 'bg-indigo-600 text-white border-blue-600 shadow-sm' 
                         : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50 hover:text-slate-600'
                     }`}
                   >
@@ -777,10 +829,10 @@ export default function SummaryDashboard() {
               {/* Selector is styled beautifully with blue theme when selected */}
               <div className={`border rounded-2xl p-3 flex items-center gap-3 transition-colors ${
                 cust1 
-                  ? 'bg-blue-50/20 border-blue-500 ring-4 ring-blue-100' 
+                  ? 'bg-indigo-50/20 border-indigo-500 ring-4 ring-indigo-100' 
                   : 'bg-slate-50 border-slate-200 hover:border-slate-300'
               }`}>
-                <Building2 className={`w-5 h-5 shrink-0 ${cust1 ? 'text-blue-500' : 'text-slate-400'}`} />
+                <Building2 className={`w-5 h-5 shrink-0 ${cust1 ? 'text-indigo-500' : 'text-slate-400'}`} />
                 <div className="flex-1 min-w-0">
                   <select
                     value={cust1}
@@ -849,10 +901,10 @@ export default function SummaryDashboard() {
               {/* Selector is styled beautifully with blue theme when selected */}
               <div className={`border rounded-2xl p-3 flex items-center gap-3 transition-colors ${
                 cust2 
-                  ? 'bg-blue-50/20 border-blue-500 ring-4 ring-blue-100' 
+                  ? 'bg-indigo-50/20 border-indigo-500 ring-4 ring-indigo-100' 
                   : 'bg-slate-50 border-slate-200 hover:border-slate-300'
               }`}>
-                <Building2 className={`w-5 h-5 shrink-0 ${cust2 ? 'text-blue-500' : 'text-slate-400'}`} />
+                <Building2 className={`w-5 h-5 shrink-0 ${cust2 ? 'text-indigo-500' : 'text-slate-400'}`} />
                 <div className="flex-1 min-w-0">
                   <select
                     value={cust2}
@@ -930,13 +982,13 @@ export default function SummaryDashboard() {
                 placeholder="Tìm Mã KH, tên công ty..."
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-xl text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 w-full sm:w-[240px]"
+                className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-xl text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full sm:w-[240px]"
               />
             </div>
 
             {/* Month Filter Selector moved down here */}
             <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm min-w-[170px]">
-              <Calendar className="w-4 h-4 text-blue-500 shrink-0" />
+              <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <select 
                   value={selectedMonth}
@@ -961,7 +1013,7 @@ export default function SummaryDashboard() {
               </button>
               <button 
                 onClick={() => { setPaymentFilter('paid'); setCurrentPage(1); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'paid' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-blue-600'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'paid' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-indigo-600'}`}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-current" /> Đã xong
               </button>
@@ -990,48 +1042,115 @@ export default function SummaryDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedCustomers.map((c) => (
-                <tr
-                  key={c.maKH}
-                  className={`transition-colors text-slate-700 text-sm hover:bg-slate-50/50 ${
-                    !c.isPaid
-                      ? 'bg-rose-50/70 border-l-4 border-l-rose-500 text-rose-950 font-semibold'
-                      : ''
-                  }`}
-                >
-                  <td className="py-4 px-4 font-mono font-bold text-xs text-slate-500">
-                    {c.maKH}
-                  </td>
-                  <td className="py-4 px-4 font-semibold text-slate-800 whitespace-normal break-words leading-snug">
-                    {c.tenKH}
-                  </td>
-                  <td className="py-4 px-4 text-center font-mono text-xs text-slate-500">
-                    {c.readingDates.length > 0 ? c.readingDates.join(', ') : '—'}
-                  </td>
-                  <td className="py-4 px-4 text-center font-mono text-xs text-slate-500">
-                    {c.paymentDates.length > 0 ? c.paymentDates.join(', ') : '—'}
-                  </td>
-                  <td className="py-4 px-4 text-right font-mono font-bold text-xs text-amber-600">
-                    {formatKWh(c.totalSanLuong)}
-                  </td>
-                  <td className="py-4 px-4 text-right font-mono text-slate-800 font-bold text-xs">
-                    {formatVND(c.totalSauThue)}
-                  </td>
-                  <td className="py-4 px-4 text-center">
-                    {c.isPaid ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-100">
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                        Đã thanh toán
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-100">
-                        <XCircle className="w-3.5 h-3.5 shrink-0 animate-pulse" />
-                        Chưa thanh toán
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {paginatedCustomers.map((c) => {
+                const isExpanded = !!expandedGroups[c.id];
+                return (
+                  <React.Fragment key={c.id}>
+                    <tr
+                      onClick={() => toggleGroupExpansion(c.id)}
+                      className={`transition-colors text-slate-700 text-sm hover:bg-slate-50/80 cursor-pointer ${
+                        !c.isPaid
+                          ? 'bg-rose-50/70 border-l-4 border-l-rose-500 text-rose-950 font-semibold md:hover:bg-rose-100/30'
+                          : 'bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      <td className="py-4 px-4 font-mono font-bold text-[11px] text-slate-500">
+                        <div className="flex items-center gap-1.5">
+                          {isExpanded ? (
+                            <ChevronDown className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          )}
+                          <span className="truncate">{c.maKH}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 font-semibold text-slate-800 whitespace-normal break-words leading-snug">
+                        <div className="flex flex-col">
+                          <span className="text-slate-800 hover:text-indigo-600 transition-colors">{c.tenKH}</span>
+                          <span className="text-[10px] font-bold text-indigo-600 mt-1 uppercase tracking-wider bg-indigo-50/70 px-1.5 py-0.5 rounded-md w-fit">
+                            Tháng {c.thangNam}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-center font-mono text-xs text-slate-500">
+                        <div>{c.latestReadingDate}</div>
+                        <div className="text-[9px] font-bold text-amber-600/80 mt-0.5 uppercase tracking-wide font-sans">(Mới nhất)</div>
+                      </td>
+                      <td className="py-4 px-4 text-center font-mono text-xs">
+                        {c.latestPaymentDate !== '—' && c.latestPaymentDate ? (
+                          <span className="text-emerald-600 font-bold">{c.latestPaymentDate}</span>
+                        ) : (
+                          <span className="text-rose-500/80 font-semibold text-[11px] bg-rose-50/30 px-1.5 py-0.5 rounded border border-rose-100/45">Chưa xong</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 text-right font-mono font-bold text-xs text-amber-600">
+                        {formatKWh(c.totalSanLuong)}
+                      </td>
+                      <td className="py-4 px-4 text-right font-mono text-slate-800 font-bold text-xs">
+                        {formatVND(c.totalSauThue)}
+                      </td>
+                      <td className="py-4 px-4 text-center">
+                        {c.isPaid ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-100">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            Đã thanh toán
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-100">
+                            <XCircle className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+                            Còn nợ ({c.bills.filter(b => !b.daThanhToan).length} kỳ)
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Expandable Pivot Child Rows for payment cycles */}
+                    {isExpanded && c.bills.map((bill, index) => (
+                      <tr 
+                        key={`${c.id}_bill_${index}`}
+                        className="bg-slate-50/60 hover:bg-slate-100/60 transition-colors border-l-[3px] border-l-indigo-400 text-slate-600 text-xs"
+                      >
+                        <td className="py-3 px-4 font-mono font-bold text-slate-400 pl-8">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                            <span>Kỳ {bill.ky}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-slate-500 italic pl-6 whitespace-normal break-words leading-relaxed text-[11px]">
+                          Hoá đơn ngày {bill.ngayXuat}
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono text-[11px] text-slate-500">
+                          {bill.ngayChotChiSo || bill.ngayXuat || '—'}
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono text-[11px]">
+                          {bill.daThanhToan ? (
+                            <span className="text-emerald-600 font-bold">{bill.ngayThanhToan || '—'}</span>
+                          ) : (
+                            <span className="text-rose-400 font-medium">Chưa thanh toán</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-amber-600/80 font-bold text-[11px]">
+                          {formatKWh(bill.sanLuong)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-slate-600 font-bold text-[11px]">
+                          {formatVND(bill.sauThue)}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {bill.daThanhToan ? (
+                            <span className="inline-flex items-center px-2 py-0.5 bg-emerald-50/50 text-emerald-600 text-[10px] font-bold rounded">
+                              Đã xong
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 bg-rose-50/50 text-rose-600 text-[10px] font-bold rounded animate-pulse">
+                              Còn nợ
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
               {displayCustomers.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-16 text-center text-slate-400">
