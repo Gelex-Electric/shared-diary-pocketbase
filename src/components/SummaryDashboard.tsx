@@ -622,25 +622,25 @@ export default function SummaryDashboard() {
               if (tableEl) tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 50);
           }}
-          className="md:fixed absolute top-4 md:top-24 right-4 md:right-10 z-[100] max-w-sm bg-rose-50 border-2 border-rose-400 rounded-2xl p-4 shadow-xl shadow-rose-100 cursor-pointer hover:shadow-2xl hover:border-rose-500 transition-all duration-300 flex items-start gap-4 mx-4 md:mx-0 backdrop-blur-md"
+          className="md:fixed absolute top-4 md:top-24 right-4 md:right-10 z-[100] max-w-sm vl-alert vl-alert-danger rounded-lg p-4 cursor-pointer hover:opacity-90 transition-all duration-300 flex items-start gap-4 mx-4 md:mx-0"
         >
-          <div className="p-2 bg-rose-100 text-rose-600 rounded-xl shrink-0">
+          <div className="p-2 bg-white/20 text-white rounded shrink-0">
             <XCircle className="w-5.5 h-5.5 animate-pulse" />
           </div>
           <div className="text-left">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black text-rose-800 uppercase tracking-widest">Cảnh báo công nợ</span>
-              <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[8px] font-black rounded uppercase animate-pulse">Lưu ý</span>
+              <span className="text-[10px] font-black text-white uppercase tracking-widest">Cảnh báo công nợ</span>
+              <span className="px-1.5 py-0.5 bg-white/20 text-white text-[8px] font-black rounded uppercase animate-pulse">Lưu ý</span>
             </div>
-            <p className="text-xs font-semibold text-slate-700 mt-1 leading-relaxed">
-              Còn <span className="text-rose-600 font-extrabold font-mono text-sm">{overallUnpaidKpis.unpaidCustomers}</span> doanh nghiệp chưa thanh toán tiền điện.
+            <p className="text-xs font-semibold text-white mt-1 leading-relaxed">
+              Còn <span className="text-white font-extrabold font-mono text-sm">{overallUnpaidKpis.unpaidCustomers}</span> doanh nghiệp chưa thanh toán tiền điện.
             </p>
             {otherMonthsUnpaidCount > 0 && (
-              <p className="text-[11px] font-semibold text-rose-500 mt-1 leading-relaxed">
+              <p className="text-[11px] font-semibold text-white/90 mt-1 leading-relaxed">
                 Trong đó <span className="font-extrabold font-mono">{otherMonthsUnpaidCount}</span> khách còn nợ ở các tháng khác.
               </p>
             )}
-            <p className="text-[10px] text-slate-400 mt-1.5 font-semibold flex items-center gap-0.5">
+            <p className="text-[10px] text-white/70 mt-1.5 font-semibold flex items-center gap-0.5">
               Cuộn xuống danh sách chi tiết ↓
             </p>
           </div>
@@ -648,10 +648,10 @@ export default function SummaryDashboard() {
       )}
 
       {/* Header and Account Badge Panel */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="vl-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-indigo-100 rounded-2xl text-indigo-600">
+            <div className="p-2.5 bg-[#e8f3ff] rounded-2xl text-[#5a8dee]">
               <TrendingUp className="w-6 h-6" />
             </div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Báo cáo tổng quan</h1>
@@ -662,8 +662,8 @@ export default function SummaryDashboard() {
           
           {/* Read Only Active Account Badge (instead of Selector) */}
           <div className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs font-semibold">
-            <Building2 className="w-4 h-4 text-indigo-600" />
-            <span>Khu vực giám sát: <strong className="text-indigo-700">{activeAreaName}</strong></span>
+            <Building2 className="w-4 h-4 text-[#5a8dee]" />
+            <span>Khu vực giám sát: <strong className="text-[#3a6fd4]">{activeAreaName}</strong></span>
           </div>
         </div>
       </div>
@@ -671,14 +671,14 @@ export default function SummaryDashboard() {
       {/* Expanded KPI Cards Grid (2 cards taking 50% width each on larger screens) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Doanh thu lũy kế + Doanh thu các năm chọn - Gộp làm một */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm flex flex-col sm:flex-row justify-between hover:-translate-y-1 transition-all group gap-6">
+        <div className="vl-card p-6 md:p-8 flex flex-col sm:flex-row justify-between hover:-translate-y-1 transition-all group gap-6">
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4">
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Doanh thu trước thuế</span>
+                <span className="text-[10px] font-bold text-[#5a8dee] uppercase tracking-wider">Doanh thu trước thuế</span>
                 <span className="text-xs font-black text-slate-500 uppercase mt-0.5">Lũy kế hệ thống</span>
               </div>
-              <div className="p-2.5 bg-indigo-50 rounded-2xl text-indigo-600 group-hover:scale-110 transition-transform">
+              <div className="p-2.5 bg-[#f4f8ff] rounded-2xl text-[#5a8dee] group-hover:scale-110 transition-transform">
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
@@ -687,7 +687,7 @@ export default function SummaryDashboard() {
                 {formatVND(allTimeRevenue)}
               </h3>
               <p className="text-[11px] text-slate-400 mt-2 font-bold flex items-center gap-1 font-sans">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#5a8dee] animate-pulse" />
                 <span>Tổng tất cả chu kỳ</span>
               </p>
             </div>
@@ -710,7 +710,7 @@ export default function SummaryDashboard() {
         </div>
 
         {/* Sản lượng lũy kế + Sản lượng các năm chọn - Gộp làm một */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm flex flex-col sm:flex-row justify-between hover:-translate-y-1 transition-all group gap-6">
+        <div className="vl-card p-6 md:p-8 flex flex-col sm:flex-row justify-between hover:-translate-y-1 transition-all group gap-6">
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4">
               <div className="flex flex-col">
@@ -749,7 +749,7 @@ export default function SummaryDashboard() {
       </div>
 
       {/* Main Monthly General Chart - DETAILED CHRONOLOGICAL MULTI-YEAR COMPLETION */}
-      <div className="bg-white rounded-[2rem] border border-slate-200 p-6 md:p-8 shadow-sm flex flex-col justify-between min-h-[580px]">
+      <div className="vl-card p-6 md:p-8 flex flex-col justify-between min-h-[580px]">
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
@@ -765,9 +765,9 @@ export default function SummaryDashboard() {
                   <button
                     key={yr}
                     onClick={() => toggleYear(yr)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all duration-250 cursor-pointer ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold border transition-all duration-250 cursor-pointer ${
                       isActive 
-                        ? 'bg-indigo-600 text-white border-blue-600 shadow-sm' 
+                        ? 'bg-[#5a8dee] text-white border-[#5a8dee] shadow-sm'
                         : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50 hover:text-slate-600'
                     }`}
                   >
@@ -821,18 +821,18 @@ export default function SummaryDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
         {/* Customer Chart 1 */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between min-h-[460px]">
+        <div className="vl-card p-6 flex flex-col justify-between min-h-[460px]">
           <div>
             <div className="flex flex-col gap-3 mb-6">
               <label className="block text-[10px] font-black text-slate-400 tracking-wider uppercase font-mono">Biểu đồ phụ tải khách hàng A</label>
               
               {/* Selector is styled beautifully with blue theme when selected */}
-              <div className={`border rounded-2xl p-3 flex items-center gap-3 transition-colors ${
+              <div className={`border rounded p-3 flex items-center gap-3 transition-colors ${
                 cust1 
-                  ? 'bg-indigo-50/20 border-indigo-500 ring-4 ring-indigo-100' 
+                  ? 'bg-[#f4f8ff] border-[#5a8dee] ring-4 ring-[#e8f3ff]'
                   : 'bg-slate-50 border-slate-200 hover:border-slate-300'
               }`}>
-                <Building2 className={`w-5 h-5 shrink-0 ${cust1 ? 'text-indigo-500' : 'text-slate-400'}`} />
+                <Building2 className={`w-5 h-5 shrink-0 ${cust1 ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
                 <div className="flex-1 min-w-0">
                   <select
                     value={cust1}
@@ -893,18 +893,18 @@ export default function SummaryDashboard() {
         </div>
 
         {/* Customer Chart 2 */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between min-h-[460px]">
+        <div className="vl-card p-6 flex flex-col justify-between min-h-[460px]">
           <div>
             <div className="flex flex-col gap-3 mb-6">
               <label className="block text-[10px] font-black text-slate-400 tracking-wider uppercase font-mono">Biểu đồ phụ tải khách hàng B</label>
               
               {/* Selector is styled beautifully with blue theme when selected */}
-              <div className={`border rounded-2xl p-3 flex items-center gap-3 transition-colors ${
+              <div className={`border rounded p-3 flex items-center gap-3 transition-colors ${
                 cust2 
-                  ? 'bg-indigo-50/20 border-indigo-500 ring-4 ring-indigo-100' 
+                  ? 'bg-[#f4f8ff] border-[#5a8dee] ring-4 ring-[#e8f3ff]'
                   : 'bg-slate-50 border-slate-200 hover:border-slate-300'
               }`}>
-                <Building2 className={`w-5 h-5 shrink-0 ${cust2 ? 'text-indigo-500' : 'text-slate-400'}`} />
+                <Building2 className={`w-5 h-5 shrink-0 ${cust2 ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
                 <div className="flex-1 min-w-0">
                   <select
                     value={cust2}
@@ -966,7 +966,7 @@ export default function SummaryDashboard() {
       </div>
 
       {/* Customer Breakdown Grid & Table */}
-      <div id="debt-table-section" className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden scroll-mt-6">
+      <div id="debt-table-section" className="vl-card overflow-hidden scroll-mt-6">
         {/* Table Control Header */}
         <div className="p-6 md:p-8 border-b border-slate-150 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-50/50">
           <div>
@@ -982,13 +982,13 @@ export default function SummaryDashboard() {
                 placeholder="Tìm Mã KH, tên công ty..."
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-xl text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full sm:w-[240px]"
+                className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-[#5a8dee] w-full sm:w-[240px]"
               />
             </div>
 
             {/* Month Filter Selector moved down here */}
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm min-w-[170px]">
-              <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded px-3 py-2 shadow-sm min-w-[170px]">
+              <Calendar className="w-4 h-4 text-[#5a8dee] shrink-0" />
               <div className="flex-1 min-w-0">
                 <select 
                   value={selectedMonth}
@@ -1007,19 +1007,19 @@ export default function SummaryDashboard() {
             <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
               <button 
                 onClick={() => { setPaymentFilter('all'); setCurrentPage(1); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${paymentFilter === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${paymentFilter === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 Tất cả
               </button>
               <button 
                 onClick={() => { setPaymentFilter('paid'); setCurrentPage(1); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'paid' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-indigo-600'}`}
+                className={`px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'paid' ? 'bg-[#5a8dee] text-white shadow-sm' : 'text-slate-400 hover:text-[#5a8dee]'}`}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-current" /> Đã xong
               </button>
               <button 
                 onClick={() => { setPaymentFilter('unpaid'); setCurrentPage(1); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'unpaid' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-400 hover:text-rose-600'}`}
+                className={`px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'unpaid' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-400 hover:text-rose-600'}`}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-current" /> Còn nợ
               </button>
@@ -1029,9 +1029,9 @@ export default function SummaryDashboard() {
 
         {/* Data Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse table-fixed min-w-[850px]">
+          <table className="vl-table w-full text-left border-collapse table-fixed min-w-[850px]">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="py-4 px-4 w-[130px]">Mã khách hàng</th>
                 <th className="py-4 px-4 w-[28%]">Tên doanh nghiệp</th>
                 <th className="py-4 px-4 w-[14%] text-center">Ngày chốt chỉ số</th>
@@ -1057,7 +1057,7 @@ export default function SummaryDashboard() {
                       <td className="py-4 px-4 font-mono font-bold text-[11px] text-slate-500">
                         <div className="flex items-center gap-1.5">
                           {isExpanded ? (
-                            <ChevronDown className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                            <ChevronDown className="w-3.5 h-3.5 text-[#5a8dee] shrink-0" />
                           ) : (
                             <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           )}
@@ -1066,8 +1066,8 @@ export default function SummaryDashboard() {
                       </td>
                       <td className="py-4 px-4 font-semibold text-slate-800 whitespace-normal break-words leading-snug">
                         <div className="flex flex-col">
-                          <span className="text-slate-800 hover:text-indigo-600 transition-colors">{c.tenKH}</span>
-                          <span className="text-[10px] font-bold text-indigo-600 mt-1 uppercase tracking-wider bg-indigo-50/70 px-1.5 py-0.5 rounded-md w-fit">
+                          <span className="text-slate-800 hover:text-[#5a8dee] transition-colors">{c.tenKH}</span>
+                          <span className="text-[10px] font-bold text-[#5a8dee] mt-1 uppercase tracking-wider bg-[#e8f3ff]/70 px-1.5 py-0.5 rounded-md w-fit">
                             Tháng {c.thangNam}
                           </span>
                         </div>
@@ -1091,12 +1091,12 @@ export default function SummaryDashboard() {
                       </td>
                       <td className="py-4 px-4 text-center">
                         {c.isPaid ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-100">
+                          <span className="vl-badge-success inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded">
                             <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                             Đã thanh toán
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-100">
+                          <span className="vl-badge-danger inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded">
                             <XCircle className="w-3.5 h-3.5 shrink-0 animate-pulse" />
                             Còn nợ ({c.bills.filter(b => !b.daThanhToan).length} kỳ)
                           </span>
@@ -1108,11 +1108,11 @@ export default function SummaryDashboard() {
                     {isExpanded && c.bills.map((bill, index) => (
                       <tr 
                         key={`${c.id}_bill_${index}`}
-                        className="bg-slate-50/60 hover:bg-slate-100/60 transition-colors border-l-[3px] border-l-indigo-400 text-slate-600 text-xs"
+                        className="bg-slate-50/60 hover:bg-slate-100/60 transition-colors border-l-[3px] border-l-[#5a8dee] text-slate-600 text-xs"
                       >
                         <td className="py-3 px-4 font-mono font-bold text-slate-400 pl-8">
                           <div className="flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#5a8dee] shrink-0" />
                             <span>Kỳ {bill.ky}</span>
                           </div>
                         </td>
@@ -1137,11 +1137,11 @@ export default function SummaryDashboard() {
                         </td>
                         <td className="py-3 px-4 text-center">
                           {bill.daThanhToan ? (
-                            <span className="inline-flex items-center px-2 py-0.5 bg-emerald-50/50 text-emerald-600 text-[10px] font-bold rounded">
+                            <span className="vl-badge-success inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded">
                               Đã xong
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 bg-rose-50/50 text-rose-600 text-[10px] font-bold rounded animate-pulse">
+                            <span className="vl-badge-danger inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded animate-pulse">
                               Còn nợ
                             </span>
                           )}
@@ -1176,7 +1176,7 @@ export default function SummaryDashboard() {
               <button 
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="p-2 border border-slate-200 rounded-xl bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                className="p-2 border border-slate-200 rounded bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
                 id="btn_prev_page"
                 aria-label="Trang trước"
               >
@@ -1190,7 +1190,7 @@ export default function SummaryDashboard() {
               <button 
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                className="p-2 border border-slate-200 rounded-xl bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                className="p-2 border border-slate-200 rounded bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
                 id="btn_next_page"
                 aria-label="Trang sau"
               >
