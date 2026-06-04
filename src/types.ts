@@ -91,6 +91,17 @@ export interface NewUpdate {
   updated: string;
 }
 
+export interface DataMetter {
+  id?: string;
+  METER_NO: string;
+  DATE_TIME: string;
+  ACTIVE_KW_INDICATE_TOTAL: string;    // API trả về string "2006.970"
+  ACTIVE_KW_INDICATE_RATE1: string;
+  ACTIVE_KW_INDICATE_RATE2: string;
+  ACTIVE_KW_INDICATE_RATE3: string;
+  REACTIVE_KVAR_INDICATE_TOTAL: string;
+}
+
 export interface HesItem {
   METER_NO: string;
   METER_NAME: string;
