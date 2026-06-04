@@ -18,6 +18,13 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
+      proxy: {
+        '/hes-meter': {
+          target: 'http://14.225.244.63:8899',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/hes-meter/, ''),
+        },
+      },
     },
   };
 });
