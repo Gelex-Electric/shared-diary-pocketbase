@@ -1,1 +1,222 @@
 @import "tailwindcss";
+
+/* =====================================================
+   VOLER DESIGN SYSTEM — CSS Variables & Global Styles
+   ===================================================== */
+
+:root {
+  /* Voler palette */
+  --vl-primary:   #5a8dee;
+  --vl-secondary: #475f7b;
+  --vl-success:   #39da8a;
+  --vl-danger:    #ff5b5c;
+  --vl-warning:   #fdac41;
+  --vl-info:      #00cfdd;
+  --vl-dark:      #222f3e;
+  --vl-light:     #a3afbd;
+
+  /* Voler surfaces */
+  --vl-bg:        #f7faff;
+  --vl-sidebar-w: 260px;
+  --vl-card-shadow: -8px 12px 18px 0 rgba(25, 42, 70, 0.13);
+  --vl-stat-shadow: 1px 2px 5px rgba(47, 170, 244, 0.5);
+  --vl-sidebar-active-bg: #e8f3ff;
+  --vl-sidebar-active-accent: rgba(46, 170, 244, 0.55);
+}
+
+/* Page background */
+body { background-color: var(--vl-bg); }
+
+/* ---- Voler Card ---- */
+.vl-card {
+  background: #fff;
+  border-radius: 0.5rem;
+  box-shadow: var(--vl-card-shadow);
+  margin-bottom: 1.5rem;
+  border: none;
+}
+
+/* ---- Stat Card (gradient blue) ---- */
+.vl-stat-card {
+  background: linear-gradient(180deg, #25a6f1 0%, #54b9ff 100%);
+  box-shadow: var(--vl-stat-shadow);
+  border-radius: 0.5rem;
+  color: #fff;
+}
+
+/* ---- Sidebar item active left accent ---- */
+.vl-sidebar-active {
+  background-color: var(--vl-sidebar-active-bg) !important;
+  position: relative;
+}
+.vl-sidebar-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background-color: var(--vl-sidebar-active-accent);
+  border-radius: 0 2px 2px 0;
+}
+
+/* ---- Smooth sidebar transition ---- */
+.vl-sidebar-link {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.vl-sidebar-link:hover {
+  background-color: #f4f8ff;
+}
+
+/* ---- Table Voler header ---- */
+.vl-table thead th {
+  border-bottom: 2px solid #dde3ec;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vl-secondary);
+  font-weight: 700;
+  padding: 0.85rem 1rem;
+}
+.vl-table tbody td {
+  vertical-align: middle;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+.vl-table tbody tr:hover {
+  background-color: #f4f8ff;
+}
+
+/* ---- Voler badge/tag ---- */
+.vl-badge-success { background-color: rgba(57,218,138,.15); color: #1da566; }
+.vl-badge-danger  { background-color: rgba(255,91,92,.12);  color: #d93434; }
+.vl-badge-primary { background-color: rgba(90,141,238,.12); color: #2e5fc2; }
+
+/* ---- Voler nav-tabs ---- */
+.vl-nav-tabs .vl-nav-link {
+  color: #475f7b;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.6rem 1.25rem;
+  border: none;
+  background: none;
+  position: relative;
+}
+.vl-nav-tabs .vl-nav-link.active {
+  color: var(--vl-primary);
+}
+.vl-nav-tabs .vl-nav-link.active::after {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background-color: var(--vl-primary);
+  box-shadow: 0 2px 5px rgba(90,141,238,.5);
+}
+
+/* ---- Voler Alert ---- */
+.vl-alert {
+  border: none;
+  border-radius: 0.4rem;
+  padding: 0.75rem 1rem;
+}
+.vl-alert p { margin-bottom: 0; }
+.vl-alert-primary { background-color: #029eff; color: #fff; box-shadow: 1px 2px 9px rgba(2,158,255,.3); }
+.vl-alert-success { background-color: #39da8a; color: #fff; box-shadow: 1px 2px 9px rgba(57,218,138,.3); }
+.vl-alert-warning { background-color: #fdd347; color: #fff; box-shadow: 1px 2px 9px rgba(253,211,71,.3); }
+.vl-alert-danger  { background-color: #f55260; color: #fff; box-shadow: 1px 2px 9px rgba(245,82,96,.3); }
+.vl-alert-light-primary { background-color: #e2ecff; color: #5a8dee; }
+.vl-alert-light-success { background-color: #d2ffe8; color: #1da566; }
+.vl-alert-light-warning { background-color: #ffeed9; color: #b07300; }
+.vl-alert-light-danger  { background-color: #ffdede; color: #d93434; }
+
+/* ---- Voler warning badge (amber) ---- */
+.vl-badge-warning { background-color: rgba(253,172,65,.15); color: #a05f00; }
+.vl-badge-info    { background-color: rgba(0,207,221,.12);   color: #007a85; }
+
+/* ---- Voler buttons ---- */
+.vl-btn {
+  border: none;
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.35rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.vl-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.vl-btn:hover:not(:disabled) { opacity: 0.88; }
+
+.vl-btn-primary {
+  background-color: var(--vl-primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(90,141,238,.35);
+}
+.vl-btn-success {
+  background-color: var(--vl-success);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(57,218,138,.35);
+}
+.vl-btn-danger {
+  background-color: var(--vl-danger);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(255,91,92,.35);
+}
+.vl-btn-warning {
+  background-color: var(--vl-warning);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(253,172,65,.35);
+}
+.vl-btn-secondary {
+  background-color: var(--vl-secondary);
+  color: #fff;
+}
+.vl-btn-sm { padding: 0.3rem 0.8rem; font-size: 0.8rem; }
+.vl-btn-lg { padding: 0.7rem 1.8rem; font-size: 1rem; }
+
+.vl-btn-outline-primary {
+  background-color: transparent;
+  color: var(--vl-primary);
+  border: 1px solid var(--vl-primary);
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.35rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.vl-btn-outline-primary:hover { background-color: var(--vl-primary); color: #fff; }
+
+/* ---- Page title ---- */
+.vl-page-title h2 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--vl-dark);
+}
+.vl-page-title p {
+  font-size: 0.875rem;
+  color: var(--vl-light);
+  margin-top: 0.15rem;
+}
+
+/* ---- Section title in sidebar ---- */
+.vl-section-title {
+  padding: 1.25rem 1.5rem 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #aab3be;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+/* ---- Scrollbar (subtle) ---- */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d9e6; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #a3afbd; }
