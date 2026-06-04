@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { pb } from '../lib/pocketbase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, User, Lock, Eye, EyeOff, AlertCircle, LogIn } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, AlertCircle, Zap } from 'lucide-react';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -32,127 +32,117 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center p-4">
-      {/* Main card */}
+    <div
+      className="min-h-screen flex items-start justify-center pt-20 px-4 pb-10"
+      style={{
+        background: '#f7faff',
+      }}
+    >
       <motion.div
-        initial={{ opacity: 0, y: 24, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-md"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        className="w-full max-w-[420px]"
       >
-        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/80 p-8 sm:p-10 border border-slate-100">
+        {/* Card */}
+        <div
+          className="bg-white rounded-xl pt-8 pb-6 px-8"
+          style={{ boxShadow: '-8px 12px 18px 0 rgba(25,42,70,.13)' }}
+        >
           {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.5 }}
-            className="text-center mb-8"
-          >
-            <div className="flex justify-center mb-5">
+          <div className="text-center mb-7">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4" style={{ background: 'linear-gradient(135deg,#5a8dee,#3a6bd4)' }}>
+              <Zap className="w-7 h-7 text-white" />
+            </div>
+            <h3 className="text-xl font-bold" style={{ color: '#222f3e' }}>Đăng nhập</h3>
+            <p className="text-sm mt-1" style={{ color: '#a3afbd' }}>Ứng dụng quản lý vận hành GETC</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Username */}
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(35,28,99,.7)' }}>
+                Tên đăng nhập
+              </label>
               <div className="relative">
-                <div
-                  className="absolute inset-0 rounded-2xl blur-xl opacity-60"
-                  style={{ background: 'linear-gradient(135deg, #3b82f6, #06b6d4)' }}
-                />
-                <div
-                  className="relative p-4 rounded-2xl"
-                  style={{ background: 'linear-gradient(135deg, #1d4ed8, #0891b2)' }}
-                >
-                  <Zap className="w-10 h-10 text-white" strokeWidth={2} />
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <User className="w-4 h-4" style={{ color: '#a3afbd' }} />
                 </div>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={e => { setUsername(e.target.value); setError(''); }}
+                  required
+                  placeholder="Nhập tên đăng nhập"
+                  className="w-full pl-9 pr-4 py-2.5 rounded-md text-sm outline-none transition-all"
+                  style={{
+                    border: '1px solid #dfe3e7',
+                    color: '#555252',
+                    background: '#fff',
+                  }}
+                  onFocus={e => {
+                    e.currentTarget.style.borderColor = '#5a8dee';
+                    e.currentTarget.style.boxShadow = '0 3px 8px 0 rgba(0,0,0,.1)';
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.borderColor = '#dfe3e7';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-              Ứng dụng quản lý vận hành
-            </h1>
-            <p className="text-slate-500 mt-1.5 text-sm">
-              Quản lý ca trực, nhật ký, chỉ số & khách hàng điện
-            </p>
-          </motion.div>
 
-          {/* Form */}
-          <motion.form
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25, duration: 0.5 }}
-            onSubmit={handleLogin}
-            className="space-y-4"
-          >
-            {/* Username field */}
-            <div className="group relative">
-              <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                <User className="w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+            {/* Password */}
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(35,28,99,.7)' }}>
+                Mật khẩu
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <Lock className="w-4 h-4" style={{ color: '#a3afbd' }} />
+                </div>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError(''); }}
+                  required
+                  placeholder="Nhập mật khẩu"
+                  className="w-full pl-9 pr-10 py-2.5 rounded-md text-sm outline-none transition-all"
+                  style={{
+                    border: '1px solid #dfe3e7',
+                    color: '#555252',
+                    background: '#fff',
+                  }}
+                  onFocus={e => {
+                    e.currentTarget.style.borderColor = '#5a8dee';
+                    e.currentTarget.style.boxShadow = '0 3px 8px 0 rgba(0,0,0,.1)';
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.borderColor = '#dfe3e7';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute inset-y-0 right-3 flex items-center transition-colors"
+                  style={{ color: '#a3afbd' }}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-              <input
-                type="text"
-                placeholder="Tên đăng nhập"
-                required
-                value={username}
-                onChange={(e) => { setUsername(e.target.value); setError(''); }}
-                className="w-full pl-11 pr-4 py-3.5 rounded-xl text-slate-800 placeholder-slate-400 text-sm transition-all outline-none"
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.border = '1px solid rgba(59, 130, 246, 0.6)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.08)';
-                  e.currentTarget.style.background = '#fff';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.border = '1px solid #e2e8f0';
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.background = '#f8fafc';
-                }}
-              />
             </div>
 
-            {/* Password field */}
-            <div className="group relative">
-              <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                <Lock className="w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-              </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Mật khẩu"
-                required
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                className="w-full pl-11 pr-12 py-3.5 rounded-xl text-slate-800 placeholder-slate-400 text-sm transition-all outline-none"
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.border = '1px solid rgba(59, 130, 246, 0.6)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.08)';
-                  e.currentTarget.style.background = '#fff';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.border = '1px solid #e2e8f0';
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.background = '#f8fafc';
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-slate-700 transition-colors"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-
-            {/* Error message */}
+            {/* Error */}
             <AnimatePresence>
               {error && (
                 <motion.div
-                  initial={{ opacity: 0, y: -6, height: 0 }}
+                  initial={{ opacity: 0, y: -4, height: 0 }}
                   animate={{ opacity: 1, y: 0, height: 'auto' }}
-                  exit={{ opacity: 0, y: -6, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-red-600"
-                  style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                  exit={{ opacity: 0, y: -4, height: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium"
+                  style={{ background: 'rgba(255,91,92,.1)', color: '#ff5b5c', border: '1px solid rgba(255,91,92,.2)' }}
                 >
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   {error}
@@ -160,56 +150,46 @@ export default function Login() {
               )}
             </AnimatePresence>
 
-            {/* Submit button */}
-            <motion.button
+            {/* Submit */}
+            <button
               type="submit"
               disabled={isLoading}
-              whileHover={{ scale: isLoading ? 1 : 1.01 }}
-              whileTap={{ scale: isLoading ? 1 : 0.98 }}
-              className="relative w-full py-3.5 rounded-xl font-semibold text-white text-sm overflow-hidden transition-opacity disabled:opacity-60 mt-2"
+              className="w-full py-2.5 rounded-md font-semibold text-sm text-white transition-opacity disabled:opacity-60 flex items-center justify-center gap-2 mt-1"
               style={{
-                background: 'linear-gradient(135deg, #1d4ed8 0%, #0891b2 100%)',
-                boxShadow: '0 4px 24px rgba(29, 78, 216, 0.4)',
+                background: '#5a8dee',
+                boxShadow: '0 2px 8px rgba(90,141,238,.4)',
               }}
+              onMouseEnter={e => { if (!isLoading) (e.currentTarget as HTMLButtonElement).style.opacity = '0.88'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
             >
-              {/* Shimmer effect */}
-              {!isLoading && (
-                <motion.div
-                  className="absolute inset-0 opacity-0 hover:opacity-100"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%, rgba(255,255,255,0.05) 100%)',
-                  }}
-                />
+              {isLoading ? (
+                <>
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
+                    className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white"
+                  />
+                  Đang đăng nhập...
+                </>
+              ) : (
+                'Đăng nhập'
               )}
-              <span className="relative flex items-center justify-center gap-2">
-                {isLoading ? (
-                  <>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                      className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white"
-                    />
-                    Đang đăng nhập...
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    Đăng nhập
-                  </>
-                )}
-              </span>
-            </motion.button>
-          </motion.form>
+            </button>
+          </form>
 
-          {/* Footer */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="text-center text-slate-400 text-xs mt-8"
-          >
+          {/* Divider */}
+          <div className="relative my-5">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full" style={{ borderTop: '1px solid #dfe3e7' }} />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-3 text-xs font-medium" style={{ color: '#a3afbd' }}>GETC</span>
+            </div>
+          </div>
+
+          <p className="text-center text-xs" style={{ color: '#a3afbd' }}>
             Chỉ dành cho thành viên nhóm vận hành
-          </motion.p>
+          </p>
         </div>
       </motion.div>
     </div>
