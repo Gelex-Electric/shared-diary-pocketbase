@@ -65,10 +65,10 @@ export default function HandoverManager() {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const shiftBadgeClass = (shift: string) => {
-    if (shift === 'Ca 1') return 'bg-blue-100 text-blue-700 border border-blue-200';
-    if (shift === 'Ca 2') return 'bg-amber-100 text-amber-700 border border-amber-200';
-    if (shift === 'Ca 3') return 'bg-purple-100 text-purple-700 border border-purple-200';
-    return 'bg-slate-100 text-slate-600 border border-slate-200';
+    if (shift === 'Ca 1') return 'vl-badge-primary rounded px-2 py-0.5';
+    if (shift === 'Ca 2') return 'vl-badge-warning rounded px-2 py-0.5';
+    if (shift === 'Ca 3') return 'bg-purple-100 text-purple-700 rounded px-2 py-0.5';
+    return 'vl-badge-primary rounded px-2 py-0.5';
   };
 
   const expandAll = () => setExpandedGroups(new Set(groupedLogs.map(g => g.id)));
@@ -586,24 +586,45 @@ export default function HandoverManager() {
     <div className="space-y-8 relative">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Sổ nhật ký điện tử</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-2xl font-bold text-slate-800">Sổ nhật ký điện tử</h2>
+            {!isLoading && logs.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded shadow-xs">
+                  <Calendar className="w-3.5 h-3.5 text-[#5a8dee]" />
+                  T{filter.month}: {uniqueDaysCount} ngày · {logs.length} ca
+                </span>
+                {([
+                  { key: 'Bình thường', dot: 'bg-emerald-500', label: 'BT' },
+                  { key: 'Sự cố',       dot: 'bg-red-500',     label: 'SC' },
+                  { key: 'Đóng cắt',   dot: 'bg-amber-500',   label: 'ĐC' },
+                  { key: 'Kiểm tra định kỳ', dot: 'bg-blue-500', label: 'KTĐK' },
+                ] as const).filter(({ key }) => typeShiftCounts[key] > 0).map(({ key, dot, label }) => (
+                  <span key={key} className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded shadow-xs">
+                    <span className={`w-2 h-2 rounded-full ${dot}`} />
+                    {label}: {typeShiftCounts[key]}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
           <p className="text-slate-500 text-sm mt-1">Quản lý lịch trực và tình hình vận hành</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <select 
-            value={filter.area} 
+          <select
+            value={filter.area}
             onChange={(e) => setFilter({ ...filter, area: e.target.value })}
-            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            className="bg-white border border-slate-200 rounded px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
           >
             <option value="">Tất cả khu vực</option>
             {effectiveAreas.map(area => (
               <option key={area} value={area}>{area}</option>
             ))}
           </select>
-          <select 
-            value={filter.month} 
+          <select
+            value={filter.month}
             onChange={(e) => setFilter({ ...filter, month: e.target.value })}
-            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            className="bg-white border border-slate-200 rounded px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
           >
             {Array.from({ length: 12 }, (_, i) => {
               const m = (i + 1).toString().padStart(2, '0');
@@ -612,7 +633,7 @@ export default function HandoverManager() {
           </select>
           <button
             onClick={startAddLog}
-            className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+            className="vl-btn vl-btn-primary flex-1 md:flex-none px-6 py-2.5 font-medium text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
           >
             <Plus className="w-5 h-5" />
             Tạo lịch trực
@@ -620,7 +641,7 @@ export default function HandoverManager() {
           <button
             disabled={selectedIds.size === 0 || isExportingPdf}
             onClick={exportMultipleToPDF}
-            className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-medium text-[13px] flex items-center justify-center gap-2 transition-all ${selectedIds.size > 0 && !isExportingPdf ? 'bg-slate-700 hover:bg-slate-800 text-white shadow-lg shadow-slate-700/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+            className={`flex-1 md:flex-none px-6 py-2.5 font-medium text-[13px] flex items-center justify-center gap-2 transition-all ${selectedIds.size > 0 && !isExportingPdf ? 'vl-btn vl-btn-secondary shadow-lg shadow-slate-700/20' : 'bg-slate-100 text-slate-400 rounded cursor-not-allowed'}`}
           >
             {isExportingPdf ? (
               <RefreshCw className="w-5 h-5 animate-spin" />
@@ -648,7 +669,7 @@ export default function HandoverManager() {
                 initial={{ scale: 0.95, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col"
+                className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col"
               >
                 <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <div className="flex items-center gap-4">
@@ -660,7 +681,7 @@ export default function HandoverManager() {
                       <p className="text-slate-500 text-xs mt-0.5">Vui lòng điền đầy đủ thông tin vận hành trong ca</p>
                     </div>
                   </div>
-                  <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
+                  <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded transition-colors">
                     <X className="w-6 h-6 text-slate-400" />
                   </button>
                 </div>
@@ -669,7 +690,7 @@ export default function HandoverManager() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Khu vực</label>
-                      <select value={formData.area} onChange={(e) => setFormData({ ...formData, area: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500">
+                      <select value={formData.area} onChange={(e) => setFormData({ ...formData, area: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]">
                         {effectiveAreas.map(area => <option key={area} value={area}>{area}</option>)}
                       </select>
                     </div>
@@ -712,7 +733,7 @@ export default function HandoverManager() {
                             endDate: newEndDate
                           });
                         }} 
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
                       >
                         <option value="Ca 1">Ca 1 (06:00 - 14:00)</option>
                         <option value="Ca 2">Ca 2 (14:00 - 22:00)</option>
@@ -739,13 +760,13 @@ export default function HandoverManager() {
                             }
                             setFormData({ ...formData, startDate: newStartDate, endDate: newEndDate });
                           }} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500" 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
                         />
                         <input 
                           type="time" 
                           value={formData.startTime} 
                           onChange={(e) => setFormData({ ...formData, startTime: e.target.value })} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500" 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
                         />
                       </div>
                     </div>
@@ -757,13 +778,13 @@ export default function HandoverManager() {
                           type="date" 
                           value={formData.endDate} 
                           onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500" 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
                         />
                         <input 
                           type="time" 
                           value={formData.endTime} 
                           onChange={(e) => setFormData({ ...formData, endTime: e.target.value })} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500" 
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
                         />
                       </div>
                     </div>
@@ -808,7 +829,7 @@ export default function HandoverManager() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-6">
+                  <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 space-y-6">
                     <div className="flex items-center justify-between">
                       <h4 className="font-bold text-slate-800 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Nhân sự trực</h4>
                       <button onClick={handleAutoAssign} className="text-xs font-bold text-blue-600 bg-white border border-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">Tự động phân ca</button>
@@ -816,19 +837,19 @@ export default function HandoverManager() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div className="space-y-3">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trực đội QLVH</div>
-                        <select value={formData.main_duty} onChange={(e) => setFormData({ ...formData, main_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <select value={formData.main_duty} onChange={(e) => setFormData({ ...formData, main_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee]">
                           <option value="">Chọn trực chính</option>
                           {staffList.map(s => <option key={s.id} value={s.Name}>{s.Name}</option>)}
                         </select>
-                        <select value={formData.sub_duty} onChange={(e) => setFormData({ ...formData, sub_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <select value={formData.sub_duty} onChange={(e) => setFormData({ ...formData, sub_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee]">
                           <option value="">Chọn trực phụ</option>
                           {staffList.map(s => <option key={s.id} value={s.Name}>{s.Name}</option>)}
                         </select>
                       </div>
                       <div className="space-y-3">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trực điều độ điện lực</div>
-                        <input type="text" placeholder="Trực chính điện lực" value={formData.main_power} onChange={(e) => setFormData({ ...formData, main_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                        <input type="text" placeholder="Trực phụ điện lực" value={formData.sub_power} onChange={(e) => setFormData({ ...formData, sub_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="text" placeholder="Trực chính điện lực" value={formData.main_power} onChange={(e) => setFormData({ ...formData, main_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee]" />
+                        <input type="text" placeholder="Trực phụ điện lực" value={formData.sub_power} onChange={(e) => setFormData({ ...formData, sub_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee]" />
                       </div>
                     </div>
                   </div>
@@ -843,7 +864,7 @@ export default function HandoverManager() {
                         <Plus className="w-4 h-4" /> Thêm dòng
                       </button>
                     </div>
-                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                    <div className="border border-slate-200 rounded-lg overflow-hidden">
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 border-b border-slate-200">
                           <tr>
@@ -896,15 +917,15 @@ export default function HandoverManager() {
                   <div className="grid grid-cols-1 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Những lưu ý và tồn tại ca sau cần giải quyết</label>
-                      <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]" placeholder="Nhập các lưu ý cho ca sau..." />
+                      <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] min-h-[100px]" placeholder="Nhập các lưu ý cho ca sau..." />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp</label>
-                      <textarea value={formData.equipment} onChange={(e) => setFormData({ ...formData, equipment: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]" placeholder="Tình trạng trang thiết bị..." />
+                      <textarea value={formData.equipment} onChange={(e) => setFormData({ ...formData, equipment: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] min-h-[100px]" placeholder="Tình trạng trang thiết bị..." />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Ý kiến lãnh đạo đơn vị</label>
-                      <textarea value={formData.opinions} onChange={(e) => setFormData({ ...formData, opinions: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]" placeholder="Ý kiến chỉ đạo..." />
+                      <textarea value={formData.opinions} onChange={(e) => setFormData({ ...formData, opinions: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] min-h-[100px]" placeholder="Ý kiến chỉ đạo..." />
                     </div>
                   </div>
                 </div>
@@ -913,14 +934,14 @@ export default function HandoverManager() {
                   <button 
                     onClick={closeModal} 
                     disabled={isSaving}
-                    className="px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-100 transition-all disabled:opacity-50"
+                    className="vl-btn vl-btn-secondary px-8 py-3 font-bold transition-all disabled:opacity-50"
                   >
                     Hủy bỏ
                   </button>
                   <button 
                     onClick={saveLog} 
                     disabled={isSaving}
-                    className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 flex items-center gap-2"
+                    className="vl-btn vl-btn-primary px-8 py-3 font-bold transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 flex items-center gap-2"
                   >
                     {isSaving ? (
                       <>
@@ -952,7 +973,7 @@ export default function HandoverManager() {
                 initial={{ scale: 0.95, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col"
+                className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col"
               >
                 <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <div className="flex items-center gap-4">
@@ -966,7 +987,7 @@ export default function HandoverManager() {
                           const cfg = TYPE_SHIFT_CONFIG[ts] ?? TYPE_SHIFT_CONFIG['Bình thường'];
                           const Icon = cfg.icon;
                           return (
-                            <span key={ts} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
+                            <span key={ts} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
                               <Icon className="w-3.5 h-3.5" />
                               {ts}
                             </span>
@@ -979,8 +1000,8 @@ export default function HandoverManager() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => exportToPDF(selectedLog)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Tải PDF"><Download className="w-6 h-6" /></button>
-                    <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
+                    <button onClick={() => exportToPDF(selectedLog)} className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-all" title="Tải PDF"><Download className="w-6 h-6" /></button>
+                    <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded transition-colors">
                       <X className="w-6 h-6 text-slate-400" />
                     </button>
                   </div>
@@ -988,7 +1009,7 @@ export default function HandoverManager() {
 
                 <div className="flex-1 overflow-y-auto p-8 space-y-6">
                   {/* Row 1: Thời gian giao nhận ca */}
-                  <div className="bg-blue-50/50 p-5 rounded-3xl border border-blue-100">
+                  <div className="bg-blue-50/50 p-5 rounded-lg border border-blue-100">
                     <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2 mb-4"><Clock className="w-4 h-4" /> Thời gian giao nhận ca</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
@@ -1003,7 +1024,7 @@ export default function HandoverManager() {
                   </div>
 
                   {/* Row 2: Nhân viên vận hành */}
-                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200">
+                  <div className="bg-slate-50 p-5 rounded-lg border border-slate-200">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><Users className="w-4 h-4" /> Nhân viên vận hành các đơn vị</h4>
                     <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-2">
@@ -1011,11 +1032,11 @@ export default function HandoverManager() {
                         <div className="flex flex-col gap-1.5">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
-                            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-bold">{selectedLog.main_duty || '—'}</span>
+                            <span className="px-2.5 py-1 vl-badge-primary rounded text-xs font-bold">{selectedLog.main_duty || '—'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
-                            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-semibold">{selectedLog.sub_duty || '—'}</span>
+                            <span className="px-2.5 py-1 vl-badge-primary rounded text-xs font-semibold">{selectedLog.sub_duty || '—'}</span>
                           </div>
                         </div>
                       </div>
@@ -1024,11 +1045,11 @@ export default function HandoverManager() {
                         <div className="flex flex-col gap-1.5">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
-                            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-bold">{selectedLog.main_power || '—'}</span>
+                            <span className="px-2.5 py-1 vl-badge-primary rounded text-xs font-bold">{selectedLog.main_power || '—'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
-                            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-semibold">{selectedLog.sub_power || '—'}</span>
+                            <span className="px-2.5 py-1 vl-badge-primary rounded text-xs font-semibold">{selectedLog.sub_power || '—'}</span>
                           </div>
                         </div>
                       </div>
@@ -1038,8 +1059,8 @@ export default function HandoverManager() {
                   {/* Row 2: Operation situation */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Activity className="w-4 h-4 text-blue-600" /> I. Tình hình vận hành trong ca</h4>
-                    <div className="border border-slate-100 rounded-3xl overflow-hidden bg-slate-50/50">
-                      <table className="w-full text-sm border-collapse">
+                    <div className="border border-slate-100 rounded-lg overflow-hidden bg-slate-50/50">
+                      <table className="vl-table w-full text-sm border-collapse">
                         <thead className="bg-slate-100 border-b border-slate-200">
                           <tr>
                             <th className="px-6 py-3.5 text-left font-bold text-slate-500 w-32">Thời gian</th>
@@ -1066,15 +1087,15 @@ export default function HandoverManager() {
 
                   {/* Row 3: Notes & Equipment & Leader comments */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-2">
+                    <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 space-y-2">
                       <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">1. Những lưu ý ca sau giải quyết</h4>
                       <p className="text-sm text-slate-750 font-medium whitespace-pre-wrap">{selectedLog.notes || 'Không có'}</p>
                     </div>
-                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-2">
+                    <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 space-y-2">
                       <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">2. Trang bị vận hành, vệ sinh</h4>
                       <p className="text-sm text-slate-750 font-medium whitespace-pre-wrap">{selectedLog.equipment || 'Không có'}</p>
                     </div>
-                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-2">
+                    <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 space-y-2">
                       <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">3. Ý kiến lãnh đạo đơn vị</h4>
                       <p className="text-sm text-slate-750 font-medium whitespace-pre-wrap">{selectedLog.opinions || 'Không có'}</p>
                     </div>
@@ -1082,7 +1103,7 @@ export default function HandoverManager() {
                 </div>
 
                 <div className="p-8 border-t border-slate-100 flex justify-end bg-slate-50/50">
-                  <button onClick={closeModal} className="px-8 py-3 bg-slate-800 text-white rounded-2xl font-bold hover:bg-slate-950 transition-all shadow-lg active:scale-95">Đóng cửa sổ</button>
+                  <button onClick={closeModal} className="vl-btn vl-btn-secondary px-8 py-3 font-bold transition-all shadow-lg active:scale-95">Đóng cửa sổ</button>
                 </div>
               </motion.div>
             </div>
@@ -1132,12 +1153,12 @@ export default function HandoverManager() {
         {/* Data List grouped by Date & Industrial park */}
         <div className="space-y-6">
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl shadow-xs text-slate-400 border border-slate-200">
+            <div className="vl-card flex flex-col items-center justify-center p-20 text-slate-400">
               <RefreshCw className="w-10 h-10 animate-spin mb-4" />
               <p className="text-sm">Đang tải nhật ký lịch trực...</p>
             </div>
           ) : logs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl shadow-xs text-slate-400 border border-slate-200">
+            <div className="vl-card flex flex-col items-center justify-center p-20 text-slate-400">
               <Calendar className="w-16 h-16 opacity-20 mb-4" />
               <p className="text-sm font-semibold">Chưa có lịch trực nào được ghi nhận cho bộ lọc hiện tại</p>
             </div>
@@ -1152,17 +1173,22 @@ export default function HandoverManager() {
               };
 
               return (
-                <div key={group.id} className="bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-xs">
-                  {/* Group Header */}
-                  <div className="p-6 flex items-center justify-between bg-slate-50/60 border-b border-slate-100 flex-wrap gap-4">
+                <div key={group.id} className="vl-card overflow-hidden">
+                  {/* Group Header — toàn bộ header có thể click để mở/thu */}
+                  <div
+                    className="p-6 flex items-center justify-between bg-slate-50/60 border-b border-slate-100 flex-wrap gap-4 cursor-pointer select-none"
+                    onClick={() => toggleGroupExpand(group.id)}
+                  >
                     <div className="flex items-center gap-4">
-                      <input 
-                        type="checkbox" 
-                        checked={groupSelected}
-                        onChange={() => toggleGroupSelection(group.records)}
-                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <div className="p-2 bg-white rounded-xl shadow-xs">
+                      {/* Mũi tên ở đầu */}
+                      <motion.div
+                        animate={{ rotate: isExpanded ? 90 : 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-slate-400 shrink-0"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </motion.div>
+                      <div className="p-2 bg-white rounded shadow-xs">
                         <Calendar className="w-5 h-5 text-blue-600" />
                       </div>
                       <div>
@@ -1170,14 +1196,15 @@ export default function HandoverManager() {
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-bold text-[10px] uppercase tracking-wider mt-1">{group.area}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    {/* Checkbox ở cuối — stopPropagation để không trigger toggle card */}
+                    <div className="flex items-center gap-3" onClick={e => e.stopPropagation()}>
                       <span className="text-xs font-bold text-slate-400 uppercase bg-white border border-slate-100 px-3 py-1.5 rounded-lg">{group.records.length} ca trực</span>
-                      <button 
-                        onClick={() => toggleGroupExpand(group.id)}
-                        className="p-2 hover:bg-slate-200 rounded-xl transition-all"
-                      >
-                        {isExpanded ? <ChevronDown className="w-5 h-5 text-slate-400 rotate-180 transition-transform" /> : <ChevronDown className="w-5 h-5 text-slate-400 transition-transform" />}
-                      </button>
+                      <input
+                        type="checkbox"
+                        checked={groupSelected}
+                        onChange={() => toggleGroupSelection(group.records)}
+                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-[#5a8dee]"
+                      />
                     </div>
                   </div>
 
@@ -1204,12 +1231,12 @@ export default function HandoverManager() {
                                 />
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-extrabold ${shiftBadgeClass(log.shift)}`}>{log.shift}</span>
+                                    <span className={`text-xs font-extrabold ${shiftBadgeClass(log.shift)}`}>{log.shift}</span>
                                     {(Array.isArray(log.type_shift) ? log.type_shift : [log.type_shift || 'Bình thường']).map(ts => {
                                       const cfg = TYPE_SHIFT_CONFIG[ts] ?? TYPE_SHIFT_CONFIG['Bình thường'];
                                       const Icon = cfg.icon;
                                       return (
-                                        <span key={ts} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
+                                        <span key={ts} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
                                           <Icon className="w-3.5 h-3.5" />
                                           {ts}
                                         </span>
@@ -1230,22 +1257,22 @@ export default function HandoverManager() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-3 self-end md:self-auto">
-                                <button 
+                                <button
                                   onClick={() => openDetail(log)}
-                                  className="px-4 py-2 hover:bg-slate-100 rounded-xl font-bold text-xs text-slate-600 border border-slate-200 transition-all shadow-xs"
+                                  className="px-4 py-2 hover:bg-slate-100 rounded font-bold text-xs text-slate-600 border border-slate-200 transition-all shadow-xs"
                                 >
                                   Chi tiết
                                 </button>
-                                <button 
+                                <button
                                   onClick={() => startEditLog(log)}
-                                  className="p-2 hover:bg-slate-100 hover:text-blue-600 text-slate-400 rounded-xl border border-slate-100 transition-all shadow-xs"
+                                  className="p-2 hover:bg-slate-100 hover:text-blue-600 text-slate-400 rounded border border-slate-100 transition-all shadow-xs"
                                   title="Chỉnh sửa"
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
-                                <button 
+                                <button
                                   onClick={() => handleDelete(log.id)}
-                                  className="p-2 hover:bg-slate-100 hover:text-red-500 text-slate-400 rounded-xl border border-slate-100 transition-all shadow-xs"
+                                  className="p-2 hover:bg-slate-100 hover:text-red-500 text-slate-400 rounded border border-slate-100 transition-all shadow-xs"
                                   title="Xóa bỏ"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -1264,30 +1291,6 @@ export default function HandoverManager() {
         </div>
       </div>
 
-      {/* Floating stats badge – bottom-right, always visible */}
-      <div className="fixed bottom-6 right-6 z-40 pointer-events-none">
-        <div className="bg-white border border-slate-200 shadow-xl rounded-2xl px-4 py-3 min-w-[220px]">
-          <div className="flex items-center gap-2 mb-2.5">
-            <Calendar className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-            <span className="text-xs font-bold text-slate-700">{uniqueDaysCount} ngày · {logs.length} ca</span>
-            <span className="ml-auto text-[10px] font-bold text-slate-400 uppercase tracking-wider">T{filter.month}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-            {([
-              { key: 'Bình thường', dot: 'bg-emerald-500', label: 'Bình thường' },
-              { key: 'Sự cố',       dot: 'bg-red-500',     label: 'Sự cố' },
-              { key: 'Đóng cắt',   dot: 'bg-amber-500',   label: 'Đóng cắt' },
-              { key: 'Kiểm tra định kỳ', dot: 'bg-blue-500', label: 'Kiểm tra ĐK' },
-            ] as const).map(({ key, dot, label }) => (
-              <div key={key} className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
-                <span className="text-[11px] text-slate-500 font-medium truncate">{label}</span>
-                <span className="ml-auto text-[11px] font-bold text-slate-700">{typeShiftCounts[key]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
