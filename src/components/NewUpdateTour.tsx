@@ -1,269 +1,195 @@
-import React, { useState, useLayoutEffect, useEffect, useCallback } from 'react';
-import { Check, Sparkles } from 'lucide-react';
-import { motion } from 'motion/react';
+import React, { useState } from 'react';
+import { Check, Sparkles, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
-interface CalloutDef {
-  targetId: string;
-  badge: string;
+interface UpdateItem {
+  badge?: string;
   title: string;
-  desc: string;
+  desc?: string;
+  tag?: string;
 }
 
-// Các mục có vị trí rõ ràng trong sidebar — sẽ có mũi tên chỉ đến
-const CALLOUTS: CalloutDef[] = [
+const UPDATES: UpdateItem[] = [
   {
-    targetId: 'nav-journal',
     badge: '1',
-    title: 'Đổi tên → "Hồ sơ vận hành"',
-    desc: 'Trước đây là "Sổ nhật ký điện tử"',
+    title: 'Sửa lại toàn bộ giao diện',
+    desc: 'Giao diện được thiết kế lại hoàn toàn, rõ ràng và dễ sử dụng hơn',
+    tag: 'Giao diện',
   },
   {
-    targetId: 'nav-journal-sub',
     badge: '2',
-    title: 'Gộp 2 mục — nay có 2 tab',
-    desc: '"Tạo lịch trực" & "Quản lý nhân sự" nay trong cùng 1 trang với 2 tab',
+    title: 'Tối ưu hóa một số thao tác',
+    desc: 'Các thao tác thường dùng được cải tiến để nhanh hơn và ít bước hơn',
+    tag: 'Cải tiến',
   },
   {
-    targetId: 'nav-operating-sub',
     badge: '3',
-    title: 'Tab "Lấy chỉ số HES" mới',
-    desc: '"Lấy chỉ số từ HES" đã chuyển vào tab thứ 3 của Thông tin chung',
+    title: 'Gộp bảng công tơ & bảng khách hàng',
+    desc: 'Hai bảng nay được hiển thị trong cùng một trang, dễ tra cứu và quản lý hơn',
+    tag: 'Mới',
+  },
+  {
+    badge: '4',
+    title: 'Bỏ trường email khi thêm khách hàng',
+    desc: 'Không còn yêu cầu nhập email khi thêm khách hàng qua HES hoặc nhập tay',
+    tag: 'Sửa lỗi',
   },
 ];
 
-// Các thay đổi không có vị trí sidebar cụ thể
-const OTHER_CHANGES = [
-  'Thông báo hệ thống nay nổi (floating) ở góc trên phải',
-  'Sửa lỗi bộ lọc bảng công nợ — không còn sao chép dòng',
-  'Hỗ trợ lưu nhiều email cho mỗi khách hàng',
-];
+const TAG_STYLE: Record<string, string> = {
+  'Mới':     'bg-blue-100 text-blue-700',
+  'Đổi tên': 'bg-violet-100 text-violet-700',
+  'Giao diện':'bg-indigo-100 text-indigo-700',
+  'Cải tiến':'bg-emerald-100 text-emerald-700',
+  'Sửa lỗi': 'bg-rose-100 text-rose-700',
+};
 
 interface Props {
-  onDismiss: () => void; // đóng + lưu PocketBase (không hiện lại)
-  onClose: () => void;   // đóng phiên này (refresh vẫn hiện lại)
+  onDismiss: () => void;
+  onClose: () => void;
 }
 
 export default function NewUpdateTour({ onDismiss, onClose }: Props) {
-  const [rects, setRects] = useState<Record<string, DOMRect | null>>({});
   const [checked, setChecked] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
 
-  const measure = useCallback(() => {
-    const result: Record<string, DOMRect | null> = {};
-    CALLOUTS.forEach(c => {
-      const el = document.getElementById(c.targetId);
-      result[c.targetId] = el?.getBoundingClientRect() ?? null;
-    });
-    setRects(result);
-    setIsDesktop(window.innerWidth >= 1024);
-  }, []);
-
-  // Delay để sidebar expand animation kịp hoàn thành trước khi đo
-  useLayoutEffect(() => {
-    const t = setTimeout(measure, 420);
-    return () => clearTimeout(t);
-  }, [measure]);
-
-  useEffect(() => {
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [measure]);
-
-  // Click bất kỳ đâu luôn đóng overlay.
-  // Nếu đã tích → gọi onDismiss (lưu PocketBase, không hiện lại).
-  // Nếu chưa tích → gọi onClose (chỉ đóng phiên, refresh vẫn hiện lại).
-  const handleOverlayClick = () => {
+  const handleClose = () => {
     if (checked) onDismiss();
     else onClose();
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <motion.div
-      className="fixed inset-0 z-[150]"
+      className="fixed inset-0 z-[150] flex items-center justify-center p-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={handleOverlayClick}
+      onClick={handleClose}
     >
-      {/* Overlay nền */}
-      <div className="absolute inset-0 bg-slate-900/55" />
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]" />
 
-      {isDesktop ? (
-        <>
-          {CALLOUTS.map((c, idx) => {
-            const rect = rects[c.targetId];
-            if (!rect || rect.width === 0) return null;
-
-            return (
-              <React.Fragment key={c.targetId}>
-                {/* Vòng highlight bao quanh phần tử */}
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.92 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: idx * 0.08 + 0.15 }}
-                  style={{
-                    position: 'fixed',
-                    top: rect.top - 3,
-                    left: rect.left - 3,
-                    width: rect.width + 6,
-                    height: rect.height + 6,
-                  }}
-                  className="rounded-xl ring-2 ring-blue-400 bg-blue-400/20 pointer-events-none"
-                />
-
-                {/* Callout bubble bên phải sidebar */}
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.08 + 0.25, type: 'spring', stiffness: 280, damping: 22 }}
-                  style={{
-                    position: 'fixed',
-                    top: rect.top + rect.height / 2,
-                    left: rect.right + 20,
-                    transform: 'translateY(-50%)',
-                    maxWidth: 230,
-                    minWidth: 200,
-                  }}
-                  className="bg-white rounded-2xl shadow-2xl border border-blue-100 px-4 py-3 pointer-events-none"
-                >
-                  {/* Mũi tên CSS chỉ về phía trái (sang sidebar) */}
-                  <div
-                    className="absolute pointer-events-none"
-                    style={{
-                      left: -9,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: 0,
-                      height: 0,
-                      borderTop: '7px solid transparent',
-                      borderBottom: '7px solid transparent',
-                      borderRight: '9px solid #bfdbfe',
-                    }}
-                  />
-                  <div
-                    className="absolute pointer-events-none"
-                    style={{
-                      left: -7,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: 0,
-                      height: 0,
-                      borderTop: '6px solid transparent',
-                      borderBottom: '6px solid transparent',
-                      borderRight: '8px solid white',
-                    }}
-                  />
-
-                  <div className="flex items-start gap-2.5">
-                    <span className="shrink-0 mt-0.5 w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center">
-                      {c.badge}
-                    </span>
-                    <div>
-                      <p className="text-[12px] font-extrabold text-slate-800 leading-snug">{c.title}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{c.desc}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              </React.Fragment>
-            );
-          })}
-
-          {/* Card "Thay đổi khác" — không có mũi tên chỉ vị trí cụ thể */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.55 }}
-            style={{ position: 'fixed', left: 344, bottom: 110 }}
-            className="bg-white/90 rounded-2xl border border-slate-100 shadow-xl px-4 py-3 w-56 pointer-events-none"
-          >
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Thay đổi khác</p>
-            <ul className="space-y-1.5">
-              {OTHER_CHANGES.map((f, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-[11px] text-slate-600 leading-snug">
-                  <span className="shrink-0 mt-1 w-1 h-1 rounded-full bg-blue-400" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-          </motion.div>
-
-          {/* Nút tích xác nhận — desktop */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="fixed bottom-7 left-1/2 z-[160] flex flex-col items-center gap-2"
-            style={{ transform: 'translateX(-50%)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <p className="text-white/70 text-xs font-semibold select-none">
-              Nhấn bất kỳ đâu để đóng
-            </p>
-
+      {/* Panel */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.93, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 8 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+        className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+        onClick={handleCardClick}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 pt-6 pb-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h2 className="text-white font-black text-base leading-tight">Cập nhật mới</h2>
+                <p className="text-blue-200 text-xs mt-0.5">Những thay đổi trong phiên bản này</p>
+              </div>
+            </div>
             <button
-              onClick={() => setChecked(v => !v)}
-              className={`flex items-center gap-3 px-6 py-3 rounded-2xl font-bold text-sm transition-all duration-200 shadow-2xl border-2 active:scale-[0.97] ${
+              onClick={handleClose}
+              className="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+          </div>
+        </div>
+
+        {/* Update list */}
+        <div className="px-6 py-4 space-y-3 max-h-[55vh] overflow-y-auto">
+          {UPDATES.map((item, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: idx * 0.05 + 0.1 }}
+              className="flex items-start gap-3"
+            >
+              {/* Number badge or dot */}
+              {item.badge ? (
+                <span className="shrink-0 mt-0.5 w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center">
+                  {item.badge}
+                </span>
+              ) : (
+                <span className="shrink-0 mt-2 w-1.5 h-1.5 rounded-full bg-slate-300" />
+              )}
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold text-slate-800 leading-snug">{item.title}</p>
+                  {item.tag && (
+                    <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${TAG_STYLE[item.tag] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {item.tag}
+                    </span>
+                  )}
+                </div>
+                {item.desc && (
+                  <p className="text-xs text-slate-500 mt-0.5 leading-snug">{item.desc}</p>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Divider */}
+        <div className="mx-6 h-px bg-slate-100" />
+
+        {/* Footer */}
+        <div className="px-6 py-4 flex items-center justify-between gap-4">
+          {/* Checkbox */}
+          <button
+            onClick={() => setChecked(v => !v)}
+            className="flex items-center gap-2.5 group select-none"
+          >
+            <div
+              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-150 ${
                 checked
-                  ? 'bg-emerald-500 border-emerald-400 text-white shadow-emerald-500/40'
-                  : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-300 shadow-slate-900/20'
+                  ? 'bg-emerald-500 border-emerald-500'
+                  : 'border-slate-300 group-hover:border-emerald-400'
               }`}
             >
-              <div
-                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
-                  checked ? 'bg-white border-white' : 'border-slate-300'
-                }`}
-              >
-                {checked && <Check className="w-3.5 h-3.5 text-emerald-500" strokeWidth={3} />}
-              </div>
-              {checked ? '✓ Đã tích — nhấn bất kỳ đâu để không hiện lại' : 'Tích để không hiện lại lần sau'}
-            </button>
-          </motion.div>
-        </>
-      ) : (
-        // Mobile: bottom sheet đơn giản
-        <div
-          className="absolute inset-x-0 bottom-0 flex justify-center p-4 pb-6"
-          onClick={e => e.stopPropagation()}
-        >
-          <motion.div
-            initial={{ y: 60, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 24 }}
-            className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl"
+              <AnimatePresence>
+                {checked && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                  >
+                    <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <span className={`text-xs font-semibold transition-colors ${checked ? 'text-emerald-600' : 'text-slate-500 group-hover:text-slate-700'}`}>
+              Không hiển thị lại
+            </span>
+          </button>
+
+          {/* Close button */}
+          <button
+            onClick={handleClose}
+            className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-150 active:scale-[0.97] ${
+              checked
+                ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/25'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25'
+            }`}
           >
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="w-4 h-4 text-blue-500" />
-              <h3 className="font-black text-slate-800">Cập nhật mới</h3>
-            </div>
-            <ul className="space-y-2 mb-5">
-              {[
-                ...CALLOUTS.map(c => `${c.title} — ${c.desc}`),
-                ...OTHER_CHANGES,
-              ].map((f, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs text-slate-600 leading-relaxed">
-                  <span className="shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-blue-400" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="flex-1 py-3 rounded-2xl font-bold text-sm bg-slate-100 text-slate-600 active:scale-[0.98] transition-transform"
-              >
-                Đóng
-              </button>
-              <button
-                onClick={onDismiss}
-                className="flex-1 py-3 rounded-2xl font-bold text-sm bg-blue-600 text-white flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-              >
-                <Check className="w-4 h-4" strokeWidth={3} />
-                Không hiện lại
-              </button>
-            </div>
-          </motion.div>
+            {checked ? 'Đã hiểu, đóng' : 'Đóng'}
+          </button>
         </div>
-      )}
+
+        <p className="text-center text-[10px] text-slate-400 pb-3 -mt-1 select-none">
+          Nhấn ra ngoài hoặc nhấn đóng để thoát
+        </p>
+      </motion.div>
     </motion.div>
   );
 }
