@@ -16,10 +16,10 @@ export default function JournalManager() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
+      <div className="vl-nav-tabs flex flex-wrap border-b border-slate-200">
         <button
           onClick={() => setTab('schedule')}
-          className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${tab === 'schedule' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          className={`vl-nav-link px-6 py-3 text-sm font-bold transition-all ${tab === 'schedule' ? 'active' : ''}`}
         >
           <div className="flex items-center gap-2">
             <CalendarDays className="w-4 h-4" />
@@ -28,7 +28,7 @@ export default function JournalManager() {
         </button>
         <button
           onClick={() => setTab('staff')}
-          className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${tab === 'staff' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          className={`vl-nav-link px-6 py-3 text-sm font-bold transition-all ${tab === 'staff' ? 'active' : ''}`}
         >
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4" />
