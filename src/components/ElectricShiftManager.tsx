@@ -122,7 +122,7 @@ export default function ElectricShiftManager() {
           <select 
             value={filterArea} 
             onChange={(e) => setFilterArea(e.target.value)}
-            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            className="bg-white border border-slate-200 rounded px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
           >
             <option value="">Tất cả khu vực</option>
             {effectiveAreas.map(area => (
@@ -131,7 +131,7 @@ export default function ElectricShiftManager() {
           </select>
           <button 
             onClick={handleOpenAdd}
-            className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+            className="vl-btn vl-btn-primary flex-1 md:flex-none flex items-center justify-center gap-2"
           >
             <Plus className="w-5 h-5" />
             Thêm nhân sự
@@ -140,11 +140,11 @@ export default function ElectricShiftManager() {
       </div>
 
       {/* Grid List */}
-      <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm">
+      <div className="vl-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="vl-table w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
+              <tr className="border-b border-slate-100">
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-10 w-24">Số thứ tự</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Họ & Tên</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Khu vực</th>
@@ -181,13 +181,13 @@ export default function ElectricShiftManager() {
                       <div className="flex gap-2 justify-end">
                         <button 
                           onClick={() => handleOpenEdit(shift)} 
-                          className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-blue-600 transition-colors"
+                          className="p-2 hover:bg-[#f4f8ff] rounded text-slate-500 hover:text-blue-600 transition-colors"
                         >
                           <Edit2 className="w-5 h-5" />
                         </button>
                         <button 
                           onClick={() => handleDelete(shift.id)} 
-                          className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-red-500 transition-colors"
+                          className="p-2 hover:bg-red-50 rounded text-slate-500 hover:text-red-500 transition-colors"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -216,7 +216,7 @@ export default function ElectricShiftManager() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-8 overflow-hidden"
+              className="relative w-full max-w-lg bg-white rounded-lg shadow-2xl p-8 overflow-hidden"
             >
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
                 <h3 className="text-xl font-bold text-slate-800">{editingId ? 'Chỉnh sửa nhân sự' : 'Thêm nhân sự mới'}</h3>
@@ -233,7 +233,7 @@ export default function ElectricShiftManager() {
                     required
                     value={formData.IDnum} 
                     onChange={(e) => setFormData({ ...formData, IDnum: parseInt(e.target.value) || 1 })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm font-bold font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:bg-white transition-all text-sm font-bold font-mono"
                   />
                 </div>
 
@@ -245,16 +245,16 @@ export default function ElectricShiftManager() {
                     required
                     value={formData.Name} 
                     onChange={(e) => setFormData({ ...formData, Name: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm font-bold"
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:bg-white transition-all text-sm font-bold"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Khu vực phân bổ</label>
-                  <select 
-                    value={formData.area} 
+                  <select
+                    value={formData.area}
                     onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm font-bold"
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:bg-white transition-all text-sm font-bold"
                   >
                     {effectiveAreas.map(area => (
                       <option key={area} value={area}>{area}</option>
@@ -266,13 +266,13 @@ export default function ElectricShiftManager() {
                   <button 
                     type="button" 
                     onClick={() => setIsModalOpen(false)}
-                    className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold transition-all text-sm"
+                    className="vl-btn vl-btn-secondary"
                   >
                     Hủy
                   </button>
                   <button 
                     type="submit" 
-                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/10 text-sm flex items-center gap-2"
+                    className="vl-btn vl-btn-primary flex items-center gap-2"
                   >
                     <Check className="w-4 h-4" />
                     Lưu lại
