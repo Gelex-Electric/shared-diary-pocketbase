@@ -220,3 +220,218 @@ body { background-color: var(--vl-bg); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d1d9e6; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #a3afbd; }
+
+/* =====================================================
+   FLATPICKR — không còn dùng, giữ lại phòng khi cần
+   ===================================================== */
+/* (đã chuyển sang custom React DatePicker/TimePicker) */
+
+/* Calendar container */
+.flatpickr-calendar {
+  border: none !important;
+  border-radius: 0.75rem !important;
+  box-shadow: -8px 12px 24px 0 rgba(25, 42, 70, 0.18) !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  overflow: hidden;
+}
+
+/* ── Header: month + year navigation ── */
+.flatpickr-months {
+  background: #5a8dee !important;
+  padding: 4px 0 !important;
+  align-items: center !important;
+}
+.flatpickr-months .flatpickr-month {
+  color: #fff !important;
+  fill: #fff !important;
+  height: 42px !important;
+}
+.flatpickr-current-month {
+  color: #fff !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  padding-top: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  width: auto !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+/* Dropdown tháng */
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+  background: #5a8dee !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  border: none !important;
+  outline: none !important;
+  padding: 0 2px !important;
+  margin-right: 4px !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+.flatpickr-current-month .flatpickr-monthDropdown-months:hover { opacity: 0.85 !important; }
+.flatpickr-current-month .flatpickr-monthDropdown-month { background: #fff !important; color: #475f7b !important; }
+
+/* Năm — wrapper + input + mũi tên tăng giảm */
+.flatpickr-current-month .numInputWrapper {
+  width: 68px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  position: relative !important;
+}
+.flatpickr-current-month input.cur-year {
+  color: #fff !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  padding: 0 22px 0 2px !important;   /* padding-right để nhường chỗ mũi tên */
+  width: 100% !important;
+  background: transparent !important;
+}
+/* Mũi tên tăng / giảm năm — luôn hiển thị, không ẩn */
+.flatpickr-current-month .numInputWrapper span {
+  position: absolute !important;
+  right: 2px !important;
+  width: 18px !important;
+  height: 18px !important;
+  opacity: 1 !important;              /* luôn hiển thị */
+  border: none !important;
+  background: rgba(255,255,255,0.18) !important;
+  border-radius: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background 0.15s !important;
+}
+.flatpickr-current-month .numInputWrapper span:hover { background: rgba(255,255,255,0.35) !important; }
+.flatpickr-current-month .numInputWrapper span.arrowUp  { top: 0 !important; bottom: auto !important; }
+.flatpickr-current-month .numInputWrapper span.arrowDown { top: auto !important; bottom: 0 !important; }
+.flatpickr-current-month .numInputWrapper span.arrowUp:after  { border-bottom-color: #fff !important; border-width: 0 4px 5px !important; }
+.flatpickr-current-month .numInputWrapper span.arrowDown:after { border-top-color: #fff !important; border-width: 5px 4px 0 !important; }
+
+/* Nút prev/next tháng */
+.flatpickr-prev-month, .flatpickr-next-month {
+  color: #fff !important; fill: #fff !important;
+  padding: 9px 12px !important;
+  top: 4px !important;
+}
+.flatpickr-prev-month:hover svg, .flatpickr-next-month:hover svg { fill: rgba(255,255,255,0.7) !important; }
+
+/* ── Weekday labels row ── */
+.flatpickr-weekdays  { background: #5a8dee !important; }
+.flatpickr-weekday   { background: #5a8dee !important; color: rgba(255,255,255,0.75) !important; font-weight: 700 !important; font-size: 11px !important; }
+
+/* ── Day cells ── */
+.flatpickr-day {
+  border-radius: 50% !important;
+  color: #475f7b !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  border: 1px solid transparent !important;
+  max-width: 36px !important;
+  height: 36px !important;
+  line-height: 36px !important;
+}
+.flatpickr-day:hover {
+  background: #e8f3ff !important;
+  border-color: #e8f3ff !important;
+  color: #5a8dee !important;
+}
+.flatpickr-day.today {
+  border-color: #5a8dee !important;
+  font-weight: 700 !important;
+  color: #5a8dee !important;
+}
+.flatpickr-day.today:hover {
+  background: #5a8dee !important;
+  border-color: #5a8dee !important;
+  color: #fff !important;
+}
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover,
+.flatpickr-day.selected:focus {
+  background: #5a8dee !important;
+  border-color: #5a8dee !important;
+  color: #fff !important;
+  box-shadow: 0 3px 10px rgba(90,141,238,0.4) !important;
+}
+.flatpickr-day.flatpickr-disabled,
+.flatpickr-day.flatpickr-disabled:hover {
+  color: rgba(71,95,123,0.25) !important;
+  background: transparent !important;
+}
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay { color: rgba(71,95,123,0.35) !important; }
+
+/* Days row padding */
+.flatpickr-days { border: none !important; }
+.dayContainer   { padding: 4px 6px 6px !important; }
+
+/* ── Nút Hôm Nay ── */
+.fp-today-btn {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 2px 10px 10px;
+  padding: 6px 0;
+  background: #5a8dee;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.fp-today-btn:hover  { opacity: 0.88; }
+.fp-today-btn:active { transform: scale(0.97); }
+
+/* ── AltInput (hiển thị dd/mm/yyyy khi dùng altInput: true) ── */
+.flatpickr-input.flatpickr-alt-input {
+  cursor: pointer !important;
+}
+
+/* ── Time picker (TimePicker popup) ── */
+.flatpickr-time {
+  border-top: 1px solid #e8ecf2 !important;
+  height: 46px !important;
+}
+.flatpickr-time input,
+.flatpickr-time .flatpickr-hour,
+.flatpickr-time .flatpickr-minute {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: #5a8dee !important;
+  background: transparent !important;
+  border: none !important;
+}
+.flatpickr-time input:hover,
+.flatpickr-time input:focus {
+  background: #e8f3ff !important;
+  border-radius: 6px !important;
+}
+.flatpickr-time .flatpickr-time-separator {
+  color: #5a8dee !important;
+  font-weight: 700 !important;
+  font-size: 15px !important;
+  line-height: 46px !important;
+}
+.flatpickr-time .numInputWrapper:hover { background: transparent !important; }
+.flatpickr-time .numInputWrapper span  { display: none !important; }  /* ẩn spinner arrows */
+
+/* Time-only calendar */
+.flatpickr-calendar.hasTime.noCalendar {
+  width: 150px !important;
+  border-radius: 0.75rem !important;
+}
+.flatpickr-calendar.hasTime.noCalendar .flatpickr-time {
+  border-top: none !important;
+  height: 50px !important;
+}
+
+/* Trigger input styling */
+.vl-fp-input.flatpickr-input { cursor: pointer !important; }
