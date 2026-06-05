@@ -29,8 +29,35 @@ import {
   FileSpreadsheet,
   HelpCircle
 } from 'lucide-react';
-import csvContent from '../datahdKH.csv?raw';
 import { pb } from '../lib/pocketbase';
+
+// Bộ nhớ đệm module-level: CSV chỉ fetch một lần duy nhất trong suốt phiên làm việc.
+// Giá trị tồn tại kể cả khi SummaryDashboard unmount/remount (chuyển tab).
+let _csvCache: string | null = null;
+let _csvPromise: Promise<string> | null = null;
+
+// Tải CSV với dedup: nhiều lần mount cùng dùng chung 1 request đang chạy.
+// KHÔNG huỷ fetch giữa chừng — luôn để hoàn tất và điền cache.
+function loadCsv(): Promise<string> {
+  if (_csvCache !== null) return Promise.resolve(_csvCache);
+  if (_csvPromise) return _csvPromise;
+
+  _csvPromise = fetch('/datahdKH.csv')
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.text();
+    })
+    .then(text => {
+      _csvCache = text.replace(/^﻿/, ''); // strip UTF-8 BOM nếu có
+      return _csvCache;
+    })
+    .catch(err => {
+      _csvPromise = null; // Cho phép thử lại ở lần mount sau nếu lỗi
+      throw err;
+    });
+
+  return _csvPromise;
+}
 
 // Interface matching each customer record in monthly sheet
 interface BillRecord {
@@ -132,6 +159,20 @@ const ACCOUNT_MAP: Record<string, string> = {
 };
 
 export default function SummaryDashboard() {
+  // Tải datahdKH.csv từ public/ — dùng cache module-level, không huỷ fetch khi chuyển tab
+  const [csvContent, setCsvContent] = useState<string>(_csvCache ?? '');
+  useEffect(() => {
+    if (_csvCache !== null) return; // Đã có cache → hiển thị ngay, không fetch lại
+
+    let mounted = true;
+    loadCsv()
+      .then(text => { if (mounted) setCsvContent(text); })
+      .catch(err => console.error('Không tải được datahdKH.csv:', err));
+
+    // Chỉ chặn setState khi đã unmount; fetch vẫn chạy tiếp để điền cache
+    return () => { mounted = false; };
+  }, []);
+
   // Account filtering from PocketBase Auth
   const defaultAccount = useMemo(() => {
     const rawArea = pb.authStore.model?.area || '';
@@ -231,7 +272,7 @@ export default function SummaryDashboard() {
       });
     }
     return records;
-  }, []);
+  }, [csvContent]);
 
   // 2. Filter records dynamically based on active Account selection
   const accountFilteredRecords = useMemo(() => {
