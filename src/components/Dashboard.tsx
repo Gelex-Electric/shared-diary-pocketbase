@@ -8,15 +8,17 @@ import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import SummaryDashboard from './SummaryDashboard';
 import CustomerManager from './CustomerManager';
+import HesReadingManager from './HesReadingManager';
 import JournalManager from './JournalManager';
 import NewUpdateTour from './NewUpdateTour';
 
-type Tab = 'summary' | 'journal' | 'operating' | 'later';
+type Tab = 'summary' | 'journal' | 'operating' | 'hes' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
   journal:   'Hồ sơ vận hành',
   operating: 'Thông số vận hành',
+  hes:       'Lấy chỉ số HES',
   later:     'Cập nhật sau',
 };
 
@@ -67,6 +69,19 @@ export default function Dashboard() {
   const closeNewUpdateForNow = () => setShowNewUpdate(false);
   const handleLogout = () => { pb.authStore.clear(); window.location.reload(); };
 
+  // Accordion: mở nhóm này thì nhóm kia tự đóng
+  const toggleSection = (section: 'journal' | 'operating') => {
+    if (section === 'journal') {
+      const willOpen = !isJournalExpanded;
+      setIsJournalExpanded(willOpen);
+      if (willOpen) setIsOperatingExpanded(false);
+    } else {
+      const willOpen = !isOperatingExpanded;
+      setIsOperatingExpanded(willOpen);
+      if (willOpen) setIsJournalExpanded(false);
+    }
+  };
+
   const userName    = pb.authStore.model?.name || 'Người dùng';
   const userArea    = pb.authStore.model?.area  || '';
   const userInitial = userName[0] || 'U';
@@ -111,7 +126,7 @@ export default function Dashboard() {
           <li className="relative mt-1">
             <button
               id="nav-journal"
-              onClick={() => { setTopTab('journal'); setIsJournalExpanded(v => !v); onNavigate?.(); }}
+              onClick={() => toggleSection('journal')}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
                 topTab === 'journal' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
               }`}
@@ -120,7 +135,7 @@ export default function Dashboard() {
               <span className="flex-1 text-left">Hồ sơ vận hành</span>
               <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isJournalExpanded ? 'rotate-180' : ''}`} />
             </button>
-            <AnimatePresence>
+            <AnimatePresence initial={false}>
               {isJournalExpanded && (
                 <motion.ul
                   initial={{ height: 0, opacity: 0 }}
@@ -133,10 +148,11 @@ export default function Dashboard() {
                     <button
                       id="nav-journal-sub"
                       onClick={() => { setTopTab('journal'); onNavigate?.(); }}
-                      className={`w-full text-left block px-12 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
                         topTab === 'journal' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
                       }`}
                     >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       Sổ nhật ký vận hành
                     </button>
                   </li>
@@ -148,16 +164,16 @@ export default function Dashboard() {
           {/* Thông số vận hành */}
           <li className="relative mt-1">
             <button
-              onClick={() => { setTopTab('operating'); setIsOperatingExpanded(v => !v); onNavigate?.(); }}
+              onClick={() => toggleSection('operating')}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'operating' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'operating' || topTab === 'hes' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
               }`}
             >
               <Activity className="w-5 h-5 shrink-0" />
               <span className="flex-1 text-left">Thông số vận hành</span>
               <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isOperatingExpanded ? 'rotate-180' : ''}`} />
             </button>
-            <AnimatePresence>
+            <AnimatePresence initial={false}>
               {isOperatingExpanded && (
                 <motion.ul
                   initial={{ height: 0, opacity: 0 }}
@@ -170,11 +186,24 @@ export default function Dashboard() {
                     <button
                       id="nav-operating-sub"
                       onClick={() => { setTopTab('operating'); onNavigate?.(); }}
-                      className={`w-full text-left block px-12 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
                         topTab === 'operating' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
                       }`}
                     >
-                      Thông tin chung
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      Thông tin khách hàng &amp; Công tơ
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      id="nav-hes-sub"
+                      onClick={() => { setTopTab('hes'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'hes' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      Lấy chỉ số từ HES
                     </button>
                   </li>
                 </motion.ul>
@@ -209,7 +238,16 @@ export default function Dashboard() {
 
       <AnimatePresence>
         {showNewUpdate && (
-          <NewUpdateTour onDismiss={dismissNewUpdate} onClose={closeNewUpdateForNow} />
+          <NewUpdateTour
+            onDismiss={dismissNewUpdate}
+            onClose={closeNewUpdateForNow}
+            onNavigate={(tab) => {
+              setTopTab(tab);
+              // Mở sẵn nhóm sidebar chứa tab đích để người dùng thấy ngữ cảnh
+              if (tab === 'journal') { setIsJournalExpanded(true); setIsOperatingExpanded(false); }
+              else if (tab === 'operating' || tab === 'hes') { setIsOperatingExpanded(true); setIsJournalExpanded(false); }
+            }}
+          />
         )}
       </AnimatePresence>
 
@@ -334,6 +372,8 @@ export default function Dashboard() {
               <SummaryDashboard />
             ) : topTab === 'operating' ? (
               <CustomerManager />
+            ) : topTab === 'hes' ? (
+              <HesReadingManager />
             ) : topTab === 'journal' ? (
               <JournalManager />
             ) : (
