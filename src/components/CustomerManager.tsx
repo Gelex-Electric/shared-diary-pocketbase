@@ -7,7 +7,6 @@ import {
   Users, CloudDownload, AlertCircle, Info, CreditCard,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import HesReadingManager from './HesReadingManager';
 
 
 const inputCls =
@@ -27,7 +26,6 @@ type CustomerGroup = { customer: Partial<Customer>; meters: Meter[] };
    COMPONENT
 ================================================================ */
 export default function CustomerManager() {
-  const [activeTab, setActiveTab] = useState<'main' | 'hes'>('main');
   const [allMeters, setAllMeters] = useState<Meter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterArea, setFilterArea] = useState('');
@@ -586,8 +584,7 @@ export default function CustomerManager() {
           <h2 className="text-2xl font-bold text-slate-800">Quản lý khách hàng &amp; Công tơ</h2>
           <p className="text-slate-500 text-sm mt-1">Hệ thống quản lý thông tin khách hàng và thiết bị đo đếm</p>
         </div>
-        {activeTab === 'main' && (
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             {/* Search */}
             <div className="relative flex-1 md:w-56">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -630,27 +627,12 @@ export default function CustomerManager() {
               <Plus className="w-3.5 h-3.5" /> Thêm mới
             </button>
           </div>
-        )}
-      </div>
-
-      {/* ================================================================
-          TABS
-      ================================================================ */}
-      <div className="vl-nav-tabs flex border-b border-slate-200">
-        <button onClick={() => setActiveTab('main')} className={`vl-nav-link px-6 py-3 text-sm font-bold transition-all ${activeTab === 'main' ? 'active' : ''}`}>
-          <div className="flex items-center gap-2"><Users className="w-4 h-4" />Thông tin khách hàng &amp; Công tơ</div>
-        </button>
-        <button onClick={() => setActiveTab('hes')} className={`vl-nav-link px-6 py-3 text-sm font-bold transition-all ${activeTab === 'hes' ? 'active' : ''}`}>
-          <div className="flex items-center gap-2"><CloudDownload className="w-4 h-4" />Lấy chỉ số từ HES</div>
-        </button>
       </div>
 
       {/* ================================================================
           MAIN CONTENT
       ================================================================ */}
-      {activeTab === 'hes' ? (
-        <HesReadingManager />
-      ) : isLoading ? (
+      {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
           <RefreshCw className="w-10 h-10 animate-spin mb-4" /><p>Đang tải dữ liệu...</p>
         </div>
