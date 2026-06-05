@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, ID_TO_AREA } from '../lib/pocketbase';
-import { Meter } from '../types';
+import { Meter, AccountHes, DataMetter } from '../types';
 import {
   RefreshCw, Download, Zap, X,
   CheckCircle2, XCircle, AlertCircle, Info,
-  Table as TableIcon,
+  Table as TableIcon, CreditCard,
 } from 'lucide-react';
+import { DatePicker, TimePicker } from './ui/DateTimePickers';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 
@@ -19,42 +20,61 @@ interface ReadingData {
   cd: string;
   td: string;
   vc: string;
+  recordTime?: string;
   status: 'idle' | 'loading' | 'success' | 'error';
   errorMsg?: string;
 }
 
 interface ReadingSection {
   id: number;
-  dateTime: {
-    day: string;
-    month: string;
-    year: string;
-    hour: string;
-    minute: string;
-  };
+  date: string;   // "YYYY-MM-DD"
+  time: string;   // "HH:mm"
   readings: Record<string, ReadingData>;
 }
 
-const now = new Date();
-const defaultDateTime = {
-  day:    now.getDate().toString(),
-  month:  (now.getMonth() + 1).toString(),
-  year:   now.getFullYear().toString(),
-  hour:   now.getHours().toString(),
-  minute: '0',
+/* ---- Default dates ---- */
+const _now       = new Date();
+const _yesterday = new Date(_now);
+_yesterday.setDate(_yesterday.getDate() - 1);
+const _pad = (n: number) => String(n).padStart(2, '0');
+const todayStr     = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())}`;
+const yesterdayStr = `${_yesterday.getFullYear()}-${_pad(_yesterday.getMonth() + 1)}-${_pad(_yesterday.getDate())}`;
+const defaultTime  = '00:00';
+
+/* ---- Helpers ---- */
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** Build "yyyyMMddHHmmss" cho HES API (giờ local) */
+function toHesDateStr(date: string, time: string, offsetMinutes = 0): string {
+  const d = new Date(`${date}T${time}:00`);
+  d.setMinutes(d.getMinutes() + offsetMinutes);
+  return (
+    `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}` +
+    `${pad2(d.getHours())}${pad2(d.getMinutes())}00`
+  );
+}
+
+/** Format DATE_TIME → "dd/MM HH:mm" theo giờ local (HES trả về giờ local) */
+const fmtRecordTime = (raw?: string): string => {
+  if (!raw) return '—';
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return raw;
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 };
 
 /* ================================================================
    COMPONENT
 ================================================================ */
 export default function HesReadingManager() {
-  const [meters, setMeters] = useState<Meter[]>([]);
+  const [meters, setMeters]                   = useState<Meter[]>([]);
   const [isLoadingMeters, setIsLoadingMeters] = useState(true);
-  const [filterArea, setFilterArea] = useState('');
+  const [filterArea, setFilterArea]           = useState('');
+  const [hesAccount, setHesAccount]           = useState<AccountHes | null>(null);
+  const [isGettingToken, setIsGettingToken]   = useState(false);
 
   const [sections, setSections] = useState<ReadingSection[]>([
-    { id: 1, dateTime: { ...defaultDateTime }, readings: {} },
-    { id: 2, dateTime: { ...defaultDateTime }, readings: {} },
+    { id: 1, date: yesterdayStr, time: defaultTime, readings: {} }, // Đầu kỳ: hôm qua
+    { id: 2, date: todayStr,     time: defaultTime, readings: {} }, // Cuối kỳ: hôm nay
   ]);
 
   /* ---- Toast ---- */
@@ -74,6 +94,38 @@ export default function HesReadingManager() {
   }, [JSON.stringify(pb.authStore.model?.area)]);
 
   const effectiveAreas = React.useMemo(() => (userAreas.length > 0 ? userAreas : AREAS), [userAreas]);
+
+  /* ---- Load HES account ---- */
+  useEffect(() => {
+    if (userAreas.length === 0) return;
+    const areaFilter = userAreas.map(a => `area='${a.replace(/'/g, "\\'")}'`).join('||');
+    pb.collection('AccountHes')
+      .getFirstListItem<AccountHes>(`(${areaFilter})`)
+      .then(setHesAccount)
+      .catch(() => {});
+  }, [userAreas]);
+
+  /* ---- Lấy Token HES ---- */
+  const getToken = async () => {
+    if (!hesAccount) { showToast('Không tìm thấy tài khoản HES.', 'error'); return; }
+    setIsGettingToken(true);
+    try {
+      const res = await fetch(`/hes/api/Login?UserAccount=${hesAccount.Account}&Password=${hesAccount.Password}`);
+      if (!res.ok) throw new Error('Lỗi kết nối API');
+      const data = await res.json();
+      if (data?.TOKEN) {
+        const updated = await pb.collection('AccountHes').update(hesAccount.id, { Token: data.TOKEN });
+        setHesAccount(updated as any);
+        showToast('Lấy Token thành công!', 'success');
+      } else {
+        throw new Error('Không nhận được Token');
+      }
+    } catch (err: any) {
+      showToast('Lỗi lấy Token: ' + err.message, 'error');
+    } finally {
+      setIsGettingToken(false);
+    }
+  };
 
   /* ---- Load meters ---- */
   const loadMeters = useCallback(async () => {
@@ -102,93 +154,145 @@ export default function HesReadingManager() {
   useEffect(() => { loadMeters(); }, [loadMeters]);
 
   /* ================================================================
-     SECTION DATETIME UPDATE
+     DATE / TIME UPDATE
   ================================================================ */
-  const updateDateTime = (sectionId: number, field: keyof ReadingSection['dateTime'], value: string) => {
-    setSections(prev => prev.map(s =>
-      s.id === sectionId ? { ...s, dateTime: { ...s.dateTime, [field]: value } } : s
-    ));
-  };
+  const updateDate = (id: number, val: string) =>
+    setSections(prev => prev.map(s => s.id === id ? { ...s, date: val } : s));
+
+  const updateTime = (id: number, val: string) =>
+    setSections(prev => prev.map(s => s.id === id ? { ...s, time: val } : s));
 
   /* ================================================================
-     FETCH FOR ONE SECTION
+     FETCH FOR ONE SECTION  (API: GetMeterDataByDate)
   ================================================================ */
   const fetchSection = async (sectionId: number) => {
     const section = sections.find(s => s.id === sectionId);
     if (!section || meters.length === 0) return;
 
-    // Init all meters to loading
+    if (!section.date || !section.time) {
+      showToast('Vui lòng chọn ngày và giờ lấy chỉ số', 'warning');
+      return;
+    }
+
+    /* Khởi tạo loading */
     setSections(prev => prev.map(s => {
       if (s.id !== sectionId) return s;
       const init: Record<string, ReadingData> = {};
       meters.forEach(m => {
-        init[m.MeterNo] = { meterNo: m.MeterNo, pg: '-', bt: '-', cd: '-', td: '-', vc: '-', status: 'loading' };
+        init[m.MeterNo] = {
+          meterNo: m.MeterNo, pg: '-', bt: '-', cd: '-', td: '-', vc: '-',
+          status: 'loading',
+        };
       });
       return { ...s, readings: init };
     }));
 
-    const { day, month, year, hour, minute } = section.dateTime;
+    const token   = hesAccount?.Token ?? '';
+    const reqTime = new Date(`${section.date}T${section.time}:00`).getTime();
     const batchSize = 3;
 
     for (let i = 0; i < meters.length; i += batchSize) {
       const batch = meters.slice(i, i + batchSize);
+
       await Promise.all(batch.map(async (meter) => {
-        let currentMinute = parseInt(minute);
-        let currentHour   = parseInt(hour);
-        let finalResult: any = null;
-        const maxRetries = 29;
+        let record: DataMetter | undefined;
 
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          // Normalise overflow
-          let h = currentHour + Math.floor(currentMinute / 60);
-          let m = currentMinute % 60;
-          h = h % 24;
+        try {
+          /* --- Lần 1: cửa sổ +35 phút --- */
+          const sStart = toHesDateStr(section.date, section.time);
+          const sEnd35 = toHesDateStr(section.date, section.time, 35);
+          const url35  = `/hes/api/GetMeterDataByDate?MeterNo=${meter.MeterNo}&StartDate=${sStart}&EndDate=${sEnd35}&Token=${token}`;
 
-          const url = `/hes/api/GELEXPOWER_getInstant?MA_DDO=ABC&MA_CTO=${meter.MeterNo}&GIO=${h}&PHUT=${m}&NGAY=${day}&THANG=${month}&NAM=${year}`;
-
-          try {
-            const res = await fetch(url);
-            if (res.ok) {
-              const data = await res.json();
-              const record = Array.isArray(data) ? data[0] : data;
-              if (record?.MESSAGE === 'invalid token') {
-                throw new Error('Token HES hết hạn');
-              }
-              if (parseFloat(record?.BIEU_TONG || '0') > 0) {
-                finalResult = record;
-                break;
-              }
+          const res1 = await fetch(url35);
+          if (res1.ok) {
+            const data1 = await res1.json();
+            if (!Array.isArray(data1) && (data1 as any)?.MESSAGE === 'invalid token') {
+              throw new Error('Token HES hết hạn');
             }
-          } catch (fetchErr: any) {
-            if (fetchErr.message === 'Token HES hết hạn') throw fetchErr;
-            // Network error — continue retry
+            if (Array.isArray(data1) && data1.length > 0) {
+              const valid1 = (data1 as DataMetter[]).filter(r => parseFloat(r.ACTIVE_KW_INDICATE_TOTAL) > 0);
+              record = valid1.sort((a, b) =>
+                Math.abs(new Date(a.DATE_TIME).getTime() - reqTime) -
+                Math.abs(new Date(b.DATE_TIME).getTime() - reqTime)
+              )[0];
+            }
           }
 
-          currentMinute++;
-          await new Promise(r => setTimeout(r, 300));
-        }
+          /* --- Fallback: cửa sổ +120 phút --- */
+          if (!record) {
+            const sEnd120 = toHesDateStr(section.date, section.time, 120);
+            const url120  = `/hes/api/GetMeterDataByDate?MeterNo=${meter.MeterNo}&StartDate=${sStart}&EndDate=${sEnd120}&Token=${token}`;
+            const res2 = await fetch(url120);
+            if (res2.ok) {
+              const data2 = await res2.json();
+              if (Array.isArray(data2) && data2.length > 0) {
+                const valid2 = (data2 as DataMetter[]).filter(r => parseFloat(r.ACTIVE_KW_INDICATE_TOTAL) > 0);
+                record = valid2.sort((a, b) =>
+                  Math.abs(new Date(a.DATE_TIME).getTime() - reqTime) -
+                  Math.abs(new Date(b.DATE_TIME).getTime() - reqTime)
+                )[0];
+              }
+            }
+          }
 
-        setSections(prev => prev.map(s => {
-          if (s.id !== sectionId) return s;
-          return {
-            ...s,
-            readings: {
-              ...s.readings,
-              [meter.MeterNo]: finalResult
-                ? {
-                    meterNo: meter.MeterNo,
-                    pg: finalResult.BIEU_TONG     || '0',
-                    bt: finalResult.BIEU_1        || '0',
-                    cd: finalResult.BIEU_2        || '0',
-                    td: finalResult.BIEU_3        || '0',
-                    vc: finalResult.BIEU_TONG_VC  || '0',
-                    status: 'success',
-                  }
-                : { ...s.readings[meter.MeterNo], status: 'error', errorMsg: 'Không tìm thấy dữ liệu' },
-            },
-          };
-        }));
+          /* --- Cập nhật state --- */
+          setSections(prev => prev.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+              ...s,
+              readings: {
+                ...s.readings,
+                [meter.MeterNo]: record
+                  ? {
+                      meterNo:    meter.MeterNo,
+                      pg:         record.ACTIVE_KW_INDICATE_TOTAL     || '0',
+                      bt:         record.ACTIVE_KW_INDICATE_RATE1     || '0',
+                      cd:         record.ACTIVE_KW_INDICATE_RATE2     || '0',
+                      td:         record.ACTIVE_KW_INDICATE_RATE3     || '0',
+                      vc:         record.REACTIVE_KVAR_INDICATE_TOTAL || '0',
+                      recordTime: record.DATE_TIME,
+                      status:     'success',
+                    }
+                  : {
+                      ...s.readings[meter.MeterNo],
+                      status:   'error',
+                      errorMsg: 'Không tìm thấy dữ liệu',
+                    },
+              },
+            };
+          }));
+
+        } catch (err: any) {
+          if (err.message === 'Token HES hết hạn') {
+            showToast('Token HES hết hạn — vui lòng lấy token mới', 'error');
+            setSections(prev => prev.map(s => {
+              if (s.id !== sectionId) return s;
+              const updated = { ...s.readings };
+              meters.forEach(m => {
+                if (updated[m.MeterNo]?.status === 'loading')
+                  updated[m.MeterNo] = { ...updated[m.MeterNo], status: 'error', errorMsg: 'Token hết hạn' };
+              });
+              return { ...s, readings: updated };
+            }));
+            return;
+          }
+          setSections(prev => prev.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+              ...s,
+              readings: {
+                ...s.readings,
+                [meter.MeterNo]: {
+                  ...s.readings[meter.MeterNo],
+                  status:   'error',
+                  errorMsg: 'Lỗi kết nối',
+                },
+              },
+            };
+          }));
+        }
       }));
+
       await new Promise(r => setTimeout(r, 500));
     }
   };
@@ -215,13 +319,15 @@ export default function HesReadingManager() {
   ================================================================ */
   const exportToExcel = () => {
     const rows = meters.map(m => ({
-      'Số công tơ':    m.MeterNo,
-      'Trạm':          m.Line || '',
-      'Hệ số nhân':    m.HSN  || '',
-      'Tổng (kWh)':    getConsumption(m.MeterNo, 'pg', m.HSN) ?? '',
-      'Biểu 1 (kWh)':  getConsumption(m.MeterNo, 'bt', m.HSN) ?? '',
-      'Biểu 2 (kWh)':  getConsumption(m.MeterNo, 'cd', m.HSN) ?? '',
-      'Biểu 3 (kWh)':  getConsumption(m.MeterNo, 'td', m.HSN) ?? '',
+      'Số công tơ':      m.MeterNo,
+      'Trạm':            m.Line || '',
+      'Hệ số nhân':      m.HSN  || '',
+      'Thời gian Đợt 1': fmtRecordTime(sections[0].readings[m.MeterNo]?.recordTime),
+      'Thời gian Đợt 2': fmtRecordTime(sections[1].readings[m.MeterNo]?.recordTime),
+      'Tổng (kWh)':      getConsumption(m.MeterNo, 'pg', m.HSN) ?? '',
+      'Biểu 1 (kWh)':   getConsumption(m.MeterNo, 'bt', m.HSN) ?? '',
+      'Biểu 2 (kWh)':   getConsumption(m.MeterNo, 'cd', m.HSN) ?? '',
+      'Biểu 3 (kWh)':   getConsumption(m.MeterNo, 'td', m.HSN) ?? '',
       'Vô công (kVarh)': getConsumption(m.MeterNo, 'vc', m.HSN) ?? '',
     }));
     if (rows.length === 0) { showToast('Chưa có dữ liệu để xuất', 'warning'); return; }
@@ -267,20 +373,46 @@ export default function HesReadingManager() {
       </AnimatePresence>
 
       {/* ================================================================
-          SECTION CARDS (Đợt 1 & Đợt 2)
+          TOOLBAR: Lấy Token
+      ================================================================ */}
+      <div className="flex items-center justify-between px-4 py-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <Zap className="w-4 h-4 text-[#5a8dee]" />
+          <span>Token HES:</span>
+          <span className={`font-mono text-xs px-2 py-0.5 rounded ${hesAccount?.Token ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-500'}`}>
+            {hesAccount?.Token ? hesAccount.Token.slice(0, 20) + '…' : 'Chưa có token'}
+          </span>
+        </div>
+        <button
+          onClick={getToken}
+          disabled={isGettingToken || !hesAccount}
+          className="vl-btn vl-btn-secondary vl-btn-sm gap-1.5 disabled:opacity-50"
+        >
+          {isGettingToken
+            ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            : <CreditCard className="w-3.5 h-3.5" />}
+          {isGettingToken ? 'Đang lấy...' : 'Lấy Token'}
+        </button>
+      </div>
+
+      {/* ================================================================
+          SECTION CARDS (Đầu kỳ & Cuối kỳ)
       ================================================================ */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {sections.map((section, si) => (
           <div key={section.id} className="vl-card overflow-hidden flex flex-col">
+
             {/* Card header */}
             <div className="p-5 border-b border-slate-100 bg-slate-50/30">
-              <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className={`p-2.5 rounded-lg shadow-md ${SECTION_COLOR[si]}`}>
                     <Zap className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-slate-800">Lấy chỉ số đợt {section.id}</h3>
+                    <h3 className="text-base font-bold text-slate-800">
+                      {section.id === 1 ? 'Lấy chỉ số đầu kỳ' : 'Lấy chỉ số cuối kỳ'}
+                    </h3>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Chỉ số tức thời HES</p>
                   </div>
                 </div>
@@ -294,21 +426,20 @@ export default function HesReadingManager() {
                 </button>
               </div>
 
-              {/* DateTime inputs */}
-              <div className="grid grid-cols-5 gap-2">
-                {(['day','month','year','hour','minute'] as const).map(field => (
-                  <div key={field} className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-0.5">
-                      {field === 'day' ? 'Ngày' : field === 'month' ? 'Tháng' : field === 'year' ? 'Năm' : field === 'hour' ? 'Giờ' : 'Phút'}
-                    </label>
-                    <input
-                      type="number"
-                      value={section.dateTime[field]}
-                      onChange={e => updateDateTime(section.id, field, e.target.value)}
-                      className="w-full px-2 py-2 bg-white border border-slate-200 rounded text-sm font-bold text-center outline-none focus:ring-2 focus:ring-[#5a8dee]"
-                    />
-                  </div>
-                ))}
+              {/* Date + Time pickers */}
+              <div className="flex gap-3">
+                <DatePicker
+                  value={section.date}
+                  onChange={val => updateDate(section.id, val)}
+                  label="Ngày"
+                  className="flex-1"
+                />
+                <TimePicker
+                  value={section.time}
+                  onChange={val => updateTime(section.id, val)}
+                  label="Giờ (24h)"
+                  className="flex-1"
+                />
               </div>
             </div>
 
@@ -318,6 +449,7 @@ export default function HesReadingManager() {
                 <thead className="sticky top-0 z-10 bg-white">
                   <tr>
                     <th>Công tơ</th>
+                    <th className="text-center text-slate-400">Thời gian</th>
                     <th className="text-center text-[#5a8dee]">Tổng</th>
                     <th className="text-center text-[#5a8dee]">Biểu 1</th>
                     <th className="text-center text-orange-500">Biểu 2</th>
@@ -327,10 +459,14 @@ export default function HesReadingManager() {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {meters.length === 0 ? (
-                    <tr><td colSpan={6} className="py-10 text-center text-slate-400 text-sm italic">Chưa có danh sách công tơ</td></tr>
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-slate-400 text-sm italic">
+                        Chưa có danh sách công tơ
+                      </td>
+                    </tr>
                   ) : (
                     meters.map(m => {
-                      const r = section.readings[m.MeterNo];
+                      const r         = section.readings[m.MeterNo];
                       const isLoading = r?.status === 'loading';
                       const isError   = r?.status === 'error';
                       const isOk      = r?.status === 'success';
@@ -346,6 +482,12 @@ export default function HesReadingManager() {
                               <span className="font-mono text-xs font-bold text-[#5a8dee]">{m.MeterNo}</span>
                               {m.Line && <div className="text-[10px] text-slate-400">{m.Line}</div>}
                             </div>
+                          </td>
+                          <td className="text-center whitespace-nowrap">
+                            {isLoading
+                              ? <RefreshCw className="w-3 h-3 animate-spin text-slate-300 mx-auto" />
+                              : <span className="text-[11px] font-mono text-slate-400">{fmtRecordTime(r?.recordTime)}</span>
+                            }
                           </td>
                           <td className="text-center text-xs font-bold text-[#5a8dee]">{cell(r?.pg || '-')}</td>
                           <td className="text-center text-xs font-bold text-[#5a8dee]">{cell(r?.bt || '-')}</td>
@@ -404,6 +546,8 @@ export default function HesReadingManager() {
                 <th>Số công tơ</th>
                 <th>Trạm</th>
                 <th className="text-center">Hệ số nhân</th>
+                <th className="text-center text-slate-400">Thời gian Đợt 1</th>
+                <th className="text-center text-slate-400">Thời gian Đợt 2</th>
                 <th className="text-center text-[#5a8dee]">Tổng (kWh)</th>
                 <th className="text-center text-[#5a8dee]">Biểu 1 (kWh)</th>
                 <th className="text-center text-orange-500">Biểu 2 (kWh)</th>
@@ -413,17 +557,33 @@ export default function HesReadingManager() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {isLoadingMeters ? (
-                <tr><td colSpan={8} className="py-10 text-center"><RefreshCw className="w-5 h-5 animate-spin text-slate-300 mx-auto" /></td></tr>
+                <tr>
+                  <td colSpan={10} className="py-10 text-center">
+                    <RefreshCw className="w-5 h-5 animate-spin text-slate-300 mx-auto" />
+                  </td>
+                </tr>
               ) : meters.length === 0 ? (
-                <tr><td colSpan={8} className="py-10 text-center text-slate-400 text-sm italic">Không có dữ liệu công tơ</td></tr>
+                <tr>
+                  <td colSpan={10} className="py-10 text-center text-slate-400 text-sm italic">
+                    Không có dữ liệu công tơ
+                  </td>
+                </tr>
               ) : (
                 meters.map(m => (
                   <tr key={m.id} className="hover:bg-[#f4f8ff] transition-colors">
                     <td>
-                      <span className="font-mono text-xs font-bold text-[#5a8dee] bg-[#e8f3ff] px-2 py-1 rounded">{m.MeterNo}</span>
+                      <span className="font-mono text-xs font-bold text-[#5a8dee] bg-[#e8f3ff] px-2 py-1 rounded">
+                        {m.MeterNo}
+                      </span>
                     </td>
                     <td className="text-sm text-slate-500">{m.Line || '—'}</td>
                     <td className="text-center text-xs font-mono text-slate-500">{m.HSN || '1'}</td>
+                    <td className="text-center text-[11px] font-mono text-slate-400 whitespace-nowrap">
+                      {fmtRecordTime(sections[0].readings[m.MeterNo]?.recordTime)}
+                    </td>
+                    <td className="text-center text-[11px] font-mono text-slate-400 whitespace-nowrap">
+                      {fmtRecordTime(sections[1].readings[m.MeterNo]?.recordTime)}
+                    </td>
                     <td className="text-center text-xs font-bold text-[#5a8dee]">{fmt(getConsumption(m.MeterNo, 'pg', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-[#5a8dee]">{fmt(getConsumption(m.MeterNo, 'bt', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-orange-500">{fmt(getConsumption(m.MeterNo, 'cd', m.HSN))}</td>
