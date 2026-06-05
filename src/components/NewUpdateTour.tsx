@@ -1,55 +1,114 @@
 import React, { useState } from 'react';
-import { Check, Sparkles, X } from 'lucide-react';
+import {
+  Check, Sparkles, X, ArrowRight,
+  Palette, Zap, Wrench, Tag, Layers, CloudDownload,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+/** Tab đích để điều hướng khi nhấn "Xem ngay" — khớp với type Tab trong Dashboard */
+export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'later';
+
 interface UpdateItem {
-  badge?: string;
   title: string;
   desc?: string;
   tag?: string;
+  /** Nếu có, hiển thị nút điều hướng tới trang liên quan */
+  link?: { tab: UpdateTab; label: string };
 }
+
+// Phiên bản & ngày phát hành hiển thị trên header
+const VERSION      = '1.0.1';
+const RELEASE_DATE = '05/06/2026';
 
 const UPDATES: UpdateItem[] = [
   {
-    badge: '1',
-    title: 'Sửa lại toàn bộ giao diện',
-    desc: 'Giao diện được thiết kế lại hoàn toàn, rõ ràng và dễ sử dụng hơn',
+    title: 'Tăng tốc độ lấy chỉ số từ HES',
+    desc: 'Lấy chỉ số nhanh hơn đáng kể. Lưu ý: cần lấy Token trước khi lấy dữ liệu HES.',
+    tag: 'Cải tiến',
+    link: { tab: 'hes', label: 'Xem ngay' },
+  },
+  {
+    title: 'Bộ chọn thời gian thay cho nhập tay',
+    desc: 'Đổi từ nhập tay ngày/tháng/năm sang bộ chọn thời gian, mặc định đã chọn sẵn ngày hôm nay.',
     tag: 'Giao diện',
   },
   {
-    badge: '2',
-    title: 'Tối ưu hóa một số thao tác',
-    desc: 'Các thao tác thường dùng được cải tiến để nhanh hơn và ít bước hơn',
-    tag: 'Cải tiến',
-  },
-  {
-    badge: '3',
-    title: 'Gộp bảng công tơ & bảng khách hàng',
-    desc: 'Hai bảng nay được hiển thị trong cùng một trang, dễ tra cứu và quản lý hơn',
+    title: 'Hiển thị thời điểm lấy chỉ số HES',
+    desc: 'Bổ sung thời gian lấy chỉ số cho mỗi đợt để dễ đối chiếu và theo dõi.',
     tag: 'Mới',
   },
   {
-    badge: '4',
+    title: 'Yêu cầu lấy Token trước khi lấy dữ liệu',
+    desc: 'Cần lấy Token HES trước; hệ thống sẽ nhắc nếu chưa có Token khi lấy chỉ số.',
+    tag: 'Sửa lỗi',
+    link: { tab: 'hes', label: 'Tới trang HES' },
+  },
+  {
+    title: 'Lấy chỉ số từ HES thành mục riêng',
+    desc: 'Tách thành mục riêng trong "Thông số vận hành" và bổ sung nút Lấy Token nhanh ngay trên trang.',
+    tag: 'Mới',
+    link: { tab: 'hes', label: 'Xem ngay' },
+  },
+  {
+    title: 'Tối ưu điều hướng thanh bên',
+    desc: 'Menu dạng accordion — mở nhóm này sẽ tự đóng nhóm kia, thêm chấm điều hướng cho từng mục con.',
+    tag: 'Giao diện',
+  },
+  {
+    title: 'Khắc phục lỗi không tải được số liệu',
+    desc: 'Sửa lỗi biểu đồ và bảng tổng hợp ở Dashboard đôi lúc hiển thị 0 hoặc không có dữ liệu.',
+    tag: 'Sửa lỗi',
+    link: { tab: 'summary', label: 'Tới Dashboard' },
+  },
+  {
+    title: 'Sửa lại toàn bộ giao diện',
+    desc: 'Giao diện được thiết kế lại hoàn toàn, rõ ràng và dễ sử dụng hơn.',
+    tag: 'Giao diện',
+  },
+  {
+    title: 'Tối ưu hóa một số thao tác',
+    desc: 'Các thao tác thường dùng được cải tiến để nhanh hơn và ít bước hơn.',
+    tag: 'Cải tiến',
+  },
+  {
+    title: 'Gộp bảng công tơ & bảng khách hàng',
+    desc: 'Hai bảng nay được hiển thị trong cùng một trang, dễ tra cứu và quản lý hơn.',
+    tag: 'Mới',
+  },
+  {
     title: 'Bỏ trường email khi thêm khách hàng',
-    desc: 'Không còn yêu cầu nhập email khi thêm khách hàng qua HES hoặc nhập tay',
+    desc: 'Không còn yêu cầu nhập email khi thêm khách hàng qua HES hoặc nhập tay.',
     tag: 'Sửa lỗi',
   },
 ];
 
+/** Màu nền + chữ cho từng nhóm danh mục */
 const TAG_STYLE: Record<string, string> = {
-  'Mới':     'bg-blue-100 text-blue-700',
-  'Đổi tên': 'bg-violet-100 text-violet-700',
+  'Mới':      'bg-blue-100 text-blue-700',
+  'Đổi tên':  'bg-violet-100 text-violet-700',
   'Giao diện':'bg-indigo-100 text-indigo-700',
-  'Cải tiến':'bg-emerald-100 text-emerald-700',
-  'Sửa lỗi': 'bg-rose-100 text-rose-700',
+  'Cải tiến': 'bg-emerald-100 text-emerald-700',
+  'Sửa lỗi':  'bg-rose-100 text-rose-700',
 };
+
+/** Icon + màu vòng tròn đại diện cho từng nhóm danh mục */
+const TAG_ICON: Record<string, { Icon: React.ElementType; ring: string }> = {
+  'Mới':      { Icon: Sparkles,      ring: 'bg-blue-600' },
+  'Đổi tên':  { Icon: Tag,           ring: 'bg-violet-600' },
+  'Giao diện':{ Icon: Palette,       ring: 'bg-indigo-600' },
+  'Cải tiến': { Icon: Zap,           ring: 'bg-emerald-600' },
+  'Sửa lỗi':  { Icon: Wrench,        ring: 'bg-rose-600' },
+};
+const DEFAULT_ICON = { Icon: Layers, ring: 'bg-slate-500' };
 
 interface Props {
   onDismiss: () => void;
   onClose: () => void;
+  /** Điều hướng tới một tab khi người dùng nhấn "Xem ngay" trên một mục */
+  onNavigate?: (tab: UpdateTab) => void;
 }
 
-export default function NewUpdateTour({ onDismiss, onClose }: Props) {
+export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props) {
   const [checked, setChecked] = useState(false);
 
   const handleClose = () => {
@@ -60,6 +119,16 @@ export default function NewUpdateTour({ onDismiss, onClose }: Props) {
   const handleCardClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
+
+  // Nhấn "Xem ngay": điều hướng tới trang liên quan rồi đóng modal.
+  // Nếu người dùng đã tích "Không hiển thị lại" thì coi như đã xem xong → dismiss.
+  const handleNavigate = (tab: UpdateTab) => {
+    onNavigate?.(tab);
+    if (checked) onDismiss();
+    else onClose();
+  };
+
+  const newCount = UPDATES.filter(u => u.tag === 'Mới').length;
 
   return (
     <motion.div
@@ -100,42 +169,68 @@ export default function NewUpdateTour({ onDismiss, onClose }: Props) {
               <X className="w-4 h-4 text-white" />
             </button>
           </div>
+
+          {/* Hàng phiên bản + ngày phát hành */}
+          <div className="flex items-center gap-2 mt-4">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-white/20 px-2 py-1 rounded-lg">
+              <CloudDownload className="w-3 h-3" />
+              Phiên bản {VERSION}
+            </span>
+            <span className="text-[11px] font-medium text-blue-100">
+              Phát hành {RELEASE_DATE}
+            </span>
+            {newCount > 0 && (
+              <span className="ml-auto text-[10px] font-bold text-blue-700 bg-white px-2 py-1 rounded-lg">
+                {newCount} tính năng mới
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Update list */}
         <div className="px-6 py-4 space-y-3 max-h-[55vh] overflow-y-auto">
-          {UPDATES.map((item, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.05 + 0.1 }}
-              className="flex items-start gap-3"
-            >
-              {/* Number badge or dot */}
-              {item.badge ? (
-                <span className="shrink-0 mt-0.5 w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center">
-                  {item.badge}
+          {UPDATES.map((item, idx) => {
+            const { Icon, ring } = item.tag ? (TAG_ICON[item.tag] ?? DEFAULT_ICON) : DEFAULT_ICON;
+            return (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.05 + 0.1 }}
+                className="flex items-start gap-3"
+              >
+                {/* Icon nhóm danh mục */}
+                <span className={`shrink-0 mt-0.5 w-6 h-6 rounded-lg ${ring} text-white flex items-center justify-center`}>
+                  <Icon className="w-3.5 h-3.5" />
                 </span>
-              ) : (
-                <span className="shrink-0 mt-2 w-1.5 h-1.5 rounded-full bg-slate-300" />
-              )}
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold text-slate-800 leading-snug">{item.title}</p>
-                  {item.tag && (
-                    <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${TAG_STYLE[item.tag] ?? 'bg-slate-100 text-slate-600'}`}>
-                      {item.tag}
-                    </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-slate-800 leading-snug">{item.title}</p>
+                    {item.tag && (
+                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${TAG_STYLE[item.tag] ?? 'bg-slate-100 text-slate-600'}`}>
+                        {item.tag}
+                      </span>
+                    )}
+                  </div>
+                  {item.desc && (
+                    <p className="text-xs text-slate-500 mt-0.5 leading-snug">{item.desc}</p>
+                  )}
+
+                  {/* Nút điều hướng tới trang liên quan */}
+                  {item.link && (
+                    <button
+                      onClick={() => handleNavigate(item.link!.tab)}
+                      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:gap-1.5 transition-all"
+                    >
+                      {item.link.label}
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
                   )}
                 </div>
-                {item.desc && (
-                  <p className="text-xs text-slate-500 mt-0.5 leading-snug">{item.desc}</p>
-                )}
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
 
         {/* Divider */}
