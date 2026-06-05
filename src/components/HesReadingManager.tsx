@@ -144,7 +144,7 @@ export default function HesReadingManager() {
           let m = currentMinute % 60;
           h = h % 24;
 
-          const url = `/hes-meter/api/GELEXPOWER_getInstant?MA_DDO=ABC&MA_CTO=${meter.MeterNo}&GIO=${h}&PHUT=${m}&NGAY=${day}&THANG=${month}&NAM=${year}`;
+          const url = `/hes/api/GELEXPOWER_getInstant?MA_DDO=ABC&MA_CTO=${meter.MeterNo}&GIO=${h}&PHUT=${m}&NGAY=${day}&THANG=${month}&NAM=${year}`;
 
           try {
             const res = await fetch(url);
