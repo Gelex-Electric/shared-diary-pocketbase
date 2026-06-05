@@ -47,6 +47,11 @@ async function startServer() {
   // Redirect /_/ → /pb/_/ cho tiện vào Admin UI
   app.get('/_', (req, res) => res.redirect('/pb/_/'));
 
+  // ==================== STATIC: public/ (CSV, PDF, assets tĩnh) ====================
+  // Phục vụ thư mục public/ trực tiếp cho cả dev & prod
+  // (đảm bảo /datahdKH.csv, /document.pdf luôn tìm thấy)
+  app.use(express.static(path.join(__dirname, 'public')));
+
   // ==================== DEV MODE (Vite middleware) ====================
   if (process.env.NODE_ENV !== 'production') {
     console.log('🛠️  Chạy ở chế độ Development với Vite middleware...');
@@ -55,7 +60,7 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } 
+  }
   // ==================== PRODUCTION MODE (Railway) ====================
   else {
     const distPath = path.join(__dirname, 'dist');
