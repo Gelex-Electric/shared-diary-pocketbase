@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import pdfMake from 'pdfmake/build/pdfmake';
+import { DatePicker, TimePicker } from './ui/DateTimePickers';
 
 const timesUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Regular.ttf';
 const timesBdUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Bold.ttf';
@@ -614,7 +615,7 @@ export default function HandoverManager() {
           <select
             value={filter.area}
             onChange={(e) => setFilter({ ...filter, area: e.target.value })}
-            className="bg-white border border-slate-200 rounded px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
+            className="vl-select bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
           >
             <option value="">Tất cả khu vực</option>
             {effectiveAreas.map(area => (
@@ -624,7 +625,7 @@ export default function HandoverManager() {
           <select
             value={filter.month}
             onChange={(e) => setFilter({ ...filter, month: e.target.value })}
-            className="bg-white border border-slate-200 rounded px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
+            className="vl-select bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
           >
             {Array.from({ length: 12 }, (_, i) => {
               const m = (i + 1).toString().padStart(2, '0');
@@ -690,7 +691,7 @@ export default function HandoverManager() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Khu vực</label>
-                      <select value={formData.area} onChange={(e) => setFormData({ ...formData, area: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]">
+                      <select value={formData.area} onChange={(e) => setFormData({ ...formData, area: e.target.value })} className="vl-select w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-[#5a8dee] text-sm font-semibold text-slate-700 transition-all">
                         {effectiveAreas.map(area => <option key={area} value={area}>{area}</option>)}
                       </select>
                     </div>
@@ -733,7 +734,7 @@ export default function HandoverManager() {
                             endDate: newEndDate
                           });
                         }} 
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
+                        className="vl-select w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-[#5a8dee] text-sm font-semibold text-slate-700 transition-all"
                       >
                         <option value="Ca 1">Ca 1 (06:00 - 14:00)</option>
                         <option value="Ca 2">Ca 2 (14:00 - 22:00)</option>
@@ -743,14 +744,12 @@ export default function HandoverManager() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-6">
+                    <div className="space-y-3">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Thời gian bắt đầu</label>
                       <div className="grid grid-cols-2 gap-4">
-                        <input 
-                          type="date" 
-                          value={formData.startDate} 
-                          onChange={(e) => {
-                            const newStartDate = e.target.value;
+                        <DatePicker
+                          value={formData.startDate}
+                          onChange={(newStartDate) => {
                             let newEndDate = newStartDate;
                             if (formData.shift === 'Ca 3') {
                               const [year, month, day] = newStartDate.split('-').map(Number);
@@ -759,32 +758,25 @@ export default function HandoverManager() {
                               newEndDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
                             }
                             setFormData({ ...formData, startDate: newStartDate, endDate: newEndDate });
-                          }} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
+                          }}
                         />
-                        <input 
-                          type="time" 
-                          value={formData.startTime} 
-                          onChange={(e) => setFormData({ ...formData, startTime: e.target.value })} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
+                        <TimePicker
+                          value={formData.startTime}
+                          onChange={(val) => setFormData({ ...formData, startTime: val })}
                         />
                       </div>
                     </div>
 
-                    <div className="space-y-6">
+                    <div className="space-y-3">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Thời gian kết thúc</label>
                       <div className="grid grid-cols-2 gap-4">
-                        <input 
-                          type="date" 
-                          value={formData.endDate} 
-                          onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
+                        <DatePicker
+                          value={formData.endDate}
+                          onChange={(val) => setFormData({ ...formData, endDate: val })}
                         />
-                        <input 
-                          type="time" 
-                          value={formData.endTime} 
-                          onChange={(e) => setFormData({ ...formData, endTime: e.target.value })} 
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee]"
+                        <TimePicker
+                          value={formData.endTime}
+                          onChange={(val) => setFormData({ ...formData, endTime: val })}
                         />
                       </div>
                     </div>
@@ -837,11 +829,11 @@ export default function HandoverManager() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div className="space-y-3">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trực đội QLVH</div>
-                        <select value={formData.main_duty} onChange={(e) => setFormData({ ...formData, main_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee]">
+                        <select value={formData.main_duty} onChange={(e) => setFormData({ ...formData, main_duty: e.target.value })} className="vl-select w-full p-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-[#5a8dee] transition-all">
                           <option value="">Chọn trực chính</option>
                           {staffList.map(s => <option key={s.id} value={s.Name}>{s.Name}</option>)}
                         </select>
-                        <select value={formData.sub_duty} onChange={(e) => setFormData({ ...formData, sub_duty: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee]">
+                        <select value={formData.sub_duty} onChange={(e) => setFormData({ ...formData, sub_duty: e.target.value })} className="vl-select w-full p-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-[#5a8dee] transition-all">
                           <option value="">Chọn trực phụ</option>
                           {staffList.map(s => <option key={s.id} value={s.Name}>{s.Name}</option>)}
                         </select>
