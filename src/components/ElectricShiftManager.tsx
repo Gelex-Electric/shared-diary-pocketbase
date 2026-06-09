@@ -119,10 +119,10 @@ export default function ElectricShiftManager() {
           <p className="text-slate-500 text-sm mt-1">Danh sách nhân sự phân bổ theo tổ vận hành</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <select 
-            value={filterArea} 
+          <select
+            value={filterArea}
             onChange={(e) => setFilterArea(e.target.value)}
-            className="bg-white border border-slate-200 rounded px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
+            className="vl-select bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
           >
             <option value="">Tất cả khu vực</option>
             {effectiveAreas.map(area => (
@@ -254,7 +254,7 @@ export default function ElectricShiftManager() {
                   <select
                     value={formData.area}
                     onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:bg-white transition-all text-sm font-bold"
+                    className="vl-select w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:bg-white transition-all text-sm font-bold text-slate-700"
                   >
                     {effectiveAreas.map(area => (
                       <option key={area} value={area}>{area}</option>
