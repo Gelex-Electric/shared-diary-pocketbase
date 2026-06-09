@@ -531,7 +531,7 @@ export default function HesReadingManager() {
             <select
               value={filterArea}
               onChange={e => setFilterArea(e.target.value)}
-              className="bg-white border border-slate-200 rounded px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none"
+              className="vl-select bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
             >
               <option value="">Tất cả khu vực</option>
               {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
