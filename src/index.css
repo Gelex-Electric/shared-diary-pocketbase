@@ -142,7 +142,7 @@ body { background-color: var(--vl-bg); }
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   background-size: 1rem;
-  padding-right: 2.5rem !important;
+  padding-right: 2.5rem;
   cursor: pointer;
 }
 .vl-select:focus {
