@@ -382,7 +382,7 @@ export default function CustomerManager() {
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-500 mb-1">Khu vực</label>
-                        <select value={modalCust.area} onChange={e => setModalCust({ ...modalCust, area: e.target.value })} className={inputCls}>
+                        <select value={modalCust.area} onChange={e => setModalCust({ ...modalCust, area: e.target.value })} className={`vl-select ${inputCls}`}>
                           {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
                         </select>
                       </div>
@@ -606,7 +606,7 @@ export default function CustomerManager() {
 
             {userAreas.length !== 1 && (
               <select value={filterArea} onChange={e => setFilterArea(e.target.value)}
-                className="bg-white border border-slate-200 rounded px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none">
+                className="vl-select bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all">
                 <option value="">Tất cả khu vực</option>
                 {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
@@ -674,7 +674,7 @@ export default function CustomerManager() {
                         onChange={e => setEditCust({ ...editCust, Name: e.target.value })}
                         className="flex-1 min-w-[140px] px-2 py-1 border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee] bg-white" />
                       <select value={editCust.area} onChange={e => setEditCust({ ...editCust, area: e.target.value })}
-                        className="px-2 py-1 border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee] bg-white">
+                        className="vl-select px-2 py-1.5 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#5a8dee] bg-white pr-8 transition-all">
                         {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
                       </select>
                       <button onClick={() => saveCustEdit(cid)} className="p-1.5 text-[#5a8dee] hover:bg-[#e8f3ff] rounded" title="Lưu"><CheckCircle2 className="w-4 h-4" /></button>
@@ -751,7 +751,7 @@ export default function CustomerManager() {
                                       : <span className="text-sm text-slate-600">{meter.Line || '—'}</span>}
                                   </td>
                                   <td>
-                                    {isEM ? <select value={editMeter.area} onChange={e => setEditMeter({ ...editMeter, area: e.target.value })} className={inputCls}>
+                                    {isEM ? <select value={editMeter.area} onChange={e => setEditMeter({ ...editMeter, area: e.target.value })} className={`vl-select ${inputCls}`}>
                                         {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
                                       </select>
                                       : <span className="text-sm text-slate-500 flex items-center gap-1"><MapPin className="w-3 h-3" />{meter.area}</span>}
