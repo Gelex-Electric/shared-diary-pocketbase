@@ -7,6 +7,7 @@ import {
   Table as TableIcon, CreditCard,
 } from 'lucide-react';
 import { DatePicker, TimePicker } from './ui/DateTimePickers';
+import { Select } from './ui/Select';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 
@@ -528,14 +529,12 @@ export default function HesReadingManager() {
               <Download className="w-3.5 h-3.5" />
               Xuất Excel
             </button>
-            <select
+            <Select
               value={filterArea}
-              onChange={e => setFilterArea(e.target.value)}
-              className="vl-select bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
-            >
-              <option value="">Tất cả khu vực</option>
-              {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
+              onChange={setFilterArea}
+              options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map(a => ({ value: a, label: a }))]}
+              className="min-w-[170px]"
+            />
           </div>
         </div>
 
