@@ -30,6 +30,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
+import { Select } from './ui/Select';
 
 // Bộ nhớ đệm module-level: CSV chỉ fetch một lần duy nhất trong suốt phiên làm việc.
 // Giá trị tồn tại kể cả khi SummaryDashboard unmount/remount (chuyển tab).
@@ -355,8 +356,8 @@ export default function SummaryDashboard() {
   }, [uniqueMonths, selectedMonth]);
 
   // Handle month selection reset pagination
-  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedMonth(e.target.value);
+  const handleMonthChange = (val: string) => {
+    setSelectedMonth(val);
     setCurrentPage(1);
   };
 
@@ -875,18 +876,14 @@ export default function SummaryDashboard() {
               }`}>
                 <Building2 className={`w-5 h-5 shrink-0 ${cust1 ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
                 <div className="flex-1 min-w-0">
-                  <select
+                  <Select
+                    variant="bare"
+                    searchable
                     value={cust1}
-                    onChange={(e) => setCust1(e.target.value)}
-                    className="vl-select w-full bg-transparent border-none text-slate-800 font-extrabold text-xs md:text-sm focus:outline-none cursor-pointer pr-8 truncate"
-                  >
-                    <option value="">-- Click chọn khách hàng A --</option>
-                    {uniqueCustomers.map(c => (
-                      <option key={c.maKH} value={c.maKH}>
-                        [{c.maKH}] {c.tenKH}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setCust1}
+                    placeholder="-- Click chọn khách hàng A --"
+                    options={[{ value: '', label: '-- Click chọn khách hàng A --' }, ...uniqueCustomers.map(c => ({ value: c.maKH, label: `[${c.maKH}] ${c.tenKH}` }))]}
+                  />
                 </div>
               </div>
             </div>
@@ -947,18 +944,14 @@ export default function SummaryDashboard() {
               }`}>
                 <Building2 className={`w-5 h-5 shrink-0 ${cust2 ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
                 <div className="flex-1 min-w-0">
-                  <select
+                  <Select
+                    variant="bare"
+                    searchable
                     value={cust2}
-                    onChange={(e) => setCust2(e.target.value)}
-                    className="vl-select w-full bg-transparent border-none text-slate-800 font-extrabold text-xs md:text-sm focus:outline-none cursor-pointer pr-8 truncate"
-                  >
-                    <option value="">-- Click chọn khách hàng B --</option>
-                    {uniqueCustomers.map(c => (
-                      <option key={c.maKH} value={c.maKH}>
-                        [{c.maKH}] {c.tenKH}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setCust2}
+                    placeholder="-- Click chọn khách hàng B --"
+                    options={[{ value: '', label: '-- Click chọn khách hàng B --' }, ...uniqueCustomers.map(c => ({ value: c.maKH, label: `[${c.maKH}] ${c.tenKH}` }))]}
+                  />
                 </div>
               </div>
             </div>
@@ -1031,16 +1024,12 @@ export default function SummaryDashboard() {
             <div className="flex items-center gap-2 bg-white border border-slate-200 rounded px-3 py-2 shadow-sm min-w-[170px]">
               <Calendar className="w-4 h-4 text-[#5a8dee] shrink-0" />
               <div className="flex-1 min-w-0">
-                <select
+                <Select
+                  variant="bare"
                   value={selectedMonth}
                   onChange={handleMonthChange}
-                  className="vl-select w-full bg-transparent border-none text-slate-800 font-bold text-xs focus:outline-none cursor-pointer pr-8"
-                >
-                  <option value="all">Tất cả các tháng</option>
-                  {uniqueMonths.map(m => (
-                    <option key={m} value={m}>Tháng {m}</option>
-                  ))}
-                </select>
+                  options={[{ value: 'all', label: 'Tất cả các tháng' }, ...uniqueMonths.map(m => ({ value: m, label: `Tháng ${m}` }))]}
+                />
               </div>
             </div>
 
