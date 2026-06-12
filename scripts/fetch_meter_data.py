@@ -16,8 +16,8 @@ BASE_URL = "http://14.225.244.63:8899/api"
 CSV_PATH = "public/datametter.csv"
 FIELDS = ["METER_NO", "DATE_TIME", "PHASE_A_VOLTS", "PHASE_B_VOLTS", "PHASE_C_VOLTS", "TOTAL_KW"]
 
-USER_ACCOUNT = os.environ.get("API_USER", "GETC")
-PASSWORD = os.environ.get("API_PASS", "GETC@123")
+USER_ACCOUNT = os.environ.get("API_USER", "")
+PASSWORD = os.environ.get("API_PASS", "")
 
 # PocketBase
 PB_URL = os.environ.get("PB_URL", "https://getc.up.railway.app/pb").rstrip("/")
@@ -102,6 +102,8 @@ def load_meter_list():
 
 
 def login() -> str:
+    if not (USER_ACCOUNT and PASSWORD):
+        sys.exit("Thieu API_USER/API_PASS. Hay them vao GitHub Secrets.")
     r = requests.get(
         f"{BASE_URL}/Login",
         params={"UserAccount": USER_ACCOUNT, "Password": PASSWORD},
