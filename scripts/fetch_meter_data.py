@@ -8,13 +8,32 @@ Luu: METER_NO, DATE_TIME, PHASE_A_VOLTS, PHASE_B_VOLTS, PHASE_C_VOLTS, TOTAL_KW
 import csv
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 
 import requests
 
+
+def get_retry(url, *, attempts=4, **kwargs):
+    """GET co retry cho loi mang/5xx (Railway cold start hay tra 502)."""
+    last = None
+    for i in range(attempts):
+        try:
+            r = requests.get(url, **kwargs)
+            if r.status_code < 500:
+                return r
+            last = f"{r.status_code} tai {r.url}"
+        except Exception as e:
+            last = str(e)
+        if i < attempts - 1:
+            time.sleep(10 * (i + 1))
+    raise RuntimeError(last)
+
 BASE_URL = "http://14.225.244.63:8899/api"
 CSV_PATH = "public/datametter.csv"
 FIELDS = ["METER_NO", "DATE_TIME", "PHASE_A_VOLTS", "PHASE_B_VOLTS", "PHASE_C_VOLTS", "TOTAL_KW"]
+KEEP_RECORDS = int(os.environ.get("KEEP_RECORDS", "336"))  # 7 ngay x 48 ban ghi/ngay moi cong to
+FETCH_HOURS = int(os.environ.get("FETCH_HOURS", "6"))       # cua so lay du lieu, rong de vot ban ghi ve tre
 
 USER_ACCOUNT = os.environ.get("API_USER", "")
 PASSWORD = os.environ.get("API_PASS", "")
@@ -61,8 +80,8 @@ def load_meter_list():
         h = pb_auth_header(b)
         for c in collections:
             try:
-                r = requests.get(f"{b}/api/collections/{c}/records",
-                                 params={"perPage": 1}, headers=h, timeout=30)
+                r = get_retry(f"{b}/api/collections/{c}/records",
+                              params={"perPage": 1}, headers=h, timeout=30)
                 if r.ok:
                     base, coll, headers = b, c, h
                     break
@@ -77,7 +96,7 @@ def load_meter_list():
 
     meters, page = {}, 1
     while True:
-        r = requests.get(
+        r = get_retry(
             f"{base}/api/collections/{coll}/records",
             params={"page": page, "perPage": 200,
                     "fields": f"{PB_FIELD},{PB_HSN_FIELD}"},
@@ -120,7 +139,7 @@ def login() -> str:
 
 def fetch_instant(token: str, meter_no: str):
     now = datetime.now(VN_TZ)
-    start = now - timedelta(hours=1)
+    start = now - timedelta(hours=FETCH_HOURS)
     fmt = "%Y%m%d%H%M%S"
     try:
         r = requests.get(
@@ -153,34 +172,54 @@ def scale(value, hsn):
 
 def append_csv(rows):
     os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
-    exists = os.path.isfile(CSV_PATH)
 
-    existing = set()
-    if exists:
+    # Doc toan bo du lieu cu
+    all_data = {}
+    if os.path.isfile(CSV_PATH):
         with open(CSV_PATH, newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                existing.add((row.get("METER_NO"), row.get("DATE_TIME")))
+                key = (row.get("METER_NO", ""), row.get("DATE_TIME", ""))
+                all_data[key] = row
 
+    # Them ban ghi moi (ghi de neu trung key)
     new = 0
-    with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS)
-        if not exists:
-            w.writeheader()
-        for rec in rows:
-            key = (rec.get("METER_NO", ""), rec.get("DATE_TIME") or rec.get("DATA_TIME", ""))
-            if key in existing:
-                continue
-            w.writerow({
-                "METER_NO": key[0],
-                "DATE_TIME": key[1],
-                "PHASE_A_VOLTS": rec.get("PHASE_A_VOLTS", ""),
-                "PHASE_B_VOLTS": rec.get("PHASE_B_VOLTS", ""),
-                "PHASE_C_VOLTS": rec.get("PHASE_C_VOLTS", ""),
-                "TOTAL_KW": rec.get("TOTAL_KW", ""),
-            })
-            existing.add(key)
+    for rec in rows:
+        key = (str(rec.get("METER_NO", "")),
+               rec.get("DATE_TIME") or rec.get("DATA_TIME", ""))
+        if key not in all_data:
             new += 1
-    print(f"Appended {new} new row(s) to {CSV_PATH}")
+        all_data[key] = {
+            "METER_NO": key[0],
+            "DATE_TIME": key[1],
+            "PHASE_A_VOLTS": rec.get("PHASE_A_VOLTS", ""),
+            "PHASE_B_VOLTS": rec.get("PHASE_B_VOLTS", ""),
+            "PHASE_C_VOLTS": rec.get("PHASE_C_VOLTS", ""),
+            "TOTAL_KW": rec.get("TOTAL_KW", ""),
+        }
+
+    # Gom theo cong to, chi giu KEEP_RECORDS ban ghi moi nhat moi cong to
+    by_meter = {}
+    for (no, _), row in all_data.items():
+        by_meter.setdefault(no, []).append(row)
+
+    kept = []
+    pruned = 0
+    for no, recs in by_meter.items():
+        recs.sort(key=lambda r: r.get("DATE_TIME", ""))
+        if len(recs) > KEEP_RECORDS:
+            pruned += len(recs) - KEEP_RECORDS
+            recs = recs[-KEEP_RECORDS:]
+        kept.extend(recs)
+
+    # Sap xep on dinh: theo cong to roi thoi gian
+    kept.sort(key=lambda r: (r.get("METER_NO", ""), r.get("DATE_TIME", "")))
+
+    with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=FIELDS)
+        w.writeheader()
+        w.writerows(kept)
+    print(f"Them {new} ban ghi moi, xoa {pruned} ban ghi cu. "
+          f"Tong: {len(kept)} dong trong {CSV_PATH}")
 
 
 def main():
@@ -195,8 +234,7 @@ def main():
         rows = fetch_instant(token, no)
         for rec in rows:
             rec.setdefault("METER_NO", no)
-            for f in ("PHASE_A_VOLTS", "PHASE_B_VOLTS", "PHASE_C_VOLTS", "TOTAL_KW"):
-                rec[f] = scale(rec.get(f), hsn)
+            rec["TOTAL_KW"] = scale(rec.get("TOTAL_KW"), hsn)
         print(f"  {no} (HSN={hsn:g}): {len(rows)} ban ghi")
         all_rows.extend(rows)
 
