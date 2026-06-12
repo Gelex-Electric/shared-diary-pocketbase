@@ -31,7 +31,6 @@ jobs:
         env:
           API_USER: ${{ secrets.API_USER }}
           API_PASS: ${{ secrets.API_PASS }}
-          PB_URL: https://getc.up.railway.app/pb
           PB_ADMIN_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
           PB_ADMIN_PASS: ${{ secrets.PB_ADMIN_PASS }}
         run: python scripts/fetch_meter_data.py
