@@ -1,0 +1,50 @@
+name: Fetch Meter Data (hourly)
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # mỗi giờ, 24 lần/ngày (giờ UTC)
+  workflow_dispatch:        # cho phép chạy thủ công để test
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-meter-data
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch data from API
+        env:
+          API_USER: ${{ secrets.API_USER }}
+          API_PASS: ${{ secrets.API_PASS }}
+          PB_URL: https://getc.up.railway.app/pb
+          PB_ADMIN_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_ADMIN_PASS: ${{ secrets.PB_ADMIN_PASS }}
+        run: python scripts/fetch_meter_data.py
+
+      - name: Commit & push CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/datametter.csv
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: update meter data $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git pull --rebase origin ${{ github.ref_name }}
+            git push
+          fi
