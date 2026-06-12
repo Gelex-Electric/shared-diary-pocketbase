@@ -21,51 +21,84 @@ PASSWORD = os.environ.get("API_PASS", "GETC@123")
 
 # PocketBase
 PB_URL = os.environ.get("PB_URL", "https://getc.up.railway.app/pb").rstrip("/")
-PB_COLLECTION = os.environ.get("PB_COLLECTION", "Metter")
+PB_COLLECTION = os.environ.get("PB_COLLECTION", "Meter")
 PB_FIELD = os.environ.get("PB_FIELD", "MeterNo")
+PB_HSN_FIELD = os.environ.get("PB_HSN_FIELD", "HSN")
 PB_ADMIN_EMAIL = os.environ.get("PB_ADMIN_EMAIL", "")       # de trong neu collection cho phep doc public
 PB_ADMIN_PASS = os.environ.get("PB_ADMIN_PASS", "")
 
 VN_TZ = timezone(timedelta(hours=7))
 
 
-def pb_auth_header():
+def pb_auth_header(base):
     if not (PB_ADMIN_EMAIL and PB_ADMIN_PASS):
         return {}
     # PocketBase >= 0.23 dung _superusers; ban cu dung /api/admins
     for path in ("/api/collections/_superusers/auth-with-password", "/api/admins/auth-with-password"):
         try:
-            r = requests.post(f"{PB_URL}{path}",
+            r = requests.post(f"{base}{path}",
                               json={"identity": PB_ADMIN_EMAIL, "password": PB_ADMIN_PASS},
                               timeout=30)
             if r.ok:
                 return {"Authorization": r.json()["token"]}
         except Exception:
             pass
-    sys.exit("Khong dang nhap duoc PocketBase admin.")
+    print("[WARN] Khong dang nhap duoc PocketBase admin, thu doc public.")
+    return {}
 
 
 def load_meter_list():
-    if not PB_URL:
-        sys.exit("PB_URL chua duoc cau hinh (URL PocketBase).")
-    headers = pb_auth_header()
-    meters, page = [], 1
+    bases = [PB_URL] if os.environ.get("PB_URL") else [
+        "https://getc.up.railway.app/pb",
+        "https://getc.up.railway.app",
+    ]
+    collections = [PB_COLLECTION, "Meter", "pbc_1418108225"]
+
+    base = coll = None
+    headers = {}
+    last_err = ""
+    for b in bases:
+        h = pb_auth_header(b)
+        for c in collections:
+            try:
+                r = requests.get(f"{b}/api/collections/{c}/records",
+                                 params={"perPage": 1}, headers=h, timeout=30)
+                if r.ok:
+                    base, coll, headers = b, c, h
+                    break
+                last_err = f"{r.status_code} tai {r.url}"
+            except Exception as e:
+                last_err = str(e)
+        if base:
+            break
+    if not base:
+        sys.exit(f"Khong tim thay collection tren PocketBase. Loi cuoi: {last_err}")
+    print(f"PocketBase OK: {base} / collection '{coll}'")
+
+    meters, page = {}, 1
     while True:
         r = requests.get(
-            f"{PB_URL}/api/collections/{PB_COLLECTION}/records",
-            params={"page": page, "perPage": 200, "fields": PB_FIELD},
+            f"{base}/api/collections/{coll}/records",
+            params={"page": page, "perPage": 200,
+                    "fields": f"{PB_FIELD},{PB_HSN_FIELD}"},
             headers=headers, timeout=30,
         )
         r.raise_for_status()
         data = r.json()
         for item in data.get("items", []):
             no = str(item.get(PB_FIELD) or "").strip()
-            if no:
-                meters.append(no)
+            if not no:
+                continue
+            try:
+                hsn = float(item.get(PB_HSN_FIELD) or 1) or 1.0
+            except (TypeError, ValueError):
+                hsn = 1.0
+            meters[no] = hsn
+    # het trang?
         if page >= data.get("totalPages", 1):
             break
         page += 1
-    return sorted(set(meters))
+    return meters
 
 
 def login() -> str:
@@ -108,6 +141,14 @@ def fetch_instant(token: str, meter_no: str):
     return data or []
 
 
+def scale(value, hsn):
+    """Nhan he so nhan; giu nguyen neu khong phai so."""
+    try:
+        return f"{float(value) * hsn:g}"
+    except (TypeError, ValueError):
+        return value if value is not None else ""
+
+
 def append_csv(rows):
     os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
     exists = os.path.isfile(CSV_PATH)
@@ -148,11 +189,13 @@ def main():
     token = login()
 
     all_rows = []
-    for no in meters:
+    for no, hsn in meters.items():
         rows = fetch_instant(token, no)
         for rec in rows:
             rec.setdefault("METER_NO", no)
-        print(f"  {no}: {len(rows)} ban ghi")
+            for f in ("PHASE_A_VOLTS", "PHASE_B_VOLTS", "PHASE_C_VOLTS", "TOTAL_KW"):
+                rec[f] = scale(rec.get(f), hsn)
+        print(f"  {no} (HSN={hsn:g}): {len(rows)} ban ghi")
         all_rows.extend(rows)
 
     if not all_rows:
