@@ -83,36 +83,6 @@ export interface HesReading {
   updated: string;
 }
 
-export interface OutageCustomer {
-  id: string;
-  MKH: string;
-  Name: string;
-}
-
-export interface OutageSlot {
-  startTime: string;      // 'YYYY-MM-DD HH:mm:ss'
-  endTime: string;
-  scope: string;
-  appendixIndex: number;  // index vào appendices[]
-}
-
-export interface OutageAppendix {
-  customers: OutageCustomer[];
-}
-
-export interface PowerOutage {
-  id: string;
-  noticeDate: string;       // text "Ngày D tháng M năm YYYY"
-  type: 'emergency' | 'planned';
-  area: string;
-  reason: string;
-  addLegal?: string;
-  slots: OutageSlot[];       // khung giờ ngừng điện
-  appendices: OutageAppendix[]; // danh sách phụ lục (nhóm khách hàng)
-  created: string;
-  updated: string;
-}
-
 export interface NewUpdate {
   id: string;
   area: string;
