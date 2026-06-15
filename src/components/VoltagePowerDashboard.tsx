@@ -65,58 +65,27 @@ const fmtDateVN = (key: string) => {
   return `${d}/${m}/${y}`;
 };
 
-const slotLabel = (slotMin: number) =>
-  `${p2(Math.floor(slotMin / 60) % 24)}:${p2(slotMin % 60)}`;
+const timeLabel = (dt: Date) => `${p2(dt.getHours())}:${p2(dt.getMinutes())}`;
 
-const fmtNum = (v: number, digits = 0) =>
-  new Intl.NumberFormat('vi-VN', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: digits,
-  }).format(v);
-
-/**
- * Làm tròn về mốc 30 phút gần nhất (yêu cầu nghiệp vụ, độ phân giải 30').
- *  - Phút [0..10]   → :00 (làm tròn xuống).
- *  - Phút [20..40]  → :30 (làm tròn về nửa giờ).
- *  - Phút [50..60]  → :00 giờ kế tiếp (làm tròn lên).
- *  - Còn lại (11..19, 41..49) → bỏ (không sát mốc nào).
- * Trả về { dateKey, slotMin, offset } với slotMin = phút trong ngày của mốc,
- * offset = độ lệch (phút) tới mốc — dùng chọn bản ghi gần mốc nhất.
- */
-function roundToHalfHour(dt: Date): { dateKey: string; slotMin: number; offset: number } | null {
-  const m = dt.getMinutes();
-  const d = new Date(dt);
-  d.setSeconds(0, 0);
-
-  if (m <= 10) {
-    d.setMinutes(0);
-    return { dateKey: fmtDateKey(d), slotMin: d.getHours() * 60, offset: m };
-  }
-  if (m >= 20 && m <= 40) {
-    d.setMinutes(30);
-    return { dateKey: fmtDateKey(d), slotMin: d.getHours() * 60 + 30, offset: Math.abs(m - 30) };
-  }
-  if (m >= 50) {
-    d.setMinutes(0);
-    d.setHours(d.getHours() + 1); // tự cuộn sang ngày kế tiếp nếu cần
-    return { dateKey: fmtDateKey(d), slotMin: d.getHours() * 60, offset: 60 - m };
-  }
-  return null;
-}
+/** Định dạng số CHÍNH XÁC theo dữ liệu (không ép làm tròn), kiểu vi-VN. */
+const fmtVal = (v: number) =>
+  new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(v);
 
 /* ================================================================
    TYPES nội bộ
 ================================================================ */
-interface HourCell {
+/** Một bản ghi đo tại ĐÚNG thời điểm trong CSV (không làm tròn). */
+interface Reading {
+  t: number;       // số phút trong ngày (để sắp xếp / trục X)
+  label: string;   // 'HH:mm'
   ua: number;
   ub: number;
   uc: number;
   kw: number;
-  offset: number;
 }
 
-// meterNo -> dateKey -> slotMin -> cell
-type ReadingIndex = Map<string, Map<string, Map<number, HourCell>>>;
+// meterNo -> dateKey -> danh sách bản ghi (sắp theo thời gian)
+type ReadingIndex = Map<string, Map<string, Reading[]>>;
 
 interface CustomerInfo {
   id: string;
@@ -176,7 +145,7 @@ function ChartTooltip({ active, payload, label }: any) {
                 <span className="vl-dot" style={{ background: it.color }} />
                 <span className="vl-lbl">{SERIES_LABEL[it.dataKey] ?? it.dataKey}</span>
                 <span className="vl-val">
-                  {fmtNum(Number(it.value), isP ? 2 : 1)} {isP ? 'kW' : 'V'}
+                  {fmtVal(Number(it.value))} {isP ? 'kW' : 'V'}
                 </span>
               </div>
             );
@@ -282,7 +251,7 @@ export default function VoltagePowerDashboard() {
     return map;
   }, [meters]);
 
-  /* ---- Phân tích CSV → chỉ mục theo công tơ / ngày / mốc 30' ---- */
+  /* ---- Phân tích CSV → chỉ mục theo công tơ / ngày (giữ nguyên thời điểm) ---- */
   const { readingIndex, dateKeys } = useMemo(() => {
     const index: ReadingIndex = new Map();
     const dateSet = new Set<string>();
@@ -303,27 +272,22 @@ export default function VoltagePowerDashboard() {
         const dt = new Date(dtRaw.replace(' ', 'T'));
         if (isNaN(dt.getTime())) continue;
 
-        const rounded = roundToHalfHour(dt);
-        if (!rounded) continue;
-
-        const cell: HourCell = {
+        const dateKey = fmtDateKey(dt);
+        const reading: Reading = {
+          t: dt.getHours() * 60 + dt.getMinutes(),
+          label: timeLabel(dt),
           ua: parseFloat(cols[2]) || 0,
           ub: parseFloat(cols[3]) || 0,
           uc: parseFloat(cols[4]) || 0,
           kw: parseFloat(cols[5]) || 0,
-          offset: rounded.offset,
         };
 
         let byDate = index.get(meterNo);
         if (!byDate) { byDate = new Map(); index.set(meterNo, byDate); }
-        let bySlot = byDate.get(rounded.dateKey);
-        if (!bySlot) { bySlot = new Map(); byDate.set(rounded.dateKey, bySlot); }
-
-        const existing = bySlot.get(rounded.slotMin);
-        if (!existing || rounded.offset < existing.offset) {
-          bySlot.set(rounded.slotMin, cell);
-        }
-        dateSet.add(rounded.dateKey);
+        let list = byDate.get(dateKey);
+        if (!list) { list = []; byDate.set(dateKey, list); }
+        list.push(reading);
+        dateSet.add(dateKey);
       }
     }
 
@@ -358,31 +322,30 @@ export default function VoltagePowerDashboard() {
       const stations: StationSeries[] = [];
 
       for (const m of info.meters) {
-        const bySlot = readingIndex.get(m.meterNo)?.get(selectedDate);
-        if (!bySlot || bySlot.size === 0) continue;
+        const list = readingIndex.get(m.meterNo)?.get(selectedDate);
+        if (!list || list.length === 0) continue;
 
-        // Trạm chỉ vẽ khi có điện áp 3 pha > 0 (ít nhất 1 mốc)
+        // Trạm chỉ vẽ khi có điện áp 3 pha > 0 (ít nhất 1 bản ghi)
         let hasVoltage = false;
-        for (const cell of bySlot.values()) {
-          if (cell.ua > 0 && cell.ub > 0 && cell.uc > 0) { hasVoltage = true; break; }
+        for (const r of list) {
+          if (r.ua > 0 && r.ub > 0 && r.uc > 0) { hasVoltage = true; break; }
         }
         if (!hasVoltage) continue;
 
-        const sortedSlots = Array.from(bySlot.keys()).sort((a, b) => a - b);
+        // Sắp theo thời gian thực — KHÔNG làm tròn, giữ nguyên mốc & giá trị
+        const sorted = [...list].sort((a, b) => a.t - b.t);
         let peakP = 0;
         let peakLabel = '';
-        const data = sortedSlots.map(s => {
-          const cell = bySlot.get(s)!;
-          const row: any = {
-            slot: s,
-            label: slotLabel(s),
-            ua: cell.ua > 0 ? cell.ua : null,
-            ub: cell.ub > 0 ? cell.ub : null,
-            uc: cell.uc > 0 ? cell.uc : null,
-            p: cell.kw,
+        const data = sorted.map(r => {
+          if (r.kw > peakP) { peakP = r.kw; peakLabel = r.label; }
+          return {
+            t: r.t,
+            label: r.label,
+            ua: r.ua > 0 ? r.ua : null,
+            ub: r.ub > 0 ? r.ub : null,
+            uc: r.uc > 0 ? r.uc : null,
+            p: r.kw,
           };
-          if (cell.kw > peakP) { peakP = cell.kw; peakLabel = row.label; }
-          return row;
         });
 
         stations.push({ meterNo: m.meterNo, line: m.line, data, peakP, peakLabel });
@@ -463,7 +426,7 @@ export default function VoltagePowerDashboard() {
   const noData = isReady && chartableCustomers.length === 0;
 
   /* ---- Render 1 thẻ biểu đồ (1 trạm: 3 đường điện áp + 1 cột P) ---- */
-  const renderCard = (i: number, size: 'lg' | 'sm') => {
+  const renderCard = (i: number) => {
     const meta = SLOT_META[i];
     const selId = slots[i];
     const cust = selId ? chartById.get(selId) : undefined;
@@ -473,11 +436,9 @@ export default function VoltagePowerDashboard() {
       : (stations[0]?.meterNo ?? '');
     const station = stations.find(s => s.meterNo === effMeter);
     const multiStation = stations.length > 1;
-    const chartHeight = size === 'lg' ? 'h-[300px]' : 'h-[210px]';
-    const cardMinH = size === 'lg' ? 'min-h-[440px]' : 'min-h-[350px]';
 
     return (
-      <div key={i} className={`vl-card p-5 flex flex-col ${cardMinH}`}>
+      <div key={i} className="vl-card p-5 flex flex-col min-h-[440px]">
         {/* Tiêu đề + bộ chọn */}
         <div className="flex flex-col gap-2.5 mb-4">
           <div className="flex items-center gap-2">
@@ -527,7 +488,7 @@ export default function VoltagePowerDashboard() {
               )}
               {station && (
                 <span className="font-mono">
-                  P max: <strong className="text-amber-600">{fmtNum(station.peakP, 1)} kW</strong>
+                  P max: <strong className="text-amber-600">{fmtVal(station.peakP)} kW</strong>
                   {station.peakLabel && <span className="text-slate-400"> @ {station.peakLabel}</span>}
                 </span>
               )}
@@ -536,7 +497,7 @@ export default function VoltagePowerDashboard() {
         </div>
 
         {/* Biểu đồ — 1 trạm */}
-        <div className={`w-full text-slate-700 ${chartHeight}`}>
+        <div className="w-full text-slate-700 h-[280px]">
           {station && station.data.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={station.data} margin={{ top: 22, right: 10, left: 2, bottom: 4 }}>
@@ -547,7 +508,7 @@ export default function VoltagePowerDashboard() {
                   stroke="#94a3b8"
                   style={{ fontSize: '10px', fontWeight: 'bold' }}
                   interval="preserveStartEnd"
-                  minTickGap={size === 'lg' ? 18 : 28}
+                  minTickGap={24}
                 />
                 <YAxis
                   yAxisId="v"
@@ -573,7 +534,7 @@ export default function VoltagePowerDashboard() {
                 />
 
                 {/* Cột công suất P (kW) — trục phải */}
-                <Bar yAxisId="p" dataKey="p" name="P (kW)" fill={P_FILL} radius={[3, 3, 0, 0]} barSize={size === 'lg' ? 14 : 9} />
+                <Bar yAxisId="p" dataKey="p" name="P (kW)" fill={P_FILL} radius={[2, 2, 0, 0]} maxBarSize={10} />
 
                 {/* Mốc đạt P max của trạm */}
                 {station.peakLabel && (
@@ -584,7 +545,7 @@ export default function VoltagePowerDashboard() {
                     strokeDasharray="4 3"
                     strokeWidth={1.5}
                     label={{
-                      value: `P max ${fmtNum(station.peakP, 1)} kW`,
+                      value: `P max ${fmtVal(station.peakP)} kW`,
                       position: 'top',
                       fontSize: 9,
                       fontWeight: 700,
@@ -632,9 +593,9 @@ export default function VoltagePowerDashboard() {
             </h1>
           </div>
           <p className="text-sm text-slate-500 max-w-2xl">
-            Biểu đồ kết hợp theo mốc <strong>30 phút</strong> cho từng <strong>trạm</strong>: <strong>điện áp 3 pha (đường)</strong> và{' '}
-            <strong>công suất P&nbsp;(kW) (cột)</strong>. Mặc định: 3 biểu đồ lớn bên trái cho khách có P&nbsp;max cao nhất,
-            3 biểu đồ nhỏ bên phải cho khách thấp nhất. Khách nhiều điểm đo có thể chọn trạm qua dropdown.
+            Biểu đồ kết hợp theo <strong>thời gian thực tế</strong> của số liệu đo cho từng <strong>trạm</strong>:{' '}
+            <strong>điện áp 3 pha (đường)</strong> và <strong>công suất P&nbsp;(kW) (cột)</strong>. Mặc định hiển thị
+            3 khách có P&nbsp;max cao nhất và 3 khách thấp nhất; khách nhiều điểm đo có thể chọn trạm qua dropdown.
           </p>
         </div>
 
@@ -685,17 +646,10 @@ export default function VoltagePowerDashboard() {
         </div>
       )}
 
-      {/* ---- Lưới 6 biểu đồ: 3 lớn bên trái, 3 nhỏ bên phải ---- */}
+      {/* ---- Lưới 6 biểu đồ kích thước bằng nhau (hàng trên: cao nhất, hàng dưới: thấp nhất) ---- */}
       {isReady && !noData && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 3 biểu đồ lớn — phụ tải cao nhất */}
-          <div className="lg:col-span-2 space-y-6">
-            {[0, 1, 2].map(i => renderCard(i, 'lg'))}
-          </div>
-          {/* 3 biểu đồ nhỏ — phụ tải thấp nhất */}
-          <div className="space-y-6">
-            {[3, 4, 5].map(i => renderCard(i, 'sm'))}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {[0, 1, 2, 3, 4, 5].map(i => renderCard(i))}
         </div>
       )}
     </div>
