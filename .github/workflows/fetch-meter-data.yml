@@ -15,6 +15,9 @@ concurrency:
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Ho_Chi_Minh   # toàn bộ job chạy theo giờ VN (UTC+7)
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -25,7 +28,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install --quiet requests
 
       - name: Fetch data from API
         env:
@@ -39,11 +42,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin ${{ github.ref_name }}
           git add public/datametter.csv
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "chore: update meter data $(date -u +'%Y-%m-%d %H:%M UTC')"
-            git pull --rebase origin ${{ github.ref_name }}
+            git commit -m "chore: update meter data $(date +'%Y-%m-%d %H:%M ICT')"
             git push
           fi
