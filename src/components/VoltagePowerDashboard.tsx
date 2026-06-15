@@ -6,7 +6,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   Bar,
   Line,
   ReferenceLine,
@@ -16,6 +15,7 @@ import {
   Building2,
   HelpCircle,
   Gauge,
+  Info,
   TrendingUp,
   TrendingDown,
 } from 'lucide-react';
@@ -141,15 +141,18 @@ interface CustomerChart {
 }
 
 /* ================================================================
-   MÀU SẮC — pha = màu, điểm đo = sắc độ + kiểu nét.
+   MÀU SẮC — đồng bộ palette SummaryDashboard
+   (slate #94a3b8, blue #3b82f6, green #10b981, amber #f59e0b, pink #ec4899).
+   Pha = màu cố định; TRẠM phân biệt bằng kiểu nét đường + sắc độ cột.
 ================================================================ */
-const PHASE_A = ['#dc2626', '#ef4444', '#f87171', '#fca5a5']; // đỏ — pha A
-const PHASE_B = ['#16a34a', '#22c55e', '#4ade80', '#86efac']; // xanh lá — pha B
-const PHASE_C = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd']; // xanh dương — pha C
-const P_FILLS = ['#c7d2fe', '#ddd6fe', '#fbcfe8', '#fde68a']; // cột P (kW)
-const DASHES = ['', '5 3', '2 3', '8 3 2 3'];                  // kiểu nét theo điểm đo
+const PHASE_COLOR = { ua: '#3b82f6', ub: '#10b981', uc: '#f59e0b' }; // Ua xanh dương, Ub xanh lá, Uc hổ phách
+const P_FILLS = ['#5a8dee', '#94a3b8', '#a5b4fc', '#ec4899'];        // cột P (kW) theo trạm
+const DASHES = ['', '5 3', '2 3', '8 3 2 3'];                        // kiểu nét theo trạm
 
 const pick = (arr: string[], i: number) => arr[i % arr.length];
+
+/** Nhãn trạm để phân biệt điểm đo (vd: YM.KIMTIN.3000KVA.ECHO). */
+const stationLabel = (cm: { line: string; meterNo: string }) => cm.line || cm.meterNo;
 
 /* ================================================================
    TOOLTIP tuỳ biến — nền sáng, gom theo điểm đo.
@@ -185,10 +188,8 @@ function ChartTooltip({ active, payload, label, chartMeters }: any) {
         const cm: ChartMeter | undefined = chartMeters.find((c: ChartMeter) => c.idx === idx);
         return (
           <div key={idx} className="vl-chart-tooltip-group">
-            {multi && (
-              <div className="vl-chart-tooltip-meter">
-                Điểm đo {idx + 1} · {cm?.meterNo}
-              </div>
+            {multi && cm && (
+              <div className="vl-chart-tooltip-meter">{stationLabel(cm)}</div>
             )}
             {items
               .sort((a, b) => (a.info.kind === 'p' ? 1 : 0) - (b.info.kind === 'p' ? 1 : 0))
@@ -204,6 +205,43 @@ function ChartTooltip({ active, payload, label, chartMeters }: any) {
                   </div>
                 );
               })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ================================================================
+   LEGEND tuỳ biến — gom theo TRẠM, hiển thị màu pha + kiểu nét + cột P.
+================================================================ */
+function DashLine({ color, dash }: { color: string; dash: string }) {
+  return (
+    <svg width="20" height="6" className="shrink-0">
+      <line x1="0" y1="3" x2="20" y2="3" stroke={color} strokeWidth="2.2" strokeDasharray={dash || undefined} />
+    </svg>
+  );
+}
+
+function StationLegend({ chartMeters }: { chartMeters: ChartMeter[] }) {
+  const multi = chartMeters.length > 1;
+  return (
+    <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-slate-100">
+      {chartMeters.map(cm => {
+        const dash = pick(DASHES, cm.idx);
+        return (
+          <div key={cm.idx} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-slate-500">
+            {multi && (
+              <span className="font-mono font-bold text-[#5a8dee] bg-[#e8f3ff] px-1.5 py-0.5 rounded">
+                {stationLabel(cm)}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1"><DashLine color={PHASE_COLOR.ua} dash={dash} /> Ua</span>
+            <span className="inline-flex items-center gap-1"><DashLine color={PHASE_COLOR.ub} dash={dash} /> Ub</span>
+            <span className="inline-flex items-center gap-1"><DashLine color={PHASE_COLOR.uc} dash={dash} /> Uc</span>
+            <span className="inline-flex items-center gap-1">
+              <span className="w-3 h-3 rounded-sm" style={{ background: pick(P_FILLS, cm.idx) }} /> P (kW)
+            </span>
           </div>
         );
       })}
@@ -499,6 +537,15 @@ export default function VoltagePowerDashboard() {
         </div>
       </div>
 
+      {/* ---- Ghi chú về độ trễ & thời gian lưu dữ liệu ---- */}
+      <div className="vl-alert vl-alert-light-warning flex items-start gap-3 p-4 rounded-xl">
+        <Info className="w-5 h-5 shrink-0 mt-0.5" />
+        <p className="text-sm leading-relaxed">
+          Thông số vận hành sẽ lấy dữ liệu chậm hơn so với HES khoảng <strong>1 đến 2 giờ</strong> và chỉ lưu
+          trong vòng <strong>7 ngày gần nhất</strong>.
+        </p>
+      </div>
+
       {/* ---- Trạng thái tải / lỗi / rỗng ---- */}
       {csvError && (
         <div className="vl-alert vl-alert-danger p-4 rounded-xl text-sm">{csvError}</div>
@@ -539,50 +586,39 @@ export default function VoltagePowerDashboard() {
                     </span>
                   </div>
 
-                  {/* Select đồng bộ kiểu standalone với toàn app */}
-                  <div className="relative">
-                    <Building2 className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${chart ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
-                    <select
-                      value={selId}
-                      onChange={e => setSlot(i, e.target.value)}
-                      className="vl-select w-full bg-white border border-slate-200 rounded-lg pl-10 pr-9 py-2.5 text-slate-800 font-bold text-xs md:text-sm focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all truncate"
-                    >
-                      <option value="">-- Chọn khách hàng --</option>
-                      {chartableCustomers.map(c => (
-                        <option key={c.id} value={c.id}>
-                          [{c.mkh}] {c.name}
-                        </option>
-                      ))}
-                    </select>
+                  {/* Bộ chọn khách hàng — đồng bộ kiểu hộp viền xanh của SummaryDashboard */}
+                  <div className={`border rounded p-3 flex items-center gap-3 transition-colors ${
+                    chart
+                      ? 'bg-[#f4f8ff] border-[#5a8dee] ring-4 ring-[#e8f3ff]'
+                      : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                  }`}>
+                    <Building2 className={`w-5 h-5 shrink-0 ${chart ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
+                    <div className="flex-1 min-w-0">
+                      <select
+                        value={selId}
+                        onChange={e => setSlot(i, e.target.value)}
+                        className="vl-select w-full bg-transparent border-none text-slate-800 font-extrabold text-xs md:text-sm focus:outline-none cursor-pointer pr-8 truncate"
+                      >
+                        <option value="">-- Click chọn khách hàng --</option>
+                        {chartableCustomers.map(c => (
+                          <option key={c.id} value={c.id}>
+                            [{c.mkh}] {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   {chart && (
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
                       <span className="flex items-center gap-1">
                         <Gauge className="w-3 h-3 text-[#5a8dee]" />
-                        {chart.chartMeters.length} điểm đo
+                        {chart.chartMeters.length} trạm
                       </span>
                       <span className="font-mono">
                         P max ngày: <strong className="text-amber-600">{fmtNum(chart.peakP, 1)} kW</strong>
                         {chart.peakLabel && <span className="text-slate-400"> @ {chart.peakLabel}</span>}
                       </span>
-                    </div>
-                  )}
-
-                  {/* Chú thích điểm đo (phân biệt công tơ nào) */}
-                  {chart && multi && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {chart.chartMeters.map(cm => (
-                        <span
-                          key={cm.idx}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5"
-                          title={cm.line ? `Trạm ${cm.line}` : undefined}
-                        >
-                          <span className="font-mono text-[#5a8dee]">ĐĐ{cm.idx + 1}</span>
-                          <span className="text-slate-400">·</span>
-                          <span className="font-mono">{cm.meterNo}</span>
-                        </span>
-                      ))}
                     </div>
                   )}
                 </div>
@@ -623,15 +659,13 @@ export default function VoltagePowerDashboard() {
                           cursor={{ fill: 'rgba(226, 232, 240, 0.35)' }}
                           wrapperStyle={{ zIndex: 60, outline: 'none' }}
                         />
-                        <Legend wrapperStyle={{ fontSize: '10px', paddingTop: 6 }} iconSize={9} />
-
-                        {/* Cột P (kW) — trục phải. Nhiều điểm đo → nhiều cột cạnh nhau cùng 1 mốc */}
+                        {/* Cột P (kW) — trục phải. Nhiều trạm → nhiều cột cạnh nhau cùng 1 mốc */}
                         {chart.chartMeters.map(cm => (
                           <Bar
                             key={`p${cm.idx}`}
                             yAxisId="p"
                             dataKey={`p${cm.idx}`}
-                            name={multi ? `P·ĐĐ${cm.idx + 1} (kW)` : 'P (kW)'}
+                            name={multi ? `P (${stationLabel(cm)})` : 'P (kW)'}
                             fill={pick(P_FILLS, cm.idx)}
                             radius={[3, 3, 0, 0]}
                             barSize={multi ? 8 : 14}
@@ -643,7 +677,7 @@ export default function VoltagePowerDashboard() {
                           <ReferenceLine
                             yAxisId="p"
                             x={chart.peakLabel}
-                            stroke="#f59e0b"
+                            stroke="#ec4899"
                             strokeDasharray="4 3"
                             strokeWidth={1.5}
                             label={{
@@ -651,14 +685,14 @@ export default function VoltagePowerDashboard() {
                               position: 'top',
                               fontSize: 9,
                               fontWeight: 700,
-                              fill: '#b45309',
+                              fill: '#be185d',
                             }}
                           />
                         )}
 
-                        {/* Đường điện áp 3 pha — trục trái. Pha = màu, điểm đo = kiểu nét */}
+                        {/* Đường điện áp 3 pha — trục trái. Pha = màu, TRẠM = kiểu nét */}
                         {chart.chartMeters.flatMap(cm => {
-                          const mp = multi ? `·ĐĐ${cm.idx + 1}` : '';
+                          const mp = multi ? ` (${stationLabel(cm)})` : '';
                           const dash = pick(DASHES, cm.idx);
                           return [
                             <Line
@@ -667,7 +701,7 @@ export default function VoltagePowerDashboard() {
                               type="monotone"
                               dataKey={`ua${cm.idx}`}
                               name={`Ua${mp}`}
-                              stroke={pick(PHASE_A, cm.idx)}
+                              stroke={PHASE_COLOR.ua}
                               strokeWidth={2}
                               strokeDasharray={dash || undefined}
                               dot={false}
@@ -680,7 +714,7 @@ export default function VoltagePowerDashboard() {
                               type="monotone"
                               dataKey={`ub${cm.idx}`}
                               name={`Ub${mp}`}
-                              stroke={pick(PHASE_B, cm.idx)}
+                              stroke={PHASE_COLOR.ub}
                               strokeWidth={2}
                               strokeDasharray={dash || undefined}
                               dot={false}
@@ -693,7 +727,7 @@ export default function VoltagePowerDashboard() {
                               type="monotone"
                               dataKey={`uc${cm.idx}`}
                               name={`Uc${mp}`}
-                              stroke={pick(PHASE_C, cm.idx)}
+                              stroke={PHASE_COLOR.uc}
                               strokeWidth={2}
                               strokeDasharray={dash || undefined}
                               dot={false}
@@ -713,6 +747,11 @@ export default function VoltagePowerDashboard() {
                     </div>
                   )}
                 </div>
+
+                {/* Chú giải — gom theo trạm */}
+                {chart && chart.data.length > 0 && (
+                  <StationLegend chartMeters={chart.chartMeters} />
+                )}
               </div>
             );
           })}
