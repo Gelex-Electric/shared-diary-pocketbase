@@ -8,7 +8,8 @@ import {
   Tooltip,
   Bar,
   Line,
-  ReferenceLine,
+  ReferenceArea,
+  Cell,
 } from 'recharts';
 import {
   Activity,
@@ -101,6 +102,7 @@ interface StationSeries {
   data: any[];         // [{ slot, label, ua, ub, uc, p }]
   peakP: number;       // P (kW) lớn nhất trong ngày của trạm này
   peakLabel: string;   // mốc thời gian đạt P max
+  outagePeriods: { x1: string; x2: string }[]; // khoảng thời gian UA=UB=UC=0
 }
 
 interface CustomerChart {
@@ -166,7 +168,7 @@ function LineSwatch({ color }: { color: string }) {
   );
 }
 
-function ChartLegend() {
+function ChartLegend({ hasOutages }: { hasOutages: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 pt-3 border-t border-slate-100 text-[10px] font-semibold text-slate-500">
       <span className="inline-flex items-center gap-1"><LineSwatch color={PHASE_COLOR.ua} /> Ua</span>
@@ -175,6 +177,14 @@ function ChartLegend() {
       <span className="inline-flex items-center gap-1">
         <span className="w-3 h-3 rounded-sm" style={{ background: P_FILL }} /> P (kW)
       </span>
+      <span className="inline-flex items-center gap-1">
+        <span className="w-3 h-3 rounded-sm" style={{ background: '#f43f5e' }} /> P max
+      </span>
+      {hasOutages && (
+        <span className="inline-flex items-center gap-1">
+          <span className="w-3 h-3 rounded-sm" style={{ background: '#fca5a5' }} /> Mất điện
+        </span>
+      )}
     </div>
   );
 }
@@ -341,14 +351,30 @@ export default function VoltagePowerDashboard() {
           return {
             t: r.t,
             label: r.label,
-            ua: r.ua > 0 ? r.ua : null,
-            ub: r.ub > 0 ? r.ub : null,
-            uc: r.uc > 0 ? r.uc : null,
+            ua: r.ua,   // giữ nguyên 0 để đường xuống đáy khi mất điện
+            ub: r.ub,
+            uc: r.uc,
             p: r.kw,
           };
         });
 
-        stations.push({ meterNo: m.meterNo, line: m.line, data, peakP, peakLabel });
+        // Phát hiện khoảng mất điện: đoạn liên tiếp UA=UB=UC=0
+        const outagePeriods: { x1: string; x2: string }[] = [];
+        let outStart: string | null = null;
+        for (const r of sorted) {
+          const isOut = r.ua === 0 && r.ub === 0 && r.uc === 0;
+          if (isOut && outStart === null) {
+            outStart = r.label;
+          } else if (!isOut && outStart !== null) {
+            outagePeriods.push({ x1: outStart, x2: r.label });
+            outStart = null;
+          }
+        }
+        if (outStart !== null && sorted.length > 0) {
+          outagePeriods.push({ x1: outStart, x2: sorted[sorted.length - 1].label });
+        }
+
+        stations.push({ meterNo: m.meterNo, line: m.line, data, peakP, peakLabel, outagePeriods });
       }
 
       if (stations.length === 0) continue;
@@ -533,31 +559,36 @@ export default function VoltagePowerDashboard() {
                   wrapperStyle={{ zIndex: 60, outline: 'none' }}
                 />
 
-                {/* Cột công suất P (kW) — trục phải */}
-                <Bar yAxisId="p" dataKey="p" name="P (kW)" fill={P_FILL} radius={[2, 2, 0, 0]} maxBarSize={10} />
-
-                {/* Mốc đạt P max của trạm */}
-                {station.peakLabel && (
-                  <ReferenceLine
-                    yAxisId="p"
-                    x={station.peakLabel}
-                    stroke="#ec4899"
-                    strokeDasharray="4 3"
-                    strokeWidth={1.5}
-                    label={{
-                      value: `P max ${fmtVal(station.peakP)} kW`,
-                      position: 'top',
-                      fontSize: 9,
-                      fontWeight: 700,
-                      fill: '#be185d',
-                    }}
+                {/* Vùng mất điện (UA=UB=UC=0) — nền trước khi vẽ đường */}
+                {station.outagePeriods.map((op, idx) => (
+                  <ReferenceArea
+                    key={`outage-${idx}`}
+                    yAxisId="v"
+                    x1={op.x1}
+                    x2={op.x2}
+                    fill="#fca5a5"
+                    fillOpacity={0.25}
+                    label={idx === 0
+                      ? { value: 'Mất điện', position: 'insideTopLeft', fontSize: 9, fill: '#dc2626', fontWeight: 700 }
+                      : undefined
+                    }
                   />
-                )}
+                ))}
+
+                {/* Cột công suất P (kW) — trục phải; cột P max đổi màu rose */}
+                <Bar yAxisId="p" dataKey="p" name="P (kW)" radius={[2, 2, 0, 0]} maxBarSize={10}>
+                  {station.data.map((entry: any, idx: number) => (
+                    <Cell
+                      key={`cell-${idx}`}
+                      fill={entry.label === station.peakLabel ? '#f43f5e' : P_FILL}
+                    />
+                  ))}
+                </Bar>
 
                 {/* 3 đường điện áp pha — trục trái */}
-                <Line yAxisId="v" type="monotone" dataKey="ua" name="Ua" stroke={PHASE_COLOR.ua} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-                <Line yAxisId="v" type="monotone" dataKey="ub" name="Ub" stroke={PHASE_COLOR.ub} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-                <Line yAxisId="v" type="monotone" dataKey="uc" name="Uc" stroke={PHASE_COLOR.uc} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+                <Line yAxisId="v" type="monotone" dataKey="ua" name="Ua" stroke={PHASE_COLOR.ua} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line yAxisId="v" type="monotone" dataKey="ub" name="Ub" stroke={PHASE_COLOR.ub} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line yAxisId="v" type="monotone" dataKey="uc" name="Uc" stroke={PHASE_COLOR.uc} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
               </ComposedChart>
             </ResponsiveContainer>
           ) : (
@@ -570,7 +601,9 @@ export default function VoltagePowerDashboard() {
           )}
         </div>
 
-        {station && station.data.length > 0 && <ChartLegend />}
+        {station && station.data.length > 0 && (
+          <ChartLegend hasOutages={station.outagePeriods.length > 0} />
+        )}
       </div>
     );
   };
