@@ -9,10 +9,8 @@ import {
   AlertTriangle, ZapOff, ClipboardCheck, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Select } from './ui/Select';
-import { DatePicker, TimePicker } from './ui/DateTimePickers';
-import { useConfirm } from './ui/ConfirmDialog';
 import pdfMake from 'pdfmake/build/pdfmake';
+import { DatePicker, TimePicker } from './ui/DateTimePickers';
 
 const timesUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Regular.ttf';
 const timesBdUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Bold.ttf';
@@ -56,7 +54,6 @@ const TYPE_SHIFT_CONFIG: Record<string, {
 const TYPE_SHIFT_OPTIONS = Object.keys(TYPE_SHIFT_CONFIG);
 
 export default function HandoverManager() {
-  const { confirm, dialog: confirmDialog } = useConfirm();
   const [logs, setLogs] = useState<Handover[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -327,8 +324,7 @@ export default function HandoverManager() {
   };
 
   const handleDelete = async (id: string) => {
-    const ok = await confirm({ title: 'Xóa lịch trực?', message: 'Lịch trực này sẽ bị xóa vĩnh viễn và không thể khôi phục.', confirmLabel: 'Xóa', variant: 'danger' });
-    if (!ok) return;
+    if (!window.confirm('Bạn có chắc muốn xóa lịch trực này?')) return;
     try {
       await pb.collection('handovers').delete(id);
       loadLogs();
@@ -589,7 +585,6 @@ export default function HandoverManager() {
 
   return (
     <div className="space-y-8 relative">
-      {confirmDialog}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -617,21 +612,26 @@ export default function HandoverManager() {
           <p className="text-slate-500 text-sm mt-1">Quản lý lịch trực và tình hình vận hành</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <Select
+          <select
             value={filter.area}
-            onChange={(v) => setFilter({ ...filter, area: v })}
-            options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map(area => ({ value: area, label: area }))]}
-            className="min-w-[160px]"
-          />
-          <Select
+            onChange={(e) => setFilter({ ...filter, area: e.target.value })}
+            className="vl-select bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
+          >
+            <option value="">Tất cả khu vực</option>
+            {effectiveAreas.map(area => (
+              <option key={area} value={area}>{area}</option>
+            ))}
+          </select>
+          <select
             value={filter.month}
-            onChange={(v) => setFilter({ ...filter, month: v })}
-            options={Array.from({ length: 12 }, (_, i) => {
+            onChange={(e) => setFilter({ ...filter, month: e.target.value })}
+            className="vl-select bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
+          >
+            {Array.from({ length: 12 }, (_, i) => {
               const m = (i + 1).toString().padStart(2, '0');
-              return { value: m, label: `Tháng ${i + 1}` };
+              return <option key={m} value={m}>Tháng {i + 1}</option>;
             })}
-            className="min-w-[120px]"
-          />
+          </select>
           <button
             onClick={startAddLog}
             className="vl-btn vl-btn-primary flex-1 md:flex-none px-6 py-2.5 font-medium text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
@@ -691,19 +691,16 @@ export default function HandoverManager() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Khu vực</label>
-                      <Select value={formData.area} onChange={(v) => setFormData({ ...formData, area: v })}
-                        options={effectiveAreas.map(area => ({ value: area, label: area }))} />
+                      <select value={formData.area} onChange={(e) => setFormData({ ...formData, area: e.target.value })} className="vl-select w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-[#5a8dee] text-sm font-semibold text-slate-700 transition-all">
+                        {effectiveAreas.map(area => <option key={area} value={area}>{area}</option>)}
+                      </select>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1">Ca trực</label>
-                      <Select
-                        value={formData.shift}
-                        options={[
-                          { value: 'Ca 1', label: 'Ca 1 (06:00 - 14:00)' },
-                          { value: 'Ca 2', label: 'Ca 2 (14:00 - 22:00)' },
-                          { value: 'Ca 3', label: 'Ca 3 (22:00 - 06:00)' },
-                        ]}
-                        onChange={(newShift) => {
+                      <select 
+                        value={formData.shift} 
+                        onChange={(e) => {
+                          const newShift = e.target.value;
                           let newStartTime = formData.startTime;
                           let newEndTime = formData.endTime;
                           let newEndDate = formData.startDate;
@@ -729,22 +726,27 @@ export default function HandoverManager() {
                             newEndDate = getNextDay(formData.startDate);
                           }
 
-                          setFormData({
-                            ...formData,
+                          setFormData({ 
+                            ...formData, 
                             shift: newShift,
                             startTime: newStartTime,
                             endTime: newEndTime,
                             endDate: newEndDate
                           });
-                        }}
-                      />
+                        }} 
+                        className="vl-select w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-[#5a8dee] text-sm font-semibold text-slate-700 transition-all"
+                      >
+                        <option value="Ca 1">Ca 1 (06:00 - 14:00)</option>
+                        <option value="Ca 2">Ca 2 (14:00 - 22:00)</option>
+                        <option value="Ca 3">Ca 3 (22:00 - 06:00)</option>
+                      </select>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Thời gian bắt đầu</label>
-                      <div className="flex items-center gap-3">
+                      <div className="grid grid-cols-2 gap-4">
                         <DatePicker
                           value={formData.startDate}
                           onChange={(newStartDate) => {
@@ -760,21 +762,21 @@ export default function HandoverManager() {
                         />
                         <TimePicker
                           value={formData.startTime}
-                          onChange={(v) => setFormData({ ...formData, startTime: v })}
+                          onChange={(val) => setFormData({ ...formData, startTime: val })}
                         />
                       </div>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Thời gian kết thúc</label>
-                      <div className="flex items-center gap-3">
+                      <div className="grid grid-cols-2 gap-4">
                         <DatePicker
                           value={formData.endDate}
-                          onChange={(v) => setFormData({ ...formData, endDate: v })}
+                          onChange={(val) => setFormData({ ...formData, endDate: val })}
                         />
                         <TimePicker
                           value={formData.endTime}
-                          onChange={(v) => setFormData({ ...formData, endTime: v })}
+                          onChange={(val) => setFormData({ ...formData, endTime: val })}
                         />
                       </div>
                     </div>
@@ -827,12 +829,14 @@ export default function HandoverManager() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div className="space-y-3">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trực đội QLVH</div>
-                        <Select value={formData.main_duty} onChange={(v) => setFormData({ ...formData, main_duty: v })}
-                          placeholder="Chọn trực chính" searchable
-                          options={[{ value: '', label: 'Chọn trực chính' }, ...staffList.map(s => ({ value: s.Name, label: s.Name }))]} />
-                        <Select value={formData.sub_duty} onChange={(v) => setFormData({ ...formData, sub_duty: v })}
-                          placeholder="Chọn trực phụ" searchable
-                          options={[{ value: '', label: 'Chọn trực phụ' }, ...staffList.map(s => ({ value: s.Name, label: s.Name }))]} />
+                        <select value={formData.main_duty} onChange={(e) => setFormData({ ...formData, main_duty: e.target.value })} className="vl-select w-full p-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-[#5a8dee] transition-all">
+                          <option value="">Chọn trực chính</option>
+                          {staffList.map(s => <option key={s.id} value={s.Name}>{s.Name}</option>)}
+                        </select>
+                        <select value={formData.sub_duty} onChange={(e) => setFormData({ ...formData, sub_duty: e.target.value })} className="vl-select w-full p-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-[#5a8dee] transition-all">
+                          <option value="">Chọn trực phụ</option>
+                          {staffList.map(s => <option key={s.id} value={s.Name}>{s.Name}</option>)}
+                        </select>
                       </div>
                       <div className="space-y-3">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trực điều độ điện lực</div>
