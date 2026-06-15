@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import {
-  Check, Sparkles, X, ArrowRight,
+  Check, Sparkles, X, ArrowRight, FileText,
   Palette, Zap, Wrench, Tag, Layers, CloudDownload,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 /** Tab đích để điều hướng khi nhấn "Xem ngay" — khớp với type Tab trong Dashboard */
-export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'later';
+export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'later';
+
+/** Đường dẫn tài liệu hướng dẫn sử dụng (mở khi đóng thông báo) */
+const GUIDE_URL = '/document.pdf';
 
 interface UpdateItem {
   title: string;
@@ -17,37 +20,37 @@ interface UpdateItem {
 }
 
 // Phiên bản & ngày phát hành hiển thị trên header
-const VERSION      = '1.1';
-const RELEASE_DATE = '10/06/2026';
+const VERSION      = '1.2';
+const RELEASE_DATE = '15/06/2026';
 
 const UPDATES: UpdateItem[] = [
   {
-    title: 'Thông báo tạm ngừng cấp điện',
-    desc: 'Soạn, lưu và tải xuống thông báo ngừng cấp điện dạng file Word (.docx) theo mẫu từng KCN. Hỗ trợ nhiều khung giờ và nhiều phụ lục khách hàng trong cùng một thông báo.',
+    title: 'Đồ thị điện áp & công suất',
+    desc: 'Trang mới trong "Thông số vận hành": vẽ điện áp 3 pha (đường) cùng công suất P (cột) theo thời gian thực tế của số liệu đo cho từng trạm.',
     tag: 'Mới',
-    link: { tab: 'outage', label: 'Xem ngay' },
+    link: { tab: 'opchart', label: 'Xem ngay' },
   },
   {
-    title: 'Nhiều khung giờ trong một thông báo',
-    desc: 'Một thông báo có thể chứa nhiều khung giờ ngừng điện khác nhau. Mỗi khung giờ được gán vào một phụ lục khách hàng riêng hoặc dùng chung phụ lục.',
+    title: 'Chọn khách hàng & trạm trên 6 biểu đồ',
+    desc: 'Mặc định hiển thị 3 khách có P max cao nhất và 3 khách thấp nhất. Khách nhiều điểm đo có thể chọn trạm qua dropdown ngay trên biểu đồ.',
     tag: 'Mới',
-    link: { tab: 'outage', label: 'Thử ngay' },
+    link: { tab: 'opchart', label: 'Thử ngay' },
   },
   {
-    title: 'Phụ lục khách hàng linh hoạt',
-    desc: 'Mỗi phụ lục có danh sách khách hàng độc lập, hỗ trợ tìm kiếm và chọn tất cả. Nhiều khung giờ có thể chung một phụ lục hoặc tách thành phụ lục riêng.',
-    tag: 'Mới',
-  },
-  {
-    title: 'Xuất file Word theo mẫu từng KCN',
-    desc: 'File .docx được điền tự động vào đúng template của từng khu công nghiệp, giữ nguyên định dạng letterhead và chữ ký.',
+    title: 'Đánh dấu thời điểm & thời gian mất điện',
+    desc: 'Khi điện áp 3 pha về 0, biểu đồ tô vùng "Mất điện" và hiển thị khung giờ kèm thời lượng (ví dụ 02:30–04:00 (1h30p)).',
     tag: 'Mới',
   },
   {
-    title: 'Bộ lọc tháng và thống kê nhanh',
-    desc: 'Lọc thông báo theo tháng, xem ngay số lượng thông báo khẩn cấp / theo kế hoạch và tổng khách hàng bị ảnh hưởng trong tháng.',
-    tag: 'Mới',
-    link: { tab: 'outage', label: 'Xem thống kê' },
+    title: 'Làm nổi bật công suất P lớn nhất',
+    desc: 'Cột công suất đạt P max được tô màu nổi bật để dễ nhận biết thời điểm tải đỉnh trong ngày.',
+    tag: 'Cải tiến',
+  },
+  {
+    title: 'Đồng bộ giao diện chú giải biểu đồ',
+    desc: 'Tooltip các biểu đồ ở trang Tổng hợp được làm lại theo bộ nhận diện chung: nền sáng, viền nhẹ, chữ rõ ràng.',
+    tag: 'Giao diện',
+    link: { tab: 'summary', label: 'Xem ngay' },
   },
 ];
 
@@ -80,13 +83,16 @@ interface Props {
 export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props) {
   const [checked, setChecked] = useState(false);
 
-  const handleClose = () => {
-    if (checked) onDismiss();
-    else onClose();
+  // Mở tài liệu hướng dẫn sử dụng trong tab mới.
+  const openGuide = () => {
+    window.open(GUIDE_URL, '_blank', 'noopener,noreferrer');
   };
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  // Nhấn "Đóng": LUÔN mở hướng dẫn sử dụng trước, sau đó mới đóng thông báo.
+  const handleClose = () => {
+    openGuide();
+    if (checked) onDismiss();
+    else onClose();
   };
 
   // Nhấn "Xem ngay": điều hướng tới trang liên quan rồi đóng modal.
@@ -105,9 +111,8 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={handleClose}
     >
-      {/* Backdrop */}
+      {/* Backdrop — KHÔNG đóng khi nhấn ra ngoài; phải dùng nút/đường dẫn bên trong */}
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]" />
 
       {/* Panel */}
@@ -117,7 +122,6 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
         exit={{ opacity: 0, scale: 0.95, y: 8 }}
         transition={{ type: 'spring', stiffness: 320, damping: 26 }}
         className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
-        onClick={handleCardClick}
       >
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 pt-6 pb-5">
@@ -237,21 +241,22 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
             </span>
           </button>
 
-          {/* Close button */}
+          {/* Close button — mở hướng dẫn sử dụng rồi đóng */}
           <button
             onClick={handleClose}
-            className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-150 active:scale-[0.97] ${
+            className={`inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-150 active:scale-[0.97] ${
               checked
                 ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/25'
                 : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25'
             }`}
           >
-            {checked ? 'Đã hiểu, đóng' : 'Đóng'}
+            <FileText className="w-4 h-4" />
+            {checked ? 'Đã hiểu, mở hướng dẫn' : 'Mở hướng dẫn & đóng'}
           </button>
         </div>
 
         <p className="text-center text-[10px] text-slate-400 pb-3 -mt-1 select-none">
-          Nhấn ra ngoài hoặc nhấn đóng để thoát
+          Nhấn nút bên trên để mở hướng dẫn sử dụng và đóng thông báo
         </p>
       </motion.div>
     </motion.div>
