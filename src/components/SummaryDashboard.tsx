@@ -834,7 +834,9 @@ export default function SummaryDashboard() {
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="monthLabel" tickLine={false} stroke="#64748b" style={{ fontSize: '11px', fontWeight: 'bold' }} />
               <Tooltip 
-                contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
+                contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.6rem', color: '#222f3e', fontSize: '11px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)' }}
+                labelStyle={{ fontWeight: 800, color: '#222f3e', fontSize: '11px' }}
+                wrapperStyle={{ zIndex: 60 }}
                 cursor={{ fill: 'rgba(226, 232, 240, 0.4)' }}
                 formatter={(value: any, name: any) => [new Intl.NumberFormat('vi-VN').format(Number(value)) + ' kWh', `Năm ${name}`]}
               />
@@ -897,7 +899,9 @@ export default function SummaryDashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="monthLabel" tickLine={false} stroke="#94a3b8" style={{ fontSize: '10px' }} />
                   <Tooltip
-                    contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
+                    contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.6rem', color: '#222f3e', fontSize: '11px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)' }}
+                    labelStyle={{ fontWeight: 800, color: '#222f3e', fontSize: '11px' }}
+                    wrapperStyle={{ zIndex: 60 }}
                     cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
                     formatter={(value: any, name: any) => [new Intl.NumberFormat('vi-VN').format(Number(value)) + ' kWh', `Năm ${name}`]}
                   />
@@ -965,7 +969,9 @@ export default function SummaryDashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="monthLabel" tickLine={false} stroke="#94a3b8" style={{ fontSize: '10px' }} />
                   <Tooltip
-                    contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
+                    contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.6rem', color: '#222f3e', fontSize: '11px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)' }}
+                    labelStyle={{ fontWeight: 800, color: '#222f3e', fontSize: '11px' }}
+                    wrapperStyle={{ zIndex: 60 }}
                     cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
                     formatter={(value: any, name: any) => [new Intl.NumberFormat('vi-VN').format(Number(value)) + ' kWh', `Năm ${name}`]}
                   />
