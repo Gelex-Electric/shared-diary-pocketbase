@@ -22,6 +22,7 @@ import {
 import { pb } from '../lib/pocketbase';
 import { Meter } from '../types';
 import { DatePicker } from './ui/DateTimePickers';
+import { Select } from './ui/Select';
 
 /* ================================================================
    CACHE CSV (module-level) — datametter.csv chỉ tải 1 lần/phiên.
@@ -586,7 +587,7 @@ export default function VoltagePowerDashboard() {
                     </span>
                   </div>
 
-                  {/* Bộ chọn khách hàng — đồng bộ kiểu hộp viền xanh của SummaryDashboard */}
+                  {/* Bộ chọn khách hàng — dùng shared <Select> (đồng bộ toàn app) */}
                   <div className={`border rounded p-3 flex items-center gap-3 transition-colors ${
                     chart
                       ? 'bg-[#f4f8ff] border-[#5a8dee] ring-4 ring-[#e8f3ff]'
@@ -594,18 +595,17 @@ export default function VoltagePowerDashboard() {
                   }`}>
                     <Building2 className={`w-5 h-5 shrink-0 ${chart ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
                     <div className="flex-1 min-w-0">
-                      <select
+                      <Select
+                        variant="bare"
+                        searchable
                         value={selId}
-                        onChange={e => setSlot(i, e.target.value)}
-                        className="vl-select w-full bg-transparent border-none text-slate-800 font-extrabold text-xs md:text-sm focus:outline-none cursor-pointer pr-8 truncate"
-                      >
-                        <option value="">-- Click chọn khách hàng --</option>
-                        {chartableCustomers.map(c => (
-                          <option key={c.id} value={c.id}>
-                            [{c.mkh}] {c.name}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={v => setSlot(i, v)}
+                        placeholder="-- Click chọn khách hàng --"
+                        options={[
+                          { value: '', label: '-- Click chọn khách hàng --' },
+                          ...chartableCustomers.map(c => ({ value: c.id, label: `[${c.mkh}] ${c.name}` })),
+                        ]}
+                      />
                     </div>
                   </div>
 
