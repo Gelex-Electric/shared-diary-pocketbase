@@ -287,7 +287,7 @@ export default function Dashboard() {
               setTopTab(tab);
               // Mở sẵn nhóm sidebar chứa tab đích để người dùng thấy ngữ cảnh
               if (tab === 'journal') { setIsJournalExpanded(true); setIsOperatingExpanded(false); }
-              else if (tab === 'operating' || tab === 'hes') { setIsOperatingExpanded(true); setIsJournalExpanded(false); }
+              else if (tab === 'operating' || tab === 'hes' || tab === 'opchart') { setIsOperatingExpanded(true); setIsJournalExpanded(false); }
             }}
           />
         )}
