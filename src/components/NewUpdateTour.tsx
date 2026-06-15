@@ -6,7 +6,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 /** Tab đích để điều hướng khi nhấn "Xem ngay" — khớp với type Tab trong Dashboard */
-export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'later';
+export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'later';
 
 interface UpdateItem {
   title: string;
@@ -17,37 +17,68 @@ interface UpdateItem {
 }
 
 // Phiên bản & ngày phát hành hiển thị trên header
-const VERSION      = '1.1';
-const RELEASE_DATE = '10/06/2026';
+const VERSION      = '1.0.1';
+const RELEASE_DATE = '05/06/2026';
 
 const UPDATES: UpdateItem[] = [
   {
-    title: 'Thông báo tạm ngừng cấp điện',
-    desc: 'Soạn, lưu và tải xuống thông báo ngừng cấp điện dạng file Word (.docx) theo mẫu từng KCN. Hỗ trợ nhiều khung giờ và nhiều phụ lục khách hàng trong cùng một thông báo.',
-    tag: 'Mới',
-    link: { tab: 'outage', label: 'Xem ngay' },
+    title: 'Tăng tốc độ lấy chỉ số từ HES',
+    desc: 'Lấy chỉ số nhanh hơn đáng kể. Lưu ý: cần lấy Token trước khi lấy dữ liệu HES.',
+    tag: 'Cải tiến',
+    link: { tab: 'hes', label: 'Xem ngay' },
   },
   {
-    title: 'Nhiều khung giờ trong một thông báo',
-    desc: 'Một thông báo có thể chứa nhiều khung giờ ngừng điện khác nhau. Mỗi khung giờ được gán vào một phụ lục khách hàng riêng hoặc dùng chung phụ lục.',
-    tag: 'Mới',
-    link: { tab: 'outage', label: 'Thử ngay' },
+    title: 'Bộ chọn thời gian thay cho nhập tay',
+    desc: 'Đổi từ nhập tay ngày/tháng/năm sang bộ chọn thời gian, mặc định đã chọn sẵn ngày hôm nay.',
+    tag: 'Giao diện',
   },
   {
-    title: 'Phụ lục khách hàng linh hoạt',
-    desc: 'Mỗi phụ lục có danh sách khách hàng độc lập, hỗ trợ tìm kiếm và chọn tất cả. Nhiều khung giờ có thể chung một phụ lục hoặc tách thành phụ lục riêng.',
-    tag: 'Mới',
-  },
-  {
-    title: 'Xuất file Word theo mẫu từng KCN',
-    desc: 'File .docx được điền tự động vào đúng template của từng khu công nghiệp, giữ nguyên định dạng letterhead và chữ ký.',
+    title: 'Hiển thị thời điểm lấy chỉ số HES',
+    desc: 'Bổ sung thời gian lấy chỉ số cho mỗi đợt để dễ đối chiếu và theo dõi.',
     tag: 'Mới',
   },
   {
-    title: 'Bộ lọc tháng và thống kê nhanh',
-    desc: 'Lọc thông báo theo tháng, xem ngay số lượng thông báo khẩn cấp / theo kế hoạch và tổng khách hàng bị ảnh hưởng trong tháng.',
+    title: 'Yêu cầu lấy Token trước khi lấy dữ liệu',
+    desc: 'Cần lấy Token HES trước; hệ thống sẽ nhắc nếu chưa có Token khi lấy chỉ số.',
+    tag: 'Sửa lỗi',
+    link: { tab: 'hes', label: 'Tới trang HES' },
+  },
+  {
+    title: 'Lấy chỉ số từ HES thành mục riêng',
+    desc: 'Tách thành mục riêng trong "Thông số vận hành" và bổ sung nút Lấy Token nhanh ngay trên trang.',
     tag: 'Mới',
-    link: { tab: 'outage', label: 'Xem thống kê' },
+    link: { tab: 'hes', label: 'Xem ngay' },
+  },
+  {
+    title: 'Tối ưu điều hướng thanh bên',
+    desc: 'Menu dạng accordion — mở nhóm này sẽ tự đóng nhóm kia, thêm chấm điều hướng cho từng mục con.',
+    tag: 'Giao diện',
+  },
+  {
+    title: 'Khắc phục lỗi không tải được số liệu',
+    desc: 'Sửa lỗi biểu đồ và bảng tổng hợp ở Dashboard đôi lúc hiển thị 0 hoặc không có dữ liệu.',
+    tag: 'Sửa lỗi',
+    link: { tab: 'summary', label: 'Tới Dashboard' },
+  },
+  {
+    title: 'Sửa lại toàn bộ giao diện',
+    desc: 'Giao diện được thiết kế lại hoàn toàn, rõ ràng và dễ sử dụng hơn.',
+    tag: 'Giao diện',
+  },
+  {
+    title: 'Tối ưu hóa một số thao tác',
+    desc: 'Các thao tác thường dùng được cải tiến để nhanh hơn và ít bước hơn.',
+    tag: 'Cải tiến',
+  },
+  {
+    title: 'Gộp bảng công tơ & bảng khách hàng',
+    desc: 'Hai bảng nay được hiển thị trong cùng một trang, dễ tra cứu và quản lý hơn.',
+    tag: 'Mới',
+  },
+  {
+    title: 'Bỏ trường email khi thêm khách hàng',
+    desc: 'Không còn yêu cầu nhập email khi thêm khách hàng qua HES hoặc nhập tay.',
+    tag: 'Sửa lỗi',
   },
 ];
 
