@@ -9,12 +9,12 @@ import {
   Legend,
   Bar,
   Line,
+  ReferenceLine,
 } from 'recharts';
 import {
   Activity,
   Building2,
   HelpCircle,
-  Info,
   Gauge,
   TrendingUp,
   TrendingDown,
@@ -25,7 +25,6 @@ import { DatePicker } from './ui/DateTimePickers';
 
 /* ================================================================
    CACHE CSV (module-level) — datametter.csv chỉ tải 1 lần/phiên.
-   Giống cơ chế trong SummaryDashboard nhưng cho file đo xa.
 ================================================================ */
 let _meterCsvCache: string | null = null;
 let _meterCsvPromise: Promise<string> | null = null;
@@ -44,7 +43,7 @@ function loadMeterCsv(): Promise<string> {
       return _meterCsvCache;
     })
     .catch(err => {
-      _meterCsvPromise = null; // cho phép thử lại lần sau nếu lỗi
+      _meterCsvPromise = null;
       throw err;
     });
 
@@ -60,9 +59,13 @@ const fmtDateKey = (d: Date) =>
   `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
 
 const fmtDateVN = (key: string) => {
+  if (!key) return '';
   const [y, m, d] = key.split('-');
   return `${d}/${m}/${y}`;
 };
+
+const slotLabel = (slotMin: number) =>
+  `${p2(Math.floor(slotMin / 60) % 24)}:${p2(slotMin % 60)}`;
 
 const fmtNum = (v: number, digits = 0) =>
   new Intl.NumberFormat('vi-VN', {
@@ -71,25 +74,31 @@ const fmtNum = (v: number, digits = 0) =>
   }).format(v);
 
 /**
- * Quy tắc làm tròn theo giờ (yêu cầu nghiệp vụ):
- *  - Phút trong [0..10]  → làm tròn XUỐNG giờ hiện tại.
- *  - Phút trong [50..60] → làm tròn LÊN giờ kế tiếp.
- *  - Còn lại (11..49, ví dụ mốc :30) → bỏ qua, không thuộc mốc giờ nào.
- * Trả về { dateKey, hour, offset } với offset = khoảng lệch (phút) tới mốc giờ,
- * dùng để chọn bản ghi gần mốc nhất khi có nhiều bản ghi cùng rơi vào 1 giờ.
+ * Làm tròn về mốc 30 phút gần nhất (yêu cầu nghiệp vụ, độ phân giải 30').
+ *  - Phút [0..10]   → :00 (làm tròn xuống).
+ *  - Phút [20..40]  → :30 (làm tròn về nửa giờ).
+ *  - Phút [50..60]  → :00 giờ kế tiếp (làm tròn lên).
+ *  - Còn lại (11..19, 41..49) → bỏ (không sát mốc nào).
+ * Trả về { dateKey, slotMin, offset } với slotMin = phút trong ngày của mốc,
+ * offset = độ lệch (phút) tới mốc — dùng chọn bản ghi gần mốc nhất.
  */
-function roundToHour(dt: Date): { dateKey: string; hour: number; offset: number } | null {
+function roundToHalfHour(dt: Date): { dateKey: string; slotMin: number; offset: number } | null {
   const m = dt.getMinutes();
   const d = new Date(dt);
   d.setSeconds(0, 0);
+
   if (m <= 10) {
     d.setMinutes(0);
-    return { dateKey: fmtDateKey(d), hour: d.getHours(), offset: m };
+    return { dateKey: fmtDateKey(d), slotMin: d.getHours() * 60, offset: m };
+  }
+  if (m >= 20 && m <= 40) {
+    d.setMinutes(30);
+    return { dateKey: fmtDateKey(d), slotMin: d.getHours() * 60 + 30, offset: Math.abs(m - 30) };
   }
   if (m >= 50) {
     d.setMinutes(0);
-    d.setHours(d.getHours() + 1); // setHours tự cuộn sang ngày kế tiếp nếu cần
-    return { dateKey: fmtDateKey(d), hour: d.getHours(), offset: 60 - m };
+    d.setHours(d.getHours() + 1); // tự cuộn sang ngày kế tiếp nếu cần
+    return { dateKey: fmtDateKey(d), slotMin: d.getHours() * 60, offset: 60 - m };
   }
   return null;
 }
@@ -97,16 +106,6 @@ function roundToHour(dt: Date): { dateKey: string; hour: number; offset: number 
 /* ================================================================
    TYPES nội bộ
 ================================================================ */
-interface RawReading {
-  meterNo: string;
-  dateKey: string;
-  hour: number;
-  ua: number;
-  ub: number;
-  uc: number;
-  kw: number;
-}
-
 interface HourCell {
   ua: number;
   ub: number;
@@ -115,7 +114,7 @@ interface HourCell {
   offset: number;
 }
 
-// meterNo -> dateKey -> hour -> cell
+// meterNo -> dateKey -> slotMin -> cell
 type ReadingIndex = Map<string, Map<string, Map<number, HourCell>>>;
 
 interface CustomerInfo {
@@ -126,7 +125,7 @@ interface CustomerInfo {
 }
 
 interface ChartMeter {
-  idx: number;
+  idx: number;        // số thứ tự điểm đo trong biểu đồ (0-based)
   meterNo: string;
   line: string;
 }
@@ -135,20 +134,82 @@ interface CustomerChart {
   id: string;
   mkh: string;
   name: string;
-  totalP: number;            // tổng P (kW) trong ngày — dùng để xếp hạng
-  chartMeters: ChartMeter[]; // các công tơ có điện áp > 0
-  data: any[];               // dữ liệu theo giờ cho ComposedChart
+  peakP: number;       // P (kW) lớn nhất trong ngày (tổng các điểm đo theo mốc) — dùng xếp hạng
+  peakLabel: string;   // nhãn mốc thời gian đạt P max
+  chartMeters: ChartMeter[];
+  data: any[];
 }
 
 /* ================================================================
-   MÀU SẮC — mỗi pha một tông, mỗi công tơ một sắc độ khác nhau.
+   MÀU SẮC — pha = màu, điểm đo = sắc độ + kiểu nét.
 ================================================================ */
-const PHASE_A = ['#dc2626', '#f87171', '#fca5a5', '#fecaca']; // đỏ
-const PHASE_B = ['#16a34a', '#4ade80', '#86efac', '#bbf7d0']; // xanh lá
-const PHASE_C = ['#2563eb', '#60a5fa', '#93c5fd', '#bfdbfe']; // xanh dương
-const P_FILLS = ['#a5b4fc', '#c4b5fd', '#fbcfe8', '#fde68a']; // cột P (kW) — tông nhạt
+const PHASE_A = ['#dc2626', '#ef4444', '#f87171', '#fca5a5']; // đỏ — pha A
+const PHASE_B = ['#16a34a', '#22c55e', '#4ade80', '#86efac']; // xanh lá — pha B
+const PHASE_C = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd']; // xanh dương — pha C
+const P_FILLS = ['#c7d2fe', '#ddd6fe', '#fbcfe8', '#fde68a']; // cột P (kW)
+const DASHES = ['', '5 3', '2 3', '8 3 2 3'];                  // kiểu nét theo điểm đo
 
 const pick = (arr: string[], i: number) => arr[i % arr.length];
+
+/* ================================================================
+   TOOLTIP tuỳ biến — nền sáng, gom theo điểm đo.
+================================================================ */
+function parseSeriesKey(key: string): { kind: 'ua' | 'ub' | 'uc' | 'p'; idx: number } | null {
+  const m = key.match(/^(ua|ub|uc|p)(\d+)$/);
+  if (!m) return null;
+  return { kind: m[1] as any, idx: Number(m[2]) };
+}
+
+const PHASE_LABEL: Record<string, string> = { ua: 'Ua', ub: 'Ub', uc: 'Uc', p: 'P' };
+
+function ChartTooltip({ active, payload, label, chartMeters }: any) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const multi = chartMeters.length > 1;
+  const groups = new Map<number, any[]>();
+  for (const p of payload) {
+    if (p.value == null) continue;
+    const info = parseSeriesKey(p.dataKey);
+    if (!info) continue;
+    if (!groups.has(info.idx)) groups.set(info.idx, []);
+    groups.get(info.idx)!.push({ ...p, info });
+  }
+  if (groups.size === 0) return null;
+
+  const ordered = Array.from(groups.entries()).sort((a, b) => a[0] - b[0]);
+
+  return (
+    <div className="vl-chart-tooltip">
+      <div className="vl-chart-tooltip-title">Thời điểm {label}</div>
+      {ordered.map(([idx, items]) => {
+        const cm: ChartMeter | undefined = chartMeters.find((c: ChartMeter) => c.idx === idx);
+        return (
+          <div key={idx} className="vl-chart-tooltip-group">
+            {multi && (
+              <div className="vl-chart-tooltip-meter">
+                Điểm đo {idx + 1} · {cm?.meterNo}
+              </div>
+            )}
+            {items
+              .sort((a, b) => (a.info.kind === 'p' ? 1 : 0) - (b.info.kind === 'p' ? 1 : 0))
+              .map((it, i) => {
+                const isP = it.info.kind === 'p';
+                return (
+                  <div key={i} className="vl-chart-tooltip-row">
+                    <span className="vl-dot" style={{ background: it.color }} />
+                    <span className="vl-lbl">{PHASE_LABEL[it.info.kind]}</span>
+                    <span className="vl-val">
+                      {fmtNum(Number(it.value), isP ? 2 : 1)} {isP ? 'kW' : 'V'}
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /* ================================================================
    COMPONENT
@@ -222,10 +283,10 @@ export default function VoltagePowerDashboard() {
     return map;
   }, [meters]);
 
-  /* ---- Phân tích CSV → chỉ mục theo công tơ / ngày / giờ ---- */
-  const { readingIndex, dateKeys, defaultDate } = useMemo(() => {
+  /* ---- Phân tích CSV → chỉ mục theo công tơ / ngày / mốc 30' ---- */
+  const { readingIndex, dateKeys } = useMemo(() => {
     const index: ReadingIndex = new Map();
-    const dateCount = new Map<string, number>();
+    const dateSet = new Set<string>();
 
     if (csvContent) {
       const lines = csvContent.split(/\r?\n/);
@@ -243,46 +304,43 @@ export default function VoltagePowerDashboard() {
         const dt = new Date(dtRaw.replace(' ', 'T'));
         if (isNaN(dt.getTime())) continue;
 
-        const rounded = roundToHour(dt);
-        if (!rounded) continue; // mốc :30 hoặc lệch giữa giờ → bỏ
+        const rounded = roundToHalfHour(dt);
+        if (!rounded) continue;
 
-        const reading: RawReading = {
-          meterNo,
-          dateKey: rounded.dateKey,
-          hour: rounded.hour,
+        const cell: HourCell = {
           ua: parseFloat(cols[2]) || 0,
           ub: parseFloat(cols[3]) || 0,
           uc: parseFloat(cols[4]) || 0,
           kw: parseFloat(cols[5]) || 0,
+          offset: rounded.offset,
         };
 
         let byDate = index.get(meterNo);
         if (!byDate) { byDate = new Map(); index.set(meterNo, byDate); }
-        let byHour = byDate.get(reading.dateKey);
-        if (!byHour) { byHour = new Map(); byDate.set(reading.dateKey, byHour); }
+        let bySlot = byDate.get(rounded.dateKey);
+        if (!bySlot) { bySlot = new Map(); byDate.set(rounded.dateKey, bySlot); }
 
-        const existing = byHour.get(reading.hour);
-        // Giữ bản ghi gần mốc giờ nhất (offset nhỏ nhất)
+        const existing = bySlot.get(rounded.slotMin);
         if (!existing || rounded.offset < existing.offset) {
-          byHour.set(reading.hour, {
-            ua: reading.ua, ub: reading.ub, uc: reading.uc, kw: reading.kw,
-            offset: rounded.offset,
-          });
+          bySlot.set(rounded.slotMin, cell);
         }
-
-        dateCount.set(reading.dateKey, (dateCount.get(reading.dateKey) || 0) + 1);
+        dateSet.add(rounded.dateKey);
       }
     }
 
-    const keys = Array.from(dateCount.keys()).sort();
-    // Ngày mặc định = ngày có nhiều bản ghi nhất (đầy đủ nhất)
-    let best = '';
-    let bestN = -1;
-    for (const [k, n] of dateCount) {
-      if (n > bestN) { bestN = n; best = k; }
-    }
-    return { readingIndex: index, dateKeys: keys, defaultDate: best };
+    return { readingIndex: index, dateKeys: Array.from(dateSet).sort() };
   }, [csvContent]);
+
+  /* ---- Ngày mặc định = HÔM QUA (fallback ngày gần nhất có dữ liệu) ---- */
+  const defaultDate = useMemo(() => {
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    const key = fmtDateKey(y);
+    if (dateKeys.includes(key)) return key;
+    const earlier = dateKeys.filter(k => k <= key);
+    if (earlier.length) return earlier[earlier.length - 1];
+    return dateKeys[dateKeys.length - 1] || '';
+  }, [dateKeys]);
 
   /* ---- Ngày đang chọn ---- */
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -297,44 +355,45 @@ export default function VoltagePowerDashboard() {
 
     for (const info of customerInfoMap.values()) {
       const chartMeters: ChartMeter[] = [];
-      const meterHourly: Map<number, Map<number, HourCell>> = new Map(); // chartMeterIdx -> hour -> cell
-      const hoursSet = new Set<number>();
-      let totalP = 0;
+      const meterBySlot: Map<number, Map<number, HourCell>> = new Map(); // idx -> slotMin -> cell
+      const slotsSet = new Set<number>();
 
       let idxCounter = 0;
       for (const m of info.meters) {
-        const byDate = readingIndex.get(m.meterNo);
-        const byHour = byDate?.get(selectedDate);
-        if (!byHour || byHour.size === 0) continue;
+        const bySlot = readingIndex.get(m.meterNo)?.get(selectedDate);
+        if (!bySlot || bySlot.size === 0) continue;
 
-        // Công tơ chỉ được vẽ khi có điện áp 3 pha > 0 (ít nhất 1 mốc giờ)
+        // Công tơ chỉ vẽ khi có điện áp 3 pha > 0 (ít nhất 1 mốc)
         let hasVoltage = false;
-        for (const cell of byHour.values()) {
+        for (const cell of bySlot.values()) {
           if (cell.ua > 0 && cell.ub > 0 && cell.uc > 0) { hasVoltage = true; break; }
         }
         if (!hasVoltage) continue;
 
         const idx = idxCounter++;
         chartMeters.push({ idx, meterNo: m.meterNo, line: m.line });
-        meterHourly.set(idx, byHour);
-        for (const [h, cell] of byHour) {
-          hoursSet.add(h);
-          totalP += cell.kw;
-        }
+        meterBySlot.set(idx, bySlot);
+        for (const s of bySlot.keys()) slotsSet.add(s);
       }
 
-      if (chartMeters.length === 0) continue; // khách không có điện áp > 0 → không vẽ
+      if (chartMeters.length === 0) continue;
 
-      const sortedHours = Array.from(hoursSet).sort((a, b) => a - b);
-      const data = sortedHours.map(h => {
-        const row: any = { hour: h, label: `${p2(h)}:00` };
+      const sortedSlots = Array.from(slotsSet).sort((a, b) => a - b);
+      let peakP = 0;
+      let peakLabel = '';
+
+      const data = sortedSlots.map(s => {
+        const row: any = { slot: s, label: slotLabel(s) };
+        let slotSumP = 0;
         for (const cm of chartMeters) {
-          const cell = meterHourly.get(cm.idx)!.get(h);
+          const cell = meterBySlot.get(cm.idx)!.get(s);
           row[`ua${cm.idx}`] = cell && cell.ua > 0 ? cell.ua : null;
           row[`ub${cm.idx}`] = cell && cell.ub > 0 ? cell.ub : null;
           row[`uc${cm.idx}`] = cell && cell.uc > 0 ? cell.uc : null;
           row[`p${cm.idx}`] = cell ? cell.kw : null;
+          if (cell) slotSumP += cell.kw;
         }
+        if (slotSumP > peakP) { peakP = slotSumP; peakLabel = row.label; }
         return row;
       });
 
@@ -342,14 +401,15 @@ export default function VoltagePowerDashboard() {
         id: info.id,
         mkh: info.mkh,
         name: info.name,
-        totalP,
+        peakP,
+        peakLabel,
         chartMeters,
         data,
       });
     }
 
-    // Xếp hạng theo P (kW) giảm dần
-    result.sort((a, b) => b.totalP - a.totalP);
+    // Xếp hạng theo P MAX giảm dần
+    result.sort((a, b) => b.peakP - a.peakP);
     return result;
   }, [selectedDate, customerInfoMap, readingIndex]);
 
@@ -359,22 +419,22 @@ export default function VoltagePowerDashboard() {
     return m;
   }, [chartableCustomers]);
 
-  /* ---- Lựa chọn mặc định: 2 biểu đồ đầu = P cao nhất, 2 sau = P thấp nhất ---- */
+  /* ---- Mặc định: 2 biểu đồ đầu = P max cao nhất, 2 sau = P max thấp nhất ---- */
   const defaultPicks = useMemo<string[]>(() => {
     const ids = chartableCustomers.map(c => c.id);
     const picks: string[] = [];
     const used = new Set<string>();
     const push = (id?: string) => { if (id && !used.has(id)) { used.add(id); picks.push(id); } };
-    push(ids[0]);                       // cao nhất
-    push(ids[1]);                       // cao nhì
-    push(ids[ids.length - 1]);          // thấp nhất
-    push(ids[ids.length - 2]);          // thấp nhì
-    for (const id of ids) { if (picks.length >= 4) break; push(id); } // bù nếu < 4
+    push(ids[0]);
+    push(ids[1]);
+    push(ids[ids.length - 1]);
+    push(ids[ids.length - 2]);
+    for (const id of ids) { if (picks.length >= 4) break; push(id); }
     while (picks.length < 4) picks.push('');
     return picks.slice(0, 4);
   }, [chartableCustomers]);
 
-  /* ---- State 4 ô chọn khách hàng (sticky, reset khi đổi ngày/khu vực) ---- */
+  /* ---- 4 ô chọn khách hàng (sticky, reset khi đổi ngày/khu vực) ---- */
   const [slots, setSlots] = useState<string[]>(['', '', '', '']);
   const [stickyKey, setStickyKey] = useState<string>('');
 
@@ -390,10 +450,10 @@ export default function VoltagePowerDashboard() {
     setSlots(prev => prev.map((v, idx) => (idx === i ? id : v)));
 
   const SLOT_META = [
-    { title: 'Phụ tải cao nhất', Icon: TrendingUp, tone: 'text-rose-600' },
-    { title: 'Phụ tải cao thứ 2', Icon: TrendingUp, tone: 'text-rose-500' },
-    { title: 'Phụ tải thấp nhất', Icon: TrendingDown, tone: 'text-emerald-600' },
-    { title: 'Phụ tải thấp thứ 2', Icon: TrendingDown, tone: 'text-emerald-500' },
+    { title: 'P max cao nhất', Icon: TrendingUp, tone: 'text-rose-600' },
+    { title: 'P max cao thứ 2', Icon: TrendingUp, tone: 'text-rose-500' },
+    { title: 'P max thấp nhất', Icon: TrendingDown, tone: 'text-emerald-600' },
+    { title: 'P max thấp thứ 2', Icon: TrendingDown, tone: 'text-emerald-500' },
   ];
 
   const isReady = !!csvContent && !isLoadingMeters;
@@ -417,9 +477,9 @@ export default function VoltagePowerDashboard() {
             </h1>
           </div>
           <p className="text-sm text-slate-500 max-w-2xl">
-            Biểu đồ kết hợp theo giờ trong ngày: <strong>điện áp 3 pha (đường)</strong> và{' '}
-            <strong>công suất P&nbsp;(kW) (cột)</strong> của khách hàng. Mặc định hiển thị 2 khách
-            phụ tải cao nhất và 2 khách phụ tải thấp nhất.
+            Biểu đồ kết hợp theo mốc <strong>30 phút</strong>: <strong>điện áp 3 pha (đường)</strong> và{' '}
+            <strong>công suất P&nbsp;(kW) (cột)</strong>. Mặc định hiển thị 2 khách có P&nbsp;max cao nhất và
+            2 khách có P&nbsp;max thấp nhất; mốc đạt P&nbsp;max được đánh dấu trên biểu đồ.
           </p>
         </div>
 
@@ -439,17 +499,6 @@ export default function VoltagePowerDashboard() {
         </div>
       </div>
 
-      {/* ---- Ghi chú: CSV không có dòng điện ---- */}
-      <div className="vl-alert vl-alert-primary flex items-start gap-3 p-4 rounded-xl">
-        <Info className="w-5 h-5 shrink-0 mt-0.5" />
-        <p className="text-sm leading-relaxed">
-          Nguồn dữ liệu <code className="font-mono text-xs bg-white/40 px-1 py-0.5 rounded">datametter.csv</code> hiện
-          chỉ có <strong>điện áp 3 pha</strong> và <strong>công suất P&nbsp;(kW)</strong>; chưa có cột dòng điện
-          (Ia/Ib/Ic) nên biểu đồ chưa thể hiện dòng điện. Khi bổ sung cột dòng điện vào CSV, có thể mở rộng thêm.
-          Các mốc giờ được làm tròn theo quy tắc: lệch 0–10 phút làm tròn xuống, 50–60 phút làm tròn lên.
-        </p>
-      </div>
-
       {/* ---- Trạng thái tải / lỗi / rỗng ---- */}
       {csvError && (
         <div className="vl-alert vl-alert-danger p-4 rounded-xl text-sm">{csvError}</div>
@@ -467,7 +516,7 @@ export default function VoltagePowerDashboard() {
           <HelpCircle className="w-12 h-12 mb-3 opacity-30" />
           <p className="font-semibold">Không có khách hàng nào đủ điều kiện vẽ biểu đồ</p>
           <p className="text-sm mt-1">
-            (cần có công tơ với điện áp 3 pha &gt; 0 trong ngày {selectedDate ? fmtDateVN(selectedDate) : ''})
+            (cần có công tơ với điện áp 3 pha &gt; 0 trong ngày {fmtDateVN(selectedDate)})
           </p>
         </div>
       )}
@@ -478,8 +527,9 @@ export default function VoltagePowerDashboard() {
           {slots.map((selId, i) => {
             const meta = SLOT_META[i];
             const chart = selId ? chartById.get(selId) : undefined;
+            const multi = !!chart && chart.chartMeters.length > 1;
             return (
-              <div key={i} className="vl-card p-6 flex flex-col min-h-[480px]">
+              <div key={i} className="vl-card p-6 flex flex-col min-h-[500px]">
                 {/* Tiêu đề + bộ chọn khách hàng */}
                 <div className="flex flex-col gap-3 mb-5">
                   <div className="flex items-center gap-2">
@@ -489,45 +539,59 @@ export default function VoltagePowerDashboard() {
                     </span>
                   </div>
 
-                  <div className={`border rounded p-3 flex items-center gap-3 transition-colors ${
-                    chart ? 'bg-[#f4f8ff] border-[#5a8dee] ring-4 ring-[#e8f3ff]'
-                          : 'bg-slate-50 border-slate-200'
-                  }`}>
-                    <Building2 className={`w-5 h-5 shrink-0 ${chart ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
-                    <div className="flex-1 min-w-0">
-                      <select
-                        value={selId}
-                        onChange={e => setSlot(i, e.target.value)}
-                        className="vl-select w-full bg-transparent border-none text-slate-800 font-extrabold text-xs md:text-sm focus:outline-none cursor-pointer pr-8 truncate"
-                      >
-                        <option value="">-- Chọn khách hàng --</option>
-                        {chartableCustomers.map(c => (
-                          <option key={c.id} value={c.id}>
-                            [{c.mkh}] {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  {/* Select đồng bộ kiểu standalone với toàn app */}
+                  <div className="relative">
+                    <Building2 className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${chart ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
+                    <select
+                      value={selId}
+                      onChange={e => setSlot(i, e.target.value)}
+                      className="vl-select w-full bg-white border border-slate-200 rounded-lg pl-10 pr-9 py-2.5 text-slate-800 font-bold text-xs md:text-sm focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all truncate"
+                    >
+                      <option value="">-- Chọn khách hàng --</option>
+                      {chartableCustomers.map(c => (
+                        <option key={c.id} value={c.id}>
+                          [{c.mkh}] {c.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {chart && (
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
                       <span className="flex items-center gap-1">
                         <Gauge className="w-3 h-3 text-[#5a8dee]" />
-                        {chart.chartMeters.length} công tơ
+                        {chart.chartMeters.length} điểm đo
                       </span>
                       <span className="font-mono">
-                        Tổng P ngày: <strong className="text-slate-700">{fmtNum(chart.totalP, 1)} kW</strong>
+                        P max ngày: <strong className="text-amber-600">{fmtNum(chart.peakP, 1)} kW</strong>
+                        {chart.peakLabel && <span className="text-slate-400"> @ {chart.peakLabel}</span>}
                       </span>
+                    </div>
+                  )}
+
+                  {/* Chú thích điểm đo (phân biệt công tơ nào) */}
+                  {chart && multi && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {chart.chartMeters.map(cm => (
+                        <span
+                          key={cm.idx}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5"
+                          title={cm.line ? `Trạm ${cm.line}` : undefined}
+                        >
+                          <span className="font-mono text-[#5a8dee]">ĐĐ{cm.idx + 1}</span>
+                          <span className="text-slate-400">·</span>
+                          <span className="font-mono">{cm.meterNo}</span>
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>
 
                 {/* Biểu đồ */}
-                <div className="flex-1 min-h-[320px] w-full text-slate-700">
+                <div className="flex-1 min-h-[330px] w-full text-slate-700">
                   {chart && chart.data.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={chart.data} margin={{ top: 18, right: 12, left: 4, bottom: 4 }}>
+                      <ComposedChart data={chart.data} margin={{ top: 22, right: 12, left: 4, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis
                           dataKey="label"
@@ -535,6 +599,7 @@ export default function VoltagePowerDashboard() {
                           stroke="#94a3b8"
                           style={{ fontSize: '10px', fontWeight: 'bold' }}
                           interval="preserveStartEnd"
+                          minTickGap={18}
                         />
                         <YAxis
                           yAxisId="v"
@@ -542,60 +607,69 @@ export default function VoltagePowerDashboard() {
                           stroke="#94a3b8"
                           style={{ fontSize: '10px' }}
                           width={42}
-                          label={{ value: 'V', angle: 0, position: 'top', offset: 8, style: { fontSize: 10, fill: '#94a3b8' } }}
+                          label={{ value: 'V', position: 'top', offset: 8, style: { fontSize: 10, fill: '#94a3b8' } }}
                         />
                         <YAxis
                           yAxisId="p"
                           orientation="right"
                           tickLine={false}
-                          stroke="#a5b4fc"
+                          stroke="#818cf8"
                           style={{ fontSize: '10px' }}
                           width={42}
-                          label={{ value: 'kW', angle: 0, position: 'top', offset: 8, style: { fontSize: 10, fill: '#818cf8' } }}
+                          label={{ value: 'kW', position: 'top', offset: 8, style: { fontSize: 10, fill: '#818cf8' } }}
                         />
                         <Tooltip
-                          contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
+                          content={<ChartTooltip chartMeters={chart.chartMeters} />}
                           cursor={{ fill: 'rgba(226, 232, 240, 0.35)' }}
-                          formatter={(value: any, name: any) => {
-                            if (value == null) return ['—', name];
-                            const isP = String(name).startsWith('P');
-                            return [
-                              `${fmtNum(Number(value), isP ? 2 : 1)} ${isP ? 'kW' : 'V'}`,
-                              name,
-                            ];
-                          }}
-                          labelFormatter={(l) => `Giờ ${l}`}
+                          wrapperStyle={{ zIndex: 60, outline: 'none' }}
                         />
                         <Legend wrapperStyle={{ fontSize: '10px', paddingTop: 6 }} iconSize={9} />
 
-                        {/* Cột P (kW) — trục phải. Nhiều công tơ → nhiều cột cạnh nhau cùng 1 giờ */}
-                        {chart.chartMeters.map(cm => {
-                          const suffix = chart.chartMeters.length > 1 ? ` ${cm.idx + 1}` : '';
-                          return (
-                            <Bar
-                              key={`p${cm.idx}`}
-                              yAxisId="p"
-                              dataKey={`p${cm.idx}`}
-                              name={`P${suffix} (kW)`}
-                              fill={pick(P_FILLS, cm.idx)}
-                              radius={[3, 3, 0, 0]}
-                              barSize={chart.chartMeters.length > 1 ? 10 : 16}
-                            />
-                          );
-                        })}
+                        {/* Cột P (kW) — trục phải. Nhiều điểm đo → nhiều cột cạnh nhau cùng 1 mốc */}
+                        {chart.chartMeters.map(cm => (
+                          <Bar
+                            key={`p${cm.idx}`}
+                            yAxisId="p"
+                            dataKey={`p${cm.idx}`}
+                            name={multi ? `P·ĐĐ${cm.idx + 1} (kW)` : 'P (kW)'}
+                            fill={pick(P_FILLS, cm.idx)}
+                            radius={[3, 3, 0, 0]}
+                            barSize={multi ? 8 : 14}
+                          />
+                        ))}
 
-                        {/* Đường điện áp 3 pha — trục trái */}
+                        {/* Đánh dấu mốc đạt P max của khách hàng */}
+                        {chart.peakLabel && (
+                          <ReferenceLine
+                            yAxisId="p"
+                            x={chart.peakLabel}
+                            stroke="#f59e0b"
+                            strokeDasharray="4 3"
+                            strokeWidth={1.5}
+                            label={{
+                              value: `P max ${fmtNum(chart.peakP, 1)} kW`,
+                              position: 'top',
+                              fontSize: 9,
+                              fontWeight: 700,
+                              fill: '#b45309',
+                            }}
+                          />
+                        )}
+
+                        {/* Đường điện áp 3 pha — trục trái. Pha = màu, điểm đo = kiểu nét */}
                         {chart.chartMeters.flatMap(cm => {
-                          const suffix = chart.chartMeters.length > 1 ? `${cm.idx + 1}` : '';
+                          const mp = multi ? `·ĐĐ${cm.idx + 1}` : '';
+                          const dash = pick(DASHES, cm.idx);
                           return [
                             <Line
                               key={`ua${cm.idx}`}
                               yAxisId="v"
                               type="monotone"
                               dataKey={`ua${cm.idx}`}
-                              name={`Ua${suffix}`}
+                              name={`Ua${mp}`}
                               stroke={pick(PHASE_A, cm.idx)}
                               strokeWidth={2}
+                              strokeDasharray={dash || undefined}
                               dot={false}
                               activeDot={{ r: 4 }}
                               connectNulls
@@ -605,9 +679,10 @@ export default function VoltagePowerDashboard() {
                               yAxisId="v"
                               type="monotone"
                               dataKey={`ub${cm.idx}`}
-                              name={`Ub${suffix}`}
+                              name={`Ub${mp}`}
                               stroke={pick(PHASE_B, cm.idx)}
                               strokeWidth={2}
+                              strokeDasharray={dash || undefined}
                               dot={false}
                               activeDot={{ r: 4 }}
                               connectNulls
@@ -617,9 +692,10 @@ export default function VoltagePowerDashboard() {
                               yAxisId="v"
                               type="monotone"
                               dataKey={`uc${cm.idx}`}
-                              name={`Uc${suffix}`}
+                              name={`Uc${mp}`}
                               stroke={pick(PHASE_C, cm.idx)}
                               strokeWidth={2}
+                              strokeDasharray={dash || undefined}
                               dot={false}
                               activeDot={{ r: 4 }}
                               connectNulls
