@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { pb } from '../lib/pocketbase';
 import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity, FileText, ExternalLink, Bell, Mail, LayoutDashboard,
+  Activity, FileText, ExternalLink, Mail, LayoutDashboard, ZapOff,
 } from 'lucide-react';
 import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -11,13 +11,16 @@ import CustomerManager from './CustomerManager';
 import HesReadingManager from './HesReadingManager';
 import VoltagePowerDashboard from './VoltagePowerDashboard';
 import JournalManager from './JournalManager';
+import PowerOutageManager from './PowerOutageManager';
 import NewUpdateTour from './NewUpdateTour';
 
-type Tab = 'summary' | 'journal' | 'operating' | 'hes' | 'opchart' | 'later';
+type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'operating' | 'hes' | 'opchart' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
   journal:   'Hồ sơ vận hành',
+  outage:            'Thông báo ngừng cấp điện',
+  'handover-record': 'Biên bản treo tháo',
   operating: 'Thông số vận hành',
   hes:       'Lấy chỉ số HES',
   opchart:   'Đồ thị điện áp & công suất',
@@ -130,7 +133,7 @@ export default function Dashboard() {
               id="nav-journal"
               onClick={() => toggleSection('journal')}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'journal' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'journal' || topTab === 'outage' || topTab === 'handover-record' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
               }`}
             >
               <ClipboardList className="w-5 h-5 shrink-0" />
@@ -156,6 +159,31 @@ export default function Dashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       Sổ nhật ký vận hành
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      id="nav-outage-sub"
+                      onClick={() => { setTopTab('outage'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'outage' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Thông báo ngừng cấp điện</span>
+                      <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 shadow-sm shadow-red-400" />
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      id="nav-handover-record-sub"
+                      onClick={() => { setTopTab('handover-record'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'handover-record' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      Biên bản treo tháo
                     </button>
                   </li>
                 </motion.ul>
@@ -332,14 +360,6 @@ export default function Dashboard() {
 
           {/* Right actions */}
           <div className="flex items-center gap-1 shrink-0">
-            {/* Bell */}
-            <button
-              className="p-2 rounded-full hover:bg-gray-100 transition-colors text-[#6c757d]"
-              title="Thông báo"
-            >
-              <Bell className="w-[20px] h-[20px]" />
-            </button>
-
             {/* Help / Hướng dẫn */}
             <a
               href="/document.pdf"
@@ -363,7 +383,7 @@ export default function Dashboard() {
               <div className="w-8 h-8 rounded-full bg-[#5a8dee] flex items-center justify-center text-white text-[13px] font-bold shrink-0">
                 {userInitial}
               </div>
-              <span className="hidden md:block text-[13px] font-semibold text-[#475f7b] max-w-[120px] truncate">
+              <span className="hidden md:block text-[13px] font-semibold text-[#475f7b] max-w-[200px] truncate">
                 {userName}
               </span>
             </div>
@@ -392,6 +412,14 @@ export default function Dashboard() {
               <VoltagePowerDashboard />
             ) : topTab === 'journal' ? (
               <JournalManager />
+            ) : topTab === 'outage' ? (
+              <PowerOutageManager />
+            ) : topTab === 'handover-record' ? (
+              <div className="vl-card flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
+                <RefreshCw className="w-14 h-14 animate-[spin_3s_linear_infinite]" style={{ color: '#a3afbd' }} />
+                <p className="text-base font-bold text-slate-500">Tính năng đang được phát triển</p>
+                <p className="text-sm text-slate-400">Biên bản treo tháo sẽ sớm được ra mắt trong phiên bản tiếp theo.</p>
+              </div>
             ) : (
               <div className="vl-card flex flex-col items-center justify-center py-20">
                 <RefreshCw
@@ -412,7 +440,7 @@ export default function Dashboard() {
         {/* Footer */}
         <footer className="px-6 py-4">
           <div className="flex justify-end text-[.8rem]" style={{ color: 'var(--vl-light)' }}>
-            <p>Phiên bản 1.0</p>
+            <p>Phiên bản 1.1</p>
           </div>
         </footer>
       </div>
