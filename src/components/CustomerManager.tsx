@@ -7,8 +7,6 @@ import {
   Users, CloudDownload, AlertCircle, Info, CreditCard,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Select } from './ui/Select';
-import { useConfirm } from './ui/ConfirmDialog';
 
 
 const inputCls =
@@ -28,7 +26,6 @@ type CustomerGroup = { customer: Partial<Customer>; meters: Meter[] };
    COMPONENT
 ================================================================ */
 export default function CustomerManager() {
-  const { confirm, dialog: confirmDialog } = useConfirm();
   const [allMeters, setAllMeters] = useState<Meter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterArea, setFilterArea] = useState('');
@@ -191,8 +188,7 @@ export default function CustomerManager() {
     catch (err: any) { showToast('Lỗi: ' + err.message, 'error'); }
   };
   const deleteCustomer = async (cid: string, count: number) => {
-    const ok = await confirm({ title: 'Xóa khách hàng?', message: `Sẽ xóa khách hàng và ${count} công tơ liên quan. Thao tác không thể hoàn tác.`, confirmLabel: 'Xóa', variant: 'danger' });
-    if (!ok) return;
+    if (!window.confirm(`Xóa khách hàng và ${count} công tơ liên quan?`)) return;
     try {
       await Promise.all(allMeters.filter(m => m.Customer === cid).map(m => pb.collection('Meter').delete(m.id)));
       await pb.collection('Customer').delete(cid);
@@ -323,7 +319,6 @@ export default function CustomerManager() {
   ================================================================ */
   return (
     <div className="space-y-6">
-      {confirmDialog}
 
       {/* ---- Toast ---- */}
       <AnimatePresence>
@@ -387,8 +382,9 @@ export default function CustomerManager() {
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-500 mb-1">Khu vực</label>
-                        <Select value={modalCust.area} onChange={v => setModalCust({ ...modalCust, area: v })}
-                          options={effectiveAreas.map(a => ({ value: a, label: a }))} />
+                        <select value={modalCust.area} onChange={e => setModalCust({ ...modalCust, area: e.target.value })} className={`vl-select ${inputCls}`}>
+                          {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -609,9 +605,11 @@ export default function CustomerManager() {
             </button>
 
             {userAreas.length !== 1 && (
-              <Select value={filterArea} onChange={setFilterArea}
-                options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map(a => ({ value: a, label: a }))]}
-                className="min-w-[160px]" />
+              <select value={filterArea} onChange={e => setFilterArea(e.target.value)}
+                className="vl-select bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all">
+                <option value="">Tất cả khu vực</option>
+                {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
             )}
 
             {/* Lưu trạng thái — always visible, grayed when no pending */}
@@ -675,8 +673,10 @@ export default function CustomerManager() {
                       <input type="text" placeholder="Tên khách hàng" value={editCust.Name}
                         onChange={e => setEditCust({ ...editCust, Name: e.target.value })}
                         className="flex-1 min-w-[140px] px-2 py-1 border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee] bg-white" />
-                      <Select value={editCust.area} onChange={v => setEditCust({ ...editCust, area: v })}
-                        options={effectiveAreas.map(a => ({ value: a, label: a }))} className="min-w-[120px]" />
+                      <select value={editCust.area} onChange={e => setEditCust({ ...editCust, area: e.target.value })}
+                        className="vl-select px-2 py-1.5 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#5a8dee] bg-white pr-8 transition-all">
+                        {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
                       <button onClick={() => saveCustEdit(cid)} className="p-1.5 text-[#5a8dee] hover:bg-[#e8f3ff] rounded" title="Lưu"><CheckCircle2 className="w-4 h-4" /></button>
                       <button onClick={() => setEditingCustId(null)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded" title="Hủy"><X className="w-4 h-4" /></button>
                     </div>
@@ -751,8 +751,9 @@ export default function CustomerManager() {
                                       : <span className="text-sm text-slate-600">{meter.Line || '—'}</span>}
                                   </td>
                                   <td>
-                                    {isEM ? <Select value={editMeter.area} onChange={v => setEditMeter({ ...editMeter, area: v })}
-                                        options={effectiveAreas.map(a => ({ value: a, label: a }))} className="min-w-[120px]" />
+                                    {isEM ? <select value={editMeter.area} onChange={e => setEditMeter({ ...editMeter, area: e.target.value })} className={`vl-select ${inputCls}`}>
+                                        {effectiveAreas.map(a => <option key={a} value={a}>{a}</option>)}
+                                      </select>
                                       : <span className="text-sm text-slate-500 flex items-center gap-1"><MapPin className="w-3 h-3" />{meter.area}</span>}
                                   </td>
                                   <td>
