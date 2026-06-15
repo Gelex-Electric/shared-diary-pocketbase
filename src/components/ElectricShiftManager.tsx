@@ -3,8 +3,11 @@ import { pb, AREAS, AREA_TO_CLASS, ID_TO_AREA } from '../lib/pocketbase';
 import { ElectricShift } from '../types';
 import { Plus, Trash2, Edit2, X, Check, Search, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Select } from './ui/Select';
+import { useConfirm } from './ui/ConfirmDialog';
 
 export default function ElectricShiftManager() {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [shifts, setShifts] = useState<ElectricShift[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterArea, setFilterArea] = useState('');
@@ -100,7 +103,8 @@ export default function ElectricShiftManager() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa nhân sự này?')) return;
+    const ok = await confirm({ title: 'Xóa nhân sự?', message: 'Nhân sự này sẽ bị xóa vĩnh viễn.', confirmLabel: 'Xóa', variant: 'danger' });
+    if (!ok) return;
     try {
       await pb.collection('Electric_shift').delete(id);
       loadShifts();
@@ -112,6 +116,7 @@ export default function ElectricShiftManager() {
 
   return (
     <div className="space-y-8 relative">
+      {confirmDialog}
       {/* Header and top filters */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
@@ -119,16 +124,12 @@ export default function ElectricShiftManager() {
           <p className="text-slate-500 text-sm mt-1">Danh sách nhân sự phân bổ theo tổ vận hành</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <select
+          <Select
             value={filterArea}
-            onChange={(e) => setFilterArea(e.target.value)}
-            className="vl-select bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-[#5a8dee] outline-none transition-all"
-          >
-            <option value="">Tất cả khu vực</option>
-            {effectiveAreas.map(area => (
-              <option key={area} value={area}>{area}</option>
-            ))}
-          </select>
+            onChange={setFilterArea}
+            options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map(area => ({ value: area, label: area }))]}
+            className="min-w-[180px]"
+          />
           <button 
             onClick={handleOpenAdd}
             className="vl-btn vl-btn-primary flex-1 md:flex-none flex items-center justify-center gap-2"
@@ -251,15 +252,11 @@ export default function ElectricShiftManager() {
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Khu vực phân bổ</label>
-                  <select
+                  <Select
                     value={formData.area}
-                    onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                    className="vl-select w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:bg-white transition-all text-sm font-bold text-slate-700"
-                  >
-                    {effectiveAreas.map(area => (
-                      <option key={area} value={area}>{area}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setFormData({ ...formData, area: v })}
+                    options={effectiveAreas.map(area => ({ value: area, label: area }))}
+                  />
                 </div>
 
                 <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
