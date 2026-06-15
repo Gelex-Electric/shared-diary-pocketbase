@@ -19,6 +19,7 @@ import {
   Info,
   TrendingUp,
   TrendingDown,
+  ZapOff,
 } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
 import { Meter } from '../types';
@@ -71,6 +72,16 @@ const timeLabel = (dt: Date) => `${p2(dt.getHours())}:${p2(dt.getMinutes())}`;
 /** Định dạng số CHÍNH XÁC theo dữ liệu (không ép làm tròn), kiểu vi-VN. */
 const fmtVal = (v: number) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(v);
+
+/** Tính thời lượng từ hai nhãn HH:mm, trả về chuỗi vd '1h30p', '45p'. */
+function fmtDuration(x1: string, x2: string): string {
+  const toMin = (s: string) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+  const diff = toMin(x2) - toMin(x1);
+  if (diff <= 0) return '';
+  const h = Math.floor(diff / 60);
+  const m = diff % 60;
+  return h > 0 && m > 0 ? `${h}h${m}p` : h > 0 ? `${h}h` : `${m}p`;
+}
 
 /* ================================================================
    TYPES nội bộ
@@ -518,6 +529,19 @@ export default function VoltagePowerDashboard() {
                   {station.peakLabel && <span className="text-slate-400"> @ {station.peakLabel}</span>}
                 </span>
               )}
+              {station && station.outagePeriods.length > 0 && (
+                <div className="flex flex-wrap gap-1 w-full mt-0.5">
+                  {station.outagePeriods.map((op, idx) => {
+                    const dur = fmtDuration(op.x1, op.x2);
+                    return (
+                      <span key={idx} className="inline-flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 text-[10px] font-mono px-1.5 py-0.5 rounded">
+                        <ZapOff className="w-2.5 h-2.5 shrink-0" />
+                        {op.x1}–{op.x2}{dur && <span className="text-red-400 ml-0.5">({dur})</span>}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -526,7 +550,7 @@ export default function VoltagePowerDashboard() {
         <div className="w-full text-slate-700 h-[280px]">
           {station && station.data.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={station.data} margin={{ top: 22, right: 10, left: 2, bottom: 4 }}>
+              <ComposedChart data={station.data} margin={{ top: 16, right: 4, left: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis
                   dataKey="label"
@@ -536,23 +560,8 @@ export default function VoltagePowerDashboard() {
                   interval="preserveStartEnd"
                   minTickGap={24}
                 />
-                <YAxis
-                  yAxisId="v"
-                  tickLine={false}
-                  stroke="#94a3b8"
-                  style={{ fontSize: '10px' }}
-                  width={40}
-                  label={{ value: 'V', position: 'top', offset: 8, style: { fontSize: 10, fill: '#94a3b8' } }}
-                />
-                <YAxis
-                  yAxisId="p"
-                  orientation="right"
-                  tickLine={false}
-                  stroke="#818cf8"
-                  style={{ fontSize: '10px' }}
-                  width={40}
-                  label={{ value: 'kW', position: 'top', offset: 8, style: { fontSize: 10, fill: '#818cf8' } }}
-                />
+                <YAxis yAxisId="v" hide />
+                <YAxis yAxisId="p" orientation="right" hide />
                 <Tooltip
                   content={<ChartTooltip />}
                   cursor={{ fill: 'rgba(226, 232, 240, 0.35)' }}
@@ -625,10 +634,11 @@ export default function VoltagePowerDashboard() {
               Đồ thị điện áp &amp; công suất
             </h1>
           </div>
-          <p className="text-sm text-slate-500 max-w-2xl">
-            Biểu đồ kết hợp theo <strong>thời gian thực tế</strong> của số liệu đo cho từng <strong>trạm</strong>:{' '}
-            <strong>điện áp 3 pha (đường)</strong> và <strong>công suất P&nbsp;(kW) (cột)</strong>. Mặc định hiển thị
-            3 khách có P&nbsp;max cao nhất và 3 khách thấp nhất; khách nhiều điểm đo có thể chọn trạm qua dropdown.
+          <p className="text-sm text-slate-500 max-w-2xl flex items-start gap-1.5">
+            <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+            Thông số vận hành sẽ lấy dữ liệu chậm hơn so với HES khoảng{' '}
+            <strong>1 đến 2 giờ</strong> và chỉ lưu trong vòng{' '}
+            <strong>7 ngày gần nhất</strong>.
           </p>
         </div>
 
@@ -646,15 +656,6 @@ export default function VoltagePowerDashboard() {
             </p>
           )}
         </div>
-      </div>
-
-      {/* ---- Ghi chú về độ trễ & thời gian lưu dữ liệu ---- */}
-      <div className="vl-alert vl-alert-light-warning flex items-start gap-3 p-4 rounded-xl">
-        <Info className="w-5 h-5 shrink-0 mt-0.5" />
-        <p className="text-sm leading-relaxed">
-          Thông số vận hành sẽ lấy dữ liệu chậm hơn so với HES khoảng <strong>1 đến 2 giờ</strong> và chỉ lưu
-          trong vòng <strong>7 ngày gần nhất</strong>.
-        </p>
       </div>
 
       {/* ---- Trạng thái tải / lỗi / rỗng ---- */}
