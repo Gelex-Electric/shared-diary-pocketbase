@@ -170,8 +170,7 @@ export default function Dashboard() {
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
-                      <span className="flex-1">Thông báo ngừng cấp điện</span>
-                      <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 shadow-sm shadow-red-400" />
+                      Thông báo ngừng cấp điện
                     </button>
                   </li>
                   <li>
@@ -245,7 +244,8 @@ export default function Dashboard() {
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
-                      Đồ thị điện áp &amp; công suất
+                      <span className="flex-1">Đồ thị điện áp &amp; công suất</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
                 </motion.ul>
