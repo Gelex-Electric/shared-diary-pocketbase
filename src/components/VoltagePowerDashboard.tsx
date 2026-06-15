@@ -125,127 +125,87 @@ interface CustomerInfo {
   meters: { meterNo: string; line: string }[];
 }
 
-interface ChartMeter {
-  idx: number;        // số thứ tự điểm đo trong biểu đồ (0-based)
+/** Chuỗi dữ liệu 1 TRẠM (điểm đo) trong ngày. */
+interface StationSeries {
   meterNo: string;
-  line: string;
+  line: string;        // tên trạm (vd: YM.KIMTIN.3000KVA.ECHO)
+  data: any[];         // [{ slot, label, ua, ub, uc, p }]
+  peakP: number;       // P (kW) lớn nhất trong ngày của trạm này
+  peakLabel: string;   // mốc thời gian đạt P max
 }
 
 interface CustomerChart {
   id: string;
   mkh: string;
   name: string;
-  peakP: number;       // P (kW) lớn nhất trong ngày (tổng các điểm đo theo mốc) — dùng xếp hạng
-  peakLabel: string;   // nhãn mốc thời gian đạt P max
-  chartMeters: ChartMeter[];
-  data: any[];
+  peakP: number;             // = P max lớn nhất trong các trạm — dùng xếp hạng
+  stations: StationSeries[]; // chỉ trạm có điện áp > 0, sắp theo peakP giảm dần
 }
 
 /* ================================================================
-   MÀU SẮC — đồng bộ palette SummaryDashboard
-   (slate #94a3b8, blue #3b82f6, green #10b981, amber #f59e0b, pink #ec4899).
-   Pha = màu cố định; TRẠM phân biệt bằng kiểu nét đường + sắc độ cột.
+   MÀU SẮC — đồng bộ palette SummaryDashboard.
+   Mỗi biểu đồ chỉ vẽ 1 trạm: 3 đường điện áp + 1 cột công suất.
 ================================================================ */
 const PHASE_COLOR = { ua: '#3b82f6', ub: '#10b981', uc: '#f59e0b' }; // Ua xanh dương, Ub xanh lá, Uc hổ phách
-const P_FILLS = ['#5a8dee', '#94a3b8', '#a5b4fc', '#ec4899'];        // cột P (kW) theo trạm
-const DASHES = ['', '5 3', '2 3', '8 3 2 3'];                        // kiểu nét theo trạm
+const P_FILL = '#a5b4fc';                                            // cột P (kW)
 
-const pick = (arr: string[], i: number) => arr[i % arr.length];
-
-/** Nhãn trạm để phân biệt điểm đo (vd: YM.KIMTIN.3000KVA.ECHO). */
-const stationLabel = (cm: { line: string; meterNo: string }) => cm.line || cm.meterNo;
+/** Nhãn trạm để hiển thị (vd: YM.KIMTIN.3000KVA.ECHO). */
+const stationLabel = (s: { line: string; meterNo: string }) => s.line || s.meterNo;
 
 /* ================================================================
-   TOOLTIP tuỳ biến — nền sáng, gom theo điểm đo.
+   TOOLTIP tuỳ biến — nền sáng (1 trạm: Ua/Ub/Uc + P).
 ================================================================ */
-function parseSeriesKey(key: string): { kind: 'ua' | 'ub' | 'uc' | 'p'; idx: number } | null {
-  const m = key.match(/^(ua|ub|uc|p)(\d+)$/);
-  if (!m) return null;
-  return { kind: m[1] as any, idx: Number(m[2]) };
-}
+const SERIES_LABEL: Record<string, string> = { ua: 'Ua', ub: 'Ub', uc: 'Uc', p: 'P' };
 
-const PHASE_LABEL: Record<string, string> = { ua: 'Ua', ub: 'Ub', uc: 'Uc', p: 'P' };
-
-function ChartTooltip({ active, payload, label, chartMeters }: any) {
+function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload || payload.length === 0) return null;
-
-  const multi = chartMeters.length > 1;
-  const groups = new Map<number, any[]>();
-  for (const p of payload) {
-    if (p.value == null) continue;
-    const info = parseSeriesKey(p.dataKey);
-    if (!info) continue;
-    if (!groups.has(info.idx)) groups.set(info.idx, []);
-    groups.get(info.idx)!.push({ ...p, info });
-  }
-  if (groups.size === 0) return null;
-
-  const ordered = Array.from(groups.entries()).sort((a, b) => a[0] - b[0]);
+  const rows = payload.filter((p: any) => p.value != null);
+  if (rows.length === 0) return null;
 
   return (
     <div className="vl-chart-tooltip">
       <div className="vl-chart-tooltip-title">Thời điểm {label}</div>
-      {ordered.map(([idx, items]) => {
-        const cm: ChartMeter | undefined = chartMeters.find((c: ChartMeter) => c.idx === idx);
-        return (
-          <div key={idx} className="vl-chart-tooltip-group">
-            {multi && cm && (
-              <div className="vl-chart-tooltip-meter">{stationLabel(cm)}</div>
-            )}
-            {items
-              .sort((a, b) => (a.info.kind === 'p' ? 1 : 0) - (b.info.kind === 'p' ? 1 : 0))
-              .map((it, i) => {
-                const isP = it.info.kind === 'p';
-                return (
-                  <div key={i} className="vl-chart-tooltip-row">
-                    <span className="vl-dot" style={{ background: it.color }} />
-                    <span className="vl-lbl">{PHASE_LABEL[it.info.kind]}</span>
-                    <span className="vl-val">
-                      {fmtNum(Number(it.value), isP ? 2 : 1)} {isP ? 'kW' : 'V'}
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
-        );
-      })}
+      <div className="vl-chart-tooltip-group">
+        {rows
+          .slice()
+          .sort((a: any, b: any) => (a.dataKey === 'p' ? 1 : 0) - (b.dataKey === 'p' ? 1 : 0))
+          .map((it: any, i: number) => {
+            const isP = it.dataKey === 'p';
+            return (
+              <div key={i} className="vl-chart-tooltip-row">
+                <span className="vl-dot" style={{ background: it.color }} />
+                <span className="vl-lbl">{SERIES_LABEL[it.dataKey] ?? it.dataKey}</span>
+                <span className="vl-val">
+                  {fmtNum(Number(it.value), isP ? 2 : 1)} {isP ? 'kW' : 'V'}
+                </span>
+              </div>
+            );
+          })}
+      </div>
     </div>
   );
 }
 
 /* ================================================================
-   LEGEND tuỳ biến — gom theo TRẠM, hiển thị màu pha + kiểu nét + cột P.
+   LEGEND tuỳ biến — 3 đường điện áp + 1 cột công suất.
 ================================================================ */
-function DashLine({ color, dash }: { color: string; dash: string }) {
+function LineSwatch({ color }: { color: string }) {
   return (
     <svg width="20" height="6" className="shrink-0">
-      <line x1="0" y1="3" x2="20" y2="3" stroke={color} strokeWidth="2.2" strokeDasharray={dash || undefined} />
+      <line x1="0" y1="3" x2="20" y2="3" stroke={color} strokeWidth="2.4" />
     </svg>
   );
 }
 
-function StationLegend({ chartMeters }: { chartMeters: ChartMeter[] }) {
-  const multi = chartMeters.length > 1;
+function ChartLegend() {
   return (
-    <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-slate-100">
-      {chartMeters.map(cm => {
-        const dash = pick(DASHES, cm.idx);
-        return (
-          <div key={cm.idx} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-slate-500">
-            {multi && (
-              <span className="font-mono font-bold text-[#5a8dee] bg-[#e8f3ff] px-1.5 py-0.5 rounded">
-                {stationLabel(cm)}
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1"><DashLine color={PHASE_COLOR.ua} dash={dash} /> Ua</span>
-            <span className="inline-flex items-center gap-1"><DashLine color={PHASE_COLOR.ub} dash={dash} /> Ub</span>
-            <span className="inline-flex items-center gap-1"><DashLine color={PHASE_COLOR.uc} dash={dash} /> Uc</span>
-            <span className="inline-flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm" style={{ background: pick(P_FILLS, cm.idx) }} /> P (kW)
-            </span>
-          </div>
-        );
-      })}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 pt-3 border-t border-slate-100 text-[10px] font-semibold text-slate-500">
+      <span className="inline-flex items-center gap-1"><LineSwatch color={PHASE_COLOR.ua} /> Ua</span>
+      <span className="inline-flex items-center gap-1"><LineSwatch color={PHASE_COLOR.ub} /> Ub</span>
+      <span className="inline-flex items-center gap-1"><LineSwatch color={PHASE_COLOR.uc} /> Uc</span>
+      <span className="inline-flex items-center gap-1">
+        <span className="w-3 h-3 rounded-sm" style={{ background: P_FILL }} /> P (kW)
+      </span>
     </div>
   );
 }
@@ -387,67 +347,61 @@ export default function VoltagePowerDashboard() {
     if (defaultDate && !selectedDate) setSelectedDate(defaultDate);
   }, [defaultDate, selectedDate]);
 
-  /* ---- Dựng dữ liệu biểu đồ cho từng khách hàng theo ngày chọn ---- */
+  /* ---- Dựng dữ liệu biểu đồ cho từng khách hàng theo ngày chọn ----
+     Mỗi TRẠM (công tơ) là một chuỗi riêng; khách nhiều điểm đo → nhiều trạm
+     để chọn qua dropdown (mỗi biểu đồ chỉ vẽ 1 trạm). */
   const chartableCustomers = useMemo<CustomerChart[]>(() => {
     if (!selectedDate) return [];
     const result: CustomerChart[] = [];
 
     for (const info of customerInfoMap.values()) {
-      const chartMeters: ChartMeter[] = [];
-      const meterBySlot: Map<number, Map<number, HourCell>> = new Map(); // idx -> slotMin -> cell
-      const slotsSet = new Set<number>();
+      const stations: StationSeries[] = [];
 
-      let idxCounter = 0;
       for (const m of info.meters) {
         const bySlot = readingIndex.get(m.meterNo)?.get(selectedDate);
         if (!bySlot || bySlot.size === 0) continue;
 
-        // Công tơ chỉ vẽ khi có điện áp 3 pha > 0 (ít nhất 1 mốc)
+        // Trạm chỉ vẽ khi có điện áp 3 pha > 0 (ít nhất 1 mốc)
         let hasVoltage = false;
         for (const cell of bySlot.values()) {
           if (cell.ua > 0 && cell.ub > 0 && cell.uc > 0) { hasVoltage = true; break; }
         }
         if (!hasVoltage) continue;
 
-        const idx = idxCounter++;
-        chartMeters.push({ idx, meterNo: m.meterNo, line: m.line });
-        meterBySlot.set(idx, bySlot);
-        for (const s of bySlot.keys()) slotsSet.add(s);
+        const sortedSlots = Array.from(bySlot.keys()).sort((a, b) => a - b);
+        let peakP = 0;
+        let peakLabel = '';
+        const data = sortedSlots.map(s => {
+          const cell = bySlot.get(s)!;
+          const row: any = {
+            slot: s,
+            label: slotLabel(s),
+            ua: cell.ua > 0 ? cell.ua : null,
+            ub: cell.ub > 0 ? cell.ub : null,
+            uc: cell.uc > 0 ? cell.uc : null,
+            p: cell.kw,
+          };
+          if (cell.kw > peakP) { peakP = cell.kw; peakLabel = row.label; }
+          return row;
+        });
+
+        stations.push({ meterNo: m.meterNo, line: m.line, data, peakP, peakLabel });
       }
 
-      if (chartMeters.length === 0) continue;
+      if (stations.length === 0) continue;
 
-      const sortedSlots = Array.from(slotsSet).sort((a, b) => a - b);
-      let peakP = 0;
-      let peakLabel = '';
-
-      const data = sortedSlots.map(s => {
-        const row: any = { slot: s, label: slotLabel(s) };
-        let slotSumP = 0;
-        for (const cm of chartMeters) {
-          const cell = meterBySlot.get(cm.idx)!.get(s);
-          row[`ua${cm.idx}`] = cell && cell.ua > 0 ? cell.ua : null;
-          row[`ub${cm.idx}`] = cell && cell.ub > 0 ? cell.ub : null;
-          row[`uc${cm.idx}`] = cell && cell.uc > 0 ? cell.uc : null;
-          row[`p${cm.idx}`] = cell ? cell.kw : null;
-          if (cell) slotSumP += cell.kw;
-        }
-        if (slotSumP > peakP) { peakP = slotSumP; peakLabel = row.label; }
-        return row;
-      });
-
+      // Trạm có P max lớn nhất đứng đầu (mặc định chọn)
+      stations.sort((a, b) => b.peakP - a.peakP);
       result.push({
         id: info.id,
         mkh: info.mkh,
         name: info.name,
-        peakP,
-        peakLabel,
-        chartMeters,
-        data,
+        peakP: stations[0].peakP,
+        stations,
       });
     }
 
-    // Xếp hạng theo P MAX giảm dần
+    // Xếp hạng khách theo P MAX giảm dần
     result.sort((a, b) => b.peakP - a.peakP);
     return result;
   }, [selectedDate, customerInfoMap, readingIndex]);
@@ -458,7 +412,7 @@ export default function VoltagePowerDashboard() {
     return m;
   }, [chartableCustomers]);
 
-  /* ---- Mặc định: 2 biểu đồ đầu = P max cao nhất, 2 sau = P max thấp nhất ---- */
+  /* ---- Mặc định: 3 biểu đồ trái = P max cao nhất, 3 phải = P max thấp nhất ---- */
   const defaultPicks = useMemo<string[]>(() => {
     const ids = chartableCustomers.map(c => c.id);
     const picks: string[] = [];
@@ -466,15 +420,18 @@ export default function VoltagePowerDashboard() {
     const push = (id?: string) => { if (id && !used.has(id)) { used.add(id); picks.push(id); } };
     push(ids[0]);
     push(ids[1]);
+    push(ids[2]);
     push(ids[ids.length - 1]);
     push(ids[ids.length - 2]);
-    for (const id of ids) { if (picks.length >= 4) break; push(id); }
-    while (picks.length < 4) picks.push('');
-    return picks.slice(0, 4);
+    push(ids[ids.length - 3]);
+    for (const id of ids) { if (picks.length >= 6) break; push(id); }
+    while (picks.length < 6) picks.push('');
+    return picks.slice(0, 6);
   }, [chartableCustomers]);
 
-  /* ---- 4 ô chọn khách hàng (sticky, reset khi đổi ngày/khu vực) ---- */
-  const [slots, setSlots] = useState<string[]>(['', '', '', '']);
+  /* ---- 6 ô chọn khách hàng + trạm (sticky, reset khi đổi ngày/khu vực) ---- */
+  const [slots, setSlots] = useState<string[]>(['', '', '', '', '', '']);
+  const [stationSlots, setStationSlots] = useState<string[]>(['', '', '', '', '', '']);
   const [stickyKey, setStickyKey] = useState<string>('');
 
   useEffect(() => {
@@ -482,21 +439,180 @@ export default function VoltagePowerDashboard() {
     if (key !== stickyKey) {
       setStickyKey(key);
       setSlots(defaultPicks);
+      setStationSlots(['', '', '', '', '', '']);
     }
   }, [selectedDate, userAreas, chartableCustomers.length, defaultPicks, stickyKey]);
 
-  const setSlot = (i: number, id: string) =>
+  const setSlot = (i: number, id: string) => {
     setSlots(prev => prev.map((v, idx) => (idx === i ? id : v)));
+    setStationSlots(prev => prev.map((v, idx) => (idx === i ? '' : v))); // đổi khách → reset trạm về mặc định
+  };
+  const setStation = (i: number, meterNo: string) =>
+    setStationSlots(prev => prev.map((v, idx) => (idx === i ? meterNo : v)));
 
   const SLOT_META = [
     { title: 'P max cao nhất', Icon: TrendingUp, tone: 'text-rose-600' },
     { title: 'P max cao thứ 2', Icon: TrendingUp, tone: 'text-rose-500' },
+    { title: 'P max cao thứ 3', Icon: TrendingUp, tone: 'text-rose-400' },
     { title: 'P max thấp nhất', Icon: TrendingDown, tone: 'text-emerald-600' },
     { title: 'P max thấp thứ 2', Icon: TrendingDown, tone: 'text-emerald-500' },
+    { title: 'P max thấp thứ 3', Icon: TrendingDown, tone: 'text-emerald-400' },
   ];
 
   const isReady = !!csvContent && !isLoadingMeters;
   const noData = isReady && chartableCustomers.length === 0;
+
+  /* ---- Render 1 thẻ biểu đồ (1 trạm: 3 đường điện áp + 1 cột P) ---- */
+  const renderCard = (i: number, size: 'lg' | 'sm') => {
+    const meta = SLOT_META[i];
+    const selId = slots[i];
+    const cust = selId ? chartById.get(selId) : undefined;
+    const stations = cust?.stations ?? [];
+    const effMeter = (stationSlots[i] && stations.some(s => s.meterNo === stationSlots[i]))
+      ? stationSlots[i]
+      : (stations[0]?.meterNo ?? '');
+    const station = stations.find(s => s.meterNo === effMeter);
+    const multiStation = stations.length > 1;
+    const chartHeight = size === 'lg' ? 'h-[300px]' : 'h-[210px]';
+    const cardMinH = size === 'lg' ? 'min-h-[440px]' : 'min-h-[350px]';
+
+    return (
+      <div key={i} className={`vl-card p-5 flex flex-col ${cardMinH}`}>
+        {/* Tiêu đề + bộ chọn */}
+        <div className="flex flex-col gap-2.5 mb-4">
+          <div className="flex items-center gap-2">
+            <meta.Icon className={`w-4 h-4 ${meta.tone}`} />
+            <span className="text-[10px] font-black text-slate-400 tracking-wider uppercase font-mono">
+              Biểu đồ {i + 1} · {meta.title}
+            </span>
+          </div>
+
+          {/* Chọn khách hàng */}
+          <div className={`border rounded p-2.5 flex items-center gap-2.5 transition-colors ${
+            cust ? 'bg-[#f4f8ff] border-[#5a8dee] ring-4 ring-[#e8f3ff]' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+          }`}>
+            <Building2 className={`w-5 h-5 shrink-0 ${cust ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
+            <div className="flex-1 min-w-0">
+              <Select
+                variant="bare"
+                searchable
+                value={selId}
+                onChange={v => setSlot(i, v)}
+                placeholder="-- Click chọn khách hàng --"
+                options={[
+                  { value: '', label: '-- Click chọn khách hàng --' },
+                  ...chartableCustomers.map(c => ({ value: c.id, label: `[${c.mkh}] ${c.name}` })),
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Dropdown trạm (khi nhiều điểm đo) + thông tin P max */}
+          {cust && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+              {multiStation ? (
+                <div className="flex items-center gap-1.5">
+                  <Gauge className="w-3.5 h-3.5 text-[#5a8dee] shrink-0" />
+                  <Select
+                    value={effMeter}
+                    onChange={v => setStation(i, v)}
+                    className="min-w-[160px]"
+                    options={stations.map(s => ({ value: s.meterNo, label: stationLabel(s) }))}
+                  />
+                </div>
+              ) : station && (
+                <span className="inline-flex items-center gap-1 font-mono font-bold text-[#5a8dee] bg-[#e8f3ff] px-1.5 py-0.5 rounded">
+                  <Gauge className="w-3 h-3" /> {stationLabel(station)}
+                </span>
+              )}
+              {station && (
+                <span className="font-mono">
+                  P max: <strong className="text-amber-600">{fmtNum(station.peakP, 1)} kW</strong>
+                  {station.peakLabel && <span className="text-slate-400"> @ {station.peakLabel}</span>}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Biểu đồ — 1 trạm */}
+        <div className={`w-full text-slate-700 ${chartHeight}`}>
+          {station && station.data.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={station.data} margin={{ top: 22, right: 10, left: 2, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  stroke="#94a3b8"
+                  style={{ fontSize: '10px', fontWeight: 'bold' }}
+                  interval="preserveStartEnd"
+                  minTickGap={size === 'lg' ? 18 : 28}
+                />
+                <YAxis
+                  yAxisId="v"
+                  tickLine={false}
+                  stroke="#94a3b8"
+                  style={{ fontSize: '10px' }}
+                  width={40}
+                  label={{ value: 'V', position: 'top', offset: 8, style: { fontSize: 10, fill: '#94a3b8' } }}
+                />
+                <YAxis
+                  yAxisId="p"
+                  orientation="right"
+                  tickLine={false}
+                  stroke="#818cf8"
+                  style={{ fontSize: '10px' }}
+                  width={40}
+                  label={{ value: 'kW', position: 'top', offset: 8, style: { fontSize: 10, fill: '#818cf8' } }}
+                />
+                <Tooltip
+                  content={<ChartTooltip />}
+                  cursor={{ fill: 'rgba(226, 232, 240, 0.35)' }}
+                  wrapperStyle={{ zIndex: 60, outline: 'none' }}
+                />
+
+                {/* Cột công suất P (kW) — trục phải */}
+                <Bar yAxisId="p" dataKey="p" name="P (kW)" fill={P_FILL} radius={[3, 3, 0, 0]} barSize={size === 'lg' ? 14 : 9} />
+
+                {/* Mốc đạt P max của trạm */}
+                {station.peakLabel && (
+                  <ReferenceLine
+                    yAxisId="p"
+                    x={station.peakLabel}
+                    stroke="#ec4899"
+                    strokeDasharray="4 3"
+                    strokeWidth={1.5}
+                    label={{
+                      value: `P max ${fmtNum(station.peakP, 1)} kW`,
+                      position: 'top',
+                      fontSize: 9,
+                      fontWeight: 700,
+                      fill: '#be185d',
+                    }}
+                  />
+                )}
+
+                {/* 3 đường điện áp pha — trục trái */}
+                <Line yAxisId="v" type="monotone" dataKey="ua" name="Ua" stroke={PHASE_COLOR.ua} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+                <Line yAxisId="v" type="monotone" dataKey="ub" name="Ub" stroke={PHASE_COLOR.ub} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+                <Line yAxisId="v" type="monotone" dataKey="uc" name="Uc" stroke={PHASE_COLOR.uc} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+              <HelpCircle className="w-7 h-7 text-slate-300 mb-2 animate-pulse" />
+              <p className="text-xs font-semibold text-center px-2">
+                {selId ? 'Khách hàng này không có dữ liệu điện áp trong ngày' : 'Vui lòng chọn khách hàng'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {station && station.data.length > 0 && <ChartLegend />}
+      </div>
+    );
+  };
 
   /* ================================================================
      RENDER
@@ -516,9 +632,9 @@ export default function VoltagePowerDashboard() {
             </h1>
           </div>
           <p className="text-sm text-slate-500 max-w-2xl">
-            Biểu đồ kết hợp theo mốc <strong>30 phút</strong>: <strong>điện áp 3 pha (đường)</strong> và{' '}
-            <strong>công suất P&nbsp;(kW) (cột)</strong>. Mặc định hiển thị 2 khách có P&nbsp;max cao nhất và
-            2 khách có P&nbsp;max thấp nhất; mốc đạt P&nbsp;max được đánh dấu trên biểu đồ.
+            Biểu đồ kết hợp theo mốc <strong>30 phút</strong> cho từng <strong>trạm</strong>: <strong>điện áp 3 pha (đường)</strong> và{' '}
+            <strong>công suất P&nbsp;(kW) (cột)</strong>. Mặc định: 3 biểu đồ lớn bên trái cho khách có P&nbsp;max cao nhất,
+            3 biểu đồ nhỏ bên phải cho khách thấp nhất. Khách nhiều điểm đo có thể chọn trạm qua dropdown.
           </p>
         </div>
 
@@ -569,192 +685,17 @@ export default function VoltagePowerDashboard() {
         </div>
       )}
 
-      {/* ---- Lưới 4 biểu đồ ---- */}
+      {/* ---- Lưới 6 biểu đồ: 3 lớn bên trái, 3 nhỏ bên phải ---- */}
       {isReady && !noData && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-          {slots.map((selId, i) => {
-            const meta = SLOT_META[i];
-            const chart = selId ? chartById.get(selId) : undefined;
-            const multi = !!chart && chart.chartMeters.length > 1;
-            return (
-              <div key={i} className="vl-card p-6 flex flex-col min-h-[500px]">
-                {/* Tiêu đề + bộ chọn khách hàng */}
-                <div className="flex flex-col gap-3 mb-5">
-                  <div className="flex items-center gap-2">
-                    <meta.Icon className={`w-4 h-4 ${meta.tone}`} />
-                    <span className="text-[10px] font-black text-slate-400 tracking-wider uppercase font-mono">
-                      Biểu đồ {i + 1} · {meta.title}
-                    </span>
-                  </div>
-
-                  {/* Bộ chọn khách hàng — dùng shared <Select> (đồng bộ toàn app) */}
-                  <div className={`border rounded p-3 flex items-center gap-3 transition-colors ${
-                    chart
-                      ? 'bg-[#f4f8ff] border-[#5a8dee] ring-4 ring-[#e8f3ff]'
-                      : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-                  }`}>
-                    <Building2 className={`w-5 h-5 shrink-0 ${chart ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
-                    <div className="flex-1 min-w-0">
-                      <Select
-                        variant="bare"
-                        searchable
-                        value={selId}
-                        onChange={v => setSlot(i, v)}
-                        placeholder="-- Click chọn khách hàng --"
-                        options={[
-                          { value: '', label: '-- Click chọn khách hàng --' },
-                          ...chartableCustomers.map(c => ({ value: c.id, label: `[${c.mkh}] ${c.name}` })),
-                        ]}
-                      />
-                    </div>
-                  </div>
-
-                  {chart && (
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <Gauge className="w-3 h-3 text-[#5a8dee]" />
-                        {chart.chartMeters.length} trạm
-                      </span>
-                      <span className="font-mono">
-                        P max ngày: <strong className="text-amber-600">{fmtNum(chart.peakP, 1)} kW</strong>
-                        {chart.peakLabel && <span className="text-slate-400"> @ {chart.peakLabel}</span>}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Biểu đồ */}
-                <div className="flex-1 min-h-[330px] w-full text-slate-700">
-                  {chart && chart.data.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={chart.data} margin={{ top: 22, right: 12, left: 4, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="label"
-                          tickLine={false}
-                          stroke="#94a3b8"
-                          style={{ fontSize: '10px', fontWeight: 'bold' }}
-                          interval="preserveStartEnd"
-                          minTickGap={18}
-                        />
-                        <YAxis
-                          yAxisId="v"
-                          tickLine={false}
-                          stroke="#94a3b8"
-                          style={{ fontSize: '10px' }}
-                          width={42}
-                          label={{ value: 'V', position: 'top', offset: 8, style: { fontSize: 10, fill: '#94a3b8' } }}
-                        />
-                        <YAxis
-                          yAxisId="p"
-                          orientation="right"
-                          tickLine={false}
-                          stroke="#818cf8"
-                          style={{ fontSize: '10px' }}
-                          width={42}
-                          label={{ value: 'kW', position: 'top', offset: 8, style: { fontSize: 10, fill: '#818cf8' } }}
-                        />
-                        <Tooltip
-                          content={<ChartTooltip chartMeters={chart.chartMeters} />}
-                          cursor={{ fill: 'rgba(226, 232, 240, 0.35)' }}
-                          wrapperStyle={{ zIndex: 60, outline: 'none' }}
-                        />
-                        {/* Cột P (kW) — trục phải. Nhiều trạm → nhiều cột cạnh nhau cùng 1 mốc */}
-                        {chart.chartMeters.map(cm => (
-                          <Bar
-                            key={`p${cm.idx}`}
-                            yAxisId="p"
-                            dataKey={`p${cm.idx}`}
-                            name={multi ? `P (${stationLabel(cm)})` : 'P (kW)'}
-                            fill={pick(P_FILLS, cm.idx)}
-                            radius={[3, 3, 0, 0]}
-                            barSize={multi ? 8 : 14}
-                          />
-                        ))}
-
-                        {/* Đánh dấu mốc đạt P max của khách hàng */}
-                        {chart.peakLabel && (
-                          <ReferenceLine
-                            yAxisId="p"
-                            x={chart.peakLabel}
-                            stroke="#ec4899"
-                            strokeDasharray="4 3"
-                            strokeWidth={1.5}
-                            label={{
-                              value: `P max ${fmtNum(chart.peakP, 1)} kW`,
-                              position: 'top',
-                              fontSize: 9,
-                              fontWeight: 700,
-                              fill: '#be185d',
-                            }}
-                          />
-                        )}
-
-                        {/* Đường điện áp 3 pha — trục trái. Pha = màu, TRẠM = kiểu nét */}
-                        {chart.chartMeters.flatMap(cm => {
-                          const mp = multi ? ` (${stationLabel(cm)})` : '';
-                          const dash = pick(DASHES, cm.idx);
-                          return [
-                            <Line
-                              key={`ua${cm.idx}`}
-                              yAxisId="v"
-                              type="monotone"
-                              dataKey={`ua${cm.idx}`}
-                              name={`Ua${mp}`}
-                              stroke={PHASE_COLOR.ua}
-                              strokeWidth={2}
-                              strokeDasharray={dash || undefined}
-                              dot={false}
-                              activeDot={{ r: 4 }}
-                              connectNulls
-                            />,
-                            <Line
-                              key={`ub${cm.idx}`}
-                              yAxisId="v"
-                              type="monotone"
-                              dataKey={`ub${cm.idx}`}
-                              name={`Ub${mp}`}
-                              stroke={PHASE_COLOR.ub}
-                              strokeWidth={2}
-                              strokeDasharray={dash || undefined}
-                              dot={false}
-                              activeDot={{ r: 4 }}
-                              connectNulls
-                            />,
-                            <Line
-                              key={`uc${cm.idx}`}
-                              yAxisId="v"
-                              type="monotone"
-                              dataKey={`uc${cm.idx}`}
-                              name={`Uc${mp}`}
-                              stroke={PHASE_COLOR.uc}
-                              strokeWidth={2}
-                              strokeDasharray={dash || undefined}
-                              dot={false}
-                              activeDot={{ r: 4 }}
-                              connectNulls
-                            />,
-                          ];
-                        })}
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                      <HelpCircle className="w-8 h-8 text-slate-300 mb-2 animate-pulse" />
-                      <p className="text-xs font-semibold">
-                        {selId ? 'Khách hàng này không có dữ liệu điện áp trong ngày' : 'Vui lòng chọn khách hàng'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Chú giải — gom theo trạm */}
-                {chart && chart.data.length > 0 && (
-                  <StationLegend chartMeters={chart.chartMeters} />
-                )}
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 3 biểu đồ lớn — phụ tải cao nhất */}
+          <div className="lg:col-span-2 space-y-6">
+            {[0, 1, 2].map(i => renderCard(i, 'lg'))}
+          </div>
+          {/* 3 biểu đồ nhỏ — phụ tải thấp nhất */}
+          <div className="space-y-6">
+            {[3, 4, 5].map(i => renderCard(i, 'sm'))}
+          </div>
         </div>
       )}
     </div>
