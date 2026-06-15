@@ -134,81 +134,6 @@ body { background-color: var(--vl-bg); }
 .vl-badge-warning { background-color: rgba(253,172,65,.15); color: #a05f00; }
 .vl-badge-info    { background-color: rgba(0,207,221,.12);   color: #007a85; }
 
-/* ---- Voler select ---- */
-.vl-select {
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3afbd' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1rem;
-  padding-right: 2.5rem;
-  cursor: pointer;
-}
-.vl-select:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(90,141,238,0.25);
-  border-color: var(--vl-primary);
-}
-.vl-select option { color: var(--vl-dark); }
-
-/* =====================================================
-   RECHARTS TOOLTIP — đồng bộ giao diện app
-   (nền sáng, nằm trên cùng để không đè chữ trục X)
-   ===================================================== */
-.recharts-tooltip-wrapper {
-  z-index: 60 !important;
-  outline: none !important;
-  pointer-events: none;
-}
-.vl-chart-tooltip {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.6rem;
-  box-shadow: -6px 10px 22px rgba(25, 42, 70, 0.16);
-  padding: 0.55rem 0.7rem;
-  font-size: 11px;
-  color: var(--vl-secondary);
-  min-width: 140px;
-}
-.vl-chart-tooltip-title {
-  font-weight: 800;
-  color: var(--vl-dark);
-  font-size: 11px;
-  margin-bottom: 4px;
-}
-.vl-chart-tooltip-group + .vl-chart-tooltip-group {
-  margin-top: 5px;
-  padding-top: 4px;
-  border-top: 1px dashed #eef2f7;
-}
-.vl-chart-tooltip-meter {
-  font-weight: 700;
-  color: var(--vl-primary);
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 2px;
-}
-.vl-chart-tooltip-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  line-height: 1.55;
-}
-.vl-chart-tooltip-row .vl-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  flex: 0 0 auto;
-}
-.vl-chart-tooltip-row .vl-lbl { flex: 1; color: var(--vl-secondary); }
-.vl-chart-tooltip-row .vl-val {
-  font-weight: 700;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  color: var(--vl-dark);
-}
-
 /* ---- Voler buttons ---- */
 .vl-btn {
   border: none;
@@ -295,6 +220,63 @@ body { background-color: var(--vl-bg); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d1d9e6; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #a3afbd; }
+
+/* =====================================================
+   RECHARTS TOOLTIP — đồng bộ giao diện app
+   (nền sáng, nằm trên cùng để không đè chữ trục X)
+   ===================================================== */
+.recharts-tooltip-wrapper {
+  z-index: 60 !important;
+  outline: none !important;
+  pointer-events: none;
+}
+.vl-chart-tooltip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+  box-shadow: -6px 10px 22px rgba(25, 42, 70, 0.16);
+  padding: 0.55rem 0.7rem;
+  font-size: 11px;
+  color: var(--vl-secondary);
+  min-width: 140px;
+}
+.vl-chart-tooltip-title {
+  font-weight: 800;
+  color: var(--vl-dark);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.vl-chart-tooltip-group + .vl-chart-tooltip-group {
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px dashed #eef2f7;
+}
+.vl-chart-tooltip-meter {
+  font-weight: 700;
+  color: var(--vl-primary);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+.vl-chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.55;
+}
+.vl-chart-tooltip-row .vl-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+.vl-chart-tooltip-row .vl-lbl { flex: 1; color: var(--vl-secondary); }
+.vl-chart-tooltip-row .vl-val {
+  font-weight: 700;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color: var(--vl-dark);
+}
 
 /* =====================================================
    FLATPICKR — không còn dùng, giữ lại phòng khi cần
