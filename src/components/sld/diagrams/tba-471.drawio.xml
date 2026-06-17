@@ -1,0 +1,45 @@
+<mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="src" value="Nguồn 22kV" style="ellipse;sldType=source;" vertex="1" parent="1">
+      <mxGeometry x="210" y="0" width="60" height="40" as="geometry" />
+    </mxCell>
+    <mxCell id="bus" value="TC C41" style="sldType=busbar;" vertex="1" parent="1">
+      <mxGeometry x="120" y="90" width="180" height="10" as="geometry" />
+    </mxCell>
+    <mxCell id="ds1" value="DCL 471-7" style="sldType=disconnector;" vertex="1" parent="1">
+      <mxGeometry x="215" y="130" width="50" height="44" as="geometry" />
+    </mxCell>
+    <mxCell id="mc1" value="MC 471" style="sldType=breaker;" vertex="1" parent="1">
+      <mxGeometry x="215" y="215" width="50" height="44" as="geometry" />
+    </mxCell>
+    <mxCell id="t1" value="MBA T1" style="sldType=transformer;" vertex="1" parent="1">
+      <mxGeometry x="210" y="300" width="60" height="54" as="geometry" />
+    </mxCell>
+    <mxCell id="mc2" value="MC 0,4kV" style="sldType=breaker;" vertex="1" parent="1">
+      <mxGeometry x="215" y="400" width="50" height="44" as="geometry" />
+    </mxCell>
+    <mxCell id="tai" value="Phụ tải" style="sldType=load;" vertex="1" parent="1">
+      <mxGeometry x="210" y="485" width="60" height="34" as="geometry" />
+    </mxCell>
+    <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="src" target="bus">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="bus" target="ds1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="ds1" target="mc1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="mc1" target="t1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="t1" target="mc2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="mc2" target="tai">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>
