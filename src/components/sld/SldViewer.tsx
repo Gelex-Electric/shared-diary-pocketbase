@@ -14,7 +14,7 @@ import { SWITCHABLE, type SldDiagram, type SwitchState } from './types';
 import { computeEnergized } from './energize';
 import {
   SourceNode, BusbarNode, BreakerNode, RecloserNode,
-  DisconnectorNode, LbsNode, MofNode, PoleNode, RmuNode,
+  DisconnectorNode, LbsNode, EarthNode, FrameNode, MofNode, PoleNode, RmuNode,
   TransformerNode, LoadNode,
 } from './symbols';
 
@@ -26,6 +26,8 @@ const nodeTypes = {
   recloser: RecloserNode,
   disconnector: DisconnectorNode,
   lbs: LbsNode,
+  earth: EarthNode,
+  frame: FrameNode,
   mof: MofNode,
   pole: PoleNode,
   rmu: RmuNode,
@@ -52,6 +54,8 @@ export default function SldViewer({ diagram }: { diagram: SldDiagram }) {
         id: n.id,
         type: n.type,
         position: n.position,
+        // Khung tủ nằm phía sau và không chắn chuột.
+        ...(n.type === 'frame' ? { zIndex: -1, selectable: false } : {}),
         data: {
           ...n.data,
           state: switchState[n.id] ?? n.data.state,
