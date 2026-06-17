@@ -3,32 +3,39 @@ import type { SldDiagram } from '../types';
 // ===================================================================
 // SƠ ĐỒ KCN MẪU — minh hoạ đầy đủ symbol mới:
 // Recloser, Cột điểm đấu, Tủ RMU 3 ngăn, LBS, DCL, MOF, MBA có gam kVA.
-// Dựa trên từ vựng thực tế trong file SVG (REC 481, LBS/DCL 479-7, C41...).
+//
+// QUY ƯỚC TOẠ ĐỘ (để không bị chồng chéo):
+//  - position.x là MÉP TRÁI của ký hiệu => tâm = x + (nửa bề rộng ký hiệu).
+//  - Muốn 2 thiết bị thẳng cột thì cho TÂM bằng nhau (đã canh sẵn bên dưới).
+//  - Nhãn hiển thị BÊN PHẢI ký hiệu nên chừa khoảng trống bên phải mỗi cột.
+// Bề rộng ký hiệu: source/mof/transformer/load=60, recloser/lbs=56,
+//                  breaker/disconnector=50, pole=50, rmu(3 ngăn)=102.
 // ===================================================================
 export const kcnIp1: SldDiagram = {
   id: 'kcn-ip1',
   title: 'KCN — Trạm cắt IP-1 (mẫu)',
   nodes: [
-    { id: 'src',  type: 'source',       position: { x: 360, y: 0 },   data: { name: 'Nguồn 22kV', sub: 'Lộ 471' } },
-    { id: 'rec',  type: 'recloser',     position: { x: 358, y: 70 },  data: { name: 'REC 481/12', state: 'closed' } },
-    { id: 'pole', type: 'pole',         position: { x: 363, y: 150 }, data: { name: 'Cột điểm đấu' } },
-    { id: 'rmu',  type: 'rmu',          position: { x: 300, y: 220 }, data: { name: 'RMU IP-1', bays: 3 } },
+    // ----- Cột chính, tâm X = 380 -----
+    { id: 'src',  type: 'source',       position: { x: 350, y: 20 },  data: { name: 'Nguồn 22kV', sub: 'Lộ 471' } },
+    { id: 'rec',  type: 'recloser',     position: { x: 352, y: 90 },  data: { name: 'REC 481/12', state: 'closed' } },
+    { id: 'pole', type: 'pole',         position: { x: 355, y: 170 }, data: { name: 'Cột điểm đấu' } },
+    { id: 'rmu',  type: 'rmu',          position: { x: 329, y: 240 }, data: { name: 'RMU IP-1', bays: 3 } },
 
-    // ----- Ngăn 1: LBS → DCL → MOF → MBA T1 → khách hàng -----
-    { id: 'lbs1', type: 'lbs',          position: { x: 95,  y: 300 }, data: { name: 'LBS 479-7', state: 'closed' } },
-    { id: 'dcl1', type: 'disconnector', position: { x: 95,  y: 380 }, data: { name: 'DCL 479-7', state: 'closed' } },
-    { id: 'mof1', type: 'mof',          position: { x: 90,  y: 458 }, data: { name: 'MOF', sub: '1 điểm đo chính' } },
-    { id: 't1',   type: 'transformer',  position: { x: 90,  y: 540 }, data: { name: 'T1', sub: '1500kVA 22/0,4kV' } },
-    { id: 'kh1',  type: 'load',         position: { x: 90,  y: 635 }, data: { name: 'ECOLAND' } },
+    // ----- Ngăn 1 (trái), tâm X = 150: LBS → DCL → MOF → T1 → khách hàng -----
+    { id: 'lbs1', type: 'lbs',          position: { x: 122, y: 360 }, data: { name: 'LBS 479-7', state: 'closed' } },
+    { id: 'dcl1', type: 'disconnector', position: { x: 125, y: 450 }, data: { name: 'DCL 479-7', state: 'closed' } },
+    { id: 'mof1', type: 'mof',          position: { x: 120, y: 540 }, data: { name: 'MOF', sub: '1 điểm đo chính' } },
+    { id: 't1',   type: 'transformer',  position: { x: 120, y: 630 }, data: { name: 'T1', sub: '1500kVA 22/0,4kV' } },
+    { id: 'kh1',  type: 'load',         position: { x: 120, y: 730 }, data: { name: 'ECOLAND' } },
 
-    // ----- Ngăn 2: MC → MBA T2 → khách hàng -----
-    { id: 'mc2',  type: 'breaker',      position: { x: 345, y: 300 }, data: { name: 'MC 432', state: 'closed' } },
-    { id: 't2',   type: 'transformer',  position: { x: 340, y: 380 }, data: { name: 'T2', sub: '1000kVA 22/0,4kV' } },
-    { id: 'kh2',  type: 'load',         position: { x: 340, y: 475 }, data: { name: 'GHN' } },
+    // ----- Ngăn 2 (giữa), tâm X = 380: MC → T2 → khách hàng -----
+    { id: 'mc2',  type: 'breaker',      position: { x: 355, y: 360 }, data: { name: 'MC 432', state: 'closed' } },
+    { id: 't2',   type: 'transformer',  position: { x: 350, y: 450 }, data: { name: 'T2', sub: '1000kVA 22/0,4kV' } },
+    { id: 'kh2',  type: 'load',         position: { x: 350, y: 560 }, data: { name: 'GHN' } },
 
-    // ----- Ngăn 3: DCL mở (dự kiến) → khách hàng -----
-    { id: 'dcl3', type: 'disconnector', position: { x: 565, y: 300 }, data: { name: 'DCL 433-7', state: 'open' } },
-    { id: 'kh3',  type: 'load',         position: { x: 560, y: 390 }, data: { name: 'DỰ KIẾN' } },
+    // ----- Ngăn 3 (phải), tâm X = 610: DCL mở (dự kiến) → khách hàng -----
+    { id: 'dcl3', type: 'disconnector', position: { x: 585, y: 360 }, data: { name: 'DCL 433-7', state: 'open' } },
+    { id: 'kh3',  type: 'load',         position: { x: 580, y: 450 }, data: { name: 'DỰ KIẾN' } },
   ],
   edges: [
     { id: 'e1', source: 'src',  target: 'rec' },
