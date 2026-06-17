@@ -1,0 +1,51 @@
+name: Daily Pmax (cuoi ngay)
+
+on:
+  schedule:
+    - cron: "5 17 * * *"   # 00:05 gio VN (17:05 UTC hom truoc) -> tinh cho hom qua tron ven
+  workflow_dispatch:        # chay thu cong / backfill
+    inputs:
+      target_date:
+        description: "Ngay can tinh (YYYY-MM-DD). De trong = hom qua."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-pmax
+  cancel-in-progress: false
+
+jobs:
+  pmax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Ho_Chi_Minh
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Compute daily Pmax
+        env:
+          TARGET_DATE: ${{ inputs.target_date }}
+        run: python scripts/daily_pmax.py
+
+      - name: Commit & push CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/pmax_daily.csv
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: update daily Pmax $(date +'%Y-%m-%d %H:%M ICT')"
+            git pull --rebase origin ${{ github.ref_name }}
+            git push
+          fi
