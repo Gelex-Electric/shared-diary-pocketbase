@@ -1,0 +1,61 @@
+name: Backfill Pmax (chay mot lan)
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Ngay bat dau (YYYY-MM-DD)"
+        required: false
+        default: "2026-01-01"
+      end_date:
+        description: "Ngay ket thuc (YYYY-MM-DD). De trong = hom qua."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backfill-pmax
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      TZ: Asia/Ho_Chi_Minh
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet requests
+
+      - name: Backfill Pmax from API
+        env:
+          API_USER: ${{ secrets.API_USER }}
+          API_PASS: ${{ secrets.API_PASS }}
+          PB_ADMIN_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_ADMIN_PASS: ${{ secrets.PB_ADMIN_PASS }}
+          START_DATE: ${{ inputs.start_date }}
+          END_DATE: ${{ inputs.end_date }}
+        run: python scripts/backfill_pmax.py
+
+      - name: Commit & push CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/pmax_daily.csv
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: backfill daily Pmax $(date +'%Y-%m-%d %H:%M ICT')"
+            git pull --rebase origin ${{ github.ref_name }}
+            git push
+          fi
