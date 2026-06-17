@@ -648,24 +648,20 @@ export default function CustomerManager() {
         /* ============================================================
            CUSTOMER ACCORDION CARDS
         ============================================================ */
-        <div>
+        <div className="vl-accordion">
           {customerGroups.map(({ customer, meters }) => {
             const cid = customer.id!;
             const isExpanded = expandedIds.has(cid);
             const isEC = editingCustId === cid;
 
             return (
-              <div key={cid} className="vl-card overflow-hidden">
+              <div key={cid} className={`vl-accordion-item ${isExpanded ? 'is-open' : ''}`}>
 
                 {/* ---- Card header ---- */}
                 <div
-                  className={`flex items-center gap-3 px-5 py-4 cursor-pointer select-none transition-colors ${isExpanded ? 'bg-[#f4f8ff]' : 'hover:bg-slate-50/60'}`}
+                  className="vl-accordion-header"
                   onClick={() => !isEC && toggleExpand(cid)}
                 >
-                  <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.2 }} className="text-slate-400 shrink-0">
-                    <ChevronRight className="w-4 h-4" />
-                  </motion.div>
-
                   {isEC ? (
                     /* EDIT MODE */
                     <div className="flex-1 flex flex-wrap items-center gap-2" onClick={e => e.stopPropagation()}>
@@ -697,10 +693,13 @@ export default function CustomerManager() {
                   )}
 
                   {!isEC && (
-                    <div className="flex items-center gap-1 shrink-0 ml-2" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => startEditCust(customer)} className="p-1.5 text-slate-400 hover:text-[#5a8dee] hover:bg-[#e8f3ff] rounded transition-all" title="Sửa KH"><Edit2 className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => deleteCustomer(cid, meters.length)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all" title="Xóa KH"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
+                    <>
+                      <div className="flex items-center gap-1 shrink-0 ml-auto" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => startEditCust(customer)} className="p-1.5 text-slate-400 hover:text-[#5a8dee] hover:bg-[#e8f3ff] rounded transition-all" title="Sửa KH"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => deleteCustomer(cid, meters.length)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all" title="Xóa KH"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                      <ChevronRight className="vl-accordion-chevron w-5 h-5" style={{ marginLeft: '0.5rem' }} />
+                    </>
                   )}
                 </div>
 
@@ -714,7 +713,7 @@ export default function CustomerManager() {
                       transition={{ duration: 0.22 }}
                       className="overflow-hidden"
                     >
-                      <div className="border-t border-slate-100">
+                      <div className="vl-accordion-body">
                         <table className="vl-table w-full text-left border-collapse">
                           <thead>
                             <tr>
