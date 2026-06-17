@@ -184,7 +184,8 @@ export default function Dashboard() {
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
-                      Biên bản treo tháo
+                      <span className="flex-1">Biên bản treo tháo</span>
+                      <span className="text-[10px] font-black text-amber-500 shrink-0 uppercase tracking-wide">Beta</span>
                     </button>
                   </li>
                 </motion.ul>
@@ -260,7 +261,7 @@ export default function Dashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Sơ đồ một sợi</span>
-                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+                      <span className="text-[10px] font-black text-amber-500 shrink-0 uppercase tracking-wide">Beta</span>
                     </button>
                   </li>
                 </motion.ul>
@@ -281,7 +282,8 @@ export default function Dashboard() {
               }`}
             >
               <RefreshCw className="w-5 h-5 shrink-0" />
-              <span>Cập nhật sau</span>
+              <span className="flex-1 text-left">Cập nhật sau</span>
+              <span className="text-[10px] font-black text-amber-500 shrink-0 uppercase tracking-wide">Beta</span>
             </button>
           </li>
         </ul>
