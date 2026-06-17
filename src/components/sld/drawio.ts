@@ -18,6 +18,7 @@ function inferTypeFromLabel(label: string): DeviceType | null {
   if (s.startsWith('rmu') || s.startsWith('tủ rmu') || s.startsWith('tu rmu')) return 'rmu';
   if (s.startsWith('rec') || s.startsWith('recloser')) return 'recloser';
   if (s.startsWith('lbs') || s.startsWith('cầu dao') || s.startsWith('cau dao')) return 'lbs';
+  if (s.startsWith('tiếp địa') || s.startsWith('tiep dia') || s.startsWith('td') || /-(76|38)$/.test(s)) return 'earth';
   if (s.startsWith('mof') || s.startsWith('đo lường') || s.startsWith('do luong')) return 'mof';
   if (s.startsWith('cột') || s.startsWith('cot') || s.startsWith('điểm đấu') || s.startsWith('diem dau')) return 'pole';
   if (s.startsWith('tc') || s.startsWith('thanh cái') || s.startsWith('thanh cai') || s.startsWith('busbar') || /^c4\d/.test(s)) return 'busbar';
@@ -36,7 +37,7 @@ function styleValue(style: string, key: string): string | undefined {
 
 const VALID_TYPES: DeviceType[] = [
   'source', 'busbar', 'breaker', 'recloser', 'disconnector', 'lbs',
-  'rmu', 'mof', 'pole', 'transformer', 'load',
+  'earth', 'rmu', 'mof', 'pole', 'transformer', 'load',
 ];
 
 /**
