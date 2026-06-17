@@ -10,11 +10,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import type { SldDiagram, SwitchState } from './types';
+import { SWITCHABLE, type SldDiagram, type SwitchState } from './types';
 import { computeEnergized } from './energize';
 import {
-  SourceNode, BusbarNode, BreakerNode,
-  DisconnectorNode, TransformerNode, LoadNode,
+  SourceNode, BusbarNode, BreakerNode, RecloserNode,
+  DisconnectorNode, LbsNode, MofNode, PoleNode, RmuNode,
+  TransformerNode, LoadNode,
 } from './symbols';
 
 // Đăng ký symbol. Thêm loại thiết bị mới -> thêm 1 dòng ở đây.
@@ -22,7 +23,12 @@ const nodeTypes = {
   source: SourceNode,
   busbar: BusbarNode,
   breaker: BreakerNode,
+  recloser: RecloserNode,
   disconnector: DisconnectorNode,
+  lbs: LbsNode,
+  mof: MofNode,
+  pole: PoleNode,
+  rmu: RmuNode,
   transformer: TransformerNode,
   load: LoadNode,
 };
@@ -63,6 +69,8 @@ export default function SldViewer({ diagram }: { diagram: SldDiagram }) {
           id: e.id,
           source: e.source,
           target: e.target,
+          sourceHandle: e.sourceHandle,
+          targetHandle: e.targetHandle,
           type: 'step', // đường vuông góc cho SLD
           style: { stroke: live ? ON : OFF, strokeWidth: 2 },
         };
@@ -74,7 +82,7 @@ export default function SldViewer({ diagram }: { diagram: SldDiagram }) {
   const onNodeClick: NodeMouseHandler = useCallback(
     (_evt, node) => {
       const orig = diagram.nodes.find((n) => n.id === node.id);
-      if (!orig || (orig.type !== 'breaker' && orig.type !== 'disconnector')) return;
+      if (!orig || !SWITCHABLE.includes(orig.type)) return;
       setSwitchState((prev) => {
         const cur = prev[node.id] ?? orig.data.state ?? 'closed';
         return { ...prev, [node.id]: cur === 'closed' ? 'open' : 'closed' };
