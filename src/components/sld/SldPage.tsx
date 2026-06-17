@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Construction } from 'lucide-react';
 import { pb } from '../../lib/pocketbase';
 import SldViewer from './SldViewer';
 import { getDiagramForUser } from './diagrams';
@@ -15,6 +16,13 @@ export default function SldPage() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Cảnh báo trang chưa hoàn thiện */}
+      <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-700">
+        <Construction className="w-4 h-4 shrink-0" />
+        <span className="text-xs font-semibold">
+          Trang đang được phát triển — dữ liệu và tính năng có thể thay đổi.
+        </span>
+      </div>
       <div className="px-4 py-3 border-b border-slate-200">
         <h2 className="text-base font-semibold text-slate-800">{diagram.title}</h2>
         <p className="text-xs text-slate-500">
