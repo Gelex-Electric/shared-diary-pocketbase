@@ -1139,7 +1139,7 @@ export default function HandoverManager() {
         )}
 
         {/* Data List grouped by Date & Industrial park */}
-        <div className="space-y-6">
+        <div className="vl-accordion">
           {isLoading ? (
             <div className="vl-card flex flex-col items-center justify-center p-20 text-slate-400">
               <RefreshCw className="w-10 h-10 animate-spin mb-4" />
@@ -1161,31 +1161,21 @@ export default function HandoverManager() {
               };
 
               return (
-                <div key={group.id} className="vl-card overflow-hidden">
+                <div key={group.id} className={`vl-accordion-item ${isExpanded ? 'is-open' : ''}`}>
                   {/* Group Header — toàn bộ header có thể click để mở/thu */}
                   <div
-                    className="p-6 flex items-center justify-between bg-slate-50/60 border-b border-slate-100 flex-wrap gap-4 cursor-pointer select-none"
+                    className="vl-accordion-header flex-wrap"
                     onClick={() => toggleGroupExpand(group.id)}
                   >
-                    <div className="flex items-center gap-4">
-                      {/* Mũi tên ở đầu */}
-                      <motion.div
-                        animate={{ rotate: isExpanded ? 90 : 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="text-slate-400 shrink-0"
-                      >
-                        <ChevronRight className="w-5 h-5" />
-                      </motion.div>
-                      <div className="p-2 bg-white rounded shadow-xs">
-                        <Calendar className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800 text-[15px]">{formatGroupHeaderDate(group.date)}</h3>
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-bold text-[10px] uppercase tracking-wider mt-1">{group.area}</span>
-                      </div>
+                    <div className="p-2 bg-white rounded shadow-xs shrink-0">
+                      <Calendar className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-[15px]">{formatGroupHeaderDate(group.date)}</h3>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-bold text-[10px] uppercase tracking-wider mt-1">{group.area}</span>
                     </div>
                     {/* Checkbox ở cuối — stopPropagation để không trigger toggle card */}
-                    <div className="flex items-center gap-3" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-3 ml-auto" onClick={e => e.stopPropagation()}>
                       <span className="text-xs font-bold text-slate-400 uppercase bg-white border border-slate-100 px-3 py-1.5 rounded-lg">{group.records.length} ca trực</span>
                       <input
                         type="checkbox"
@@ -1194,16 +1184,17 @@ export default function HandoverManager() {
                         className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-[#5a8dee]"
                       />
                     </div>
+                    <ChevronRight className="vl-accordion-chevron w-5 h-5" style={{ marginLeft: '0.25rem' }} />
                   </div>
 
                   {/* Group Rows */}
                   <AnimatePresence initial={false}>
                     {isExpanded && (
-                      <motion.div 
+                      <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden bg-white divide-y divide-slate-100"
+                        className="overflow-hidden vl-accordion-body divide-y divide-slate-100"
                       >
                         {group.records.map((log) => {
                           const isSelected = selectedIds.has(log.id);
