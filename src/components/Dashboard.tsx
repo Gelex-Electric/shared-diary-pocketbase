@@ -13,8 +13,9 @@ import VoltagePowerDashboard from './VoltagePowerDashboard';
 import JournalManager from './JournalManager';
 import PowerOutageManager from './PowerOutageManager';
 import NewUpdateTour from './NewUpdateTour';
+import SldPage from './sld/SldPage';
 
-type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'operating' | 'hes' | 'opchart' | 'later';
+type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'operating' | 'hes' | 'opchart' | 'sld' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
@@ -24,6 +25,7 @@ const TAB_LABEL: Record<Tab, string> = {
   operating: 'Thông số vận hành',
   hes:       'Lấy chỉ số HES',
   opchart:   'Đồ thị điện áp & công suất',
+  sld:       'Sơ đồ một sợi',
   later:     'Cập nhật sau',
 };
 
@@ -195,7 +197,7 @@ export default function Dashboard() {
             <button
               onClick={() => toggleSection('operating')}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'operating' || topTab === 'hes' || topTab === 'opchart' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'operating' || topTab === 'hes' || topTab === 'opchart' || topTab === 'sld' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
               }`}
             >
               <Activity className="w-5 h-5 shrink-0" />
@@ -248,6 +250,19 @@ export default function Dashboard() {
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
+                  <li>
+                    <button
+                      id="nav-sld-sub"
+                      onClick={() => { setTopTab('sld'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'sld' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Sơ đồ một sợi</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+                    </button>
+                  </li>
                 </motion.ul>
               )}
             </AnimatePresence>
@@ -287,7 +302,7 @@ export default function Dashboard() {
               setTopTab(tab);
               // Mở sẵn nhóm sidebar chứa tab đích để người dùng thấy ngữ cảnh
               if (tab === 'journal') { setIsJournalExpanded(true); setIsOperatingExpanded(false); }
-              else if (tab === 'operating' || tab === 'hes' || tab === 'opchart') { setIsOperatingExpanded(true); setIsJournalExpanded(false); }
+              else if (tab === 'operating' || tab === 'hes' || tab === 'opchart' || tab === 'sld') { setIsOperatingExpanded(true); setIsJournalExpanded(false); }
             }}
           />
         )}
@@ -410,6 +425,10 @@ export default function Dashboard() {
               <HesReadingManager />
             ) : topTab === 'opchart' ? (
               <VoltagePowerDashboard />
+            ) : topTab === 'sld' ? (
+              <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
+                <SldPage />
+              </div>
             ) : topTab === 'journal' ? (
               <JournalManager />
             ) : topTab === 'outage' ? (
