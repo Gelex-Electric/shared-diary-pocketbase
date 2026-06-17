@@ -12,7 +12,9 @@ export type DeviceType =
   | 'recloser'    // Recloser (máy cắt tự đóng lại)
   | 'disconnector'// Dao cách ly (DCL)
   | 'lbs'         // Cầu dao phụ tải (Load Break Switch)
-  | 'rmu'         // Tủ RMU nhiều ngăn
+  | 'earth'       // Dao tiếp địa (nối đất) — vd -76, -38
+  | 'rmu'         // Tủ RMU nhiều ngăn (khối gọn — xem thêm 'frame')
+  | 'frame'       // Khung tủ RMU (hình nền bao quanh các ngăn)
   | 'mof'         // Bộ đo lường (MOF)
   | 'pole'        // Cột điểm đấu
   | 'transformer' // Máy biến áp 2 cuộn
@@ -22,7 +24,7 @@ export type DeviceType =
 export type SwitchState = 'closed' | 'open';
 
 /** Các loại thiết bị có thể đóng/cắt (phản hồi click + chặn lan truyền điện). */
-export const SWITCHABLE: DeviceType[] = ['breaker', 'recloser', 'disconnector', 'lbs'];
+export const SWITCHABLE: DeviceType[] = ['breaker', 'recloser', 'disconnector', 'lbs', 'earth'];
 
 export interface SldNodeData {
   /** Tên hiển thị, vd "MC 471", "T1 22/0,4kV" */
@@ -33,6 +35,10 @@ export interface SldNodeData {
   sub?: string;
   /** Số ngăn của tủ RMU (2 hoặc 3). Chỉ dùng cho type === 'rmu'. */
   bays?: number;
+  /** Bề rộng (px) — dùng cho thanh cái dài hoặc khung tủ 'frame'. */
+  width?: number;
+  /** Chiều cao (px) — dùng cho khung tủ 'frame'. */
+  height?: number;
   /** Nội bộ runtime: nhánh có đang mang điện không (engine tự gán). */
   energized?: boolean;
   /** true nếu là điểm cấp nguồn gốc của sơ đồ. Mặc định: type === 'source'. */
