@@ -1,4 +1,4 @@
-import type { SldNode, SldEdge } from './types';
+import { SWITCHABLE, type SldNode, type SldEdge } from './types';
 
 // ===================================================================
 // Engine tô màu mang điện (energized analysis)
@@ -28,7 +28,7 @@ export function computeEnergized({ nodes, edges, switchState }: EnergizeInput): 
   const isOpen = (id: string): boolean => {
     const n = byId.get(id);
     if (!n) return false;
-    if (n.type !== 'breaker' && n.type !== 'disconnector') return false;
+    if (!SWITCHABLE.includes(n.type)) return false;
     const s = switchState[id] ?? n.data.state ?? 'closed';
     return s === 'open';
   };
