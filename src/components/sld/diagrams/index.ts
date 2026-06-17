@@ -2,6 +2,7 @@ import type { SldDiagram } from '../types';
 import { parseDrawio } from '../drawio';
 import { tba475 } from './tba-475';
 import { kcnIp1 } from './kcn-ip1';
+import { rmuChiTiet } from './rmu-chitiet';
 
 // Nạp bản vẽ draw.io (file .xml không nén) — Vite nhúng nội dung lúc build.
 import tba471Xml from './tba-471.drawio.xml?raw';
@@ -19,6 +20,7 @@ import tba471Xml from './tba-471.drawio.xml?raw';
 const tba471 = parseDrawio(tba471Xml, { id: 'tba-471', title: 'TBA 471 - Lộ 22kV' });
 
 export const DIAGRAMS: Record<string, SldDiagram> = {
+  [rmuChiTiet.id]: rmuChiTiet,
   [kcnIp1.id]: kcnIp1,
   [tba471.id]: tba471,
   [tba475.id]: tba475,
