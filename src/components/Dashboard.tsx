@@ -7,6 +7,7 @@ import {
 import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import SummaryDashboard from './SummaryDashboard';
+import BusinessSummaryDashboard from './business/BusinessSummaryDashboard';
 import CustomerManager from './CustomerManager';
 import HesReadingManager from './HesReadingManager';
 import VoltagePowerDashboard from './VoltagePowerDashboard';
@@ -92,6 +93,11 @@ export default function Dashboard() {
   const userName    = pb.authStore.model?.name || 'Người dùng';
   const userArea    = pb.authStore.model?.area  || '';
   const userInitial = userName[0] || 'U';
+
+  // Tài khoản khối văn phòng / kinh doanh: không gắn với một KCN cụ thể (area trống)
+  // → dùng dashboard mở toàn bộ Khu công nghiệp kèm bộ lọc. Tài khoản vận hành
+  // (area là một KCN) dùng dashboard khóa theo khu vực như cũ.
+  const isBusinessUser = !userArea || !userArea.trim();
 
   /* -------- Sidebar nav content (pure nav, no user / help) -------- */
   const SidebarNav = ({ onNavigate }: { onNavigate?: () => void }) => (
@@ -419,7 +425,7 @@ export default function Dashboard() {
         <div className="flex-1 px-4 py-6 md:px-6 md:py-8">
           <section>
             {topTab === 'summary' ? (
-              <SummaryDashboard />
+              isBusinessUser ? <BusinessSummaryDashboard /> : <SummaryDashboard />
             ) : topTab === 'operating' ? (
               <CustomerManager />
             ) : topTab === 'hes' ? (
