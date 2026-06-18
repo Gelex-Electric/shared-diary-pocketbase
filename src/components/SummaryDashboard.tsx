@@ -186,8 +186,12 @@ export default function SummaryDashboard() {
     return 'all'; // admin hoặc không xác định
   }, []);
 
-  // Secure: Lock active account selection to defaultAccount (no selection option)
-  const selectedAccount = defaultAccount;
+  // Tài khoản Vận hành (defaultAccount là 1 KCN cụ thể) bị khóa theo khu vực.
+  // Tài khoản Kinh doanh / khối văn phòng (defaultAccount === 'all') được phép
+  // chọn lọc Khu công nghiệp tự do.
+  const isBusinessAccount = defaultAccount === 'all';
+  const [businessAccount, setBusinessAccount] = useState<string>('all');
+  const selectedAccount = isBusinessAccount ? businessAccount : defaultAccount;
   const activeAreaName = ACCOUNT_MAP[selectedAccount] || 'Tất cả khu vực';
 
   const [selectedMonth, setSelectedMonth] = useState<string>('');
@@ -702,11 +706,26 @@ export default function SummaryDashboard() {
             Phân tích số liệu sản lượng điện, doanh thu và đối soát thanh toán tích hợp thời gian thực.
           </p>
           
-          {/* Read Only Active Account Badge (instead of Selector) */}
-          <div className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs font-semibold">
-            <Building2 className="w-4 h-4 text-[#5a8dee]" />
-            <span>Khu vực giám sát: <strong className="text-[#3a6fd4]">{activeAreaName}</strong></span>
-          </div>
+          {/* Tài khoản Vận hành: badge khóa khu vực. Tài khoản Kinh doanh: bộ lọc KCN. */}
+          {isBusinessAccount ? (
+            <div className="inline-flex items-center gap-2 mt-3 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm min-w-[240px]">
+              <Building2 className="w-4 h-4 text-[#5a8dee] shrink-0" />
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Khu công nghiệp</span>
+              <div className="flex-1 min-w-0">
+                <Select
+                  variant="bare"
+                  value={businessAccount}
+                  onChange={(val) => { setBusinessAccount(val); setCurrentPage(1); }}
+                  options={Object.entries(ACCOUNT_MAP).map(([value, label]) => ({ value, label }))}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs font-semibold">
+              <Building2 className="w-4 h-4 text-[#5a8dee]" />
+              <span>Khu vực giám sát: <strong className="text-[#3a6fd4]">{activeAreaName}</strong></span>
+            </div>
+          )}
         </div>
       </div>
 
