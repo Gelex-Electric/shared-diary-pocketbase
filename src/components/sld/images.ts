@@ -1,16 +1,17 @@
 // ===================================================================
-// CẤU HÌNH BẢN VẼ (xuất từ CAD) cho từng user.
+// CẤU HÌNH BẢN VẼ (xuất từ CAD) cho từng KHU CÔNG NGHIỆP (area).
 //
-// === THÊM BẢN VẼ MỚI (không cần vẽ lại) ===
+// Mỗi KCN dùng 1 bản vẽ; MỌI user thuộc KCN đó cùng xem bản vẽ này.
+// Khoá ánh xạ là field `area` của user (pb.authStore.model.area),
+// trùng với danh sách AREAS trong src/lib/pocketbase.ts.
+//
+// === THÊM / ĐỔI BẢN VẼ (không cần vẽ lại) ===
 //   1) Xuất bản vẽ CAD ra PDF (KHUYÊN DÙNG — vector, nét sắc, không mờ).
 //      Đừng chuyển PDF -> SVG qua Inkscape (làm mảnh nét, mờ chữ).
 //      Có thể dùng SVG/PNG nếu thích, app tự nhận theo đuôi file.
 //   2) Bỏ file vào thư mục  public/sld/
-//   3) Khai báo bên dưới: user nào xem bản vẽ nào (đuôi .pdf hay ảnh đều được).
+//   3) Khai báo bên dưới: KCN nào xem bản vẽ nào.
 //   4) git push -> Railway tự deploy.
-//
-// File trong public/ được phục vụ ở đường dẫn gốc, vd:
-//   public/sld/so-do-mot-soi.pdf  ->  '/sld/so-do-mot-soi.pdf'
 // ===================================================================
 
 export interface SldImage {
@@ -18,19 +19,21 @@ export interface SldImage {
   title: string;
 }
 
-/** Bản vẽ mặc định khi user chưa được gán riêng.
- *  (Tạm dùng KCN03.pdf cho MỌI tài khoản để xem trước.) */
+/** Bản vẽ mặc định khi area của user chưa được khai báo riêng. */
 export const DEFAULT_IMAGE: SldImage = {
   src: '/sld/KCN03.pdf',
-  title: 'Sơ đồ một sợi — KCN03',
+  title: 'Sơ đồ một sợi',
 };
 
-/** Ánh xạ user -> ảnh bản vẽ. Để trống thì mọi user xem ảnh mặc định. */
-export const USER_IMAGE: Record<string, SldImage> = {
-  // 'userId_A': { src: '/sld/kcn-a.svg', title: 'KCN A' },
-  // 'userId_B': { src: '/sld/kcn-b.svg', title: 'KCN B' },
+/** Ánh xạ KCN (area) -> bản vẽ. Khoá phải trùng field `area` của user. */
+export const AREA_IMAGE: Record<string, SldImage> = {
+  'KCN Số 3':          { src: '/sld/KCN03.pdf',  title: 'Sơ đồ một sợi — KCN Số 3' },
+  'KCN Yên Mỹ':        { src: '/sld/KCNYM.pdf',  title: 'Sơ đồ một sợi — KCN Yên Mỹ' },
+  'KCN Tiền Hải':      { src: '/sld/KCNTH.pdf',  title: 'Sơ đồ một sợi — KCN Tiền Hải' },
+  'KCN Phong Điền':    { src: '/sld/KCNPĐ.pdf',  title: 'Sơ đồ một sợi — KCN Phong Điền' },
+  'KCN Thuận Thành I': { src: '/sld/KCNTTI.pdf', title: 'Sơ đồ một sợi — KCN Thuận Thành I' },
 };
 
-export function getImageForUser(userId?: string): SldImage {
-  return (userId && USER_IMAGE[userId]) || DEFAULT_IMAGE;
+export function getImageForArea(area?: string): SldImage {
+  return (area && AREA_IMAGE[area]) || DEFAULT_IMAGE;
 }
