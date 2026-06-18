@@ -2,20 +2,17 @@ import { useMemo } from 'react';
 import { pb } from '../../lib/pocketbase';
 import SldImageViewer from './SldImageViewer';
 import SldPdfViewer from './SldPdfViewer';
-import { getImageForUser } from './images';
+import { getImageForArea } from './images';
 
 // ===================================================================
-// Trang SLD — hiển thị ẢNH bản vẽ (xuất từ CAD) cho từng user.
-// Chỉ xem + phóng to/kéo, không cần vẽ lại.
-//
-// (Bản tương tác React Flow vẫn còn ở ./SldViewer + ./diagrams nếu sau
-//  này cần đóng/cắt; xem getDiagramForUser.)
+// Trang SLD — hiển thị ẢNH bản vẽ (xuất từ CAD) theo KCN (area) của user.
+// Mỗi KCN 1 bản vẽ; chỉ xem + phóng to/kéo, không cần vẽ lại.
 // ===================================================================
 export default function SldPage() {
-  // PocketBase: id user đang đăng nhập.
-  const userId = (pb.authStore.model?.id as string | undefined) ?? undefined;
+  // PocketBase: KCN (area) của user đang đăng nhập.
+  const area = (pb.authStore.model?.area as string | undefined) ?? undefined;
 
-  const image = useMemo(() => getImageForUser(userId), [userId]);
+  const image = useMemo(() => getImageForArea(area), [area]);
   const isPdf = image.src.toLowerCase().endsWith('.pdf');
 
   return (
