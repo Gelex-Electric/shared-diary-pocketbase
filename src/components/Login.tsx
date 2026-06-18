@@ -40,6 +40,23 @@ export default function Login() {
     setIsLoading(true);
     try {
       await pb.collection('users').authWithPassword(username, password);
+
+      // Phân loại khối theo field 'area': có area = Vận hành, trống = Kinh doanh.
+      const rawArea = pb.authStore.model?.area;
+      const accountIsBusiness = !rawArea || (typeof rawArea === 'string' && !rawArea.trim());
+      const accountMode: LoginMode = accountIsBusiness ? 'business' : 'operation';
+
+      // Chặn đăng nhập nếu khối tài khoản không khớp tab đang chọn.
+      if (accountMode !== mode) {
+        pb.authStore.clear();
+        setError(
+          mode === 'business'
+            ? 'Tài khoản này thuộc khối Vận hành. Vui lòng đăng nhập ở tab "Vận Hành".'
+            : 'Tài khoản này thuộc khối Kinh doanh. Vui lòng đăng nhập ở tab "Kinh Doanh".'
+        );
+        return;
+      }
+
       try { localStorage.setItem('loginMode', mode); } catch { /* ignore */ }
     } catch (err: any) {
       setError(
