@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { pb } from './lib/pocketbase';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
+import BusinessDashboard from './components/business/BusinessDashboard';
 import { RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -29,5 +30,11 @@ export default function App() {
     );
   }
 
-  return isAuth ? <Dashboard /> : <Login />;
+  if (!isAuth) return <Login />;
+
+  // Phân loại khối theo field 'area': có area = Vận hành, trống = Kinh doanh.
+  const rawArea = pb.authStore.model?.area;
+  const isBusinessUser = !rawArea || (typeof rawArea === 'string' && !rawArea.trim());
+
+  return isBusinessUser ? <BusinessDashboard /> : <Dashboard />;
 }
