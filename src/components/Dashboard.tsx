@@ -261,7 +261,6 @@ export default function Dashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Sơ đồ một sợi</span>
-                      <span className="text-[10px] font-black text-amber-500 shrink-0 uppercase tracking-wide">Beta</span>
                     </button>
                   </li>
                 </motion.ul>
