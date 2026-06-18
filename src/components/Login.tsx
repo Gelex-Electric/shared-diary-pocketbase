@@ -1,14 +1,34 @@
 import React, { useState } from 'react';
 import { pb } from '../lib/pocketbase';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Lock, Eye, EyeOff, AlertCircle, Zap } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, AlertCircle, Zap, Activity, Briefcase } from 'lucide-react';
+
+type LoginMode = 'operation' | 'business';
+
+const MODE_CONFIG: Record<LoginMode, { label: string; icon: typeof Activity; subtitle: string; footer: string }> = {
+  operation: {
+    label: 'Vận Hành',
+    icon: Activity,
+    subtitle: 'Ứng dụng quản lý vận hành GETC',
+    footer: 'Chỉ dành cho thành viên nhóm vận hành',
+  },
+  business: {
+    label: 'Kinh Doanh',
+    icon: Briefcase,
+    subtitle: 'Cổng dành cho khối văn phòng / kinh doanh',
+    footer: 'Chỉ dành cho tài khoản khối văn phòng',
+  },
+};
 
 export default function Login() {
+  const [mode, setMode] = useState<LoginMode>('operation');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const cfg = MODE_CONFIG[mode];
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,6 +40,7 @@ export default function Login() {
     setIsLoading(true);
     try {
       await pb.collection('users').authWithPassword(username, password);
+      try { localStorage.setItem('loginMode', mode); } catch { /* ignore */ }
     } catch (err: any) {
       setError(
         err?.message?.includes('Invalid')
@@ -50,12 +71,36 @@ export default function Login() {
           style={{ boxShadow: '-8px 12px 18px 0 rgba(25,42,70,.13)' }}
         >
           {/* Header */}
-          <div className="text-center mb-7">
+          <div className="text-center mb-5">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4" style={{ background: 'linear-gradient(135deg,#5a8dee,#3a6bd4)' }}>
               <Zap className="w-7 h-7 text-white" />
             </div>
             <h3 className="text-xl font-bold" style={{ color: '#222f3e' }}>Đăng nhập</h3>
-            <p className="text-sm mt-1" style={{ color: '#a3afbd' }}>Ứng dụng quản lý vận hành GETC</p>
+            <p className="text-sm mt-1" style={{ color: '#a3afbd' }}>{cfg.subtitle}</p>
+          </div>
+
+          {/* Tabs: Vận Hành / Kinh Doanh */}
+          <div className="grid grid-cols-2 gap-1 p-1 mb-6 rounded-xl" style={{ background: '#eef2f7' }}>
+            {(Object.keys(MODE_CONFIG) as LoginMode[]).map(m => {
+              const Icon = MODE_CONFIG[m].icon;
+              const active = mode === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { setMode(m); setError(''); }}
+                  className="relative flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all"
+                  style={{
+                    background: active ? '#fff' : 'transparent',
+                    color: active ? '#3a6bd4' : '#8693a4',
+                    boxShadow: active ? '0 2px 6px rgba(25,42,70,.12)' : 'none',
+                  }}
+                >
+                  <Icon className="w-4 h-4" />
+                  {MODE_CONFIG[m].label}
+                </button>
+              );
+            })}
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -188,7 +233,7 @@ export default function Login() {
           </div>
 
           <p className="text-center text-xs" style={{ color: '#a3afbd' }}>
-            Chỉ dành cho thành viên nhóm vận hành
+            {cfg.footer}
           </p>
         </div>
       </motion.div>
