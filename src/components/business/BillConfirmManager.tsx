@@ -4,7 +4,7 @@ import { DatePicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import pdfMake from 'pdfmake/build/pdfmake';
 import {
-  FileCheck2, Save, Calculator, Gauge, Hash, Building2,
+  FileCheck2, Save, Gauge, Building2,
   CheckCircle2, AlertCircle, RotateCcw, Plus, ArrowLeft,
   Pencil, Trash2, FileDown, Search, FileSpreadsheet,
 } from 'lucide-react';
@@ -36,6 +36,15 @@ const RESULTS = [
   { key: 'CD',   src: 'CD', label: 'CD' },
   { key: 'TD',   src: 'TD', label: 'TD' },
   { key: 'VC',   src: 'VC', label: 'VC' },
+] as const;
+
+// Hàng hiển thị trong bảng biên bản (theo đúng mẫu giấy)
+const ROWS = [
+  { comp: 'PG', res: 'Tong', label: 'Tổng Pg' },
+  { comp: 'BT', res: 'BT',   label: 'BT' },
+  { comp: 'CD', res: 'CD',   label: 'CĐ' },
+  { comp: 'TD', res: 'TD',   label: 'TĐ' },
+  { comp: 'VC', res: 'VC',   label: 'Tổng Qg' },
 ] as const;
 
 interface BBXNRecord {
@@ -91,6 +100,10 @@ const num = (v: any) => {
 const fmt = (n: number, digits = 0) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: digits }).format(n);
 
+// Chỉ số công tơ hiển thị tối đa 2 số lẻ (vd 6.829,33)
+const fmt2 = (n: number) =>
+  new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
+
 // Hiển thị ngày dd/mm/yyyy từ chuỗi PocketBase (YYYY-MM-DD hoặc ISO)
 const fmtDate = (s?: string) => {
   if (!s) return '—';
@@ -139,6 +152,7 @@ export default function BillConfirmManager() {
   const [dChiNMua, setDChiNMua] = useState('');
   const [sct, setSct] = useState('');
   const [hsn, setHsn] = useState('1');
+  const [nKy, setNKy] = useState('');
   const [readings, setReadings] = useState<Record<string, string>>({});
   const [phu, setPhu] = useState<Record<string, string>>({});
 
@@ -174,7 +188,7 @@ export default function BillConfirmManager() {
   /* ── form helpers ── */
   const resetForm = () => {
     setStartDate(todayStr()); setEndDate(todayStr());
-    setNBan(''); setDChiNBan(''); setNMua(''); setDChiNMua(''); setSct(''); setHsn('1');
+    setNBan(''); setDChiNBan(''); setNMua(''); setDChiNMua(''); setSct(''); setHsn('1'); setNKy('');
     setReadings({}); setPhu({});
   };
 
@@ -189,7 +203,7 @@ export default function BillConfirmManager() {
     setEndDate((r.EndDate || '').split('T')[0].split(' ')[0] || todayStr());
     setNBan(r.NBan || ''); setDChiNBan(r.DChiNBan || '');
     setNMua(r.NMua || ''); setDChiNMua(r.DChiNMua || '');
-    setSct(r.SCT || ''); setHsn(String(r.HSN ?? ''));
+    setSct(r.SCT || ''); setHsn(String(r.HSN ?? '')); setNKy(r.NKy || '');
     const rd: Record<string, string> = {};
     COMPONENTS.forEach(c => {
       rd[`${c.key}_dau`] = r[`${c.key}_dau`] != null ? String(r[`${c.key}_dau`]) : '';
@@ -227,7 +241,7 @@ export default function BillConfirmManager() {
         StartDate: startDate,
         EndDate: endDate,
         NBan: nBan, DChiNBan: dChiNBan, NMua: nMua, DChiNMua: dChiNMua,
-        SCT: sct, HSN: num(hsn),
+        SCT: sct, HSN: num(hsn), NKy: nKy,
         phu_Tong: num(phu.Tong), phu_BT: num(phu.BT), phu_CD: num(phu.CD),
         phu_TD: num(phu.TD), phu_VC: num(phu.VC),
       };
@@ -277,102 +291,87 @@ export default function BillConfirmManager() {
       await loadFontsToVfs();
       const res = computeResults(r);
 
-      const indexRows = COMPONENTS.map(c => ([
-        { text: c.label, alignment: 'left' },
-        { text: fmt(num(r[`${c.key}_dau`])), alignment: 'right' },
-        { text: fmt(num(r[`${c.key}_cuoi`])), alignment: 'right' },
-        { text: fmt(res.sanLuong[c.key]), alignment: 'right' },
-      ]));
+      const th = (text: string) => ({ text, bold: true, fillColor: '#dbeafe', alignment: 'center', fontSize: 9 });
+      const numCell = (n: number, bold = false) => ({ text: fmt(n), alignment: 'right', bold, fontSize: 10 });
 
-      const resultRows = res.bieu.map(b => ([
-        { text: `Biểu ${b.label}`, alignment: 'left' },
-        { text: fmt(b.sanLuong), alignment: 'right' },
-        { text: fmt(b.phu), alignment: 'right' },
-        { text: fmt(b.cuoi), alignment: 'right', bold: true },
-      ]));
+      // Bảng gộp giống biên bản giấy (SCT, HSN, cosφ là ô gộp dọc)
+      const tableBody: any[] = [
+        [
+          { ...th('Số công tơ'), rowSpan: 2 },
+          { ...th('Thanh ghi'), rowSpan: 2 },
+          { ...th('Chỉ số công tơ'), colSpan: 2 }, {},
+          { ...th('Hệ số nhân'), rowSpan: 2 },
+          { ...th('Sản lượng (kWh)'), rowSpan: 2 },
+          { ...th('Sản lượng trừ phụ (kWh)'), rowSpan: 2 },
+          { ...th('Tổng sản lượng (kWh)'), rowSpan: 2 },
+          { ...th('cosφ'), rowSpan: 2 },
+        ],
+        [ {}, {}, th('Đầu kỳ'), th('Cuối kỳ'), {}, {}, {}, {}, {} ],
+      ];
+      ROWS.forEach((row, i) => {
+        const bieu = res.bieu.find(b => b.key === row.res)!;
+        tableBody.push([
+          i === 0 ? { text: r.SCT || '—', rowSpan: ROWS.length, alignment: 'center', bold: true, margin: [0, 16, 0, 0] } : {},
+          { text: row.label, alignment: 'center', bold: true, fontSize: 10 },
+          { text: fmt2(num(r[`${row.comp}_dau`])), alignment: 'right', fontSize: 10 },
+          { text: fmt2(num(r[`${row.comp}_cuoi`])), alignment: 'right', fontSize: 10 },
+          i === 0 ? { text: fmt(num(r.HSN)), rowSpan: ROWS.length, alignment: 'center', bold: true, margin: [0, 16, 0, 0] } : {},
+          numCell(bieu.sanLuong),
+          numCell(bieu.phu),
+          numCell(bieu.cuoi, true),
+          i === 0 ? { text: res.cosphi.toFixed(2), rowSpan: ROWS.length, alignment: 'center', bold: true, fontSize: 13, margin: [0, 16, 0, 0] } : {},
+        ]);
+      });
+
+      const infoLine = (label: string, value: string, valueBold = false) => ({
+        columns: [
+          { width: 130, text: label, bold: false },
+          { text: value || '', bold: valueBold },
+        ],
+        margin: [0, 0, 0, 2],
+      });
 
       const docDefinition: any = {
         pageSize: 'A4',
-        pageMargins: [40, 36, 40, 36],
-        defaultStyle: { font: 'Times', fontSize: 12, lineHeight: 1.3 },
-        styles: {
-          title: { fontSize: 15, bold: true, alignment: 'center' },
-          sub: { fontSize: 12, bold: true, margin: [0, 10, 0, 4] },
-          th: { bold: true, fillColor: '#f3f4f6', alignment: 'center' },
-        },
+        pageOrientation: 'landscape',
+        pageMargins: [30, 28, 30, 28],
+        defaultStyle: { font: 'Times', fontSize: 12, lineHeight: 1.25 },
         content: [
-          { text: 'CÔNG TY GETC', alignment: 'center', bold: true },
-          { text: 'BIÊN BẢN XÁC NHẬN CHỈ SỐ CÔNG TƠ', style: 'title', margin: [0, 6, 0, 2] },
-          { text: `Kỳ: ${fmtDate(r.StartDate)} — ${fmtDate(r.EndDate)}`, alignment: 'center', italics: true, margin: [0, 0, 0, 8] },
+          { text: `Từ ngày ${fmtDate(r.StartDate)} đến ngày ${fmtDate(r.EndDate)}`, alignment: 'center', bold: true, margin: [0, 0, 0, 8] },
+
+          infoLine('Bên bán điện:', r.NBan || '—', true),
+          infoLine('Địa chỉ:', r.DChiNBan || ''),
+          infoLine('Bên mua điện:', r.NMua || '—', true),
+          infoLine('Địa chỉ sử dụng điện:', r.DChiNMua || ''),
+          { text: 'Cùng nhau xác nhận chỉ số công tơ, sản lượng điện giao nhận giữa hai bên như sau:', margin: [0, 4, 0, 8] },
+
+          {
+            table: {
+              headerRows: 2,
+              widths: ['12%', '10%', '12%', '12%', '8%', '13%', '13%', '12%', '8%'],
+              body: tableBody,
+            },
+            layout: {
+              hLineWidth: () => 0.8, vLineWidth: () => 0.8,
+              hLineColor: () => '#374151', vLineColor: () => '#374151',
+              paddingTop: () => 4, paddingBottom: () => 4,
+            },
+          },
+
+          ...(r.NKy ? [{ text: r.NKy, alignment: 'right', italics: true, margin: [0, 14, 0, 0] }] : []),
 
           {
             columns: [
               { width: '50%', stack: [
-                { text: 'Bên bán điện:', bold: true },
-                { text: r.NBan || '—' },
-                { text: r.DChiNBan || '', italics: true, fontSize: 11 },
-              ] },
-              { width: '50%', stack: [
-                { text: 'Bên mua điện:', bold: true },
-                { text: r.NMua || '—' },
-                { text: r.DChiNMua || '', italics: true, fontSize: 11 },
-              ] },
-            ],
-            columnGap: 16,
-            margin: [0, 0, 0, 6],
-          },
-          { text: `Số công tơ (SCT): ${r.SCT || '—'}        Hệ số nhân (HSN): ${fmt(num(r.HSN), 4)}`, margin: [0, 0, 0, 4] },
-
-          { text: 'I. CHỈ SỐ ĐẦU / CUỐI KỲ', style: 'sub' },
-          {
-            table: {
-              headerRows: 1,
-              widths: ['34%', '22%', '22%', '22%'],
-              body: [
-                [
-                  { text: 'Thành phần', style: 'th' },
-                  { text: 'Đầu kỳ', style: 'th' },
-                  { text: 'Cuối kỳ', style: 'th' },
-                  { text: 'Sản lượng', style: 'th' },
-                ],
-                ...indexRows,
-              ],
-            },
-            layout: { hLineWidth: () => 0.8, vLineWidth: () => 0.8, hLineColor: () => '#9ca3af', vLineColor: () => '#9ca3af', paddingTop: () => 4, paddingBottom: () => 4 },
-          },
-
-          { text: 'II. SẢN LƯỢNG CUỐI CÙNG', style: 'sub' },
-          {
-            table: {
-              headerRows: 1,
-              widths: ['34%', '22%', '22%', '22%'],
-              body: [
-                [
-                  { text: 'Biểu', style: 'th' },
-                  { text: 'Sản lượng', style: 'th' },
-                  { text: 'Biểu phụ', style: 'th' },
-                  { text: 'Biểu cuối', style: 'th' },
-                ],
-                ...resultRows,
-              ],
-            },
-            layout: { hLineWidth: () => 0.8, vLineWidth: () => 0.8, hLineColor: () => '#9ca3af', vLineColor: () => '#9ca3af', paddingTop: () => 4, paddingBottom: () => 4 },
-          },
-
-          { text: `Hệ số công suất cosφ = ${res.cosphi.toFixed(3)}`, bold: true, margin: [0, 10, 0, 0] },
-
-          {
-            columns: [
-              { width: '50%', stack: [
-                { text: 'ĐẠI DIỆN BÊN BÁN', bold: true, alignment: 'center', margin: [0, 24, 0, 40] },
+                { text: 'ĐẠI DIỆN BÊN BÁN', bold: true, alignment: 'center', margin: [0, 16, 0, 36] },
                 { text: '(Ký, ghi rõ họ tên)', italics: true, alignment: 'center', fontSize: 11 },
               ] },
               { width: '50%', stack: [
-                { text: 'ĐẠI DIỆN BÊN MUA', bold: true, alignment: 'center', margin: [0, 24, 0, 40] },
+                { text: 'ĐẠI DIỆN BÊN MUA', bold: true, alignment: 'center', margin: [0, 16, 0, 36] },
                 { text: '(Ký, ghi rõ họ tên)', italics: true, alignment: 'center', fontSize: 11 },
               ] },
             ],
-            margin: [0, 20, 0, 0],
+            margin: [0, 6, 0, 0],
           },
         ],
       };
@@ -400,8 +399,13 @@ export default function BillConfirmManager() {
   const inputCls =
     'w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm text-slate-700 ' +
     'focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] transition-all';
-  const numCls = inputCls + ' text-right font-mono tabular-nums';
   const labelCls = 'block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5';
+  // input gọn nằm trong ô bảng (không viền riêng, dùng viền của ô)
+  const cellInputCls =
+    'w-full px-2 py-1.5 text-sm text-right font-mono tabular-nums bg-transparent outline-none ' +
+    'rounded focus:bg-[#e8f3ff] transition-colors';
+  const tdCls = 'border border-slate-300 px-1 py-0.5';
+  const thCls = 'border border-slate-300 px-2 py-2 text-center font-bold';
 
   /* ===================== LIST VIEW ===================== */
   const renderList = () => (
@@ -556,128 +560,131 @@ export default function BillConfirmManager() {
         </div>
       </div>
 
-      {/* Thông tin chung */}
+      {/* Thông tin đầu biên bản */}
       <div className="vl-card p-6 md:p-8">
         <h3 className="text-base font-black text-slate-800 mb-5 flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-[#5a8dee]" /> Thông tin chung
+          <Building2 className="w-5 h-5 text-[#5a8dee]" /> Thông tin biên bản
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className={labelCls}>Ngày đầu kỳ</label>
+            <label className={labelCls}>Từ ngày</label>
             <DatePicker value={startDate} onChange={setStartDate} />
           </div>
           <div>
-            <label className={labelCls}>Ngày cuối kỳ</label>
+            <label className={labelCls}>Đến ngày</label>
             <DatePicker value={endDate} onChange={setEndDate} />
           </div>
           <div>
-            <label className={labelCls}>Số công tơ (SCT)</label>
-            <input className={inputCls} value={sct} onChange={e => setSct(e.target.value)} placeholder="Nhập số công tơ" />
+            <label className={labelCls}>Bên bán điện (NBan)</label>
+            <input className={inputCls} value={nBan} onChange={e => setNBan(e.target.value)} placeholder="VD: CÔNG TY CỔ PHẦN MUA BÁN ĐIỆN GELEX" />
           </div>
           <div>
-            <label className={labelCls}>Hệ số nhân (HSN)</label>
-            <input className={numCls} inputMode="decimal" value={hsn} onChange={e => setHsn(e.target.value)} placeholder="1" />
-          </div>
-          <div>
-            <label className={labelCls}>Người bán (NBan)</label>
-            <input className={inputCls} value={nBan} onChange={e => setNBan(e.target.value)} placeholder="Bên bán điện" />
-          </div>
-          <div>
-            <label className={labelCls}>Địa chỉ người bán</label>
+            <label className={labelCls}>Địa chỉ bên bán</label>
             <input className={inputCls} value={dChiNBan} onChange={e => setDChiNBan(e.target.value)} placeholder="Địa chỉ bên bán" />
           </div>
           <div>
-            <label className={labelCls}>Người mua (NMua)</label>
-            <input className={inputCls} value={nMua} onChange={e => setNMua(e.target.value)} placeholder="Bên mua điện" />
+            <label className={labelCls}>Bên mua điện (NMua)</label>
+            <input className={inputCls} value={nMua} onChange={e => setNMua(e.target.value)} placeholder="VD: CÔNG TY TNHH HUM&C VINA" />
           </div>
           <div>
-            <label className={labelCls}>Địa chỉ người mua</label>
-            <input className={inputCls} value={dChiNMua} onChange={e => setDChiNMua(e.target.value)} placeholder="Địa chỉ bên mua" />
+            <label className={labelCls}>Địa chỉ sử dụng điện</label>
+            <input className={inputCls} value={dChiNMua} onChange={e => setDChiNMua(e.target.value)} placeholder="Địa chỉ sử dụng điện" />
           </div>
         </div>
       </div>
 
-      {/* Chỉ số đầu / cuối kỳ */}
-      <div className="vl-card p-6 md:p-8">
-        <h3 className="text-base font-black text-slate-800 mb-5 flex items-center gap-2">
-          <Gauge className="w-5 h-5 text-[#5a8dee]" /> Chỉ số đầu / cuối kỳ
+      {/* Bảng xác nhận chỉ số & sản lượng (giống biên bản giấy) */}
+      <div className="vl-card p-4 md:p-6">
+        <h3 className="text-base font-black text-slate-800 mb-2 flex items-center gap-2 px-2">
+          <Gauge className="w-5 h-5 text-[#5a8dee]" /> Xác nhận chỉ số công tơ & sản lượng
         </h3>
+        <p className="text-xs text-slate-500 mb-4 px-2">Cùng nhau xác nhận chỉ số công tơ, sản lượng điện giao nhận giữa hai bên như sau:</p>
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[560px]">
-            <thead>
-              <tr className="text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                <th className="py-3 px-3 w-[36%]">Thành phần</th>
-                <th className="py-3 px-3 text-right">Chỉ số đầu kỳ</th>
-                <th className="py-3 px-3 text-right">Chỉ số cuối kỳ</th>
-                <th className="py-3 px-3 text-right w-[24%]">Sản lượng (× HSN)</th>
+          <table className="w-full border-collapse text-slate-700 min-w-[920px]">
+            <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase">
+              <tr>
+                <th className={thCls} rowSpan={2}>Số công tơ</th>
+                <th className={thCls} rowSpan={2}>Thanh ghi</th>
+                <th className={thCls} colSpan={2}>Chỉ số công tơ</th>
+                <th className={thCls} rowSpan={2}>Hệ số<br />nhân</th>
+                <th className={thCls} rowSpan={2}>Sản lượng<br />(kWh)</th>
+                <th className={thCls} rowSpan={2}>Sản lượng<br />trừ phụ (kWh)</th>
+                <th className={thCls} rowSpan={2}>Tổng sản<br />lượng (kWh)</th>
+                <th className={thCls} rowSpan={2}>cosφ</th>
+              </tr>
+              <tr>
+                <th className={thCls}>Đầu kỳ</th>
+                <th className={thCls}>Cuối kỳ</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {COMPONENTS.map(c => (
-                <tr key={c.key}>
-                  <td className="py-2.5 px-3 text-sm font-semibold text-slate-700">{c.label}</td>
-                  <td className="py-2.5 px-3">
-                    <input className={numCls} inputMode="decimal"
-                      value={readings[`${c.key}_dau`] ?? ''}
-                      onChange={e => setReading(`${c.key}_dau`, e.target.value)} placeholder="0" />
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <input className={numCls} inputMode="decimal"
-                      value={readings[`${c.key}_cuoi`] ?? ''}
-                      onChange={e => setReading(`${c.key}_cuoi`, e.target.value)} placeholder="0" />
-                  </td>
-                  <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-600 text-sm tabular-nums">
-                    {fmt(calc.sanLuong[c.key] ?? 0)}
-                  </td>
-                </tr>
-              ))}
+            <tbody className="text-sm">
+              {ROWS.map((row, i) => {
+                const bieu = calc.bieu.find(b => b.key === row.res)!;
+                return (
+                  <tr key={row.comp}>
+                    {i === 0 && (
+                      <td className={tdCls + ' align-middle'} rowSpan={ROWS.length}>
+                        <input
+                          className={cellInputCls + ' text-center font-bold text-[#5a8dee]'}
+                          value={sct}
+                          onChange={e => setSct(e.target.value)}
+                          placeholder="Số công tơ"
+                        />
+                      </td>
+                    )}
+                    <td className={tdCls + ' text-center font-bold text-slate-700'}>{row.label}</td>
+                    <td className={tdCls}>
+                      <input className={cellInputCls} inputMode="decimal"
+                        value={readings[`${row.comp}_dau`] ?? ''}
+                        onChange={e => setReading(`${row.comp}_dau`, e.target.value)} placeholder="0" />
+                    </td>
+                    <td className={tdCls}>
+                      <input className={cellInputCls} inputMode="decimal"
+                        value={readings[`${row.comp}_cuoi`] ?? ''}
+                        onChange={e => setReading(`${row.comp}_cuoi`, e.target.value)} placeholder="0" />
+                    </td>
+                    {i === 0 && (
+                      <td className={tdCls + ' align-middle'} rowSpan={ROWS.length}>
+                        <input className={cellInputCls + ' text-center font-bold'} inputMode="decimal"
+                          value={hsn} onChange={e => setHsn(e.target.value)} placeholder="1" />
+                      </td>
+                    )}
+                    <td className={tdCls + ' text-right font-mono font-bold text-amber-600 pr-2'}>{fmt(bieu.sanLuong)}</td>
+                    <td className={tdCls}>
+                      <input className={cellInputCls} inputMode="decimal"
+                        value={phu[row.res] ?? ''}
+                        onChange={e => setPhuVal(row.res, e.target.value)} placeholder="0" />
+                    </td>
+                    <td className={tdCls + ' text-right font-mono font-extrabold text-slate-800 pr-2'}>{fmt(bieu.cuoi)}</td>
+                    {i === 0 && (
+                      <td className={tdCls + ' align-middle text-center'} rowSpan={ROWS.length}>
+                        <span className="text-2xl font-black font-mono text-[#5a8dee]">{calc.cosphi.toFixed(2)}</span>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+
         {calc.tongMismatch && (
-          <p className="mt-3 text-xs font-semibold text-amber-600 flex items-center gap-1.5">
+          <p className="mt-3 px-2 text-xs font-semibold text-amber-600 flex items-center gap-1.5">
             <AlertCircle className="w-3.5 h-3.5" />
-            Lưu ý: sản lượng Tổng (PG) = {fmt(calc.sanLuong.PG)} khác tổng BT+CD+TD = {fmt(calc.sumBtCdTd)}.
+            Lưu ý: sản lượng Tổng Pg = {fmt(calc.sanLuong.PG)} khác tổng BT+CĐ+TĐ = {fmt(calc.sumBtCdTd)}.
           </p>
         )}
-      </div>
 
-      {/* Biểu phụ + Kết quả */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="vl-card p-6 md:p-8">
-          <h3 className="text-base font-black text-slate-800 mb-5 flex items-center gap-2">
-            <Hash className="w-5 h-5 text-[#5a8dee]" /> Biểu phụ (trừ)
-          </h3>
-          <div className="space-y-3">
-            {RESULTS.map(r => (
-              <div key={r.key} className="flex items-center gap-3">
-                <label className="text-sm font-semibold text-slate-600 w-20 shrink-0">{r.label}</label>
-                <input className={numCls} inputMode="decimal"
-                  value={phu[r.key] ?? ''}
-                  onChange={e => setPhuVal(r.key, e.target.value)} placeholder="0" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="vl-card p-6 md:p-8 bg-gradient-to-br from-[#f4f8ff] to-white">
-          <h3 className="text-base font-black text-slate-800 mb-5 flex items-center gap-2">
-            <Calculator className="w-5 h-5 text-[#5a8dee]" /> Sản lượng cuối cùng
-          </h3>
-          <div className="space-y-2">
-            {calc.bieu.map(b => (
-              <div key={b.key} className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 last:border-b-0">
-                <span className="text-sm font-bold text-slate-500">Biểu {b.label}</span>
-                <span className="font-mono font-extrabold text-slate-800 text-sm tabular-nums">{fmt(b.cuoi)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5 p-4 rounded-2xl bg-[#5a8dee] text-white flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-white/80">Hệ số công suất</p>
-              <p className="text-sm font-semibold text-white/90">Cosφ</p>
-            </div>
-            <span className="text-3xl font-black font-mono tabular-nums">{calc.cosphi.toFixed(3)}</span>
+        {/* Dòng ngày tháng cuối biên bản */}
+        <div className="mt-5 px-2 flex flex-col sm:flex-row sm:justify-end">
+          <div className="w-full sm:w-[460px]">
+            <label className={labelCls}>Dòng ký cuối biên bản (NKy)</label>
+            <input
+              className={inputCls}
+              value={nKy}
+              onChange={e => setNKy(e.target.value)}
+              placeholder="VD: 00 giờ 00 phút ngày 15 tháng 05 năm 2026"
+            />
           </div>
         </div>
       </div>
