@@ -7,12 +7,14 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
+import QuickImportManager from './QuickImportManager';
 
-type Tab = 'summary' | 'bill-confirm';
+type Tab = 'summary' | 'bill-confirm' | 'quick-import';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:        'Dashboard',
   'bill-confirm': 'Biên bản xác nhận chỉ số',
+  'quick-import': 'Nạp dữ liệu nhanh',
 };
 
 export default function BusinessDashboard() {
@@ -67,7 +69,7 @@ export default function BusinessDashboard() {
               id="nav-business"
               onClick={() => setIsBusinessExpanded(v => !v)}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'bill-confirm' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'bill-confirm' || topTab === 'quick-import' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
               }`}
             >
               <Briefcase className="w-5 h-5 shrink-0" />
@@ -94,6 +96,19 @@ export default function BusinessDashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Biên bản xác nhận chỉ số</span>
                       <span className="text-[10px] font-black text-amber-500 shrink-0 uppercase tracking-wide">Beta</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      id="nav-quick-import-sub"
+                      onClick={() => { setTopTab('quick-import'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'quick-import' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Nạp dữ liệu nhanh</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
                 </motion.ul>
@@ -210,6 +225,8 @@ export default function BusinessDashboard() {
           <section>
             {topTab === 'summary' ? (
               <BusinessSummaryDashboard />
+            ) : topTab === 'quick-import' ? (
+              <QuickImportManager />
             ) : (
               <BillConfirmManager />
             )}
