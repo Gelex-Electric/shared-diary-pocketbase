@@ -21,8 +21,8 @@ import {
   TrendingDown,
   ZapOff,
 } from 'lucide-react';
-import { pb } from '../lib/pocketbase';
-import { Meter } from '../types';
+import { pb, ID_TO_AREA } from '../lib/pocketbase';
+import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { DatePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
 
@@ -220,57 +220,52 @@ export default function VoltagePowerDashboard() {
     return () => { mounted = false; };
   }, []);
 
-  /* ---- Meters từ PocketBase (map công tơ → khách hàng) ---- */
-  const [meters, setMeters] = useState<Meter[]>([]);
+  /* ---- Khách hàng & công tơ từ metterinfo.csv (lọc theo KCN) ---- */
+  const [meterRows, setMeterRows] = useState<MeterInfoRow[]>([]);
   const [isLoadingMeters, setIsLoadingMeters] = useState(true);
+
+  /** Chuẩn hoá Unicode (NFC) + trim để so khớp area tiếng Việt an toàn. */
+  const normArea = (s: string) => (s || '').normalize('NFC').trim();
 
   const userAreas = useMemo(() => {
     const raw = pb.authStore.model?.area;
-    return Array.isArray(raw)
+    const items = Array.isArray(raw)
       ? raw
       : typeof raw === 'string' ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
+    // Map ID → tên hiển thị (nếu area lưu dạng ID) rồi chuẩn hoá để khớp ADDRESS trong CSV
+    return items.map(item => normArea(ID_TO_AREA[item] || item));
   }, [JSON.stringify(pb.authStore.model?.area)]);
 
   useEffect(() => {
     let mounted = true;
-    if (!pb.authStore.isValid) { setIsLoadingMeters(false); return; }
     setIsLoadingMeters(true);
-    const fp: string[] = [];
-    if (userAreas.length > 0) {
-      fp.push(`(${userAreas.map(a => `area = '${a.replace(/'/g, "\\'")}'`).join(' || ')})`);
-    }
-    pb.collection('Meter')
-      .getFullList<Meter>({
-        filter: fp.join(' && '),
-        sort: 'Customer.MKH,MeterNo',
-        expand: 'Customer',
-        requestKey: null,
-      })
-      .then(res => { if (mounted) setMeters(res); })
-      .catch(err => { if (!err?.isAbort) console.error('Lỗi tải công tơ:', err); })
+    fetchMeterInfo()
+      .then(rows => { if (mounted) setMeterRows(rows); })
+      .catch(err => console.error('Lỗi tải metterinfo.csv:', err))
       .finally(() => { if (mounted) setIsLoadingMeters(false); });
     return () => { mounted = false; };
-  }, [userAreas]);
+  }, []);
 
-  // customerId -> CustomerInfo (gồm danh sách công tơ của khách)
+  // customerId -> CustomerInfo (gồm danh sách công tơ của khách), lọc theo khu vực (KCN)
   const customerInfoMap = useMemo(() => {
     const map = new Map<string, CustomerInfo>();
-    for (const mt of meters) {
-      const cust = mt.expand?.Customer;
-      const cid = mt.Customer;
+    const allowed = userAreas.length > 0 ? new Set(userAreas) : null;
+    for (const r of meterRows) {
+      if (allowed && !allowed.has(normArea(r.ADDRESS))) continue;
+      const cid = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
       if (!cid) continue;
       if (!map.has(cid)) {
         map.set(cid, {
           id: cid,
-          mkh: cust?.MKH || '?',
-          name: cust?.Name || 'Không rõ',
+          mkh: r.CUSTOMER_CODE || '?',
+          name: r.CUSTOMER_NAME || 'Không rõ',
           meters: [],
         });
       }
-      map.get(cid)!.meters.push({ meterNo: mt.MeterNo, line: mt.Line || '' });
+      map.get(cid)!.meters.push({ meterNo: r.METER_NO, line: r.LINE_NAME || '' });
     }
     return map;
-  }, [meters]);
+  }, [meterRows, userAreas]);
 
   /* ---- Phân tích CSV → chỉ mục theo công tơ / ngày (giữ nguyên thời điểm) ---- */
   const { readingIndex, dateKeys } = useMemo(() => {
