@@ -78,7 +78,7 @@ export default function CustomerManager() {
       if (!map.has(key)) map.set(key, { code: r.CUSTOMER_CODE, name: r.CUSTOMER_NAME, area: r.ADDRESS, meters: [] });
       map.get(key)!.meters.push(r);
     }
-    return Array.from(map.values());
+    return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
   }, [filteredRows]);
 
   /* ================================================================
