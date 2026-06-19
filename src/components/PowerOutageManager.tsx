@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, ID_TO_AREA } from '../lib/pocketbase';
-import { PowerOutage, OutageCustomer, OutageSlot, OutageAppendix, Meter } from '../types';
+import { fetchMeterInfo } from '../lib/meterInfo';
+import { PowerOutage, OutageCustomer, OutageSlot, OutageAppendix } from '../types';
 import {
   Plus, Trash2, Edit2, X, CheckCircle2, XCircle, AlertCircle, Info,
   Search, Download, RefreshCw, ZapOff, AlertTriangle,
-  CalendarClock, Users, MapPin, CheckSquare, Square, BookOpen,
+  CalendarClock, Users, MapPin, CheckSquare, Square, BookOpen, UserPlus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
@@ -106,6 +107,17 @@ export default function PowerOutageManager() {
   const [customerList, setCustomerList] = useState<OutageCustomer[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
 
+  /* khách hàng nhập tay (ngoài danh sách CSV) */
+  const [manualCustomers, setManualCustomers] = useState<OutageCustomer[]>([]);
+  const [manualForm, setManualForm] = useState<{ appIdx: number; MKH: string; Name: string } | null>(null);
+
+  const allCustomers = React.useMemo(() => {
+    const map = new Map<string, OutageCustomer>();
+    customerList.forEach(c => map.set(c.id, c));
+    manualCustomers.forEach(c => map.set(c.id, c));
+    return Array.from(map.values());
+  }, [customerList, manualCustomers]);
+
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
     setToast({ message, type: t });
@@ -150,26 +162,22 @@ export default function PowerOutageManager() {
 
   useEffect(() => { loadNotices(); }, [loadNotices]);
 
-  /* load customers */
+  /* load customers — từ metterinfo.csv, lọc theo khu vực (KCN) */
   const loadCustomers = useCallback(async (a: string) => {
     if (!a) { setCustomerList([]); return; }
     setLoadingCustomers(true);
     try {
-      const meters = await pb.collection('Meter').getFullList<Meter>({
-        filter: `area = '${a.replace(/'/g, "\\'")}'`,
-        sort: 'Customer.MKH',
-        expand: 'Customer',
-        requestKey: null,
-      });
+      const rows = await fetchMeterInfo();
       const map = new Map<string, OutageCustomer>();
-      meters.forEach(m => {
-        const c = m.expand?.Customer;
-        const id = c?.id || m.Customer;
-        if (id && !map.has(id)) map.set(id, { id, MKH: c?.MKH || '?', Name: c?.Name || '?' });
-      });
-      setCustomerList(Array.from(map.values()));
+      rows
+        .filter(r => r.ADDRESS === a)
+        .forEach(r => {
+          const id = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
+          if (id && !map.has(id)) map.set(id, { id, MKH: r.CUSTOMER_CODE || '?', Name: r.CUSTOMER_NAME || '?' });
+        });
+      setCustomerList(Array.from(map.values()).sort((x, y) => x.MKH.localeCompare(y.MKH)));
     } catch {
-      showToast('Lỗi tải danh sách khách hàng', 'error');
+      showToast('Lỗi tải danh sách khách hàng từ metterinfo.csv', 'error');
       setCustomerList([]);
     } finally {
       setLoadingCustomers(false);
@@ -214,8 +222,19 @@ export default function PowerOutageManager() {
   const getFiltered = (a: AppendixForm) => {
     const q = a.search.trim().toLowerCase();
     return q
-      ? customerList.filter(c => c.Name.toLowerCase().includes(q) || c.MKH.toLowerCase().includes(q))
-      : customerList;
+      ? allCustomers.filter(c => c.Name.toLowerCase().includes(q) || c.MKH.toLowerCase().includes(q))
+      : allCustomers;
+  };
+
+  const addManualCustomer = () => {
+    if (!manualForm) return;
+    const MKH = manualForm.MKH.trim();
+    const Name = manualForm.Name.trim();
+    if (!Name) { showToast('Vui lòng nhập tên khách hàng', 'warning'); return; }
+    const id = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setManualCustomers(prev => [...prev, { id, MKH: MKH || '—', Name }]);
+    updateAppendix(manualForm.appIdx, { selectedIds: [...appendices[manualForm.appIdx].selectedIds, id] });
+    setManualForm(null);
   };
 
   const toggleAll = (appIdx: number) => {
@@ -238,6 +257,8 @@ export default function PowerOutageManager() {
     setAddLegal('');
     setSlots([emptySlot()]);
     setAppendices([emptyAppendix()]);
+    setManualCustomers([]);
+    setManualForm(null);
     setIsModalOpen(true);
   };
 
@@ -262,6 +283,11 @@ export default function PowerOutageManager() {
       selectedIds: (a.customers || []).map(c => c.id),
       search: '',
     })));
+    /* khôi phục snapshot khách hàng đã lưu (gồm cả khách hàng nhập tay trước đó) để hiển thị đúng khi sửa */
+    const snapshot = new Map<string, OutageCustomer>();
+    (n.appendices || []).forEach(a => (a.customers || []).forEach(c => snapshot.set(c.id, c)));
+    setManualCustomers(Array.from(snapshot.values()));
+    setManualForm(null);
     setIsModalOpen(true);
   };
 
@@ -288,7 +314,7 @@ export default function PowerOutageManager() {
         appendixIndex: s.appendixIndex,
       }));
       const outageAppendices: OutageAppendix[] = appendices.map(a => ({
-        customers: customerList.filter(c => a.selectedIds.includes(c.id)),
+        customers: allCustomers.filter(c => a.selectedIds.includes(c.id)),
       }));
       const data = {
         noticeDate: fmtNoticeDateSave(noticeDate),
@@ -749,7 +775,28 @@ export default function PowerOutageManager() {
                           {allSel ? <Square className="w-3.5 h-3.5" /> : <CheckSquare className="w-3.5 h-3.5" />}
                           {allSel ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                         </button>
+                        <button type="button"
+                          onClick={() => setManualForm(manualForm?.appIdx === ai ? null : { appIdx: ai, MKH: '', Name: '' })}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-blue-600 rounded text-xs font-bold hover:bg-blue-50 transition-all shrink-0">
+                          <UserPlus className="w-3.5 h-3.5" /> Thêm KH ngoài danh sách
+                        </button>
                       </div>
+
+                      {/* Form thêm khách hàng ngoài danh sách */}
+                      {manualForm?.appIdx === ai && (
+                        <div className="flex items-center gap-2 bg-blue-50/60 border border-dashed border-blue-300 rounded p-2.5">
+                          <input type="text" placeholder="Mã KH (tùy chọn)" value={manualForm.MKH}
+                            onChange={e => setManualForm({ ...manualForm, MKH: e.target.value })}
+                            className="w-32 px-2 py-1.5 bg-white border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] text-sm" />
+                          <input type="text" placeholder="Tên khách hàng" value={manualForm.Name}
+                            onChange={e => setManualForm({ ...manualForm, Name: e.target.value })}
+                            className="flex-1 px-2 py-1.5 bg-white border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] text-sm" autoFocus />
+                          <button type="button" onClick={addManualCustomer}
+                            className="vl-btn vl-btn-primary vl-btn-sm">Thêm</button>
+                          <button type="button" onClick={() => setManualForm(null)}
+                            className="p-1.5 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+                        </div>
+                      )}
 
                       {/* Customer list */}
                       <div className="border border-slate-200 rounded max-h-52 overflow-y-auto divide-y divide-slate-100">
