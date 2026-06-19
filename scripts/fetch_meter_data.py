@@ -38,89 +38,33 @@ FETCH_HOURS = int(os.environ.get("FETCH_HOURS", "6"))       # cua so lay du lieu
 USER_ACCOUNT = os.environ.get("API_USER", "")
 PASSWORD = os.environ.get("API_PASS", "")
 
-# PocketBase
-PB_URL = os.environ.get("PB_URL", "https://getc.up.railway.app/pb").rstrip("/")
-PB_COLLECTION = os.environ.get("PB_COLLECTION", "Meter")
-PB_FIELD = os.environ.get("PB_FIELD", "MeterNo")
-PB_HSN_FIELD = os.environ.get("PB_HSN_FIELD", "HSN")
-PB_ADMIN_EMAIL = os.environ.get("PB_ADMIN_EMAIL", "")       # de trong neu collection cho phep doc public
-PB_ADMIN_PASS = os.environ.get("PB_ADMIN_PASS", "")
+# Danh sach cong to + HSN doc tu file metterinfo.csv (sinh boi fetch_meter_info.py).
+# Cot METER_NAME duoc dung lam HSN (he so nhan).
+METTERINFO_PATH = os.environ.get("METTERINFO_PATH", "public/metterinfo.csv")
 
 VN_TZ = timezone(timedelta(hours=7))
 
 
-def pb_auth_header(base):
-    if not (PB_ADMIN_EMAIL and PB_ADMIN_PASS):
-        return {}
-    # PocketBase >= 0.23 dung _superusers; ban cu dung /api/admins
-    for path in ("/api/collections/_superusers/auth-with-password", "/api/admins/auth-with-password"):
-        try:
-            r = requests.post(f"{base}{path}",
-                              json={"identity": PB_ADMIN_EMAIL, "password": PB_ADMIN_PASS},
-                              timeout=30)
-            if r.ok:
-                return {"Authorization": r.json()["token"]}
-        except Exception:
-            pass
-    print("[WARN] Khong dang nhap duoc PocketBase admin, thu doc public.")
-    return {}
-
-
 def load_meter_list():
-    bases = [PB_URL] if os.environ.get("PB_URL") else [
-        "https://getc.up.railway.app/pb",
-        "https://getc.up.railway.app",
-    ]
-    collections = [PB_COLLECTION, "Meter", "pbc_1418108225"]
-
-    base = coll = None
-    headers = {}
-    last_err = ""
-    for b in bases:
-        h = pb_auth_header(b)
-        for c in collections:
-            try:
-                r = get_retry(f"{b}/api/collections/{c}/records",
-                              params={"perPage": 1}, headers=h, timeout=30)
-                if r.ok:
-                    base, coll, headers = b, c, h
-                    break
-                last_err = f"{r.status_code} tai {r.url}"
-            except Exception as e:
-                last_err = str(e)
-        if base:
-            break
-    if not base:
-        sys.exit(f"Khong tim thay collection tren PocketBase. Loi cuoi: {last_err}")
-    print(f"PocketBase OK: {base} / collection '{coll}'")
-
-    meters, page = {}, 1
-    while True:
-        r = get_retry(
-            f"{base}/api/collections/{coll}/records",
-            params={"page": page, "perPage": 200,
-                    "fields": f"{PB_FIELD},{PB_HSN_FIELD}"},
-            headers=headers, timeout=30,
-        )
-        r.raise_for_status()
-        data = r.json()
-        for item in data.get("items", []):
-            no = str(item.get(PB_FIELD) or "").strip()
+    """Doc {METER_NO: HSN} tu metterinfo.csv. HSN lay tu cot METER_NAME."""
+    if not os.path.isfile(METTERINFO_PATH):
+        sys.exit(f"Khong tim thay {METTERINFO_PATH}. Hay chay fetch_meter_info.py truoc.")
+    meters = {}
+    with open(METTERINFO_PATH, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            no = str(row.get("METER_NO") or "").strip()
             if not no:
                 continue
             try:
-                hsn = float(item.get(PB_HSN_FIELD) or 1) or 1.0
+                hsn = float(row.get("METER_NAME") or 1) or 1.0
             except (TypeError, ValueError):
                 hsn = 1.0
             meters[no] = hsn
-    # het trang?
-        if page >= data.get("totalPages", 1):
-            break
-        page += 1
     return meters
 
 
-def login() -> str:
+def login_data() -> dict:
+    """Dang nhap API dien, tra ve toan bo object (gom USER_ID, TOKEN)."""
     if not (USER_ACCOUNT and PASSWORD):
         sys.exit("Thieu API_USER/API_PASS. Hay them vao GitHub Secrets.")
     r = requests.get(
@@ -134,7 +78,11 @@ def login() -> str:
         data = data[0] if data else {}
     if str(data.get("CODE")) != "1":
         sys.exit(f"Login failed: {data.get('MESSAGE')}")
-    return data["TOKEN"]
+    return data
+
+
+def login() -> str:
+    return login_data()["TOKEN"]
 
 
 def fetch_instant(token: str, meter_no: str):
@@ -224,9 +172,9 @@ def append_csv(rows):
 
 def main():
     meters = load_meter_list()
-    print(f"PocketBase tra ve {len(meters)} cong to tu collection '{PB_COLLECTION}'")
+    print(f"Doc {len(meters)} cong to tu {METTERINFO_PATH}")
     if not meters:
-        sys.exit("Khong co cong to nao trong PocketBase.")
+        sys.exit(f"Khong co cong to nao trong {METTERINFO_PATH}.")
     token = login()
 
     all_rows = []
