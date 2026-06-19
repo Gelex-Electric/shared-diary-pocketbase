@@ -313,10 +313,26 @@ export default function BillConfirmManager() {
       await loadFontsToVfs();
       const res = computeResults(r);
 
-      const th = (text: string) => ({ text, bold: true, fillColor: '#dbeafe', alignment: 'center', fontSize: 9 });
-      const numCell = (n: number, bold = false) => ({ text: fmt(n), alignment: 'right', bold, fontSize: 10 });
+      // Cỡ chữ đồng bộ, mọi ô căn giữa
+      const FS = 10;
+      const th = (text: string) => ({ text, bold: true, fillColor: '#dbeafe', alignment: 'center', fontSize: FS });
+      const cell = (text: string, opts: any = {}) => ({ text, alignment: 'center', fontSize: FS, margin: [0, 2, 0, 2], ...opts });
+      const merged = (text: string, opts: any = {}) => ({ text, alignment: 'center', fontSize: FS, rowSpan: 5, margin: [0, 44, 0, 0], ...opts });
 
-      // Bảng gộp giống biên bản giấy (SCT, HSN, cosφ là ô gộp dọc)
+      // Số liệu theo 5 hàng: Tổng Pg, BT, CĐ, TĐ, Tổng Qg
+      const tongB = res.bieu.find(b => b.key === 'Tong')!;
+      const sum3 = (suffix: string) => num(r[`BT_${suffix}`]) + num(r[`CD_${suffix}`]) + num(r[`TD_${suffix}`]);
+      const phuTong = num(r.phu_BT) + num(r.phu_CD) + num(r.phu_TD);
+      const rowDefs = [
+        { label: 'Tổng Pg', dau: sum3('dau'), cuoi: sum3('cuoi'), sl: tongB.sanLuong, phu: phuTong, tong: tongB.cuoi },
+        ...(['BT', 'CD', 'TD'] as const).map(k => {
+          const b = res.bieu.find(x => x.key === k)!;
+          return { label: b.label, dau: num(r[`${k}_dau`]), cuoi: num(r[`${k}_cuoi`]), sl: b.sanLuong, phu: b.phu, tong: b.cuoi };
+        }),
+        (() => { const b = res.bieu.find(x => x.key === 'VC')!; return { label: 'Tổng Qg', dau: num(r.VC_dau), cuoi: num(r.VC_cuoi), sl: b.sanLuong, phu: b.phu, tong: b.cuoi }; })(),
+      ];
+
+      // Bảng gộp (SCT, HSN, cosφ là ô gộp dọc, căn giữa)
       const tableBody: any[] = [
         [
           { ...th('Số công tơ'), rowSpan: 2 },
@@ -330,18 +346,17 @@ export default function BillConfirmManager() {
         ],
         [ {}, {}, th('Đầu kỳ'), th('Cuối kỳ'), {}, {}, {}, {}, {} ],
       ];
-      ROWS.forEach((row, i) => {
-        const bieu = res.bieu.find(b => b.key === row.res)!;
+      rowDefs.forEach((row, i) => {
         tableBody.push([
-          i === 0 ? { text: r.SCT || '—', rowSpan: ROWS.length, alignment: 'center', bold: true, margin: [0, 16, 0, 0] } : {},
-          { text: row.label, alignment: 'center', bold: true, fontSize: 10 },
-          { text: fmt2(num(r[`${row.comp}_dau`])), alignment: 'right', fontSize: 10 },
-          { text: fmt2(num(r[`${row.comp}_cuoi`])), alignment: 'right', fontSize: 10 },
-          i === 0 ? { text: fmt(num(r.HSN)), rowSpan: ROWS.length, alignment: 'center', bold: true, margin: [0, 16, 0, 0] } : {},
-          numCell(bieu.sanLuong),
-          numCell(bieu.phu),
-          numCell(bieu.cuoi, true),
-          i === 0 ? { text: res.cosphi.toFixed(2), rowSpan: ROWS.length, alignment: 'center', bold: true, fontSize: 13, margin: [0, 16, 0, 0] } : {},
+          i === 0 ? merged(r.SCT || '—', { bold: true }) : {},
+          cell(row.label, { bold: true }),
+          cell(fmt2(row.dau)),
+          cell(fmt2(row.cuoi)),
+          i === 0 ? merged(fmt(num(r.HSN)), { bold: true }) : {},
+          cell(fmt(row.sl)),
+          cell(fmt(row.phu)),
+          cell(fmt(row.tong), { bold: true }),
+          i === 0 ? merged(res.cosphi.toFixed(2), { bold: true }) : {},
         ]);
       });
 
@@ -457,10 +472,12 @@ export default function BillConfirmManager() {
   const labelCls = 'block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5';
   // input gọn nằm trong ô bảng (không viền riêng, dùng viền của ô)
   const cellInputCls =
-    'w-full px-2 py-1.5 text-sm text-right font-mono tabular-nums bg-transparent outline-none ' +
+    'w-full px-2 py-1.5 text-sm text-center font-mono tabular-nums bg-transparent outline-none ' +
     'rounded focus:bg-[#e8f3ff] transition-colors';
-  const tdCls = 'border border-slate-300 px-1 py-0.5';
-  const thCls = 'border border-slate-300 px-2 py-2 text-center font-bold';
+  const tdCls = 'border border-slate-300 px-1 py-1';
+  const thCls = 'border border-slate-300 px-2 py-2 text-center font-bold align-middle';
+  // ô số tính sẵn — căn giữa, đồng bộ cỡ chữ
+  const calcCell = tdCls + ' text-center font-mono text-sm tabular-nums';
 
   /* ===================== LIST VIEW ===================== */
   const renderList = () => (
@@ -714,52 +731,68 @@ export default function BillConfirmManager() {
               </tr>
             </thead>
             <tbody className="text-sm">
-              {ROWS.map((row, i) => {
-                const bieu = calc.bieu.find(b => b.key === row.res)!;
+              {(() => {
+                const totalRows = ROWS.length + 1; // Tổng Pg + BT/CĐ/TĐ/Tổng Qg
+                const sum3 = (suf: string) =>
+                  num(readings[`BT_${suf}`]) + num(readings[`CD_${suf}`]) + num(readings[`TD_${suf}`]);
+                const tongB = calc.bieu.find(b => b.key === 'Tong')!;
+                const phuTong = num(phu.BT) + num(phu.CD) + num(phu.TD);
                 return (
-                  <tr key={row.comp}>
-                    {i === 0 && (
-                      <td className={tdCls + ' align-middle'} rowSpan={ROWS.length}>
+                  <>
+                    {/* Hàng Tổng Pg (tính sẵn) + các ô gộp dọc SCT/HSN/cosφ */}
+                    <tr>
+                      <td className={tdCls + ' align-middle'} rowSpan={totalRows}>
                         <input
-                          className={cellInputCls + ' text-center font-bold text-[#5a8dee]'}
+                          className={cellInputCls + ' font-bold text-[#5a8dee]'}
                           value={sct}
                           onChange={e => setSct(e.target.value)}
                           placeholder="Số công tơ"
                         />
                       </td>
-                    )}
-                    <td className={tdCls + ' text-center font-bold text-slate-700'}>{row.label}</td>
-                    <td className={tdCls}>
-                      <input className={cellInputCls} inputMode="decimal"
-                        value={readings[`${row.comp}_dau`] ?? ''}
-                        onChange={e => setReading(`${row.comp}_dau`, e.target.value)} placeholder="0" />
-                    </td>
-                    <td className={tdCls}>
-                      <input className={cellInputCls} inputMode="decimal"
-                        value={readings[`${row.comp}_cuoi`] ?? ''}
-                        onChange={e => setReading(`${row.comp}_cuoi`, e.target.value)} placeholder="0" />
-                    </td>
-                    {i === 0 && (
-                      <td className={tdCls + ' align-middle'} rowSpan={ROWS.length}>
-                        <input className={cellInputCls + ' text-center font-bold'} inputMode="decimal"
+                      <td className={tdCls + ' text-center font-bold text-slate-700'}>Tổng Pg</td>
+                      <td className={calcCell + ' text-slate-500'}>{fmt2(sum3('dau'))}</td>
+                      <td className={calcCell + ' text-slate-500'}>{fmt2(sum3('cuoi'))}</td>
+                      <td className={tdCls + ' align-middle'} rowSpan={totalRows}>
+                        <input className={cellInputCls + ' font-bold'} inputMode="decimal"
                           value={hsn} onChange={e => setHsn(e.target.value)} placeholder="1" />
                       </td>
-                    )}
-                    <td className={tdCls + ' text-right font-mono font-bold text-amber-600 pr-2'}>{fmt(bieu.sanLuong)}</td>
-                    <td className={tdCls}>
-                      <input className={cellInputCls} inputMode="decimal"
-                        value={phu[row.res] ?? ''}
-                        onChange={e => setPhuVal(row.res, e.target.value)} placeholder="0" />
-                    </td>
-                    <td className={tdCls + ' text-right font-mono font-extrabold text-slate-800 pr-2'}>{fmt(bieu.cuoi)}</td>
-                    {i === 0 && (
-                      <td className={tdCls + ' align-middle text-center'} rowSpan={ROWS.length}>
-                        <span className="text-2xl font-black font-mono text-[#5a8dee]">{calc.cosphi.toFixed(2)}</span>
+                      <td className={calcCell + ' font-bold text-amber-600'}>{fmt(tongB.sanLuong)}</td>
+                      <td className={calcCell}>{fmt(phuTong)}</td>
+                      <td className={calcCell + ' font-extrabold text-slate-800'}>{fmt(tongB.cuoi)}</td>
+                      <td className={tdCls + ' align-middle text-center'} rowSpan={totalRows}>
+                        <span className="text-base font-black font-mono text-[#5a8dee]">{calc.cosphi.toFixed(2)}</span>
                       </td>
-                    )}
-                  </tr>
+                    </tr>
+
+                    {/* Các hàng nhập: BT, CĐ, TĐ, Tổng Qg */}
+                    {ROWS.map(row => {
+                      const bieu = calc.bieu.find(b => b.key === row.res)!;
+                      return (
+                        <tr key={row.comp}>
+                          <td className={tdCls + ' text-center font-bold text-slate-700'}>{row.label}</td>
+                          <td className={tdCls}>
+                            <input className={cellInputCls} inputMode="decimal"
+                              value={readings[`${row.comp}_dau`] ?? ''}
+                              onChange={e => setReading(`${row.comp}_dau`, e.target.value)} placeholder="0" />
+                          </td>
+                          <td className={tdCls}>
+                            <input className={cellInputCls} inputMode="decimal"
+                              value={readings[`${row.comp}_cuoi`] ?? ''}
+                              onChange={e => setReading(`${row.comp}_cuoi`, e.target.value)} placeholder="0" />
+                          </td>
+                          <td className={calcCell + ' font-bold text-amber-600'}>{fmt(bieu.sanLuong)}</td>
+                          <td className={tdCls}>
+                            <input className={cellInputCls} inputMode="decimal"
+                              value={phu[row.res] ?? ''}
+                              onChange={e => setPhuVal(row.res, e.target.value)} placeholder="0" />
+                          </td>
+                          <td className={calcCell + ' font-extrabold text-slate-800'}>{fmt(bieu.cuoi)}</td>
+                        </tr>
+                      );
+                    })}
+                  </>
                 );
-              })}
+              })()}
             </tbody>
           </table>
         </div>
