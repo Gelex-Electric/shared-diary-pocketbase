@@ -38,9 +38,12 @@ def fetch_accounts(user_id: str, token: str):
         timeout=60,
     )
     r.raise_for_status()
-    data = r.json()
+    raw = r.json()
+    data = raw
     if isinstance(data, dict):
         data = data.get("DATA", data.get("data", []))
+    if not data:
+        print(f"[DEBUG] GetMeterAccount tra ve rong. UserID={user_id}. Raw response: {raw}")
     return data or []
 
 
@@ -85,6 +88,8 @@ def pmax_status_map(last_day: str, num_days: int):
 def main():
     info = login_data()
     token = info.get("TOKEN")
+    print(f"[DEBUG] Login OK. USER_ID dung de goi GetMeterAccount = {USER_ID} "
+          f"(USER_ID tra ve tu Login = {info.get('USER_ID')}).")
     rows = fetch_accounts(USER_ID, token)
     if not rows:
         sys.exit("GetMeterAccount khong tra ve cong to nao.")
