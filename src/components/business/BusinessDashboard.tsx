@@ -219,7 +219,7 @@ export default function BusinessDashboard() {
         {/* Footer */}
         <footer className="px-6 py-4">
           <div className="flex justify-end text-[.8rem]" style={{ color: 'var(--vl-light)' }}>
-            <p>Phiên bản 1.1</p>
+            <p>2026 © GETC</p>
           </div>
         </footer>
       </div>
