@@ -20,37 +20,33 @@ interface UpdateItem {
 }
 
 // Phiên bản & ngày phát hành hiển thị trên header
-const VERSION      = '1.2';
-const RELEASE_DATE = '15/06/2026';
+const VERSION      = '1.3';
+const RELEASE_DATE = '19/06/2026';
 
 const UPDATES: UpdateItem[] = [
   {
-    title: 'Đồ thị điện áp & công suất',
-    desc: 'Trang mới trong "Thông số vận hành": vẽ điện áp 3 pha (đường) cùng công suất P (cột) theo thời gian thực tế của số liệu đo cho từng trạm.',
-    tag: 'Mới',
-    link: { tab: 'opchart', label: 'Xem ngay' },
-  },
-  {
-    title: 'Chọn khách hàng & trạm trên 6 biểu đồ',
-    desc: 'Mặc định hiển thị 3 khách có P max cao nhất và 3 khách thấp nhất. Khách nhiều điểm đo có thể chọn trạm qua dropdown ngay trên biểu đồ.',
-    tag: 'Mới',
-    link: { tab: 'opchart', label: 'Thử ngay' },
-  },
-  {
-    title: 'Đánh dấu thời điểm & thời gian mất điện',
-    desc: 'Khi điện áp 3 pha về 0, biểu đồ tô vùng "Mất điện" và hiển thị khung giờ kèm thời lượng (ví dụ 02:30–04:00 (1h30p)).',
-    tag: 'Mới',
-  },
-  {
-    title: 'Làm nổi bật công suất P lớn nhất',
-    desc: 'Cột công suất đạt P max được tô màu nổi bật để dễ nhận biết thời điểm tải đỉnh trong ngày.',
+    title: 'Thông tin khách hàng & công tơ đọc trực tiếp từ HES',
+    desc: 'Danh sách khách hàng/công tơ nay sẽ đọc trực tiếp từ HES loại bỏ hoàn toàn khả năng thêm thủ công dữ liệu sẽ được làm mới sau mỗi ngày.',
     tag: 'Cải tiến',
+    link: { tab: 'operating', label: 'Xem ngay' },
   },
   {
-    title: 'Đồng bộ giao diện chú giải biểu đồ',
-    desc: 'Tooltip các biểu đồ ở trang Tổng hợp được làm lại theo bộ nhận diện chung: nền sáng, viền nhẹ, chữ rõ ràng.',
+    title: 'Thêm khách hàng ngoài danh sách khi soạn thông báo ngừng điện',
+    desc: 'Danh sách khách hàng trong phụ lục thông báo ngừng cấp điện có thể thêm thủ công cho những khách khác chưa có trong HES',
+    tag: 'Cải tiến',
+    link: { tab: 'outage', label: 'Thử ngay' },
+  },
+  {
+    title: 'Gộp cột Phạm vi & Phụ lục trong bảng khung giờ',
+    desc: 'Bảng khung giờ của thông báo ngừng cấp điện chỉ còn một cột "Phạm vi", bộ chọn phụ lục được đặt ngay dưới ô nhập phạm vi.',
     tag: 'Giao diện',
-    link: { tab: 'summary', label: 'Xem ngay' },
+    link: { tab: 'outage', label: 'Xem ngay' },
+  },
+  {
+    title: 'Đồ thị điện áp & công suất bỏ qua khách hàng không sử dụng điện',
+    desc: 'Trang "Đồ thị điện áp & công suất" ở chế độ mặc định sẽ không đọc những khách hàng không sử dụng điện nhưng vẫn đóng điện (điện áp pha >0 nhưng dòng = 0).',
+    tag: 'Cải tiến',
+    link: { tab: 'opchart', label: 'Xem ngay' },
   },
 ];
 
