@@ -126,7 +126,7 @@ export default function CustomerManager() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Thông tin khách hàng &amp; Công tơ</h2>
-          <p className="text-slate-500 text-sm mt-1">Danh sách khách hàng và thiết bị đo đếm (nguồn: metterinfo.csv)</p>
+          <p className="text-slate-500 text-sm mt-1">Danh sách khách hàng và thiết bị đo đếm (Đồng bộ trực tiếp từ HES sau mỗi 1 ngày)</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             {/* Search */}
