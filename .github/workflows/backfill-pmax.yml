@@ -41,8 +41,6 @@ jobs:
         env:
           API_USER: ${{ secrets.API_USER }}
           API_PASS: ${{ secrets.API_PASS }}
-          PB_ADMIN_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
-          PB_ADMIN_PASS: ${{ secrets.PB_ADMIN_PASS }}
           START_DATE: ${{ inputs.start_date }}
           END_DATE: ${{ inputs.end_date }}
         run: python scripts/backfill_pmax.py
