@@ -412,18 +412,20 @@ export default function VoltagePowerDashboard() {
     return m;
   }, [chartableCustomers]);
 
-  /* ---- Mặc định: 3 biểu đồ trái = P max cao nhất, 3 phải = P max thấp nhất ---- */
+  /* ---- Mặc định: 3 biểu đồ trái = P max cao nhất, 3 phải = P max thấp nhất (nhưng > 0) ---- */
   const defaultPicks = useMemo<string[]>(() => {
     const ids = chartableCustomers.map(c => c.id);
+    // chartableCustomers đã sắp theo peakP giảm dần → lọc P max > 0 rồi lấy từ cuối lên cho nhóm "thấp nhất"
+    const positiveIds = chartableCustomers.filter(c => c.peakP > 0).map(c => c.id);
     const picks: string[] = [];
     const used = new Set<string>();
     const push = (id?: string) => { if (id && !used.has(id)) { used.add(id); picks.push(id); } };
     push(ids[0]);
     push(ids[1]);
     push(ids[2]);
-    push(ids[ids.length - 1]);
-    push(ids[ids.length - 2]);
-    push(ids[ids.length - 3]);
+    push(positiveIds[positiveIds.length - 1]);
+    push(positiveIds[positiveIds.length - 2]);
+    push(positiveIds[positiveIds.length - 3]);
     for (const id of ids) { if (picks.length >= 6) break; push(id); }
     while (picks.length < 6) picks.push('');
     return picks.slice(0, 6);
