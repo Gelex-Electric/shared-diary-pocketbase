@@ -6,7 +6,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 /** Tab đích để điều hướng khi nhấn "Xem ngay" — khớp với type Tab trong Dashboard */
-export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'later';
+export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'sld' | 'later';
 
 /** Đường dẫn tài liệu hướng dẫn sử dụng (mở khi đóng thông báo) */
 const GUIDE_URL = '/document.pdf';
@@ -24,6 +24,12 @@ const VERSION      = '1.3';
 const RELEASE_DATE = '19/06/2026';
 
 const UPDATES: UpdateItem[] = [
+  {
+    title: 'Sơ đồ một sợi cho từng khu công nghiệp',
+    desc: 'Trang mới trong "Thông số vận hành": bản vẽ sơ đồ một sợi (single line diagram) riêng cho mỗi KCN, giúp nắm nhanh cấu trúc lưới điện.',
+    tag: 'Mới',
+    link: { tab: 'sld', label: 'Xem ngay' },
+  },
   {
     title: 'Thông tin khách hàng & công tơ đọc trực tiếp từ HES',
     desc: 'Danh sách khách hàng/công tơ nay sẽ đọc trực tiếp từ HES loại bỏ hoàn toàn khả năng thêm thủ công dữ liệu sẽ được làm mới sau mỗi ngày.',
