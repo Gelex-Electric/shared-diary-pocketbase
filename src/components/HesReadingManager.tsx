@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, ID_TO_AREA } from '../lib/pocketbase';
-import { Meter, AccountHes, DataMetter } from '../types';
+import { fetchMeterInfo } from '../lib/meterInfo';
+import { AccountHes, DataMetter } from '../types';
+
+interface MeterRow { id: string; MeterNo: string; HSN: string; Line: string; area: string; }
 import {
   RefreshCw, Download, Zap, X,
   CheckCircle2, XCircle, AlertCircle, Info,
@@ -67,7 +70,7 @@ const fmtRecordTime = (raw?: string): string => {
    COMPONENT
 ================================================================ */
 export default function HesReadingManager() {
-  const [meters, setMeters]                   = useState<Meter[]>([]);
+  const [meters, setMeters]                   = useState<MeterRow[]>([]);
   const [isLoadingMeters, setIsLoadingMeters] = useState(true);
   const [filterArea, setFilterArea]           = useState('');
   const [hesAccount, setHesAccount]           = useState<AccountHes | null>(null);
@@ -128,25 +131,20 @@ export default function HesReadingManager() {
     }
   };
 
-  /* ---- Load meters ---- */
+  /* ---- Load meters (từ metterinfo.csv, lọc theo KCN) ---- */
   const loadMeters = useCallback(async () => {
-    if (!pb.authStore.isValid) return;
     setIsLoadingMeters(true);
     try {
-      const fp: string[] = ['Activate = true'];
-      if (filterArea) {
-        fp.push(`area = '${filterArea.replace(/'/g, "\\'")}'`);
-      } else if (userAreas.length > 0) {
-        fp.push(`(${userAreas.map(a => `area = '${a.replace(/'/g, "\\'")}'`).join(' || ')})`);
-      }
-      const result = await pb.collection('Meter').getFullList<Meter>({
-        filter: fp.join(' && '),
-        sort: 'Line,MeterNo',
-        requestKey: null,
-      });
-      setMeters(result);
+      const rows = await fetchMeterInfo();
+      const allowed = new Set(userAreas.length > 0 ? userAreas : AREAS);
+      const filtered = rows
+        .filter(r => r.STATUS === 'Yes')
+        .filter(r => (filterArea ? r.ADDRESS === filterArea : allowed.has(r.ADDRESS)))
+        .map((r): MeterRow => ({ id: r.METER_NO, MeterNo: r.METER_NO, HSN: r.METER_NAME, Line: r.LINE_NAME, area: r.ADDRESS }))
+        .sort((a, b) => (a.Line + a.MeterNo).localeCompare(b.Line + b.MeterNo));
+      setMeters(filtered);
     } catch (err: any) {
-      if (!err.isAbort) console.error('Error loading meters:', err);
+      console.error('Error loading meters:', err);
     } finally {
       setIsLoadingMeters(false);
     }
