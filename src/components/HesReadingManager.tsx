@@ -7,7 +7,7 @@ interface MeterRow { id: string; MeterNo: string; HSN: string; Line: string; are
 import {
   RefreshCw, Download, Zap, X,
   CheckCircle2, XCircle, AlertCircle, Info,
-  Table as TableIcon, CreditCard,
+  Table as TableIcon, CreditCard, Crown,
 } from 'lucide-react';
 import { DatePicker, TimePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
@@ -307,11 +307,22 @@ export default function HesReadingManager() {
     const v2 = parseFloat(r2[field]);
     if (isNaN(v1) || isNaN(v2)) return null;
     const factor = parseFloat(hsn) || 1;
-    return Math.round((v2 - v1) * factor * 1000) / 1000;
+    return Math.round((v2 - v1) * factor);
   };
 
   const fmt = (val: number | null) =>
-    val === null ? '—' : val.toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+    val === null ? '—' : val.toLocaleString('vi-VN', { maximumFractionDigits: 0 });
+
+  /* Công tơ có sản lượng Tổng (kWh) lớn nhất — để đánh dấu trong bảng chi tiết */
+  const maxTotalMeterId = React.useMemo(() => {
+    let bestId = '';
+    let best = -Infinity;
+    for (const m of meters) {
+      const total = getConsumption(m.MeterNo, 'pg', m.HSN);
+      if (total !== null && total > best) { best = total; bestId = m.id; }
+    }
+    return best > 0 ? bestId : '';
+  }, [meters, sections]);
 
   /* ================================================================
      EXCEL EXPORT
@@ -321,8 +332,8 @@ export default function HesReadingManager() {
       'Số công tơ':      m.MeterNo,
       'Trạm':            m.Line || '',
       'Hệ số nhân':      m.HSN  || '',
-      'Thời gian Đợt 1': fmtRecordTime(sections[0].readings[m.MeterNo]?.recordTime),
-      'Thời gian Đợt 2': fmtRecordTime(sections[1].readings[m.MeterNo]?.recordTime),
+      'Thời gian đầu kỳ': fmtRecordTime(sections[0].readings[m.MeterNo]?.recordTime),
+      'Thời gian cuối kỳ': fmtRecordTime(sections[1].readings[m.MeterNo]?.recordTime),
       'Tổng (kWh)':      getConsumption(m.MeterNo, 'pg', m.HSN) ?? '',
       'Biểu 1 (kWh)':   getConsumption(m.MeterNo, 'bt', m.HSN) ?? '',
       'Biểu 2 (kWh)':   getConsumption(m.MeterNo, 'cd', m.HSN) ?? '',
@@ -505,7 +516,7 @@ export default function HesReadingManager() {
       </div>
 
       {/* ================================================================
-          CONSUMPTION TABLE (Đợt 2 − Đợt 1)
+          CONSUMPTION TABLE (Cuối kỳ − Đầu kỳ)
       ================================================================ */}
       <div className="vl-card overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -515,7 +526,7 @@ export default function HesReadingManager() {
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-800">Chi tiết sản lượng</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">Tiêu thụ = (Đợt 2 − Đợt 1) × Hệ số nhân</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Tiêu thụ = (Cuối kỳ − Đầu kỳ) × Hệ số nhân</p>
             </div>
           </div>
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -543,9 +554,9 @@ export default function HesReadingManager() {
                 <th>Số công tơ</th>
                 <th>Trạm</th>
                 <th className="text-center">Hệ số nhân</th>
-                <th className="text-center text-slate-400">Thời gian Đợt 1</th>
-                <th className="text-center text-slate-400">Thời gian Đợt 2</th>
-                <th className="text-center text-[#5a8dee]">Tổng (kWh)</th>
+                <th className="text-center text-slate-400">Thời gian đầu kỳ</th>
+                <th className="text-center text-slate-400">Thời gian cuối kỳ</th>
+                <th className="text-center text-white bg-[#5a8dee] font-extrabold">Tổng (kWh)</th>
                 <th className="text-center text-[#5a8dee]">Biểu 1 (kWh)</th>
                 <th className="text-center text-orange-500">Biểu 2 (kWh)</th>
                 <th className="text-center text-purple-600">Biểu 3 (kWh)</th>
@@ -566,11 +577,16 @@ export default function HesReadingManager() {
                   </td>
                 </tr>
               ) : (
-                meters.map(m => (
-                  <tr key={m.id} className="hover:bg-[#f4f8ff] transition-colors">
+                meters.map(m => {
+                  const isMax = m.id === maxTotalMeterId;
+                  return (
+                  <tr key={m.id} className={`transition-colors ${isMax ? 'bg-amber-50 hover:bg-amber-100/70' : 'hover:bg-[#f4f8ff]'}`}>
                     <td>
-                      <span className="font-mono text-xs font-bold text-[#5a8dee] bg-[#e8f3ff] px-2 py-1 rounded">
-                        {m.MeterNo}
+                      <span className="inline-flex items-center gap-1.5">
+                        {isMax && <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                        <span className="font-mono text-xs font-bold text-[#5a8dee] bg-[#e8f3ff] px-2 py-1 rounded">
+                          {m.MeterNo}
+                        </span>
                       </span>
                     </td>
                     <td className="text-sm text-slate-500">{m.Line || '—'}</td>
@@ -581,13 +597,14 @@ export default function HesReadingManager() {
                     <td className="text-center text-[11px] font-mono text-slate-400 whitespace-nowrap">
                       {fmtRecordTime(sections[1].readings[m.MeterNo]?.recordTime)}
                     </td>
-                    <td className="text-center text-xs font-bold text-[#5a8dee]">{fmt(getConsumption(m.MeterNo, 'pg', m.HSN))}</td>
+                    <td className={`text-center text-sm font-extrabold text-[#3b6fd4] ${isMax ? 'bg-amber-100/60' : 'bg-[#e8f3ff]/60'}`}>{fmt(getConsumption(m.MeterNo, 'pg', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-[#5a8dee]">{fmt(getConsumption(m.MeterNo, 'bt', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-orange-500">{fmt(getConsumption(m.MeterNo, 'cd', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-purple-600">{fmt(getConsumption(m.MeterNo, 'td', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-slate-500">{fmt(getConsumption(m.MeterNo, 'vc', m.HSN))}</td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
