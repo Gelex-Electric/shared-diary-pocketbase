@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
-import { DatePicker, TimePicker } from './ui/DateTimePickers';
+import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
 import { generateOutageDocx } from '../lib/outageDocx';
 
@@ -411,19 +411,6 @@ export default function PowerOutageManager() {
     };
   }, [filteredNotices]);
 
-  /* month picker options: current year ± 1 */
-  const monthOptions = React.useMemo(() => {
-    const now = new Date();
-    const opts: { value: string; label: string }[] = [{ value: '', label: 'Tất cả tháng' }];
-    for (let y = now.getFullYear() + 1; y >= now.getFullYear() - 1; y--) {
-      for (let m = 12; m >= 1; m--) {
-        const val = `${y}-${p2(m)}`;
-        opts.push({ value: val, label: `Tháng ${m}/${y}` });
-      }
-    }
-    return opts;
-  }, []);
-
   return (
     <div className="space-y-8 relative">
       {confirmDialog}
@@ -451,7 +438,7 @@ export default function PowerOutageManager() {
           <p className="text-slate-500 text-sm mt-1">Soạn, lưu và phát hành thông báo ngừng cấp điện tới khách hàng</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <Select value={filterMonth} onChange={setFilterMonth} options={monthOptions} className="min-w-[140px]" />
+          <MonthPicker value={filterMonth} onChange={(v) => setFilterMonth(v === 'all' ? '' : v)} allowAll className="min-w-[150px]" />
           <Select value={filterArea} onChange={setFilterArea}
             options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map((a: string) => ({ value: a, label: a }))]}
             className="min-w-[160px]" />
