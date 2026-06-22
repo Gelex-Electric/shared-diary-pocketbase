@@ -58,23 +58,38 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
   const [open,      setOpen]      = useState(false);
   const [viewYear,  setViewYear]  = useState(parsed?.y  ?? today.getFullYear());
   const [viewMonth, setViewMonth] = useState(parsed?.mo ?? today.getMonth());
-  const [portalPos, setPortalPos] = useState({ top: 0, left: 0, width: 0 });
+  // null = chưa đo được vị trí → chưa render dropdown (tránh "nhảy" từ góc 0,0)
+  const [portalPos, setPortalPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  // Giá trị gõ tay trong ô (dd/mm/yyyy)
+  const [text, setText] = useState('');
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   const portalRef = useRef<HTMLDivElement>(null);
 
-  /* Tính vị trí khi mở (chế độ portal): bám theo trigger, lật lên nếu không đủ chỗ dưới */
+  /* Tính vị trí khi mở (chế độ portal): bám theo trigger, lật lên nếu không đủ chỗ dưới.
+     Đo ngay trong useLayoutEffect (trước khi browser paint) nên dropdown xuất hiện
+     thẳng đúng chỗ, không bị bay nhảy. Theo dõi scroll/resize để bám trigger. */
   useLayoutEffect(() => {
-    if (!usePortal || !open || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    const dropdownH = 360;
-    const openUp = rect.bottom + dropdownH > window.innerHeight && rect.top > dropdownH;
-    setPortalPos({
-      top: openUp ? rect.top - dropdownH - 6 : rect.bottom + 6,
-      left: rect.left,
-      width: rect.width,
-    });
+    if (!usePortal || !open) { setPortalPos(null); return; }
+    const measure = () => {
+      if (!triggerRef.current) return;
+      const rect = triggerRef.current.getBoundingClientRect();
+      const dropdownH = 360;
+      const openUp = rect.bottom + dropdownH > window.innerHeight && rect.top > dropdownH;
+      setPortalPos({
+        top: openUp ? rect.top - dropdownH - 6 : rect.bottom + 6,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+    measure();
+    window.addEventListener('scroll', measure, true);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('resize', measure);
+    };
   }, [usePortal, open]);
 
   /* Đóng khi click ngoài */
@@ -90,12 +105,44 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
     return () => document.removeEventListener('mousedown', handler);
   }, [open, usePortal]);
 
-  /* Đồng bộ view khi value thay đổi từ ngoài */
+  /* Đồng bộ view + ô gõ tay khi value thay đổi từ ngoài */
   useEffect(() => {
     const p = parse(value);
     if (p) { setViewYear(p.y); setViewMonth(p.mo); }
+    setText(p ? `${p2(p.d)}/${p2(p.mo + 1)}/${p.y}` : '');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
+
+  /* Tự chèn dấu "/" khi gõ: ddmmyyyy → dd/mm/yyyy */
+  const formatTyped = (raw: string) => {
+    const d = raw.replace(/\D/g, '').slice(0, 8);
+    if (d.length > 4) return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+    if (d.length > 2) return `${d.slice(0, 2)}/${d.slice(2)}`;
+    return d;
+  };
+
+  /* Kiểm tra & commit chuỗi dd/mm/yyyy hợp lệ → trả về YYYY-MM-DD; false nếu sai */
+  const tryCommitTyped = (str: string) => {
+    const m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return false;
+    const d = +m[1], mo = +m[2], y = +m[3];
+    if (mo < 1 || mo > 12 || d < 1 || d > getDaysInMonth(y, mo - 1)) return false;
+    onChange(`${y}-${p2(mo)}-${p2(d)}`);
+    setViewYear(y);
+    setViewMonth(mo - 1);
+    return true;
+  };
+
+  const onTypedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = formatTyped(e.target.value);
+    setText(f);
+    if (f.length === 10) tryCommitTyped(f);
+  };
+
+  const onTypedBlur = () => {
+    if (text.trim() === '') { onChange(''); return; }
+    if (!tryCommitTyped(text)) setText(displayVal); // sai định dạng → khôi phục
+  };
 
   const selectDay = (d: number) => {
     onChange(`${viewYear}-${p2(viewMonth + 1)}-${p2(d)}`);
@@ -149,32 +196,45 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
         </label>
       )}
 
-      {/* Trigger input */}
+      {/* Trigger input — cho phép gõ tay dd/mm/yyyy */}
       <div
         ref={triggerRef}
-        onClick={() => setOpen(o => !o)}
         className={`relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-white border rounded-lg
-                    text-sm font-bold cursor-pointer select-none transition-all
+                    text-sm font-bold transition-all
                     ${open
                       ? 'ring-2 ring-[#5a8dee] border-[#5a8dee]'
-                      : 'border-slate-200 hover:border-[#5a8dee]/50'}`}
+                      : 'border-slate-200 hover:border-[#5a8dee]/50 focus-within:ring-2 focus-within:ring-[#5a8dee] focus-within:border-[#5a8dee]'}`}
       >
-        <Calendar className={`w-4 h-4 shrink-0 ${open ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
-        <span className={displayVal ? 'text-slate-700' : 'text-slate-300 font-normal'}>
-          {displayVal || 'dd/mm/yyyy'}
-        </span>
+        <Calendar
+          onClick={() => setOpen(o => !o)}
+          className={`w-4 h-4 shrink-0 cursor-pointer ${open ? 'text-[#5a8dee]' : 'text-slate-400'}`}
+        />
+        <input
+          type="text"
+          inputMode="numeric"
+          value={text}
+          onChange={onTypedChange}
+          onFocus={() => setOpen(true)}
+          onBlur={onTypedBlur}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { if (tryCommitTyped(text)) setOpen(false); }
+            else if (e.key === 'Escape') { setText(displayVal); setOpen(false); }
+          }}
+          placeholder="dd/mm/yyyy"
+          className="flex-1 min-w-0 bg-transparent outline-none text-slate-700 placeholder:text-slate-300 placeholder:font-normal"
+        />
       </div>
 
-      {/* Dropdown calendar */}
-      {open && (() => {
+      {/* Dropdown calendar — ở chế độ portal phải đo xong vị trí (portalPos) mới render */}
+      {open && (!usePortal || portalPos) && (() => {
         const dropdown = (
           <div
             ref={portalRef}
             className={usePortal
-              ? 'fixed z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150'
+              ? 'fixed z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in duration-150'
               : 'absolute top-full mt-1.5 left-0 z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150'}
             style={usePortal
-              ? { boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 270, top: portalPos.top, left: portalPos.left }
+              ? { boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 270, top: portalPos!.top, left: portalPos!.left }
               : { boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 270 }}
             onClick={e => e.stopPropagation()}
           >
