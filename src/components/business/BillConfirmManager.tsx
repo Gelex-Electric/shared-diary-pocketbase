@@ -4,7 +4,7 @@ import { pb } from '../../lib/pocketbase';
 import { DatePicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { Select } from '../ui/Select';
-import pdfMake from 'pdfmake/build/pdfmake';
+import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import {
   FileCheck2, Save, Gauge, Building2, Calendar, Users,
   CheckCircle2, AlertCircle, RotateCcw, Plus, X, ChevronDown,
@@ -56,31 +56,6 @@ interface InvoiceRecord {
   created: string;
   updated: string;
 }
-
-/* ── Font cho PDF (giống Sổ nhật ký vận hành) ── */
-const timesUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Regular.ttf';
-const timesBdUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Bold.ttf';
-const timesBiUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-BoldItalic.ttf';
-const timesIUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Italic.ttf';
-let fontsLoaded = false;
-const loadFontsToVfs = async () => {
-  if (fontsLoaded) return;
-  const entries: [string, string][] = [
-    ['times.ttf', timesUrl],
-    ['timesbd.ttf', timesBdUrl],
-    ['timesbi.ttf', timesBiUrl],
-    ['timesi.ttf', timesIUrl],
-  ];
-  await Promise.all(entries.map(async ([name, url]) => {
-    const res = await fetch(url);
-    const buf = await res.arrayBuffer();
-    (pdfMake as any).virtualfs.writeFileSync(name, new Uint8Array(buf));
-  }));
-  pdfMake.fonts = {
-    Times: { normal: 'times.ttf', bold: 'timesbd.ttf', italics: 'timesi.ttf', bolditalics: 'timesbi.ttf' },
-  };
-  fontsLoaded = true;
-};
 
 const todayStr = () => {
   const d = new Date();
@@ -307,116 +282,18 @@ export default function BillConfirmManager() {
   };
 
   /* ── xuất PDF ── */
-  const exportPdf = async (r: InvoiceRecord) => {
+  const exportDocx = async (r: InvoiceRecord) => {
     setExportingId(r.id);
     try {
-      await loadFontsToVfs();
-      const res = computeResults(r);
-
-      // Cỡ chữ đồng bộ, mọi ô căn giữa
-      const FS = 10;
-      const th = (text: string) => ({ text, bold: true, fillColor: '#dbeafe', alignment: 'center', fontSize: FS });
-      const cell = (text: string, opts: any = {}) => ({ text, alignment: 'center', fontSize: FS, margin: [0, 2, 0, 2], ...opts });
-      const merged = (text: string, opts: any = {}) => ({ text, alignment: 'center', fontSize: FS, rowSpan: 5, margin: [0, 44, 0, 0], ...opts });
-
-      // Số liệu theo 5 hàng: Tổng Pg, BT, CĐ, TĐ, Tổng Qg
-      const tongB = res.bieu.find(b => b.key === 'Tong')!;
-      const sum3 = (suffix: string) => num(r[`BT_${suffix}`]) + num(r[`CD_${suffix}`]) + num(r[`TD_${suffix}`]);
-      const phuTong = num(r.phu_BT) + num(r.phu_CD) + num(r.phu_TD);
-      const rowDefs = [
-        { label: 'Tổng Pg', dau: sum3('dau'), cuoi: sum3('cuoi'), sl: tongB.sanLuong, phu: phuTong, tong: tongB.cuoi },
-        ...(['BT', 'CD', 'TD'] as const).map(k => {
-          const b = res.bieu.find(x => x.key === k)!;
-          return { label: b.label, dau: num(r[`${k}_dau`]), cuoi: num(r[`${k}_cuoi`]), sl: b.sanLuong, phu: b.phu, tong: b.cuoi };
-        }),
-        (() => { const b = res.bieu.find(x => x.key === 'VC')!; return { label: 'Tổng Qg', dau: num(r.VC_dau), cuoi: num(r.VC_cuoi), sl: b.sanLuong, phu: b.phu, tong: b.cuoi }; })(),
-      ];
-
-      // Bảng gộp (SCT, HSN, cosφ là ô gộp dọc, căn giữa)
-      const tableBody: any[] = [
-        [
-          { ...th('Số công tơ'), rowSpan: 2 },
-          { ...th('Thanh ghi'), rowSpan: 2 },
-          { ...th('Chỉ số công tơ'), colSpan: 2 }, {},
-          { ...th('Hệ số nhân'), rowSpan: 2 },
-          { ...th('Sản lượng (kWh)'), rowSpan: 2 },
-          { ...th('Sản lượng trừ phụ (kWh)'), rowSpan: 2 },
-          { ...th('Tổng sản lượng (kWh)'), rowSpan: 2 },
-          { ...th('cosφ'), rowSpan: 2 },
-        ],
-        [ {}, {}, th('Đầu kỳ'), th('Cuối kỳ'), {}, {}, {}, {}, {} ],
-      ];
-      rowDefs.forEach((row, i) => {
-        tableBody.push([
-          i === 0 ? merged(r.SCT || '—', { bold: true }) : {},
-          cell(row.label, { bold: true }),
-          cell(fmt2(row.dau)),
-          cell(fmt2(row.cuoi)),
-          i === 0 ? merged(fmt(num(r.HSN)), { bold: true }) : {},
-          cell(fmt(row.sl)),
-          cell(fmt(row.phu)),
-          cell(fmt(row.tong), { bold: true }),
-          i === 0 ? merged(res.cosphi.toFixed(2), { bold: true }) : {},
-        ]);
-      });
-
-      const infoLine = (label: string, value: string, valueBold = false) => ({
-        columns: [
-          { width: 130, text: label, bold: false },
-          { text: value || '', bold: valueBold },
-        ],
-        margin: [0, 0, 0, 2],
-      });
-
-      const docDefinition: any = {
-        pageSize: 'A4',
-        pageOrientation: 'landscape',
-        pageMargins: [30, 28, 30, 28],
-        defaultStyle: { font: 'Times', fontSize: 12, lineHeight: 1.25 },
-        content: [
-          { text: `Từ ngày ${fmtDate(r.StartDate)} đến ngày ${fmtDate(r.EndDate)}`, alignment: 'center', bold: true, margin: [0, 0, 0, 8] },
-
-          infoLine('Bên bán điện:', r.NBan || '—', true),
-          infoLine('Địa chỉ:', r.DChiNBan || ''),
-          infoLine('Bên mua điện:', r.NMua || '—', true),
-          infoLine('Địa chỉ sử dụng điện:', r.DChiNMua || ''),
-          { text: 'Cùng nhau xác nhận chỉ số công tơ, sản lượng điện giao nhận giữa hai bên như sau:', margin: [0, 4, 0, 8] },
-
-          {
-            table: {
-              headerRows: 2,
-              widths: ['12%', '10%', '12%', '12%', '8%', '13%', '13%', '12%', '8%'],
-              body: tableBody,
-            },
-            layout: {
-              hLineWidth: () => 0.8, vLineWidth: () => 0.8,
-              hLineColor: () => '#374151', vLineColor: () => '#374151',
-              paddingTop: () => 4, paddingBottom: () => 4,
-            },
-          },
-
-          ...(r.NKy ? [{ text: r.NKy, alignment: 'right', italics: true, margin: [0, 14, 0, 0] }] : []),
-
-          {
-            columns: [
-              { width: '50%', stack: [
-                { text: 'ĐẠI DIỆN BÊN BÁN', bold: true, alignment: 'center', margin: [0, 16, 0, 36] },
-                { text: '(Ký, ghi rõ họ tên)', italics: true, alignment: 'center', fontSize: 11 },
-              ] },
-              { width: '50%', stack: [
-                { text: 'ĐẠI DIỆN BÊN MUA', bold: true, alignment: 'center', margin: [0, 16, 0, 36] },
-                { text: '(Ký, ghi rõ họ tên)', italics: true, alignment: 'center', fontSize: 11 },
-              ] },
-            ],
-            margin: [0, 6, 0, 0],
-          },
-        ],
-      };
-
-      const fname = `BienBan_${(r.SCT || 'CT').replace(/[^\w]/g, '')}_${fmtDate(r.EndDate).replace(/\//g, '-')}.pdf`;
-      pdfMake.createPdf(docDefinition).download(fname);
+      const blob = await generateBbxnDocx(r);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `BienBan_${(r.SCT || 'CT').replace(/[^\w]/g, '')}_${fmtDate(r.EndDate).replace(/\//g, '-')}.docx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
     } catch (err: any) {
-      showToast(`Lỗi khi xuất PDF: ${err?.message || ''}`, 'error');
+      showToast(`Lỗi khi xuất Word: ${err?.message || ''}`, 'error');
     } finally {
       setExportingId(null);
     }
@@ -608,7 +485,7 @@ export default function BillConfirmManager() {
                                         className="p-2 rounded-lg text-slate-500 hover:bg-[#e8f3ff] hover:text-[#5a8dee] transition-colors">
                                         <Pencil className="w-4 h-4" />
                                       </button>
-                                      <button onClick={() => exportPdf(r)} disabled={exportingId === r.id} title="Tải PDF"
+                                      <button onClick={() => exportDocx(r)} disabled={exportingId === r.id} title="Tải Word"
                                         className="p-2 rounded-lg text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-50">
                                         <FileDown className="w-4 h-4" />
                                       </button>
