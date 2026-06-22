@@ -5,11 +5,12 @@ import { DatePicker, TimePicker, MonthPicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
+import PizZip from 'pizzip';
 import {
   FileCheck2, Save, Gauge, Building2, Users,
   CheckCircle2, AlertCircle, RotateCcw, Plus, X, ChevronRight,
   Pencil, Trash2, FileDown, Search, FileSpreadsheet,
-  CreditCard, RefreshCw, Zap,
+  CreditCard, RefreshCw, Zap, CheckSquare, Square, Archive,
 } from 'lucide-react';
 
 /* ============================================================
@@ -155,6 +156,10 @@ export default function BillConfirmManager() {
   const [search, setSearch] = useState('');
   const [monthFilterDate, setMonthFilterDate] = useState<string>(currentYearMonth());
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  /* ── chọn nhiều biên bản để tải hàng loạt ── */
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkExporting, setIsBulkExporting] = useState(false);
 
   /* ── HES: token + đồng bộ thời gian lấy chỉ số ── */
   const [hesAccount, setHesAccount] = useState<AccountHes | null>(null);
@@ -440,6 +445,53 @@ export default function BillConfirmManager() {
     setExpandedGroups(Object.fromEntries(groupedByCustomer.map(g => [g.name, true])));
   const collapseAll = () => setExpandedGroups({});
 
+  /* ── chọn nhiều để tải hàng loạt ── */
+  const toggleSelection = (id: string) =>
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const toggleGroupSelection = (items: InvoiceRecord[]) =>
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      const allSelected = items.every(it => next.has(it.id));
+      items.forEach(it => allSelected ? next.delete(it.id) : next.add(it.id));
+      return next;
+    });
+  const selectAllFiltered = () => setSelectedIds(new Set(filteredRecords.map(r => r.id)));
+  const deselectAll = () => setSelectedIds(new Set());
+
+  /* ── tải hàng loạt: ghép nhiều biên bản Word đã chọn vào 1 file .zip ── */
+  const bulkExportZip = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkExporting(true);
+    try {
+      const zip = new PizZip();
+      const selectedRecords = records.filter(r => selectedIds.has(r.id));
+      const usedNames = new Set<string>();
+      for (const r of selectedRecords) {
+        const blob = await generateBbxnDocx(r);
+        const buf = await blob.arrayBuffer();
+        let fname = `BienBan_${(r.SCT || 'CT').replace(/[^\w]/g, '')}_${fmtDate(r.EndDate).replace(/\//g, '-')}.docx`;
+        if (usedNames.has(fname)) fname = `BienBan_${(r.SCT || 'CT').replace(/[^\w]/g, '')}_${fmtDate(r.EndDate).replace(/\//g, '-')}_${r.id}.docx`;
+        usedNames.add(fname);
+        zip.file(fname, buf);
+      }
+      const zipBlob = zip.generate({ type: 'blob', mimeType: 'application/zip', compression: 'DEFLATE' });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `BienBan_${todayStr()}.zip`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      showToast(`Lỗi khi tải hàng loạt: ${err?.message || ''}`, 'error');
+    } finally {
+      setIsBulkExporting(false);
+    }
+  };
+
   /* ── style helpers ── */
   const inputCls =
     'w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm text-slate-700 ' +
@@ -470,17 +522,7 @@ export default function BillConfirmManager() {
             Lưu theo từng khách hàng. Tạo mới, xem lại, chỉnh sửa, xóa hoặc tải PDF.
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] shadow-sm transition-all shrink-0"
-        >
-          <Plus className="w-4 h-4" /> Tạo biên bản mới
-        </button>
-      </div>
-
-      {/* Filter bar */}
-      <div className="vl-card p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
           {/* Month filter (bộ chọn tháng, mặc định tháng hiện tại) */}
           <MonthPicker
             value={monthFilterDate}
@@ -498,6 +540,20 @@ export default function BillConfirmManager() {
               className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-[#5a8dee] w-full sm:w-[260px]"
             />
           </div>
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] shadow-sm transition-all shrink-0"
+          >
+            <Plus className="w-4 h-4" /> Tạo biên bản mới
+          </button>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div className="vl-card p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={expandAll} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">Mở tất cả</button>
+          <button onClick={collapseAll} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">Thu tất cả</button>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -517,8 +573,28 @@ export default function BillConfirmManager() {
             {isSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ thời gian lấy chỉ số'}
           </button>
-          <button onClick={expandAll} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">Mở tất cả</button>
-          <button onClick={collapseAll} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">Thu tất cả</button>
+          <button
+            onClick={selectAllFiltered}
+            disabled={filteredRecords.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            <CheckSquare className="w-3.5 h-3.5" /> Chọn hết
+          </button>
+          <button
+            onClick={deselectAll}
+            disabled={selectedIds.size === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            <Square className="w-3.5 h-3.5" /> Bỏ chọn {selectedIds.size > 0 && `(${selectedIds.size})`}
+          </button>
+          <button
+            onClick={bulkExportZip}
+            disabled={selectedIds.size === 0 || isBulkExporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:bg-slate-300"
+          >
+            {isBulkExporting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+            {isBulkExporting ? 'Đang nén...' : `Tải hàng loạt${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+          </button>
         </div>
       </div>
 
@@ -536,6 +612,7 @@ export default function BillConfirmManager() {
         <div className="vl-accordion">
           {groupedByCustomer.map(group => {
             const open = !!expandedGroups[group.name];
+            const groupSelected = group.items.length > 0 && group.items.every(it => selectedIds.has(it.id));
             return (
               <div key={group.name} className={`vl-accordion-item ${open ? 'is-open' : ''}`}>
                 {/* Group header */}
@@ -549,6 +626,15 @@ export default function BillConfirmManager() {
                   <div className="min-w-0">
                     <p className="font-bold truncate">{group.name}</p>
                     <p className="text-[11px] font-semibold text-slate-400">{group.items.length} biên bản</p>
+                  </div>
+                  {/* Checkbox chọn tất cả công tơ trong nhóm — chặn lan để không trigger thu/mở */}
+                  <div className="flex items-center gap-3 ml-auto" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={groupSelected}
+                      onChange={() => toggleGroupSelection(group.items)}
+                      className="w-4.5 h-4.5 rounded border-slate-300 text-[#5a8dee] focus:ring-[#5a8dee]"
+                    />
                   </div>
                   <ChevronRight className="vl-accordion-chevron w-5 h-5" />
                 </div>
@@ -567,6 +653,7 @@ export default function BillConfirmManager() {
                         <table className="vl-table w-full text-left border-collapse min-w-[760px]">
                           <thead>
                             <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                              <th className="py-3 px-4 w-[40px]"></th>
                               <th className="py-3 px-4">Số công tơ</th>
                               <th className="py-3 px-4">Kỳ</th>
                               <th className="py-3 px-4 text-right">Sản lượng Tổng</th>
@@ -577,8 +664,17 @@ export default function BillConfirmManager() {
                           <tbody className="divide-y divide-slate-100">
                             {group.items.map(r => {
                               const res = computeResults(r);
+                              const isSelected = selectedIds.has(r.id);
                               return (
-                                <tr key={r.id} className="text-slate-700 text-sm hover:bg-slate-50/80 transition-colors">
+                                <tr key={r.id} className={`text-slate-700 text-sm hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-[#f4f8ff]' : ''}`}>
+                                  <td className="py-3.5 px-4">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => toggleSelection(r.id)}
+                                      className="w-4.5 h-4.5 rounded border-slate-300 text-[#5a8dee] focus:ring-[#5a8dee]"
+                                    />
+                                  </td>
                                   <td className="py-3.5 px-4 font-mono font-bold text-[#5a8dee]">{r.SCT || '—'}</td>
                                   <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
                                     {fmtDate(r.StartDate)} – {fmtDate(r.EndDate)}
