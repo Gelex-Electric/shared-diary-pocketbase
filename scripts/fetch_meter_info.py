@@ -5,11 +5,11 @@ Cot luu: METER_NO, METER_NAME (dung lam HSN), METER_MODEL_DESC, CUSTOMER_CODE,
 CUSTOMER_NAME, ADDRESS, LINE_NAME, STATUS.
 
 - Che do MERGE: chi them moi va cap nhat, KHONG xoa cong to cu da co trong file.
-- STATUS (Yes/No): xet Pmax trong INACTIVE_DAYS ngay gan nhat (tinh tu hom truoc,
-  lui ve qua khu) trong public/pmax_daily.csv.
-    + Co BAT KY ngay nao Pmax > 0 trong khoang do -> "Yes".
-    + TAT CA ngay trong khoang deu Pmax = 0 hoac khong co du lieu -> "No".
-  Vi vay mat du lieu 1-2 ngay (do job loi) khong lam cong to bi gan nham "No".
+- STATUS (Yes/No): xet dien ap 3 pha (PHASE_A_VOLTS, PHASE_B_VOLTS, PHASE_C_VOLTS)
+  cua INACTIVE_DAYS ngay lien tiep gan nhat trong public/datametter.csv.
+    + Co BAT KY ban ghi nao trong khoang do co U_A/U_B/U_C > 0 -> "Yes".
+    + TAT CA ban ghi trong khoang (hoac khong co du lieu) deu U_A=U_B=U_C=0 -> "No".
+  (datametter.csv chi giu ~7 ngay gan nhat nen INACTIVE_DAYS mac dinh = 7.)
 
 File nay la nguon danh sach cong to + HSN cho fetch_meter_data.py (chay moi gio).
 """
@@ -23,12 +23,12 @@ import requests
 from fetch_meter_data import BASE_URL, VN_TZ, login_data
 
 CSV_PATH = "public/metterinfo.csv"
-PMAX_PATH = "public/pmax_daily.csv"
+DATAMETTER_PATH = "public/datametter.csv"
 API_FIELDS = ["METER_NO", "METER_NAME", "METER_MODEL_DESC", "CUSTOMER_CODE",
               "CUSTOMER_NAME", "ADDRESS", "LINE_NAME"]
 FIELDS = API_FIELDS + ["STATUS"]
-USER_ID = os.environ.get("USER_ID", "1")   # tai khoan luon dung UserID = 1
-INACTIVE_DAYS = int(os.environ.get("INACTIVE_DAYS", "3"))  # so ngay lien tiep Pmax=0 moi gan No
+USER_ID = os.environ.get("USER_ID", "2")   # tai khoan luon dung UserID = 2
+INACTIVE_DAYS = int(os.environ.get("INACTIVE_DAYS", "7"))  # so ngay lien tiep U=0 moi gan No
 
 
 def fetch_accounts(user_id: str, token: str):
@@ -59,37 +59,39 @@ def load_existing():
     return meters
 
 
-def pmax_status_map(last_day: str, num_days: int):
-    """Tra ve {METER_NO: "Yes"/"No"} dua tren `num_days` ngay gan nhat ket thuc
-    tai `last_day` trong pmax_daily.csv. "Yes" neu co it nhat 1 ngay Pmax > 0."""
+def _to_float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def phase_active_meters(last_day: str, num_days: int):
+    """Tra ve tap cong to co U_A/U_B/U_C > 0 it nhat 1 ban ghi trong `num_days`
+    ngay gan nhat ket thuc tai `last_day`, doc tu datametter.csv."""
     end = datetime.fromisoformat(last_day).date()
     days = {(end - timedelta(days=i)).isoformat() for i in range(num_days)}
 
-    has_positive = set()
-    seen_any = set()
-    if os.path.isfile(PMAX_PATH):
-        with open(PMAX_PATH, newline="", encoding="utf-8") as f:
+    active = set()
+    if os.path.isfile(DATAMETTER_PATH):
+        with open(DATAMETTER_PATH, newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                if row.get("DATE", "") not in days:
+                if row.get("DATE_TIME", "")[:10] not in days:
                     continue
                 no = str(row.get("METER_NO") or "").strip()
-                if not no:
+                if not no or no in active:
                     continue
-                try:
-                    pmax = float(row.get("PMAX_KW", "") or 0)
-                except (TypeError, ValueError):
-                    pmax = 0.0
-                seen_any.add(no)
-                if pmax > 0:
-                    has_positive.add(no)
-    return has_positive  # chi can biet cong to nao co Pmax>0 trong khoang
+                a = _to_float(row.get("PHASE_A_VOLTS"))
+                b = _to_float(row.get("PHASE_B_VOLTS"))
+                c = _to_float(row.get("PHASE_C_VOLTS"))
+                if a > 0 or b > 0 or c > 0:
+                    active.add(no)
+    return active
 
 
 def main():
     info = login_data()
     token = info.get("TOKEN")
-    print(f"[DEBUG] Login OK. USER_ID dung de goi GetMeterAccount = {USER_ID} "
-          f"(USER_ID tra ve tu Login = {info.get('USER_ID')}).")
     rows = fetch_accounts(USER_ID, token)
     if not rows:
         sys.exit("GetMeterAccount khong tra ve cong to nao.")
@@ -110,9 +112,9 @@ def main():
             meters[no][k] = rec.get(k) if rec.get(k) is not None else ""
         meters[no]["METER_NO"] = no
 
-    # STATUS: "Yes" neu co Pmax > 0 trong INACTIVE_DAYS ngay gan nhat
+    # STATUS: "Yes" neu co dien ap pha > 0 trong INACTIVE_DAYS ngay gan nhat
     last_day = os.environ.get("TARGET_DATE", "").strip() or (datetime.now(VN_TZ).date() - timedelta(days=1)).isoformat()
-    active_meters = pmax_status_map(last_day, INACTIVE_DAYS)
+    active_meters = phase_active_meters(last_day, INACTIVE_DAYS)
     active = 0
     for no, m in meters.items():
         m["STATUS"] = "Yes" if no in active_meters else "No"
@@ -126,7 +128,7 @@ def main():
         w.writeheader()
         w.writerows(out)
     print(f"metterinfo.csv: tong {len(out)} cong to (+{added} moi, {updated} cap nhat). "
-          f"STATUS xet {INACTIVE_DAYS} ngay gan {last_day}: {active} Yes / {len(out) - active} No.")
+          f"STATUS xet U pha {INACTIVE_DAYS} ngay gan {last_day}: {active} Yes / {len(out) - active} No.")
 
 
 if __name__ == "__main__":
