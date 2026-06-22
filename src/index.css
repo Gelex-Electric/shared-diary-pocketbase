@@ -18,8 +18,8 @@
   /* Voler surfaces */
   --vl-bg:        #f7faff;
   --vl-sidebar-w: 260px;
-  --vl-card-shadow: -8px 12px 18px 0 rgba(25, 42, 70, 0.13);
-  --vl-stat-shadow: 1px 2px 5px rgba(47, 170, 244, 0.5);
+  --vl-card-shadow: 0 6px 18px 0 rgba(25, 42, 70, 0.05);
+  --vl-stat-shadow: 0 4px 12px rgba(47, 170, 244, 0.25);
   --vl-sidebar-active-bg: #e8f3ff;
   --vl-sidebar-active-accent: rgba(46, 170, 244, 0.55);
 }
