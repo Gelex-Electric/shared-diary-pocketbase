@@ -72,9 +72,6 @@ const currentYearMonth = () => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 };
 
-// "YYYY-MM" từ chuỗi "YYYY-MM-DD"
-const ymOf = (s: string) => s.slice(0, 7);
-
 // Dựng câu "NN giờ NN phút ngày NN tháng NN năm NNNN" từ ngày + giờ chọn
 const buildNKySentence = (date: string, time: string): string => {
   if (!date) return '';
@@ -193,11 +190,19 @@ export default function BillConfirmManager() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
-  /* ── load list ── */
-  const loadRecords = useCallback(async () => {
+  /* ── load list ──
+     Chỉ tải bản ghi của tháng đang lọc (server-side filter theo EndDate),
+     tránh getFullList toàn bảng — không khả thi khi collection lên tới hàng triệu dòng. */
+  const loadRecords = useCallback(async (ym: string) => {
+    if (!ym) return;
     setLoadingList(true);
     try {
+      const [y, m] = ym.split('-').map(Number);
+      const start = `${ym}-01`;
+      const lastDay = new Date(y, m, 0).getDate(); // ngày cuối tháng
+      const end = `${ym}-${pad2(lastDay)}`;
       const list = await pb.collection('invoice').getFullList<InvoiceRecord>({
+        filter: pb.filter('EndDate >= {:start} && EndDate <= {:end}', { start, end }),
         sort: '-created',
         requestKey: null,
       });
@@ -209,7 +214,7 @@ export default function BillConfirmManager() {
     }
   }, [showToast]);
 
-  useEffect(() => { loadRecords(); }, [loadRecords]);
+  useEffect(() => { loadRecords(monthFilterDate); }, [loadRecords, monthFilterDate]);
 
   /* ── tài khoản HES (khối Kinh doanh không phân theo khu vực, lấy bản ghi đầu tiên) ── */
   useEffect(() => {
@@ -319,7 +324,7 @@ export default function BillConfirmManager() {
         await pb.collection('invoice').create(data);
         showToast('Đã lưu biên bản xác nhận chỉ số', 'success');
       }
-      await loadRecords();
+      await loadRecords(monthFilterDate);
       closeModal();
     } catch (err: any) {
       showToast(`Lỗi khi lưu: ${err?.data?.message || err?.message || ''}`, 'error');
@@ -338,7 +343,7 @@ export default function BillConfirmManager() {
     if (!ok) return;
     try {
       await pb.collection('invoice').delete(r.id);
-      await loadRecords();
+      await loadRecords(monthFilterDate);
       showToast('Đã xóa biên bản', 'success');
     } catch (err: any) {
       showToast(`Lỗi khi xóa: ${err?.data?.message || err?.message || ''}`, 'error');
@@ -363,18 +368,16 @@ export default function BillConfirmManager() {
     }
   };
 
-  // Lọc theo tháng (ngày cuối kỳ, chọn qua bộ chọn tháng) + ô tìm kiếm khách hàng/SCT
+  // Tháng đã được lọc ở server (loadRecords); ở đây chỉ còn lọc theo ô tìm kiếm khách hàng/SCT
   const filteredRecords = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return records.filter(r => {
-      const matchMonth = ymOf((r.EndDate || '').split('T')[0].split(' ')[0]) === monthFilterDate;
-      const matchSearch = !q ||
-        (r.SCT || '').toLowerCase().includes(q) ||
-        (r.NMua || '').toLowerCase().includes(q) ||
-        (r.NBan || '').toLowerCase().includes(q);
-      return matchMonth && matchSearch;
-    });
-  }, [records, search, monthFilterDate]);
+    if (!q) return records;
+    return records.filter(r =>
+      (r.SCT || '').toLowerCase().includes(q) ||
+      (r.NMua || '').toLowerCase().includes(q) ||
+      (r.NBan || '').toLowerCase().includes(q),
+    );
+  }, [records, search]);
 
   /* ── Đồng bộ thời gian lấy chỉ số: gọi API HES (0h–23h59 ngày cuối kỳ),
      so khớp BT/CD/TD của biên bản với dữ liệu trả về, điền giờ/ngày vào NKy.
@@ -417,7 +420,7 @@ export default function BillConfirmManager() {
         updated++;
         setSyncProgress({ done: i + 1, total: filteredRecords.length });
       }
-      await loadRecords();
+      await loadRecords(monthFilterDate);
 
       const attempted = filteredRecords.length - skipped;
       if (attempted > 0 && updated === 0) {
