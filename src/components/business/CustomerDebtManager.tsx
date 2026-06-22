@@ -110,8 +110,11 @@ export default function CustomerDebtManager() {
       if (ym && ym !== 'all') {
         const [y, m] = ym.split('-').map(Number);
         const start = `${ym}-01`;
-        const end = `${ym}-${pad2(new Date(y, m, 0).getDate())}`;
-        filter = pb.filter('EndDate >= {:start} && EndDate <= {:end}', { start, end });
+        // Cận trên: đầu tháng kế tiếp (loại trừ) — PocketBase lưu date dạng chuỗi
+        // "YYYY-MM-DD 00:00:00.000Z", "<= ngày-cuối-tháng" sẽ bỏ sót bản ghi chốt
+        // đúng ngày cuối tháng. Dùng "< đầu-tháng-sau" để bao trọn cả ngày cuối.
+        const nextStart = m === 12 ? `${y + 1}-01-01` : `${y}-${pad2(m + 1)}-01`;
+        filter = pb.filter('EndDate >= {:start} && EndDate < {:nextStart}', { start, nextStart });
       }
       const list = await pb.collection('invoice').getFullList<DebtInvoiceRecord>({
         filter,
@@ -244,6 +247,26 @@ export default function CustomerDebtManager() {
             Tổng hợp sản lượng &amp; doanh thu theo từng kỳ chốt chỉ số của khách hàng, đối soát thanh toán.
           </p>
         </div>
+
+        {/* Bộ tìm kiếm + chọn tháng (bên phải) */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:shrink-0">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Tìm MKH, tên công ty..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
+              className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-lg text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-[#5a8dee] w-full sm:w-[240px]"
+            />
+          </div>
+          <MonthPicker
+            value={monthFilter}
+            onChange={v => { setMonthFilter(v); setCurrentPage(1); }}
+            allowAll
+            className="min-w-[170px]"
+          />
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -288,26 +311,6 @@ export default function CustomerDebtManager() {
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center gap-4">
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Tìm MKH, tên công ty..."
-                value={search}
-                onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-                className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-[#5a8dee] w-full sm:w-[240px]"
-              />
-            </div>
-
-            {/* Month Filter */}
-            <MonthPicker
-              value={monthFilter}
-              onChange={v => { setMonthFilter(v); setCurrentPage(1); }}
-              allowAll
-              className="min-w-[170px]"
-            />
-
             <button
               onClick={() => loadRecords(monthFilter)}
               disabled={loading}
