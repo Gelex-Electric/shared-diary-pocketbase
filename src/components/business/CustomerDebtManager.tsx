@@ -458,6 +458,7 @@ export default function CustomerDebtManager() {
                                 value={ky.nTToan}
                                 onChange={val => setPaymentDate(ky, val)}
                                 className="w-[140px]"
+                                usePortal
                               />
                               {isSaving && <Loader2 className="w-3.5 h-3.5 text-[#5a8dee] animate-spin shrink-0" />}
                               {!isSaving && ky.nTToan && (
