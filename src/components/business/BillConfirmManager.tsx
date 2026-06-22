@@ -1,12 +1,12 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { pb } from '../../lib/pocketbase';
-import { DatePicker, TimePicker } from '../ui/DateTimePickers';
+import { DatePicker, TimePicker, MonthPicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
 import {
-  FileCheck2, Save, Gauge, Building2, Users, Calendar,
+  FileCheck2, Save, Gauge, Building2, Users,
   CheckCircle2, AlertCircle, RotateCcw, Plus, X, ChevronRight,
   Pencil, Trash2, FileDown, Search, FileSpreadsheet,
   CreditCard, RefreshCw, Zap,
@@ -482,15 +482,11 @@ export default function BillConfirmManager() {
       <div className="vl-card p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           {/* Month filter (bộ chọn tháng, mặc định tháng hiện tại) */}
-          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded px-3 py-2 shadow-sm w-full sm:w-[200px]">
-            <Calendar className="w-4 h-4 text-[#5a8dee] shrink-0" />
-            <input
-              type="month"
-              value={monthFilterDate}
-              onChange={e => setMonthFilterDate(e.target.value)}
-              className="flex-1 min-w-0 text-sm text-slate-700 outline-none bg-transparent"
-            />
-          </div>
+          <MonthPicker
+            value={monthFilterDate}
+            onChange={setMonthFilterDate}
+            className="w-full sm:w-[200px]"
+          />
           {/* Search */}
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
