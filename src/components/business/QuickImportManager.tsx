@@ -145,7 +145,7 @@ export default function QuickImportManager() {
       MKHang: inv.nmua.mkhang,
       NBan: inv.nban.ten,
       DChiNBan: inv.nban.dchi,
-      DChiNMua: inv.nmua.dchi,
+      DChiNMua: inv.nmua.pointAddress || inv.nmua.dchi,
       SHDon: inv.shdon,
       LoaiHD: inv.loaiHD,
       BT_dau: r.bieu.BT.old, BT_cuoi: r.bieu.BT.moi,
