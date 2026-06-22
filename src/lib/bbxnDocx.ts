@@ -59,7 +59,8 @@ export async function generateBbxnDocx(r: BbxnRecordLike): Promise<Blob> {
   const cuoi = (k: string) => num(r[`${k}_cuoi`]);
   const phu = (k: string) => num(r[`phu_${k}`]);
   const sl = (k: string) => (cuoi(k) - dau(k)) * hsn;
-  const tsl = (k: string) => sl(k) - phu(k);
+  // Sản lượng thực tế = trực tiếp - phụ trừ, không cho âm (và tránh hiển thị -0)
+  const tsl = (k: string) => Math.max(0, sl(k) - phu(k)) || 0;
 
   const PG_dau = dau('BT') + dau('CD') + dau('TD');
   const PG_cuoi = cuoi('BT') + cuoi('CD') + cuoi('TD');
