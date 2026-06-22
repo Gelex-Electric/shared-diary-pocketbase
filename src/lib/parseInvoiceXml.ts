@@ -38,7 +38,7 @@ export interface ParsedInvoice {
   shdon: string;
   loaiHD: 'HC' | 'VC';
   nban: { ten: string; dchi: string };
-  nmua: { ten: string; mst: string; dchi: string; mkhang: string };
+  nmua: { ten: string; mst: string; dchi: string; mkhang: string; pointAddress: string };
   rows: MeterPeriodRow[];
 }
 
@@ -98,6 +98,7 @@ export function parseInvoiceXml(xml: string): ParsedInvoice {
     mst: childText(nmuaEl, 'MST'),
     dchi: childText(nmuaEl, 'DChi'),
     mkhang: childText(nmuaEl, 'MKHang'),
+    pointAddress: childText(nmuaEl, 'PointAddress'),
   };
 
   const loaiHD: 'HC' | 'VC' = /CSPK/i.test(thdon) ? 'VC' : 'HC';
