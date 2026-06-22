@@ -248,8 +248,14 @@ export default function CustomerDebtManager() {
           </p>
         </div>
 
-        {/* Bộ tìm kiếm + chọn tháng (bên phải) */}
+        {/* Bộ chọn tháng + tìm kiếm (bên phải) */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:shrink-0">
+          <MonthPicker
+            value={monthFilter}
+            onChange={v => { setMonthFilter(v); setCurrentPage(1); }}
+            allowAll
+            className="min-w-[170px]"
+          />
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
@@ -260,12 +266,6 @@ export default function CustomerDebtManager() {
               className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-lg text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-[#5a8dee] w-full sm:w-[240px]"
             />
           </div>
-          <MonthPicker
-            value={monthFilter}
-            onChange={v => { setMonthFilter(v); setCurrentPage(1); }}
-            allowAll
-            className="min-w-[170px]"
-          />
         </div>
       </div>
 
