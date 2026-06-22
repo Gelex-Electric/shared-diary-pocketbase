@@ -2,7 +2,8 @@
  * DatePicker & TimePicker — Pure React + Tailwind
  * Không dùng flatpickr để tránh dialog thừa, kiểm soát layout hoàn toàn.
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 
 /* ============================================================
@@ -38,9 +39,12 @@ interface DatePickerProps {
   onChange: (val: string) => void;
   label?: string;
   className?: string;
+  /** Render dropdown qua portal (document.body) với position: fixed — dùng khi
+   *  picker nằm trong card/bảng có overflow-hidden/overflow-auto khiến dropdown bị che. */
+  usePortal?: boolean;
 }
 
-export function DatePicker({ value, onChange, label, className = '' }: DatePickerProps) {
+export function DatePicker({ value, onChange, label, className = '', usePortal = false }: DatePickerProps) {
   const today = new Date();
 
   const parse = (v: string) => {
@@ -54,18 +58,37 @@ export function DatePicker({ value, onChange, label, className = '' }: DatePicke
   const [open,      setOpen]      = useState(false);
   const [viewYear,  setViewYear]  = useState(parsed?.y  ?? today.getFullYear());
   const [viewMonth, setViewMonth] = useState(parsed?.mo ?? today.getMonth());
+  const [portalPos, setPortalPos] = useState({ top: 0, left: 0, width: 0 });
 
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const portalRef = useRef<HTMLDivElement>(null);
+
+  /* Tính vị trí khi mở (chế độ portal): bám theo trigger, lật lên nếu không đủ chỗ dưới */
+  useLayoutEffect(() => {
+    if (!usePortal || !open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const dropdownH = 360;
+    const openUp = rect.bottom + dropdownH > window.innerHeight && rect.top > dropdownH;
+    setPortalPos({
+      top: openUp ? rect.top - dropdownH - 6 : rect.bottom + 6,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, [usePortal, open]);
 
   /* Đóng khi click ngoài */
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (wrapperRef.current?.contains(target)) return;
+      if (usePortal && portalRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  }, [open, usePortal]);
 
   /* Đồng bộ view khi value thay đổi từ ngoài */
   useEffect(() => {
@@ -128,6 +151,7 @@ export function DatePicker({ value, onChange, label, className = '' }: DatePicke
 
       {/* Trigger input */}
       <div
+        ref={triggerRef}
         onClick={() => setOpen(o => !o)}
         className={`relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-white border rounded-lg
                     text-sm font-bold cursor-pointer select-none transition-all
@@ -142,95 +166,103 @@ export function DatePicker({ value, onChange, label, className = '' }: DatePicke
       </div>
 
       {/* Dropdown calendar */}
-      {open && (
-        <div
-          className="absolute top-full mt-1.5 left-0 z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
-          style={{ boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 270 }}
-          onClick={e => e.stopPropagation()}
-        >
-          {/* ── Hàng Năm ── */}
-          <div className="flex items-center justify-between bg-[#5a8dee] px-3 py-2">
-            <button
-              onClick={prevYear}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-white font-extrabold text-sm tracking-wide">{viewYear}</span>
-            <button
-              onClick={nextYear}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+      {open && (() => {
+        const dropdown = (
+          <div
+            ref={portalRef}
+            className={usePortal
+              ? 'fixed z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150'
+              : 'absolute top-full mt-1.5 left-0 z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150'}
+            style={usePortal
+              ? { boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 270, top: portalPos.top, left: portalPos.left }
+              : { boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 270 }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* ── Hàng Năm ── */}
+            <div className="flex items-center justify-between bg-[#5a8dee] px-3 py-2">
+              <button
+                onClick={prevYear}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-white font-extrabold text-sm tracking-wide">{viewYear}</span>
+              <button
+                onClick={nextYear}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
 
-          {/* ── Hàng Tháng ── */}
-          <div className="flex items-center justify-between bg-[#4880e8] px-3 py-2">
-            <button
-              onClick={prevMonth}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-white font-semibold text-sm">{VN_MONTHS[viewMonth]}</span>
-            <button
-              onClick={nextMonth}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+            {/* ── Hàng Tháng ── */}
+            <div className="flex items-center justify-between bg-[#4880e8] px-3 py-2">
+              <button
+                onClick={prevMonth}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-white font-semibold text-sm">{VN_MONTHS[viewMonth]}</span>
+              <button
+                onClick={nextMonth}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
 
-          {/* ── Header ngày trong tuần ── */}
-          <div className="grid grid-cols-7 bg-[#e8f3ff] px-3 py-1.5">
-            {VN_WEEKDAYS.map(wd => (
-              <div key={wd} className="text-center text-[10px] font-extrabold text-[#5a8dee]">{wd}</div>
-            ))}
-          </div>
+            {/* ── Header ngày trong tuần ── */}
+            <div className="grid grid-cols-7 bg-[#e8f3ff] px-3 py-1.5">
+              {VN_WEEKDAYS.map(wd => (
+                <div key={wd} className="text-center text-[10px] font-extrabold text-[#5a8dee]">{wd}</div>
+              ))}
+            </div>
 
-          {/* ── Grid ngày ── */}
-          <div className="grid grid-cols-7 gap-y-0.5 px-3 py-2">
-            {cells.map((cell, i) => {
-              const sel = cell.kind === 'cur' && isSel(cell.day);
-              const td  = cell.kind === 'cur' && isTd(cell.day);
-              return (
-                <button
-                  key={i}
-                  onClick={() => cell.kind === 'cur' && selectDay(cell.day)}
-                  disabled={cell.kind !== 'cur'}
-                  className={[
-                    'mx-auto w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all',
-                    cell.kind !== 'cur'
-                      ? 'text-slate-300 cursor-default'
-                      : 'cursor-pointer',
-                    sel
-                      ? 'bg-[#5a8dee] text-white font-bold shadow-md shadow-[#5a8dee]/40'
-                      : td
-                        ? 'border-2 border-[#5a8dee] text-[#5a8dee] font-bold'
-                        : cell.kind === 'cur'
-                          ? 'text-slate-600 font-medium hover:bg-[#e8f3ff] hover:text-[#5a8dee]'
-                          : '',
-                  ].join(' ')}
-                >
-                  {cell.day}
-                </button>
-              );
-            })}
-          </div>
+            {/* ── Grid ngày ── */}
+            <div className="grid grid-cols-7 gap-y-0.5 px-3 py-2">
+              {cells.map((cell, i) => {
+                const sel = cell.kind === 'cur' && isSel(cell.day);
+                const td  = cell.kind === 'cur' && isTd(cell.day);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => cell.kind === 'cur' && selectDay(cell.day)}
+                    disabled={cell.kind !== 'cur'}
+                    className={[
+                      'mx-auto w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all',
+                      cell.kind !== 'cur'
+                        ? 'text-slate-300 cursor-default'
+                        : 'cursor-pointer',
+                      sel
+                        ? 'bg-[#5a8dee] text-white font-bold shadow-md shadow-[#5a8dee]/40'
+                        : td
+                          ? 'border-2 border-[#5a8dee] text-[#5a8dee] font-bold'
+                          : cell.kind === 'cur'
+                            ? 'text-slate-600 font-medium hover:bg-[#e8f3ff] hover:text-[#5a8dee]'
+                            : '',
+                    ].join(' ')}
+                  >
+                    {cell.day}
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* ── Nút Hôm Nay ── */}
-          <div className="px-3 pb-3 pt-1">
-            <button
-              onClick={goToday}
-              className="w-full py-1.5 bg-[#5a8dee] text-white text-xs font-bold rounded-lg
-                         hover:bg-[#4a7de2] active:scale-[0.98] transition-all"
-            >
-              Hôm Nay
-            </button>
+            {/* ── Nút Hôm Nay ── */}
+            <div className="px-3 pb-3 pt-1">
+              <button
+                onClick={goToday}
+                className="w-full py-1.5 bg-[#5a8dee] text-white text-xs font-bold rounded-lg
+                           hover:bg-[#4a7de2] active:scale-[0.98] transition-all"
+              >
+                Hôm Nay
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+        return usePortal ? createPortal(dropdown, document.body) : dropdown;
+      })()}
     </div>
   );
 }
