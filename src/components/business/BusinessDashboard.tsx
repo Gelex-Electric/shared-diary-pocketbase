@@ -8,13 +8,15 @@ import { motion, AnimatePresence } from 'motion/react';
 import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
 import QuickImportManager from './QuickImportManager';
+import CustomerDebtManager from './CustomerDebtManager';
 
-type Tab = 'summary' | 'bill-confirm' | 'quick-import';
+type Tab = 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt';
 
 const TAB_LABEL: Record<Tab, string> = {
-  summary:        'Dashboard',
-  'bill-confirm': 'Biên bản xác nhận chỉ số',
-  'quick-import': 'Nạp dữ liệu nhanh',
+  summary:         'Dashboard',
+  'bill-confirm':  'Biên bản xác nhận chỉ số',
+  'quick-import':  'Nạp dữ liệu nhanh',
+  'customer-debt': 'Công nợ khách hàng',
 };
 
 export default function BusinessDashboard() {
@@ -69,7 +71,7 @@ export default function BusinessDashboard() {
               id="nav-business"
               onClick={() => setIsBusinessExpanded(v => !v)}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'bill-confirm' || topTab === 'quick-import' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'bill-confirm' || topTab === 'quick-import' || topTab === 'customer-debt' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
               }`}
             >
               <Briefcase className="w-5 h-5 shrink-0" />
@@ -95,7 +97,6 @@ export default function BusinessDashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Biên bản xác nhận chỉ số</span>
-                      <span className="text-[10px] font-black text-amber-500 shrink-0 uppercase tracking-wide">Beta</span>
                     </button>
                   </li>
                   <li>
@@ -108,6 +109,19 @@ export default function BusinessDashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Nạp dữ liệu nhanh</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      id="nav-customer-debt-sub"
+                      onClick={() => { setTopTab('customer-debt'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'customer-debt' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Công nợ khách hàng</span>
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
@@ -227,6 +241,8 @@ export default function BusinessDashboard() {
               <BusinessSummaryDashboard />
             ) : topTab === 'quick-import' ? (
               <QuickImportManager />
+            ) : topTab === 'customer-debt' ? (
+              <CustomerDebtManager />
             ) : (
               <BillConfirmManager />
             )}
