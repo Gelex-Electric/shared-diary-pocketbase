@@ -165,6 +165,7 @@ export default function BillConfirmManager() {
   const [hesAccount, setHesAccount] = useState<AccountHes | null>(null);
   const [isGettingToken, setIsGettingToken] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ done: number; total: number } | null>(null);
 
   /* ── form: meta ── */
   const [startDate, setStartDate] = useState(todayStr());
@@ -382,19 +383,21 @@ export default function BillConfirmManager() {
     const token = hesAccount?.Token;
     if (!token) { showToast('Chưa có Token HES — hãy bấm "Lấy Token" trước.', 'error'); return; }
     setIsSyncing(true);
+    setSyncProgress({ done: 0, total: filteredRecords.length });
     let updated = 0, skipped = 0, notFound = 0;
     try {
-      for (const r of filteredRecords) {
-        if ((r.NKy || '').trim()) { skipped++; continue; }
+      for (let i = 0; i < filteredRecords.length; i++) {
+        const r = filteredRecords[i];
+        if ((r.NKy || '').trim()) { skipped++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
         const day = (r.EndDate || '').split('T')[0].split(' ')[0];
-        if (!r.SCT || !day) { notFound++; continue; }
+        if (!r.SCT || !day) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
         const start = toHesDateStr(day, '00', '00');
         const end = toHesDateStr(day, '23', '59');
         const url = `/hes/api/GetMeterDataByDate?MeterNo=${r.SCT}&StartDate=${start}&EndDate=${end}&Token=${token}`;
         const res = await fetch(url);
-        if (!res.ok) { notFound++; continue; }
+        if (!res.ok) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
         const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) { notFound++; continue; }
+        if (!Array.isArray(data) || data.length === 0) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
 
         const EPS = 0.05;
         const match = (data as DataMetter[]).find(d => {
@@ -405,24 +408,33 @@ export default function BillConfirmManager() {
                  (Number.isFinite(cd) && Math.abs(cd - num(r.CD_cuoi)) < EPS) ||
                  (Number.isFinite(td) && Math.abs(td - num(r.TD_cuoi)) < EPS);
         });
-        if (!match) { notFound++; continue; }
+        if (!match) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
 
         const dt = new Date(match.DATE_TIME);
-        if (isNaN(dt.getTime())) { notFound++; continue; }
+        if (isNaN(dt.getTime())) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
         const nKySentence = `${pad2(dt.getHours())} giờ ${pad2(dt.getMinutes())} phút ngày ${pad2(dt.getDate())} tháng ${pad2(dt.getMonth() + 1)} năm ${dt.getFullYear()}`;
         await pb.collection('invoice').update(r.id, { NKy: nKySentence });
         updated++;
+        setSyncProgress({ done: i + 1, total: filteredRecords.length });
       }
       await loadRecords();
-      showToast(`Đồng bộ xong: ${updated} cập nhật, ${skipped} đã có NKy, ${notFound} không tìm thấy dữ liệu`, 'success');
+
+      const attempted = filteredRecords.length - skipped;
+      if (attempted > 0 && updated === 0) {
+        showToast(`Không công tơ nào lấy được dữ liệu — Token HES có thể đã hết hạn, hãy bấm "Lấy Token" lại.`, 'error');
+      } else {
+        showToast(`Đồng bộ xong: ${updated} cập nhật, ${skipped} đã có NKy, ${notFound} không tìm thấy dữ liệu`, 'success');
+      }
     } catch (err: any) {
       showToast(`Lỗi đồng bộ: ${err?.message || ''}`, 'error');
     } finally {
       setIsSyncing(false);
+      setSyncProgress(null);
     }
   };
 
-  // Gom theo Tên khách hàng (NMua); mỗi nhóm sort theo ngày cuối kỳ giảm dần
+  // Gom theo Tên khách hàng (NMua); mỗi nhóm sort theo ngày cuối kỳ giảm dần;
+  // danh sách nhóm sắp xếp theo MKH (mã khách hàng)
   const groupedByCustomer = useMemo(() => {
     const map = new Map<string, InvoiceRecord[]>();
     filteredRecords.forEach(r => {
@@ -430,12 +442,17 @@ export default function BillConfirmManager() {
       if (!map.has(name)) map.set(name, []);
       map.get(name)!.push(r);
     });
-    const groups = Array.from(map.entries()).map(([name, items]) => ({
-      name,
-      items: items.sort((a, b) =>
-        (b.EndDate || '').localeCompare(a.EndDate || '')),
-    }));
-    groups.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    const groups = Array.from(map.entries()).map(([name, items]) => {
+      const mkhList = Array.from(new Set(items.map(it => (it.MKHang || '').trim()).filter(Boolean))).sort();
+      return {
+        name,
+        mkh: mkhList.join(', '),
+        mkhSort: mkhList[0] || '',
+        items: items.sort((a, b) =>
+          (b.EndDate || '').localeCompare(a.EndDate || '')),
+      };
+    });
+    groups.sort((a, b) => a.mkhSort.localeCompare(b.mkhSort, 'vi') || a.name.localeCompare(b.name, 'vi'));
     return groups;
   }, [filteredRecords]);
 
@@ -571,7 +588,7 @@ export default function BillConfirmManager() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] transition-colors disabled:opacity-50"
           >
             {isSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ thời gian lấy chỉ số'}
+            {isSyncing ? `Đang đồng bộ... ${syncProgress ? `${syncProgress.done}/${syncProgress.total}` : ''}` : 'Đồng bộ thời gian lấy chỉ số'}
           </button>
           <button
             onClick={selectAllFiltered}
@@ -625,10 +642,16 @@ export default function BillConfirmManager() {
                   </div>
                   <div className="min-w-0">
                     <p className="font-bold truncate">{group.name}</p>
-                    <p className="text-[11px] font-semibold text-slate-400">{group.items.length} biên bản</p>
+                    <p className="text-[11px] font-semibold text-slate-400 flex items-center gap-2 flex-wrap">
+                      <span>{group.items.length} biên bản</span>
+                      {group.mkh && (
+                        <span className="px-1.5 py-0.5 rounded bg-[#e8f3ff] text-[#5a8dee] font-bold">MKH: {group.mkh}</span>
+                      )}
+                    </p>
                   </div>
-                  {/* Checkbox chọn tất cả công tơ trong nhóm — chặn lan để không trigger thu/mở */}
-                  <div className="flex items-center gap-3 ml-auto" onClick={e => e.stopPropagation()}>
+                  <ChevronRight className="vl-accordion-chevron w-5 h-5" />
+                  {/* Checkbox chọn tất cả công tơ trong nhóm — cuối cùng bên phải, chặn lan để không trigger thu/mở */}
+                  <div onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={groupSelected}
@@ -636,7 +659,6 @@ export default function BillConfirmManager() {
                       className="w-4.5 h-4.5 rounded border-slate-300 text-[#5a8dee] focus:ring-[#5a8dee]"
                     />
                   </div>
-                  <ChevronRight className="vl-accordion-chevron w-5 h-5" />
                 </div>
 
                 {/* Group body */}
@@ -653,12 +675,11 @@ export default function BillConfirmManager() {
                         <table className="vl-table w-full text-left border-collapse min-w-[760px]">
                           <thead>
                             <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
-                              <th className="py-3 px-4 w-[40px]"></th>
                               <th className="py-3 px-4">Số công tơ</th>
                               <th className="py-3 px-4">Kỳ</th>
                               <th className="py-3 px-4 text-right">Sản lượng Tổng</th>
                               <th className="py-3 px-4 text-center">Cosφ</th>
-                              <th className="py-3 px-4 text-center w-[160px]">Thao tác</th>
+                              <th className="py-3 px-4 text-center w-[200px]">Thao tác</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -667,14 +688,6 @@ export default function BillConfirmManager() {
                               const isSelected = selectedIds.has(r.id);
                               return (
                                 <tr key={r.id} className={`text-slate-700 text-sm hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-[#f4f8ff]' : ''}`}>
-                                  <td className="py-3.5 px-4">
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={() => toggleSelection(r.id)}
-                                      className="w-4.5 h-4.5 rounded border-slate-300 text-[#5a8dee] focus:ring-[#5a8dee]"
-                                    />
-                                  </td>
                                   <td className="py-3.5 px-4 font-mono font-bold text-[#5a8dee]">{r.SCT || '—'}</td>
                                   <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
                                     {fmtDate(r.StartDate)} – {fmtDate(r.EndDate)}
@@ -682,7 +695,7 @@ export default function BillConfirmManager() {
                                   <td className="py-3.5 px-4 text-right font-mono font-bold text-amber-600">{fmt(res.bieu[0].cuoi)}</td>
                                   <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-700">{res.cosphi.toFixed(3)}</td>
                                   <td className="py-3.5 px-4">
-                                    <div className="flex items-center justify-center gap-1.5">
+                                    <div className="flex items-center justify-end gap-1.5">
                                       <button onClick={() => openEdit(r)} title="Sửa"
                                         className="p-2 rounded-lg text-slate-500 hover:bg-[#e8f3ff] hover:text-[#5a8dee] transition-colors">
                                         <Pencil className="w-4 h-4" />
@@ -695,6 +708,12 @@ export default function BillConfirmManager() {
                                         className="p-2 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors">
                                         <Trash2 className="w-4 h-4" />
                                       </button>
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => toggleSelection(r.id)}
+                                        className="w-4.5 h-4.5 ml-1 rounded border-slate-300 text-[#5a8dee] focus:ring-[#5a8dee]"
+                                      />
                                     </div>
                                   </td>
                                 </tr>
