@@ -24,6 +24,7 @@ export interface MeterPeriodRow {
   HSN: number;
   StartDate: string; // YYYY-MM-DD
   EndDate: string;   // YYYY-MM-DD
+  pointAddress: string; // Địa chỉ sử dụng điện (PointAddress của từng công tơ)
   bieu: Record<Bieu, BieuData>;
   // Hóa đơn phản kháng (đọc trực tiếp, trước thuế) — 0 nếu hóa đơn thường
   TongSL_HC: number;
@@ -38,7 +39,7 @@ export interface ParsedInvoice {
   shdon: string;
   loaiHD: 'HC' | 'VC';
   nban: { ten: string; dchi: string };
-  nmua: { ten: string; mst: string; dchi: string; mkhang: string; pointAddress: string };
+  nmua: { ten: string; mst: string; dchi: string; mkhang: string };
   rows: MeterPeriodRow[];
 }
 
@@ -72,7 +73,7 @@ const collectTTin = (h: Element): Record<string, string> => {
 
 const emptyBieu = (): BieuData => ({ old: 0, moi: 0, phuTru: 0, dgia: 0 });
 const emptyRow = (SCT: string, StartDate: string, EndDate: string): MeterPeriodRow => ({
-  SCT, HSN: 0, StartDate, EndDate,
+  SCT, HSN: 0, StartDate, EndDate, pointAddress: '',
   bieu: { BT: emptyBieu(), CD: emptyBieu(), TD: emptyBieu(), VC: emptyBieu() },
   TongSL_HC: 0, TongSL_PK: 0, ThTien_HC: 0, ThTien_PK: 0, CosFi: 0, KCosFi: 0,
 });
@@ -98,7 +99,6 @@ export function parseInvoiceXml(xml: string): ParsedInvoice {
     mst: childText(nmuaEl, 'MST'),
     dchi: childText(nmuaEl, 'DChi'),
     mkhang: childText(nmuaEl, 'MKHang'),
-    pointAddress: childText(nmuaEl, 'PointAddress'),
   };
 
   const loaiHD: 'HC' | 'VC' = /CSPK/i.test(thdon) ? 'VC' : 'HC';
@@ -124,6 +124,7 @@ export function parseInvoiceXml(xml: string): ParsedInvoice {
     if (!rowMap.has(key)) rowMap.set(key, emptyRow(sct, start, end));
     const row = rowMap.get(key)!;
     row.HSN = toNum(m['Coefficient']) || row.HSN;
+    row.pointAddress = m['PointAddress'] || row.pointAddress;
     row.bieu[tou] = {
       old: toNum(m['OldValue']),
       moi: toNum(m['NewValue']),
