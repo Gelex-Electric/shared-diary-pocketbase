@@ -236,6 +236,181 @@ export function DatePicker({ value, onChange, label, className = '' }: DatePicke
 }
 
 /* ============================================================
+   MONTH PICKER — đồng bộ phong cách với DatePicker
+   value = "YYYY-MM"  | onChange(val: "YYYY-MM")
+   Hỗ trợ tuỳ chọn "Tất cả" (allowAll) → value = "all"
+   Hiển thị: Tháng MM/YYYY
+============================================================ */
+const MONTHS_SHORT = [
+  'Th1','Th2','Th3','Th4','Th5','Th6',
+  'Th7','Th8','Th9','Th10','Th11','Th12',
+];
+
+interface MonthPickerProps {
+  value: string;                 // "YYYY-MM" | "all"
+  onChange: (val: string) => void;
+  label?: string;
+  className?: string;
+  allowAll?: boolean;            // hiển thị nút "Tất cả các tháng" → value "all"
+  allLabel?: string;
+}
+
+export function MonthPicker({
+  value, onChange, label, className = '',
+  allowAll = false, allLabel = 'Tất cả các tháng',
+}: MonthPickerProps) {
+  const today = new Date();
+
+  const isAll = allowAll && (value === 'all' || value === '');
+  const parse = (v: string) => {
+    if (!v || v === 'all') return null;
+    const [y, mo] = v.split('-').map(Number);
+    return { y, mo: mo - 1 };
+  };
+  const parsed = parse(value);
+
+  const [open, setOpen] = useState(false);
+  const [viewYear, setViewYear] = useState(parsed?.y ?? today.getFullYear());
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  /* Đóng khi click ngoài */
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  /* Đồng bộ view khi value đổi từ ngoài */
+  useEffect(() => {
+    const p = parse(value);
+    if (p) setViewYear(p.y);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const selectMonth = (mo: number) => {
+    onChange(`${viewYear}-${p2(mo + 1)}`);
+    setOpen(false);
+  };
+  const goThisMonth = () => {
+    const t = new Date();
+    setViewYear(t.getFullYear());
+    onChange(`${t.getFullYear()}-${p2(t.getMonth() + 1)}`);
+    setOpen(false);
+  };
+  const selectAll = () => { onChange('all'); setOpen(false); };
+
+  const prevYear = (e: React.MouseEvent) => { e.stopPropagation(); setViewYear(y => y - 1); };
+  const nextYear = (e: React.MouseEvent) => { e.stopPropagation(); setViewYear(y => y + 1); };
+
+  const isSel = (mo: number) => parsed && parsed.y === viewYear && parsed.mo === mo;
+  const isCur = (mo: number) => today.getFullYear() === viewYear && today.getMonth() === mo;
+
+  const displayVal = isAll
+    ? allLabel
+    : parsed ? `Tháng ${p2(parsed.mo + 1)}/${parsed.y}` : '';
+
+  return (
+    <div ref={wrapperRef} className={`space-y-1 relative ${className}`}>
+      {label && (
+        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 select-none pointer-events-none">
+          <Calendar className="w-3 h-3" /> {label}
+        </label>
+      )}
+
+      {/* Trigger input */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        className={`relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-white border rounded-lg
+                    text-sm font-bold cursor-pointer select-none transition-all
+                    ${open
+                      ? 'ring-2 ring-[#5a8dee] border-[#5a8dee]'
+                      : 'border-slate-200 hover:border-[#5a8dee]/50'}`}
+      >
+        <Calendar className={`w-4 h-4 shrink-0 ${open ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
+        <span className={displayVal ? 'text-slate-700' : 'text-slate-300 font-normal'}>
+          {displayVal || 'Chọn tháng'}
+        </span>
+      </div>
+
+      {/* Dropdown */}
+      {open && (
+        <div
+          className="absolute top-full mt-1.5 left-0 z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+          style={{ boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 240 }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* ── Hàng Năm ── */}
+          <div className="flex items-center justify-between bg-[#5a8dee] px-3 py-2">
+            <button
+              onClick={prevYear}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-white font-extrabold text-sm tracking-wide">{viewYear}</span>
+            <button
+              onClick={nextYear}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* ── Grid 12 tháng ── */}
+          <div className="grid grid-cols-3 gap-1.5 px-3 py-3">
+            {MONTHS_SHORT.map((m, idx) => {
+              const sel = isSel(idx);
+              const cur = isCur(idx);
+              return (
+                <button
+                  key={m}
+                  onClick={() => selectMonth(idx)}
+                  className={[
+                    'h-9 rounded-lg text-xs font-bold flex items-center justify-center transition-all',
+                    sel
+                      ? 'bg-[#5a8dee] text-white shadow-md shadow-[#5a8dee]/40'
+                      : cur
+                        ? 'border-2 border-[#5a8dee] text-[#5a8dee]'
+                        : 'text-slate-600 hover:bg-[#e8f3ff] hover:text-[#5a8dee]',
+                  ].join(' ')}
+                >
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── Footer ── */}
+          <div className="px-3 pb-3 pt-1 flex gap-2">
+            {allowAll && (
+              <button
+                onClick={selectAll}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-[0.98]
+                           ${isAll
+                             ? 'bg-[#5a8dee] text-white'
+                             : 'bg-[#e8f3ff] text-[#5a8dee] hover:bg-[#d8ebff]'}`}
+              >
+                Tất cả
+              </button>
+            )}
+            <button
+              onClick={goThisMonth}
+              className="flex-1 py-1.5 bg-[#5a8dee] text-white text-xs font-bold rounded-lg
+                         hover:bg-[#4a7de2] active:scale-[0.98] transition-all"
+            >
+              Tháng này
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
    TIME PICKER — nhập trực tiếp từ bàn phím, không popup
    value = "HH:mm"  |  onChange(val: "HH:mm")
    UX: focus → chọn hết → gõ đè | Tab/Enter chuyển sang phút
