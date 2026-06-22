@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
-import { DatePicker, TimePicker } from './ui/DateTimePickers';
+import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
 import pdfMake from 'pdfmake/build/pdfmake';
 
@@ -60,9 +60,9 @@ export default function HandoverManager() {
   const [logs, setLogs] = useState<Handover[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [filter, setFilter] = useState({ 
-    month: (new Date().getMonth() + 1).toString().padStart(2, '0'),
-    area: '' 
+  const [filter, setFilter] = useState({
+    month: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}`,
+    area: ''
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -144,10 +144,10 @@ export default function HandoverManager() {
       }
 
       if (filter.month) {
-        const currentYear = new Date().getFullYear();
-        const startOfMonth = `${currentYear}-${filter.month}-01 00:00:00`;
-        const nextMonth = parseInt(filter.month) + 1;
-        const endYear = nextMonth > 12 ? currentYear + 1 : currentYear;
+        const [yr, mo] = filter.month.split('-').map(Number);
+        const startOfMonth = `${filter.month}-01 00:00:00`;
+        const nextMonth = mo + 1;
+        const endYear = nextMonth > 12 ? yr + 1 : yr;
         const endMonth = nextMonth > 12 ? '01' : nextMonth.toString().padStart(2, '0');
         const endOfMonth = `${endYear}-${endMonth}-01 00:00:00`;
         filterParts.push(`startdate >= '${startOfMonth}' && startdate < '${endOfMonth}'`);
@@ -598,7 +598,7 @@ export default function HandoverManager() {
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded shadow-xs">
                   <Calendar className="w-3.5 h-3.5 text-[#5a8dee]" />
-                  T{filter.month}: {uniqueDaysCount} ngày · {logs.length} ca
+                  T{filter.month.split('-')[1]}: {uniqueDaysCount} ngày · {logs.length} ca
                 </span>
                 {([
                   { key: 'Bình thường', dot: 'bg-emerald-500', label: 'BT' },
@@ -623,14 +623,10 @@ export default function HandoverManager() {
             options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map(area => ({ value: area, label: area }))]}
             className="min-w-[160px]"
           />
-          <Select
+          <MonthPicker
             value={filter.month}
             onChange={(v) => setFilter({ ...filter, month: v })}
-            options={Array.from({ length: 12 }, (_, i) => {
-              const m = (i + 1).toString().padStart(2, '0');
-              return { value: m, label: `Tháng ${i + 1}` };
-            })}
-            className="min-w-[120px]"
+            className="min-w-[150px]"
           />
           <button
             onClick={startAddLog}
