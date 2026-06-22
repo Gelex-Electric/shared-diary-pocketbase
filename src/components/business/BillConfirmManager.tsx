@@ -199,10 +199,12 @@ export default function BillConfirmManager() {
     try {
       const [y, m] = ym.split('-').map(Number);
       const start = `${ym}-01`;
-      const lastDay = new Date(y, m, 0).getDate(); // ngày cuối tháng
-      const end = `${ym}-${pad2(lastDay)}`;
+      // Cận trên: đầu tháng kế tiếp (loại trừ) — PocketBase lưu date là chuỗi
+      // "YYYY-MM-DD 00:00:00.000Z" nên dùng "<= ngày-cuối-tháng" sẽ bỏ sót bản ghi
+      // chốt đúng ngày cuối tháng (so sánh chuỗi). Dùng "< đầu-tháng-sau" để bao trọn.
+      const nextStart = m === 12 ? `${y + 1}-01-01` : `${y}-${pad2(m + 1)}-01`;
       const list = await pb.collection('invoice').getFullList<InvoiceRecord>({
-        filter: pb.filter('EndDate >= {:start} && EndDate <= {:end}', { start, end }),
+        filter: pb.filter('EndDate >= {:start} && EndDate < {:nextStart}', { start, nextStart }),
         sort: '-created',
         requestKey: null,
       });
