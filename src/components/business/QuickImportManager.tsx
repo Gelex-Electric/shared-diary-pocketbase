@@ -187,8 +187,13 @@ export default function QuickImportManager() {
     setIsImporting(true);
     let created = 0, updated = 0, failed = 0;
     try {
-      // Nạp sẵn toàn bộ record hiện có để dò trùng theo SCT|Start|End
-      const existing = await pb.collection(INVOICE_COLLECTION).getFullList<any>({ requestKey: null });
+      // Chỉ dò trùng trong các SCT đang nạp (không getFullList toàn bảng — không khả thi khi
+      // collection invoice lên tới hàng triệu dòng).
+      const scts = Array.from(new Set(rows.map(p => p.row.SCT).filter(Boolean)));
+      const sctFilter = scts.map(s => pb.filter('SCT = {:sct}', { sct: s })).join(' || ');
+      const existing = sctFilter
+        ? await pb.collection(INVOICE_COLLECTION).getFullList<any>({ filter: sctFilter, requestKey: null })
+        : [];
       const idByKey = new Map<string, string>();
       existing.forEach(rec => {
         const key = `${rec.SCT}|${(rec.StartDate || '').split('T')[0].split(' ')[0]}|${(rec.EndDate || '').split('T')[0].split(' ')[0]}`;
