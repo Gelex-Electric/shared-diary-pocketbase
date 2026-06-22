@@ -6,7 +6,7 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
 import {
-  FileCheck2, Save, Gauge, Building2, Users,
+  FileCheck2, Save, Gauge, Building2, Users, Calendar,
   CheckCircle2, AlertCircle, RotateCcw, Plus, X, ChevronRight,
   Pencil, Trash2, FileDown, Search, FileSpreadsheet,
   CreditCard, RefreshCw, Zap,
@@ -65,10 +65,10 @@ const todayStr = () => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
-// Ngày đầu tháng hiện tại, dùng làm mặc định cho bộ lọc tháng
-const firstDayOfThisMonth = () => {
+// "YYYY-MM" của tháng hiện tại, dùng làm mặc định cho bộ lọc tháng
+const currentYearMonth = () => {
   const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 };
 
 // "YYYY-MM" từ chuỗi "YYYY-MM-DD"
@@ -153,7 +153,7 @@ export default function BillConfirmManager() {
   const [records, setRecords] = useState<InvoiceRecord[]>([]);
   const [loadingList, setLoadingList] = useState(false);
   const [search, setSearch] = useState('');
-  const [monthFilterDate, setMonthFilterDate] = useState<string>(firstDayOfThisMonth());
+  const [monthFilterDate, setMonthFilterDate] = useState<string>(currentYearMonth());
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   /* ── HES: token + đồng bộ thời gian lấy chỉ số ── */
@@ -357,12 +357,11 @@ export default function BillConfirmManager() {
     }
   };
 
-  // Lọc theo tháng (ngày cuối kỳ, chọn qua datepicker) + ô tìm kiếm khách hàng/SCT
+  // Lọc theo tháng (ngày cuối kỳ, chọn qua bộ chọn tháng) + ô tìm kiếm khách hàng/SCT
   const filteredRecords = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const ym = ymOf(monthFilterDate);
     return records.filter(r => {
-      const matchMonth = ymOf((r.EndDate || '').split('T')[0].split(' ')[0]) === ym;
+      const matchMonth = ymOf((r.EndDate || '').split('T')[0].split(' ')[0]) === monthFilterDate;
       const matchSearch = !q ||
         (r.SCT || '').toLowerCase().includes(q) ||
         (r.NMua || '').toLowerCase().includes(q) ||
@@ -482,12 +481,14 @@ export default function BillConfirmManager() {
       {/* Filter bar */}
       <div className="vl-card p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          {/* Month filter (datepicker, mặc định tháng hiện tại) */}
-          <div className="w-full sm:w-[180px]">
-            <DatePicker
+          {/* Month filter (bộ chọn tháng, mặc định tháng hiện tại) */}
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded px-3 py-2 shadow-sm w-full sm:w-[200px]">
+            <Calendar className="w-4 h-4 text-[#5a8dee] shrink-0" />
+            <input
+              type="month"
               value={monthFilterDate}
-              onChange={setMonthFilterDate}
-              className="w-full"
+              onChange={e => setMonthFilterDate(e.target.value)}
+              className="flex-1 min-w-0 text-sm text-slate-700 outline-none bg-transparent"
             />
           </div>
           {/* Search */}
