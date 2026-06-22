@@ -17,10 +17,9 @@ import {
 import { 
   Zap, 
   DollarSign, 
-  CheckCircle2, 
-  XCircle, 
-  Calendar, 
-  Search, 
+  CheckCircle2,
+  XCircle,
+  Search,
   TrendingUp, 
   Building2, 
   ChevronLeft, 
@@ -31,6 +30,7 @@ import {
 } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
 import { Select } from './ui/Select';
+import { MonthPicker } from './ui/DateTimePickers';
 
 // Bộ nhớ đệm module-level: CSV chỉ fetch một lần duy nhất trong suốt phiên làm việc.
 // Giá trị tồn tại kể cả khi SummaryDashboard unmount/remount (chuyển tab).
@@ -1027,17 +1027,18 @@ export default function SummaryDashboard() {
             </div>
 
             {/* Month Filter Selector moved down here */}
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded px-3 py-2 shadow-sm min-w-[170px]">
-              <Calendar className="w-4 h-4 text-[#5a8dee] shrink-0" />
-              <div className="flex-1 min-w-0">
-                <Select
-                  variant="bare"
-                  value={selectedMonth}
-                  onChange={handleMonthChange}
-                  options={[{ value: 'all', label: 'Tất cả các tháng' }, ...uniqueMonths.map(m => ({ value: m, label: `Tháng ${m}` }))]}
-                />
-              </div>
-            </div>
+            <MonthPicker
+              value={selectedMonth && selectedMonth !== 'all'
+                ? `${selectedMonth.split('/')[1]}-${selectedMonth.split('/')[0]}`
+                : selectedMonth}
+              onChange={(v) => {
+                if (v === 'all') { handleMonthChange('all'); return; }
+                const [yy, mm] = v.split('-');
+                handleMonthChange(`${mm}/${yy}`);
+              }}
+              allowAll
+              className="min-w-[170px]"
+            />
 
             {/* Status Filter Tab */}
             <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
