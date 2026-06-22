@@ -1,14 +1,15 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { pb } from '../../lib/pocketbase';
-import { DatePicker } from '../ui/DateTimePickers';
+import { DatePicker, TimePicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
-import { Select } from '../ui/Select';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
+import { AccountHes, DataMetter } from '../../types';
 import {
-  FileCheck2, Save, Gauge, Building2, Calendar, Users,
-  CheckCircle2, AlertCircle, RotateCcw, Plus, X, ChevronDown,
+  FileCheck2, Save, Gauge, Building2, Users,
+  CheckCircle2, AlertCircle, RotateCcw, Plus, X, ChevronRight,
   Pencil, Trash2, FileDown, Search, FileSpreadsheet,
+  CreditCard, RefreshCw, Zap,
 } from 'lucide-react';
 
 /* ============================================================
@@ -57,9 +58,44 @@ interface InvoiceRecord {
   updated: string;
 }
 
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
 const todayStr = () => {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+// Ngày đầu tháng hiện tại, dùng làm mặc định cho bộ lọc tháng
+const firstDayOfThisMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`;
+};
+
+// "YYYY-MM" từ chuỗi "YYYY-MM-DD"
+const ymOf = (s: string) => s.slice(0, 7);
+
+// Dựng câu "NN giờ NN phút ngày NN tháng NN năm NNNN" từ ngày + giờ chọn
+const buildNKySentence = (date: string, time: string): string => {
+  if (!date) return '';
+  const [y, m, d] = date.split('-');
+  const [hh, mi] = (time || '00:00').split(':');
+  if (!y || !m || !d) return '';
+  return `${pad2(Number(hh) || 0)} giờ ${pad2(Number(mi) || 0)} phút ngày ${pad2(Number(d))} tháng ${pad2(Number(m))} năm ${y}`;
+};
+
+// Đọc ngược câu NKy có sẵn (dữ liệu cũ) ra { date, time } để đổ vào picker
+const parseNKySentence = (s?: string): { date: string; time: string } => {
+  if (!s) return { date: '', time: '00:00' };
+  const m = s.match(/(\d{1,2})\s*giờ\s*(\d{1,2})\s*phút\s*ngày\s*(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})/);
+  if (!m) return { date: '', time: '00:00' };
+  const [, hh, mi, d, mo, y] = m;
+  return { date: `${y}-${pad2(Number(mo))}-${pad2(Number(d))}`, time: `${pad2(Number(hh))}:${pad2(Number(mi))}` };
+};
+
+// Format yyyyMMddHHmmss cho HES API
+const toHesDateStr = (date: string, hh: string, mm: string): string => {
+  const [y, m, d] = date.split('-');
+  return `${y}${m}${d}${hh}${mm}00`;
 };
 
 const num = (v: any) => {
@@ -82,22 +118,6 @@ const fmtDate = (s?: string) => {
   return d && m && y ? `${d}/${m}/${y}` : s;
 };
 
-// Lấy "MM/YYYY" từ chuỗi ngày (dùng cho bộ lọc tháng theo ngày cuối kỳ)
-const monthKey = (s?: string): string => {
-  if (!s) return '';
-  const [y, m] = s.split('T')[0].split(' ')[0].split('-');
-  return y && m ? `${m}/${y}` : '';
-};
-
-// Sắp xếp danh sách "MM/YYYY" tăng dần (theo năm rồi tháng)
-const sortMonthKeys = (months: string[]): string[] =>
-  [...months].sort((a, b) => {
-    const [mA, yA] = a.split('/').map(Number);
-    const [mB, yB] = b.split('/').map(Number);
-    if (yA !== yB) return yA - yB;
-    return mA - mB;
-  });
-
 /* ── Tính toán dùng chung cho preview & PDF ──
    Tổng (tác dụng) = BT+CĐ+TĐ; cosφ = Tổng cuối / √(Tổng cuối² + VC cuối²). */
 function computeResults(d: Record<string, any>) {
@@ -106,7 +126,8 @@ function computeResults(d: Record<string, any>) {
   COMPONENTS.forEach(c => {
     sanLuong[c.key] = (num(d[`${c.key}_cuoi`]) - num(d[`${c.key}_dau`])) * hsnVal;
   });
-  const cuoiOf = (k: string) => sanLuong[k] - num(d[`phu_${k}`]);
+  // Sản lượng thực tế = trực tiếp - phụ trừ, không cho âm (và tránh hiển thị -0)
+  const cuoiOf = (k: string) => Math.max(0, sanLuong[k] - num(d[`phu_${k}`])) || 0;
   const slTong = sanLuong.BT + sanLuong.CD + sanLuong.TD;
   const tongCuoi = cuoiOf('BT') + cuoiOf('CD') + cuoiOf('TD');
   // Danh sách biểu hiển thị: Tổng (gộp) + BT/CĐ/TĐ/VC
@@ -132,8 +153,13 @@ export default function BillConfirmManager() {
   const [records, setRecords] = useState<InvoiceRecord[]>([]);
   const [loadingList, setLoadingList] = useState(false);
   const [search, setSearch] = useState('');
-  const [monthFilter, setMonthFilter] = useState<string>('all');
+  const [monthFilterDate, setMonthFilterDate] = useState<string>(firstDayOfThisMonth());
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  /* ── HES: token + đồng bộ thời gian lấy chỉ số ── */
+  const [hesAccount, setHesAccount] = useState<AccountHes | null>(null);
+  const [isGettingToken, setIsGettingToken] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   /* ── form: meta ── */
   const [startDate, setStartDate] = useState(todayStr());
@@ -145,7 +171,8 @@ export default function BillConfirmManager() {
   const [dChiNMua, setDChiNMua] = useState('');
   const [sct, setSct] = useState('');
   const [hsn, setHsn] = useState('1');
-  const [nKy, setNKy] = useState('');
+  const [nKyDate, setNKyDate] = useState('');
+  const [nKyTime, setNKyTime] = useState('00:00');
   const [readings, setReadings] = useState<Record<string, string>>({});
   const [phu, setPhu] = useState<Record<string, string>>({});
 
@@ -178,10 +205,39 @@ export default function BillConfirmManager() {
 
   useEffect(() => { loadRecords(); }, [loadRecords]);
 
+  /* ── tài khoản HES (khối Kinh doanh không phân theo khu vực, lấy bản ghi đầu tiên) ── */
+  useEffect(() => {
+    pb.collection('AccountHes').getList<AccountHes>(1, 1)
+      .then(res => setHesAccount(res.items[0] || null))
+      .catch(() => {});
+  }, []);
+
+  const getToken = async () => {
+    if (!hesAccount) { showToast('Không tìm thấy tài khoản HES.', 'error'); return; }
+    setIsGettingToken(true);
+    try {
+      const res = await fetch(`/hes/api/Login?UserAccount=${hesAccount.Account}&Password=${hesAccount.Password}`);
+      if (!res.ok) throw new Error('Lỗi kết nối API');
+      const data = await res.json();
+      if (data?.TOKEN) {
+        const updated = await pb.collection('AccountHes').update(hesAccount.id, { Token: data.TOKEN });
+        setHesAccount(updated as any);
+        showToast('Lấy Token thành công!', 'success');
+      } else {
+        throw new Error('Không nhận được Token');
+      }
+    } catch (err: any) {
+      showToast('Lỗi lấy Token: ' + err.message, 'error');
+    } finally {
+      setIsGettingToken(false);
+    }
+  };
+
   /* ── form helpers ── */
   const resetForm = () => {
     setStartDate(todayStr()); setEndDate(todayStr());
-    setNBan(''); setDChiNBan(''); setNMua(''); setMKhang(''); setDChiNMua(''); setSct(''); setHsn('1'); setNKy('');
+    setNBan(''); setDChiNBan(''); setNMua(''); setMKhang(''); setDChiNMua(''); setSct(''); setHsn('1');
+    setNKyDate(''); setNKyTime('00:00');
     setReadings({}); setPhu({});
   };
 
@@ -201,7 +257,9 @@ export default function BillConfirmManager() {
     setEndDate((r.EndDate || '').split('T')[0].split(' ')[0] || todayStr());
     setNBan(r.NBan || ''); setDChiNBan(r.DChiNBan || '');
     setNMua(r.NMua || ''); setMKhang(r.MKHang || ''); setDChiNMua(r.DChiNMua || '');
-    setSct(r.SCT || ''); setHsn(String(r.HSN ?? '')); setNKy(r.NKy || '');
+    setSct(r.SCT || ''); setHsn(String(r.HSN ?? ''));
+    const parsedNKy = parseNKySentence(r.NKy);
+    setNKyDate(parsedNKy.date); setNKyTime(parsedNKy.time);
     const rd: Record<string, string> = {};
     COMPONENTS.forEach(c => {
       rd[`${c.key}_dau`] = r[`${c.key}_dau`] != null ? String(r[`${c.key}_dau`]) : '';
@@ -239,7 +297,7 @@ export default function BillConfirmManager() {
         StartDate: startDate,
         EndDate: endDate,
         NBan: nBan, DChiNBan: dChiNBan, NMua: nMua, DChiNMua: dChiNMua, MKHang: mKhang,
-        SCT: sct, HSN: num(hsn), NKy: nKy,
+        SCT: sct, HSN: num(hsn), NKy: buildNKySentence(nKyDate, nKyTime),
         phu_BT: num(phu.BT), phu_CD: num(phu.CD),
         phu_TD: num(phu.TD), phu_VC: num(phu.VC),
       };
@@ -299,25 +357,66 @@ export default function BillConfirmManager() {
     }
   };
 
-  // Danh sách tháng (theo ngày cuối kỳ) để đổ vào bộ lọc
-  const monthOptions = useMemo(() => {
-    const set = new Set<string>();
-    records.forEach(r => { const k = monthKey(r.EndDate); if (k) set.add(k); });
-    return sortMonthKeys(Array.from(set));
-  }, [records]);
-
-  // Lọc theo tháng (ngày cuối kỳ) + ô tìm kiếm khách hàng/SCT
+  // Lọc theo tháng (ngày cuối kỳ, chọn qua datepicker) + ô tìm kiếm khách hàng/SCT
   const filteredRecords = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const ym = ymOf(monthFilterDate);
     return records.filter(r => {
-      const matchMonth = monthFilter === 'all' || monthKey(r.EndDate) === monthFilter;
+      const matchMonth = ymOf((r.EndDate || '').split('T')[0].split(' ')[0]) === ym;
       const matchSearch = !q ||
         (r.SCT || '').toLowerCase().includes(q) ||
         (r.NMua || '').toLowerCase().includes(q) ||
         (r.NBan || '').toLowerCase().includes(q);
       return matchMonth && matchSearch;
     });
-  }, [records, search, monthFilter]);
+  }, [records, search, monthFilterDate]);
+
+  /* ── Đồng bộ thời gian lấy chỉ số: gọi API HES (0h–23h59 ngày cuối kỳ),
+     so khớp BT/CD/TD của biên bản với dữ liệu trả về, điền giờ/ngày vào NKy.
+     Bỏ qua các biên bản đã có NKy. ── */
+  const syncNKyTimes = async () => {
+    const token = hesAccount?.Token;
+    if (!token) { showToast('Chưa có Token HES — hãy bấm "Lấy Token" trước.', 'error'); return; }
+    setIsSyncing(true);
+    let updated = 0, skipped = 0, notFound = 0;
+    try {
+      for (const r of filteredRecords) {
+        if ((r.NKy || '').trim()) { skipped++; continue; }
+        const day = (r.EndDate || '').split('T')[0].split(' ')[0];
+        if (!r.SCT || !day) { notFound++; continue; }
+        const start = toHesDateStr(day, '00', '00');
+        const end = toHesDateStr(day, '23', '59');
+        const url = `/hes/api/GetMeterDataByDate?MeterNo=${r.SCT}&StartDate=${start}&EndDate=${end}&Token=${token}`;
+        const res = await fetch(url);
+        if (!res.ok) { notFound++; continue; }
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) { notFound++; continue; }
+
+        const EPS = 0.05;
+        const match = (data as DataMetter[]).find(d => {
+          const bt = parseFloat(d.ACTIVE_KW_INDICATE_RATE1);
+          const cd = parseFloat(d.ACTIVE_KW_INDICATE_RATE2);
+          const td = parseFloat(d.ACTIVE_KW_INDICATE_RATE3);
+          return (Number.isFinite(bt) && Math.abs(bt - num(r.BT_cuoi)) < EPS) ||
+                 (Number.isFinite(cd) && Math.abs(cd - num(r.CD_cuoi)) < EPS) ||
+                 (Number.isFinite(td) && Math.abs(td - num(r.TD_cuoi)) < EPS);
+        });
+        if (!match) { notFound++; continue; }
+
+        const dt = new Date(match.DATE_TIME);
+        if (isNaN(dt.getTime())) { notFound++; continue; }
+        const nKySentence = `${pad2(dt.getHours())} giờ ${pad2(dt.getMinutes())} phút ngày ${pad2(dt.getDate())} tháng ${pad2(dt.getMonth() + 1)} năm ${dt.getFullYear()}`;
+        await pb.collection('invoice').update(r.id, { NKy: nKySentence });
+        updated++;
+      }
+      await loadRecords();
+      showToast(`Đồng bộ xong: ${updated} cập nhật, ${skipped} đã có NKy, ${notFound} không tìm thấy dữ liệu`, 'success');
+    } catch (err: any) {
+      showToast(`Lỗi đồng bộ: ${err?.message || ''}`, 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Gom theo Tên khách hàng (NMua); mỗi nhóm sort theo ngày cuối kỳ giảm dần
   const groupedByCustomer = useMemo(() => {
@@ -383,20 +482,13 @@ export default function BillConfirmManager() {
       {/* Filter bar */}
       <div className="vl-card p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          {/* Month filter */}
-          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded px-3 py-2 shadow-sm min-w-[200px]">
-            <Calendar className="w-4 h-4 text-[#5a8dee] shrink-0" />
-            <div className="flex-1 min-w-0">
-              <Select
-                variant="bare"
-                value={monthFilter}
-                onChange={setMonthFilter}
-                options={[
-                  { value: 'all', label: 'Tất cả các tháng' },
-                  ...monthOptions.map(m => ({ value: m, label: `Tháng ${m}` })),
-                ]}
-              />
-            </div>
+          {/* Month filter (datepicker, mặc định tháng hiện tại) */}
+          <div className="w-full sm:w-[180px]">
+            <DatePicker
+              value={monthFilterDate}
+              onChange={setMonthFilterDate}
+              className="w-full"
+            />
           </div>
           {/* Search */}
           <div className="relative">
@@ -410,7 +502,24 @@ export default function BillConfirmManager() {
             />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={getToken}
+            disabled={isGettingToken || !hesAccount}
+            title={hesAccount?.Token ? `Token: ${hesAccount.Token.slice(0, 16)}…` : 'Chưa có token'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            {isGettingToken ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CreditCard className="w-3.5 h-3.5" />}
+            {isGettingToken ? 'Đang lấy...' : 'Lấy Token'}
+          </button>
+          <button
+            onClick={syncNKyTimes}
+            disabled={isSyncing || !hesAccount?.Token}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] transition-colors disabled:opacity-50"
+          >
+            {isSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ thời gian lấy chỉ số'}
+          </button>
           <button onClick={expandAll} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">Mở tất cả</button>
           <button onClick={collapseAll} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">Thu tất cả</button>
         </div>
@@ -427,25 +536,25 @@ export default function BillConfirmManager() {
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="vl-accordion">
           {groupedByCustomer.map(group => {
             const open = !!expandedGroups[group.name];
             return (
-              <div key={group.name} className="vl-card overflow-hidden">
+              <div key={group.name} className={`vl-accordion-item ${open ? 'is-open' : ''}`}>
                 {/* Group header */}
-                <button
+                <div
                   onClick={() => toggleGroup(group.name)}
-                  className="w-full flex items-center gap-3 px-5 py-4 hover:bg-slate-50/70 transition-colors text-left"
+                  className="vl-accordion-header"
                 >
-                  <div className="p-2 bg-[#e8f3ff] rounded-xl text-[#5a8dee] shrink-0">
+                  <div className="p-2 bg-white rounded shadow-xs text-[#5a8dee] shrink-0">
                     <Users className="w-5 h-5" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 truncate">{group.name}</p>
+                  <div className="min-w-0">
+                    <p className="font-bold truncate">{group.name}</p>
                     <p className="text-[11px] font-semibold text-slate-400">{group.items.length} biên bản</p>
                   </div>
-                  <ChevronDown className={`w-5 h-5 text-slate-400 shrink-0 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
-                </button>
+                  <ChevronRight className="vl-accordion-chevron w-5 h-5" />
+                </div>
 
                 {/* Group body */}
                 <AnimatePresence initial={false}>
@@ -455,7 +564,7 @@ export default function BillConfirmManager() {
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.22 }}
-                      className="overflow-hidden border-t border-slate-100"
+                      className="overflow-hidden vl-accordion-body"
                     >
                       <div className="overflow-x-auto">
                         <table className="vl-table w-full text-left border-collapse min-w-[760px]">
@@ -678,12 +787,13 @@ export default function BillConfirmManager() {
         <div className="mt-5 px-2 flex flex-col sm:flex-row sm:justify-end">
           <div className="w-full sm:w-[460px]">
             <label className={labelCls}>Dòng ký cuối biên bản (NKy)</label>
-            <input
-              className={inputCls}
-              value={nKy}
-              onChange={e => setNKy(e.target.value)}
-              placeholder="VD: 00 giờ 00 phút ngày 15 tháng 05 năm 2026"
-            />
+            <div className="flex gap-3">
+              <DatePicker value={nKyDate} onChange={setNKyDate} className="flex-1" />
+              <TimePicker value={nKyTime} onChange={setNKyTime} className="flex-1" />
+            </div>
+            {nKyDate && (
+              <p className="mt-1.5 text-xs text-slate-400 italic">{buildNKySentence(nKyDate, nKyTime)}</p>
+            )}
           </div>
         </div>
       </div>
