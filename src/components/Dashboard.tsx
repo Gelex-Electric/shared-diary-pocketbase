@@ -14,6 +14,7 @@ import JournalManager from './JournalManager';
 import PowerOutageManager from './PowerOutageManager';
 import NewUpdateTour from './NewUpdateTour';
 import SldPage from './sld/SldPage';
+import NotificationBell from './ui/NotificationBell';
 
 type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'operating' | 'hes' | 'opchart' | 'sld' | 'later';
 
@@ -391,6 +392,9 @@ export default function Dashboard() {
             >
               <FileText className="w-[20px] h-[20px]" />
             </a>
+
+            {/* Thông báo */}
+            <NotificationBell />
 
             {/* Divider */}
             <div className="w-px h-6 bg-gray-200 mx-1" />
