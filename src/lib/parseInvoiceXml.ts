@@ -147,16 +147,18 @@ export function parseInvoiceXml(xml: string): ParsedInvoice {
     if (!row) continue;
 
     if (/CSPK/i.test(mhh)) {
-      // Hóa đơn phản kháng
+      // Hóa đơn phản kháng: CHỈ lấy số liệu vô công. Hữu công (TongSL_HC/ThTien_HC)
+      // của hóa đơn VC luôn = 0 (giữ giá trị mặc định, không đọc từ XML).
       row.TongSL_PK = toNum(childText(h, 'SLuong'));
       row.ThTien_PK = toNum(childText(h, 'ThTien'));
-      row.TongSL_HC = toNum(m['ElectricityIndexHC']);
-      row.ThTien_HC = toNum(m['TotalHC']);
       row.CosFi = toNum(m['CosFi']);
       row.KCosFi = toNum(m['KCosFi']);
     } else {
-      // Đơn giá theo biểu (hữu công)
+      // Dòng tính tiền hữu công: đơn giá theo biểu + cộng dồn Tổng sản lượng & Thành
+      // tiền hữu công ĐỌC TRỰC TIẾP từ XML (SLuong/ThTien), không suy từ chỉ số nữa.
       row.bieu[ref.bieu].dgia = toNum(childText(h, 'DGia'));
+      row.TongSL_HC += toNum(childText(h, 'SLuong'));
+      row.ThTien_HC += toNum(childText(h, 'ThTien'));
     }
   }
 
