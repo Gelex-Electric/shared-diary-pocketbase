@@ -204,7 +204,8 @@ export default function BillConfirmManager() {
       // chốt đúng ngày cuối tháng (so sánh chuỗi). Dùng "< đầu-tháng-sau" để bao trọn.
       const nextStart = m === 12 ? `${y + 1}-01-01` : `${y}-${pad2(m + 1)}-01`;
       const list = await pb.collection('invoice').getFullList<InvoiceRecord>({
-        filter: pb.filter('EndDate >= {:start} && EndDate < {:nextStart}', { start, nextStart }),
+        // Bỏ công tơ thuộc hóa đơn phản kháng (VC) — không lập biên bản xác nhận chỉ số.
+        filter: pb.filter('EndDate >= {:start} && EndDate < {:nextStart} && LoaiHD != "VC"', { start, nextStart }),
         sort: '-created',
         requestKey: null,
       });
