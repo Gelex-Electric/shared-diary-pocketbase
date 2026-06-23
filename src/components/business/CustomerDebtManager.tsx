@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { pb } from '../../lib/pocketbase';
 import { DatePicker, MonthPicker } from '../ui/DateTimePickers';
+import { createNotification } from '../ui/NotificationBell';
 import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle, AlertCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
@@ -68,16 +69,9 @@ const ZONE_MAP: Record<string, string> = {
   KCN03: 'KCN Số 3',
 };
 const ZONE_ORDER = Object.keys(ZONE_MAP);
-// Mỗi KCN một gam màu header riêng để dễ phân biệt
-const ZONE_GRADIENT: Record<string, string> = {
-  KCNTH: 'from-[#5a8dee] to-[#4880e8]',
-  KCNPĐ: 'from-teal-500 to-emerald-600',
-  KCNTTI: 'from-violet-500 to-indigo-600',
-  KCNYM: 'from-amber-500 to-orange-600',
-  KCN03: 'from-cyan-500 to-sky-600',
-};
+// Màu header chung cho mọi bảng KCN
+const ZONE_HEADER_GRADIENT = 'from-[#5a8dee] to-[#4880e8]';
 const zoneOf = (mkh: string) => (mkh.split('-')[0] || '').trim();
-const gradientFor = (code: string) => ZONE_GRADIENT[code] || 'from-slate-500 to-slate-700';
 
 const num = (v: any) => {
   const n = parseFloat((v ?? '').toString().replace(/,/g, ''));
@@ -246,10 +240,24 @@ export default function CustomerDebtManager() {
   const toggleGroupExpansion = (mkh: string) =>
     setExpandedGroups(prev => ({ ...prev, [mkh]: !prev[mkh] }));
 
-  const setPaymentDate = async (g: KyGroup, date: string) => {
+  const setPaymentDate = async (g: KyGroup, date: string, ctx?: { mkh: string; nMua: string }) => {
     setSavingKey(g.key);
     try {
       await Promise.all(g.ids.map(id => pb.collection('invoice').update(id, { NTToan: date || null })));
+      // Khi đánh dấu ĐÃ thanh toán → chỉ phát thông báo cho khối Vận hành của KCN
+      // tương ứng (area = tên KCN). Khối Kinh doanh KHÔNG nhận thông báo thanh toán.
+      if (date && ctx) {
+        const kcnArea = ZONE_MAP[zoneOf(ctx.mkh)];
+        if (kcnArea) {
+          await createNotification({
+            title: 'Khách hàng đã thanh toán',
+            message: `${ctx.nMua || ctx.mkh} (MKH ${ctx.mkh}) đã thanh toán kỳ ${fmtDate(g.endDate)}.`,
+            type: 'payment',
+            mkh: ctx.mkh,
+            area: kcnArea,
+          });
+        }
+      }
       await loadRecords(monthFilter);
       showToast(date ? 'Đã lưu ngày thanh toán' : 'Đã đánh dấu chưa thanh toán', 'success');
     } catch (err: any) {
@@ -352,7 +360,7 @@ export default function CustomerDebtManager() {
                 <div className="flex items-center justify-center gap-1.5">
                   <DatePicker
                     value={ky.nTToan}
-                    onChange={val => setPaymentDate(ky, val)}
+                    onChange={val => setPaymentDate(ky, val, { mkh: c.mkh, nMua: c.nMua })}
                     className="w-[140px]"
                     usePortal
                   />
@@ -531,8 +539,8 @@ export default function CustomerDebtManager() {
         /* ── Mỗi Khu công nghiệp một bảng ── */
         zoneGroups.map(zone => (
           <div key={zone.code} className="vl-card overflow-hidden scroll-mt-6">
-            {/* Zone header */}
-            <div className={`bg-gradient-to-r ${gradientFor(zone.code)} px-5 md:px-7 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3`}>
+            {/* Zone header — màu chung cho mọi KCN */}
+            <div className={`bg-gradient-to-r ${ZONE_HEADER_GRADIENT} px-5 md:px-7 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3`}>
               <div className="flex items-center gap-3 text-white">
                 <div className="p-2 bg-white/20 rounded-xl shrink-0">
                   <Building2 className="w-5 h-5" />
@@ -543,19 +551,11 @@ export default function CustomerDebtManager() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2.5 py-1 rounded-lg bg-white/15 text-white text-[11px] font-bold backdrop-blur-sm">
-                  SL: {fmtKWh(zone.tongSL)} kWh
+              {zone.unpaidCount > 0 && (
+                <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-black shadow-sm flex items-center gap-1">
+                  <XCircle className="w-3.5 h-3.5" /> {zone.unpaidCount} còn nợ
                 </span>
-                <span className="px-2.5 py-1 rounded-lg bg-white/15 text-white text-[11px] font-bold backdrop-blur-sm">
-                  DT: {fmtVND(zone.doanhThu)} đ
-                </span>
-                {zone.unpaidCount > 0 && (
-                  <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-black shadow-sm flex items-center gap-1">
-                    <XCircle className="w-3.5 h-3.5" /> {zone.unpaidCount} còn nợ
-                  </span>
-                )}
-              </div>
+              )}
             </div>
 
             {/* Zone table */}
@@ -575,6 +575,16 @@ export default function CustomerDebtManager() {
                 <tbody className="divide-y divide-slate-100">
                   {zone.customers.map(renderCustomerRows)}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-slate-100 border-t-2 border-slate-200 text-sm font-black">
+                    <td colSpan={4} className="py-3.5 px-4 text-right text-slate-600 uppercase text-xs tracking-wider">
+                      Tổng cộng {zone.name}
+                    </td>
+                    <td className="py-3.5 px-4 text-right font-mono text-amber-600">{fmtKWh(zone.tongSL)}</td>
+                    <td className="py-3.5 px-4 text-right font-mono text-[#5a8dee]">{fmtVND(zone.doanhThu)}</td>
+                    <td className="py-3.5 px-4" />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
