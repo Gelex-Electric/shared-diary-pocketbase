@@ -25,6 +25,31 @@ const COLLECTION = 'notifications';
 // Giới hạn số thông báo giữ lại cho MỖI khu vực Vận hành (khối Kinh doanh area="" không giới hạn)
 const MAX_PER_AREA = 10;
 
+/* ── Thông báo cục bộ (không lưu server) ──────────────────────
+   Dùng cho cảnh báo suy ra từ dữ liệu tại client (vd "Cảnh báo công nợ")
+   cần luôn hiện trong chuông trong khi điều kiện còn đúng. Lưu ở module-level
+   nên không mất khi component dashboard unmount/remount (chuyển tab). */
+let localNotifs: NotificationRecord[] = [];
+const localListeners = new Set<() => void>();
+const emitLocal = () => localListeners.forEach(fn => fn());
+
+export function setLocalNotification(n: { id: string; title: string; message: string; type?: string }) {
+  const idx = localNotifs.findIndex(x => x.id === n.id);
+  if (idx >= 0) {
+    // Cập nhật nội dung nhưng GIỮ thời điểm tạo cũ (không re-alert liên tục)
+    localNotifs[idx] = { ...localNotifs[idx], title: n.title, message: n.message, type: n.type };
+  } else {
+    localNotifs = [{ ...n, area: '', created: new Date().toISOString().replace('T', ' ') }, ...localNotifs];
+  }
+  emitLocal();
+}
+
+export function clearLocalNotification(id: string) {
+  const before = localNotifs.length;
+  localNotifs = localNotifs.filter(x => x.id !== id);
+  if (localNotifs.length !== before) emitLocal();
+}
+
 const fmtWhen = (iso: string) => {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
@@ -35,8 +60,17 @@ const fmtWhen = (iso: string) => {
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationRecord[]>([]);
+  const [local, setLocal] = useState<NotificationRecord[]>(localNotifs);
   const [lastRead, setLastRead] = useState<string>(() => localStorage.getItem(LAST_READ_KEY) || '');
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Đăng ký nhận thông báo cục bộ (vd cảnh báo công nợ)
+  useEffect(() => {
+    const fn = () => setLocal([...localNotifs]);
+    localListeners.add(fn);
+    fn();
+    return () => { localListeners.delete(fn); };
+  }, []);
 
   // Khu vực của tài khoản hiện tại: '' = Kinh doanh, tên KCN = Vận hành
   const myArea = (pb.authStore.model?.area as string) || '';
@@ -83,7 +117,9 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const unreadCount = items.filter(it => !lastRead || it.created > lastRead).length;
+  // Gộp thông báo cục bộ + server, mới nhất lên đầu
+  const merged = [...local, ...items].sort((a, b) => (b.created || '').localeCompare(a.created || ''));
+  const unreadCount = merged.filter(it => !lastRead || it.created > lastRead).length;
 
   const markAllRead = () => {
     const now = new Date().toISOString().replace('T', ' ');
@@ -142,12 +178,12 @@ export default function NotificationBell() {
 
           {/* List */}
           <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-50">
-            {items.length === 0 ? (
+            {merged.length === 0 ? (
               <div className="py-12 text-center text-slate-400">
                 <Bell className="w-8 h-8 text-slate-200 mx-auto mb-2" />
                 <p className="text-xs font-semibold">Chưa có thông báo nào</p>
               </div>
-            ) : items.map(it => {
+            ) : merged.map(it => {
               const isUnread = !lastRead || it.created > lastRead;
               const isPayment = it.type === 'payment';
               return (
