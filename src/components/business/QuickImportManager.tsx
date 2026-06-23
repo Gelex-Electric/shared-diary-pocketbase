@@ -160,13 +160,14 @@ export default function QuickImportManager() {
       CosFi: r.CosFi, KCosFi: r.KCosFi,
     };
     if (inv.loaiHD === 'VC') {
-      // Hóa đơn phản kháng: không nuốt đơn giá hữu công đã nạp trước đó
+      // Hóa đơn phản kháng: hữu công luôn = 0 → KHÔNG ghi TongSL_HC/ThTien_HC để
+      // không nuốt số liệu hữu công đã nạp từ hóa đơn HC; cũng không ghi đơn giá hữu công.
+      delete data.TongSL_HC; delete data.ThTien_HC;
       delete data.DGia_BT; delete data.DGia_CD; delete data.DGia_TD;
     } else {
-      // Hóa đơn hữu công: không có số liệu phản kháng → không ghi để khỏi
-      // xóa mất TongSL_HC/ThTien_HC/... do hóa đơn phản kháng đã nạp.
-      delete data.TongSL_HC; delete data.TongSL_PK;
-      delete data.ThTien_HC; delete data.ThTien_PK;
+      // Hóa đơn hữu công: giữ TongSL_HC/ThTien_HC (đọc trực tiếp từ XML) + đơn giá;
+      // không ghi số liệu phản kháng để khỏi nuốt dữ liệu từ hóa đơn VC.
+      delete data.TongSL_PK; delete data.ThTien_PK;
       delete data.CosFi; delete data.KCosFi;
     }
     return data;
@@ -206,6 +207,9 @@ export default function QuickImportManager() {
           const key = `${p.row.SCT}|${p.row.StartDate}|${p.row.EndDate}`;
           const existingId = idByKey.get(key);
           if (existingId) {
+            // Hóa đơn VC cập nhật lên bản ghi đã có (thường do hóa đơn HC tạo): giữ
+            // nguyên LoaiHD của bản ghi (không lật HC→VC), chỉ bổ sung số liệu phản kháng.
+            if (p.invoice.loaiHD === 'VC') delete payload.LoaiHD;
             await pb.collection(INVOICE_COLLECTION).update(existingId, payload);
             updated++;
           } else {
