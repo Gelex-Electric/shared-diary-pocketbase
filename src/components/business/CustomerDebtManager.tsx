@@ -5,7 +5,7 @@ import { createNotification } from '../ui/NotificationBell';
 import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle, AlertCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
-  RefreshCw, X, Loader2,
+  RefreshCw, X, Loader2, Save,
 } from 'lucide-react';
 
 /* ============================================================
@@ -112,7 +112,9 @@ export default function CustomerDebtManager() {
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const [savingKey, setSavingKey] = useState<string | null>(null);
+  // Thay đổi ngày thanh toán đang soạn (chưa lưu): key kỳ → ngày ('' = chưa thanh toán)
+  const [pending, setPending] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
@@ -198,22 +200,54 @@ export default function CustomerDebtManager() {
     return Array.from(custMap.values()).sort((a, b) => a.mkh.localeCompare(b.mkh, 'vi'));
   }, [records]);
 
+  /* ── tra cứu kỳ theo key (ids + ngày gốc) phục vụ lưu thay đổi ── */
+  const kyIndex = useMemo(() => {
+    const m = new Map<string, { ids: string[]; endDate: string; mkh: string; nMua: string; original: string }>();
+    customers.forEach(c => c.kyList.forEach(ky => {
+      m.set(ky.key, { ids: ky.ids, endDate: ky.endDate, mkh: c.mkh, nMua: c.nMua, original: ky.nTToan });
+    }));
+    return m;
+  }, [customers]);
+
+  /* ── áp các thay đổi đang soạn (pending) lên dữ liệu để hiển thị tức thì
+        nhưng CHƯA lưu vào collection ── */
+  const effectiveCustomers = useMemo<CustomerGroup[]>(() => {
+    return customers.map(c => {
+      let unpaidCount = 0;
+      const kyList = c.kyList.map(ky => {
+        const nTToan = ky.key in pending ? pending[ky.key] : ky.nTToan;
+        if (!nTToan) unpaidCount += 1;
+        return { ...ky, nTToan };
+      });
+      return { ...c, kyList, unpaidCount, isPaid: unpaidCount === 0 };
+    });
+  }, [customers, pending]);
+
+  /* ── số thay đổi thực sự (khác giá trị gốc) đang chờ lưu ── */
+  const pendingCount = useMemo(
+    () => Object.entries(pending).filter(([key, date]) => {
+      const info = kyIndex.get(key);
+      return info && (date || '') !== (info.original || '');
+    }).length,
+    [pending, kyIndex],
+  );
+
   /* ── KPI tổng quan (theo phạm vi tháng đang chọn, không phụ thuộc tìm kiếm/lọc) ── */
   const kpis = useMemo(() => ({
-    unpaidCustomers: customers.filter(c => !c.isPaid).length,
-    tongSL: customers.reduce((s, c) => s + c.tongSL, 0),
-    doanhThu: customers.reduce((s, c) => s + c.doanhThu, 0),
-  }), [customers]);
+    unpaidCustomers: effectiveCustomers.filter(c => !c.isPaid).length,
+    tongSL: effectiveCustomers.reduce((s, c) => s + c.tongSL, 0),
+    doanhThu: effectiveCustomers.reduce((s, c) => s + c.doanhThu, 0),
+  }), [effectiveCustomers]);
 
   /* ── lọc theo tìm kiếm + trạng thái thanh toán ── */
   const displayCustomers = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return customers.filter(c => {
+    return effectiveCustomers.filter(c => {
       const matchesSearch = !q || c.mkh.toLowerCase().includes(q) || c.nMua.toLowerCase().includes(q);
       const matchesPayment = paymentFilter === 'all' ? true : paymentFilter === 'paid' ? c.isPaid : !c.isPaid;
       return matchesSearch && matchesPayment;
     });
-  }, [customers, search, paymentFilter]);
+  }, [effectiveCustomers, search, paymentFilter]);
 
   /* ── tách theo Khu công nghiệp ── */
   const zoneGroups = useMemo<ZoneGroup[]>(() => {
@@ -240,30 +274,45 @@ export default function CustomerDebtManager() {
   const toggleGroupExpansion = (mkh: string) =>
     setExpandedGroups(prev => ({ ...prev, [mkh]: !prev[mkh] }));
 
-  const setPaymentDate = async (g: KyGroup, date: string, ctx?: { mkh: string; nMua: string }) => {
-    setSavingKey(g.key);
+  /* Soạn thay đổi (chưa lưu) — chỉ cập nhật state pending */
+  const stagePaymentDate = (key: string, date: string) =>
+    setPending(prev => ({ ...prev, [key]: date }));
+
+  const discardChanges = () => setPending({});
+
+  /* Lưu tất cả thay đổi đang soạn vào collection */
+  const saveChanges = async () => {
+    const entries = Object.entries(pending).filter(([key, date]) => {
+      const info = kyIndex.get(key);
+      return info && (date || '') !== (info.original || '');
+    });
+    if (entries.length === 0) { setPending({}); return; }
+    setSaving(true);
     try {
-      await Promise.all(g.ids.map(id => pb.collection('invoice').update(id, { NTToan: date || null })));
-      // Khi đánh dấu ĐÃ thanh toán → chỉ phát thông báo cho khối Vận hành của KCN
-      // tương ứng (area = tên KCN). Khối Kinh doanh KHÔNG nhận thông báo thanh toán.
-      if (date && ctx) {
-        const kcnArea = ZONE_MAP[zoneOf(ctx.mkh)];
-        if (kcnArea) {
-          await createNotification({
-            title: 'Khách hàng đã thanh toán',
-            message: `${ctx.nMua || ctx.mkh} (MKH ${ctx.mkh}) đã thanh toán kỳ ${fmtDate(g.endDate)}.`,
-            type: 'payment',
-            mkh: ctx.mkh,
-            area: kcnArea,
-          });
+      for (const [key, date] of entries) {
+        const info = kyIndex.get(key)!;
+        await Promise.all(info.ids.map(id => pb.collection('invoice').update(id, { NTToan: date || null })));
+        // Chuyển từ "chưa thanh toán" → "đã thanh toán": báo cho khối Vận hành của KCN
+        if (date && !info.original) {
+          const kcnArea = ZONE_MAP[zoneOf(info.mkh)];
+          if (kcnArea) {
+            await createNotification({
+              title: 'Khách hàng đã thanh toán',
+              message: `${info.nMua || info.mkh} (MKH ${info.mkh}) đã thanh toán kỳ ${fmtDate(info.endDate)}.`,
+              type: 'payment',
+              mkh: info.mkh,
+              area: kcnArea,
+            });
+          }
         }
       }
       await loadRecords(monthFilter);
-      showToast(date ? 'Đã lưu ngày thanh toán' : 'Đã đánh dấu chưa thanh toán', 'success');
+      setPending({});
+      showToast(`Đã lưu ${entries.length} thay đổi thanh toán`, 'success');
     } catch (err: any) {
       showToast(`Lỗi khi lưu: ${err?.data?.message || err?.message || ''}`, 'error');
     } finally {
-      setSavingKey(null);
+      setSaving(false);
     }
   };
 
@@ -333,7 +382,8 @@ export default function CustomerDebtManager() {
 
         {/* Dòng con mở rộng — mỗi dòng = 1 kỳ chốt chỉ số */}
         {isExpanded && c.kyList.map(ky => {
-          const isSaving = savingKey === ky.key;
+          const original = kyIndex.get(ky.key)?.original ?? '';
+          const isStaged = (ky.key in pending) && ((pending[ky.key] || '') !== (original || ''));
           return (
             <tr
               key={ky.key}
@@ -360,19 +410,21 @@ export default function CustomerDebtManager() {
                 <div className="flex items-center justify-center gap-1.5">
                   <DatePicker
                     value={ky.nTToan}
-                    onChange={val => setPaymentDate(ky, val, { mkh: c.mkh, nMua: c.nMua })}
+                    onChange={val => stagePaymentDate(ky.key, val)}
                     className="w-[140px]"
                     usePortal
                   />
-                  {isSaving && <Loader2 className="w-3.5 h-3.5 text-[#5a8dee] animate-spin shrink-0" />}
-                  {!isSaving && ky.nTToan && (
+                  {ky.nTToan && (
                     <button
-                      onClick={() => setPaymentDate(ky, '')}
-                      title="Bỏ đánh dấu đã thanh toán"
+                      onClick={() => stagePaymentDate(ky.key, '')}
+                      title="Đánh dấu chưa thanh toán"
                       className="p-1 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors shrink-0"
                     >
                       <X className="w-3 h-3" />
                     </button>
+                  )}
+                  {isStaged && (
+                    <span title="Chưa lưu" className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
                   )}
                 </div>
               </td>
@@ -429,7 +481,7 @@ export default function CustomerDebtManager() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:shrink-0">
           <MonthPicker
             value={monthFilter}
-            onChange={v => setMonthFilter(v)}
+            onChange={v => { setPending({}); setMonthFilter(v); }}
             allowAll
             className="min-w-[170px]"
           />
@@ -491,9 +543,28 @@ export default function CustomerDebtManager() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
+          {/* Lưu thay đổi (chỉ lưu khi bấm nút này) */}
           <button
-            onClick={() => loadRecords(monthFilter)}
-            disabled={loading}
+            onClick={saveChanges}
+            disabled={saving || pendingCount === 0}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            {saving ? 'Đang lưu...' : `Lưu thay đổi${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
+          </button>
+
+          {pendingCount > 0 && !saving && (
+            <button
+              onClick={discardChanges}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" /> Hủy
+            </button>
+          )}
+
+          <button
+            onClick={() => { setPending({}); loadRecords(monthFilter); }}
+            disabled={loading || saving}
             className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Tải lại
