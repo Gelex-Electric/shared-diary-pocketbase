@@ -72,15 +72,12 @@ const currentYearMonth = () => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 };
 
-// Sản lượng cuối cùng (active, không cho âm) + doanh thu trước thuế của 1 bản ghi
+// Tổng sản lượng & doanh thu của 1 bản ghi — đọc TRỰC TIẾP từ trường đã lưu
+// (TongSL_HC/ThTien_HC nạp thẳng từ XML), không suy từ chỉ số × đơn giá nữa.
+// Doanh thu = thành tiền hữu công + thành tiền phản kháng (VC: hữu công = 0).
 function computeRecordTotals(r: DebtInvoiceRecord) {
-  const hsn = num(r.HSN);
-  const cuoi = (k: string) =>
-    Math.max(0, (num(r[`${k}_cuoi`]) - num(r[`${k}_dau`])) * hsn - num(r[`phu_${k}`])) || 0;
-  const tongSL = cuoi('BT') + cuoi('CD') + cuoi('TD');
-  const doanhThu = r.LoaiHD === 'VC'
-    ? num(r.ThTien_HC) + num(r.ThTien_PK)
-    : cuoi('BT') * num(r.DGia_BT) + cuoi('CD') * num(r.DGia_CD) + cuoi('TD') * num(r.DGia_TD);
+  const tongSL = num(r.TongSL_HC);
+  const doanhThu = num(r.ThTien_HC) + num(r.ThTien_PK);
   return { tongSL, doanhThu };
 }
 
