@@ -31,6 +31,7 @@ import {
 import { pb } from '../lib/pocketbase';
 import { Select } from './ui/Select';
 import { MonthPicker } from './ui/DateTimePickers';
+import { setLocalNotification, clearLocalNotification } from './ui/NotificationBell';
 
 // Bộ nhớ đệm module-level: CSV chỉ fetch một lần duy nhất trong suốt phiên làm việc.
 // Giá trị tồn tại kể cả khi SummaryDashboard unmount/remount (chuyển tab).
@@ -525,6 +526,28 @@ export default function SummaryDashboard() {
     return set.size;
   }, [accountFilteredRecords, selectedMonth]);
 
+  // Alert nổi "Cảnh báo công nợ": chỉ hiện một lúc rồi tự ẩn; nội dung luôn nằm
+  // trong chuông thông báo (thông báo cục bộ) trong khi còn khách chưa thanh toán.
+  const [showFloatingAlert, setShowFloatingAlert] = useState(false);
+  useEffect(() => {
+    if (overallUnpaidKpis.isAnyUnpaid) {
+      const extra = otherMonthsUnpaidCount > 0
+        ? ` Trong đó ${otherMonthsUnpaidCount} khách còn nợ ở các tháng khác.`
+        : '';
+      setLocalNotification({
+        id: 'debt-warning',
+        title: 'Cảnh báo công nợ',
+        message: `Còn ${overallUnpaidKpis.unpaidCustomers} doanh nghiệp chưa thanh toán tiền điện.${extra}`,
+        type: 'info',
+      });
+      setShowFloatingAlert(true);
+      const t = setTimeout(() => setShowFloatingAlert(false), 6000);
+      return () => clearTimeout(t);
+    }
+    clearLocalNotification('debt-warning');
+    setShowFloatingAlert(false);
+  }, [overallUnpaidKpis.isAnyUnpaid, overallUnpaidKpis.unpaidCustomers, otherMonthsUnpaidCount]);
+
   // Dynamic Top 2 customers of selected month for default charts selection
   const defaultTop2 = useMemo(() => {
     const sorted = [...customerList].sort((a, b) => b.totalSanLuong - a.totalSanLuong);
@@ -653,8 +676,8 @@ export default function SummaryDashboard() {
 
   return (
     <div className="space-y-8 pb-12 animate-fade-in relative">
-      {/* Floating alert for unpaid customers in the top-right corner */}
-      {overallUnpaidKpis.isAnyUnpaid && (
+      {/* Floating alert for unpaid customers in the top-right corner — tự ẩn sau ít giây */}
+      {showFloatingAlert && overallUnpaidKpis.isAnyUnpaid && (
         <div 
           onClick={() => {
             setPaymentFilter('unpaid');
