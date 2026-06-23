@@ -19,6 +19,13 @@ const fmtDate = (s?: string) => {
   return d && m && y ? `${d}/${m}/${y}` : s;
 };
 
+// NKy mặc định khi trống: "00 giờ 00 phút ngày DD tháng MM năm YYYY" theo ngày cuối kỳ
+const defaultNKy = (endDate?: string) => {
+  const datePart = (endDate || '').split('T')[0].split(' ')[0];
+  const [y, m, d] = datePart.split('-');
+  return d && m && y ? `00 giờ 00 phút ngày ${d} tháng ${m} năm ${y}` : '';
+};
+
 // Hiển thị số: tối đa 2 số lẻ, dấu phân cách kiểu VN
 const fmtNum = (n: number, digits = 0) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: digits }).format(n);
@@ -85,7 +92,7 @@ export async function generateBbxnDocx(r: BbxnRecordLike): Promise<Blob> {
     DChiNBan: r.DChiNBan || '',
     NMua: r.NMua || '',
     DChiNMua: r.DChiNMua || '',
-    NKy: r.NKy || '',
+    NKy: (r.NKy && r.NKy.trim()) || defaultNKy(r.EndDate),
 
     BT_dau: fmtNum(dau('BT'), 2), BT_cuoi: fmtNum(cuoi('BT'), 2),
     CD_dau: fmtNum(dau('CD'), 2), CD_cuoi: fmtNum(cuoi('CD'), 2),
