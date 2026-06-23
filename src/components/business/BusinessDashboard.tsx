@@ -9,6 +9,7 @@ import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
 import QuickImportManager from './QuickImportManager';
 import CustomerDebtManager from './CustomerDebtManager';
+import NotificationBell from '../ui/NotificationBell';
 
 type Tab = 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt';
 
@@ -212,6 +213,9 @@ export default function BusinessDashboard() {
             >
               <FileText className="w-[20px] h-[20px]" />
             </a>
+
+            {/* Thông báo */}
+            <NotificationBell />
 
             <div className="w-px h-6 bg-gray-200 mx-1" />
 
