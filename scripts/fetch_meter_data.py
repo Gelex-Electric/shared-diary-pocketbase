@@ -67,7 +67,7 @@ def login_data() -> dict:
     """Dang nhap API dien, tra ve toan bo object (gom USER_ID, TOKEN)."""
     if not (USER_ACCOUNT and PASSWORD):
         sys.exit("Thieu API_USER/API_PASS. Hay them vao GitHub Secrets.")
-    r = requests.get(
+    r = get_retry(
         f"{BASE_URL}/Login",
         params={"UserAccount": USER_ACCOUNT, "Password": PASSWORD},
         timeout=30,
