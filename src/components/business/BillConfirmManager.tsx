@@ -770,7 +770,7 @@ export default function BillConfirmManager() {
                                       {row.merged && (
                                         <span title={`Hóa đơn đổi giá — gộp ${row.ids.length} khoảng`}
                                           className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wide">
-                                          gộp {row.ids.length} khoảng
+                                          đổi giá điện
                                         </span>
                                       )}
                                     </div>
