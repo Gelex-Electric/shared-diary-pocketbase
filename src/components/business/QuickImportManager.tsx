@@ -55,6 +55,7 @@ export default function QuickImportManager() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
     setToast({ message, type: t });
@@ -186,6 +187,7 @@ export default function QuickImportManager() {
     if (!ok) return;
 
     setIsImporting(true);
+    setImportProgress({ done: 0, total: rows.length });
     let created = 0, updated = 0, failed = 0;
     try {
       // Chỉ dò trùng trong các SCT đang nạp (không getFullList toàn bảng — không khả thi khi
@@ -201,7 +203,8 @@ export default function QuickImportManager() {
         idByKey.set(key, rec.id);
       });
 
-      for (const p of rows) {
+      for (let i = 0; i < rows.length; i++) {
+        const p = rows[i];
         try {
           const payload = buildPayload(p);
           const key = `${p.row.SCT}|${p.row.StartDate}|${p.row.EndDate}`;
@@ -220,6 +223,7 @@ export default function QuickImportManager() {
         } catch {
           failed++;
         }
+        setImportProgress({ done: i + 1, total: rows.length });
       }
       showToast(
         `Hoàn tất: tạo mới ${created}, cập nhật ${updated}` + (failed ? `, lỗi ${failed}` : ''),
@@ -229,6 +233,7 @@ export default function QuickImportManager() {
       showToast(`Lỗi khi ghi: ${err?.data?.message || err?.message || ''}`, 'error');
     } finally {
       setIsImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -317,9 +322,30 @@ export default function QuickImportManager() {
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] disabled:opacity-60 shadow-sm transition-all"
             >
               {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-              {isImporting ? 'Đang ghi...' : `Ghi vào hệ thống (${selectedCount})`}
+              {isImporting
+                ? `Đang ghi... ${importProgress ? `${importProgress.done}/${importProgress.total}` : ''}`
+                : `Ghi vào hệ thống (${selectedCount})`}
             </button>
           </div>
+
+          {/* Thanh tiến trình ghi dữ liệu */}
+          {importProgress && (
+            <div className="px-5 md:px-6 py-3 border-b border-slate-150 bg-white">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1.5">
+                <span>Đang ghi vào hệ thống…</span>
+                <span className="font-mono text-[#5a8dee]">
+                  {importProgress.done}/{importProgress.total}
+                  {' '}({Math.round((importProgress.done / Math.max(1, importProgress.total)) * 100)}%)
+                </span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className="h-full bg-[#5a8dee] transition-all duration-200"
+                  style={{ width: `${(importProgress.done / Math.max(1, importProgress.total)) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="divide-y divide-slate-100">
             {grouped.map(g => (
