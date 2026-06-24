@@ -359,7 +359,6 @@ export default function BusinessSummaryDashboard() {
   // Filter records of the designated Month
   const filteredRecords = useMemo(() => {
     if (!selectedMonth) return [];
-    if (selectedMonth === 'all') return accountFilteredRecords;
     return accountFilteredRecords.filter(r => r.thangNam === selectedMonth);
   }, [accountFilteredRecords, selectedMonth]);
 
@@ -508,7 +507,6 @@ export default function BusinessSummaryDashboard() {
 
   // Đếm số khách còn nợ ở CÁC THÁNG KHÁC (không tính tháng đang chọn) — dùng cho thông báo floating.
   const otherMonthsUnpaidCount = useMemo(() => {
-    if (selectedMonth === 'all') return 0;
     const set = new Set<string>();
     accountFilteredRecords.forEach(r => {
       if (!r.daThanhToan && r.thangNam !== selectedMonth) {
@@ -1028,15 +1026,13 @@ export default function BusinessSummaryDashboard() {
 
             {/* Month Filter Selector moved down here */}
             <MonthPicker
-              value={selectedMonth && selectedMonth !== 'all'
+              value={selectedMonth
                 ? `${selectedMonth.split('/')[1]}-${selectedMonth.split('/')[0]}`
-                : selectedMonth}
+                : ''}
               onChange={(v) => {
-                if (v === 'all') { handleMonthChange('all'); return; }
                 const [yy, mm] = v.split('-');
                 handleMonthChange(`${mm}/${yy}`);
               }}
-              allowAll
               className="min-w-[170px]"
             />
 
