@@ -380,16 +380,15 @@ export default function CustomerDebtManager() {
             )}
           </td>
           <td className="py-3.5 px-4 text-right font-mono text-xs">
-            <div className="font-bold text-amber-600">{fmtKWh(c.slHC)} <span className="text-[9px] text-amber-600/60">kWh</span></div>
+            {(c.slHC > 0 || c.slVC === 0) && (
+              <div className="font-bold text-amber-600">{fmtKWh(c.slHC)} <span className="text-[9px] text-amber-600/60">kWh</span></div>
+            )}
             {c.slVC > 0 && (
               <div className="text-[10px] text-slate-400 font-semibold">{fmtKWh(c.slVC)} kVarh</div>
             )}
           </td>
           <td className="py-3.5 px-4 text-right font-mono text-xs">
             <div className="text-slate-800 font-bold">{fmtVND(c.dtHC + c.dtVC)}</div>
-            {c.dtVC > 0 && (
-              <div className="text-[10px] text-slate-400 font-semibold">VC: {fmtVND(c.dtVC)}</div>
-            )}
           </td>
           <td className="py-3.5 px-4 text-center">
             {c.isPaid ? (
@@ -455,16 +454,15 @@ export default function CustomerDebtManager() {
                 </div>
               </td>
               <td className="py-3 px-4 text-right font-mono text-[11px]">
-                <div className="text-amber-600/80 font-bold">{fmtKWh(ky.slHC)} <span className="text-[9px] text-amber-600/50">kWh</span></div>
+                {(ky.slHC > 0 || ky.slVC === 0) && (
+                  <div className="text-amber-600/80 font-bold">{fmtKWh(ky.slHC)} <span className="text-[9px] text-amber-600/50">kWh</span></div>
+                )}
                 {ky.slVC > 0 && (
                   <div className="text-[10px] text-slate-400 font-semibold">{fmtKWh(ky.slVC)} kVarh</div>
                 )}
               </td>
               <td className="py-3 px-4 text-right font-mono text-[11px]">
                 <div className="text-slate-600 font-bold">{fmtVND(ky.dtHC + ky.dtVC)}</div>
-                {ky.dtVC > 0 && (
-                  <div className="text-[10px] text-slate-400 font-semibold">VC: {fmtVND(ky.dtVC)}</div>
-                )}
               </td>
               <td className="py-3 px-4 text-center">
                 {ky.nTToan ? (
@@ -568,14 +566,17 @@ export default function CustomerDebtManager() {
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-[9px] font-bold text-[#5a8dee]/70 uppercase tracking-wider mb-0.5">Hữu công</p>
-              <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtVND(kpis.dtHC)}</h3>
-            </div>
-            <div className="pl-3 border-l border-slate-100">
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Vô công</p>
-              <h3 className="text-xl font-black text-slate-500 tracking-tight leading-none font-mono">{fmtVND(kpis.dtVC)}</h3>
+          <div className="flex items-end justify-between gap-3">
+            <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtVND(kpis.dtHC + kpis.dtVC)}</h3>
+            <div className="text-right shrink-0 space-y-1">
+              <p className="text-[10px] font-bold text-slate-500 leading-none">
+                <span className="text-[#5a8dee]/70 uppercase tracking-wider">Hữu công</span>{' '}
+                <span className="font-mono text-slate-700">{fmtVND(kpis.dtHC)}</span>
+              </p>
+              <p className="text-[10px] font-bold text-slate-500 leading-none">
+                <span className="text-slate-400 uppercase tracking-wider">Vô công</span>{' '}
+                <span className="font-mono text-slate-600">{fmtVND(kpis.dtVC)}</span>
+              </p>
             </div>
           </div>
         </div>
