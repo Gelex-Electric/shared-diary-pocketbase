@@ -154,7 +154,7 @@ export default function QuickImportManager() {
       VC_dau: r.bieu.VC.old, VC_cuoi: r.bieu.VC.moi,
       phu_BT: r.bieu.BT.phuTru, phu_CD: r.bieu.CD.phuTru,
       phu_TD: r.bieu.TD.phuTru, phu_VC: r.bieu.VC.phuTru,
-      DGia_BT: r.bieu.BT.dgia, DGia_CD: r.bieu.CD.dgia, DGia_TD: r.bieu.TD.dgia,
+      SL_BT: r.bieu.BT.sluong, SL_CD: r.bieu.CD.sluong, SL_TD: r.bieu.TD.sluong,
       TongSL_HC: r.TongSL_HC, TongSL_PK: r.TongSL_PK,
       ThTien_HC: r.ThTien_HC, ThTien_PK: r.ThTien_PK,
       CosFi: r.CosFi, KCosFi: r.KCosFi,
@@ -163,7 +163,7 @@ export default function QuickImportManager() {
       // Hóa đơn phản kháng: hữu công luôn = 0 → KHÔNG ghi TongSL_HC/ThTien_HC để
       // không nuốt số liệu hữu công đã nạp từ hóa đơn HC; cũng không ghi đơn giá hữu công.
       delete data.TongSL_HC; delete data.ThTien_HC;
-      delete data.DGia_BT; delete data.DGia_CD; delete data.DGia_TD;
+      delete data.SL_BT; delete data.SL_CD; delete data.SL_TD;
     } else {
       // Hóa đơn hữu công: giữ TongSL_HC/ThTien_HC (đọc trực tiếp từ XML) + đơn giá;
       // không ghi số liệu phản kháng để khỏi nuốt dữ liệu từ hóa đơn VC.
