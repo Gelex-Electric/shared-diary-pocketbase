@@ -438,7 +438,7 @@ export default function PowerOutageManager() {
           <p className="text-slate-500 text-sm mt-1">Soạn, lưu và phát hành thông báo ngừng cấp điện tới khách hàng</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <MonthPicker value={filterMonth} onChange={(v) => setFilterMonth(v === 'all' ? '' : v)} allowAll className="min-w-[150px]" />
+          <MonthPicker value={filterMonth} onChange={setFilterMonth} className="min-w-[150px]" />
           <Select value={filterArea} onChange={setFilterArea}
             options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map((a: string) => ({ value: a, label: a }))]}
             className="min-w-[160px]" />
