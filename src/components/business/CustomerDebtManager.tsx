@@ -116,6 +116,7 @@ export default function CustomerDebtManager() {
   // Thay đổi ngày thanh toán đang soạn (chưa lưu): key kỳ → ngày ('' = chưa thanh toán)
   const [pending, setPending] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<{ done: number; total: number } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
@@ -295,8 +296,10 @@ export default function CustomerDebtManager() {
     });
     if (entries.length === 0) { setPending({}); return; }
     setSaving(true);
+    setSaveProgress({ done: 0, total: entries.length });
     try {
-      for (const [key, date] of entries) {
+      for (let i = 0; i < entries.length; i++) {
+        const [key, date] = entries[i];
         const info = kyIndex.get(key)!;
         await Promise.all(info.ids.map(id => pb.collection('invoice').update(id, { NTToan: date || null })));
         // Chuyển từ "chưa thanh toán" → "đã thanh toán": báo cho khối Vận hành của KCN
@@ -312,6 +315,7 @@ export default function CustomerDebtManager() {
             });
           }
         }
+        setSaveProgress({ done: i + 1, total: entries.length });
       }
       await loadRecords(monthFilter);
       setPending({});
@@ -320,6 +324,7 @@ export default function CustomerDebtManager() {
       showToast(`Lỗi khi lưu: ${err?.data?.message || err?.message || ''}`, 'error');
     } finally {
       setSaving(false);
+      setSaveProgress(null);
     }
   };
 
@@ -557,7 +562,9 @@ export default function CustomerDebtManager() {
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            {saving ? 'Đang lưu...' : `Lưu thay đổi${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
+            {saving
+              ? `Đang lưu... ${saveProgress ? `${saveProgress.done}/${saveProgress.total}` : ''}`
+              : `Lưu thay đổi${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
           </button>
 
           {pendingCount > 0 && !saving && (
@@ -600,6 +607,27 @@ export default function CustomerDebtManager() {
           </div>
         </div>
       </div>
+
+      {/* Thanh tiến trình lưu thay đổi */}
+      {saveProgress && (
+        <div className="vl-card p-4 md:p-5">
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1.5">
+            <span className="flex items-center gap-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5a8dee]" /> Đang lưu thay đổi thanh toán…
+            </span>
+            <span className="font-mono text-[#5a8dee]">
+              {saveProgress.done}/{saveProgress.total}
+              {' '}({Math.round((saveProgress.done / Math.max(1, saveProgress.total)) * 100)}%)
+            </span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+            <div
+              className="h-full bg-[#5a8dee] transition-all duration-200"
+              style={{ width: `${(saveProgress.done / Math.max(1, saveProgress.total)) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Loading / Empty */}
       {loading ? (
