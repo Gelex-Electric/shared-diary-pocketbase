@@ -328,25 +328,6 @@ export default function QuickImportManager() {
             </button>
           </div>
 
-          {/* Thanh tiến trình ghi dữ liệu */}
-          {importProgress && (
-            <div className="px-5 md:px-6 py-3 border-b border-slate-150 bg-white">
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1.5">
-                <span>Đang ghi vào hệ thống…</span>
-                <span className="font-mono text-[#5a8dee]">
-                  {importProgress.done}/{importProgress.total}
-                  {' '}({Math.round((importProgress.done / Math.max(1, importProgress.total)) * 100)}%)
-                </span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                <div
-                  className="h-full bg-[#5a8dee] transition-all duration-200"
-                  style={{ width: `${(importProgress.done / Math.max(1, importProgress.total)) * 100}%` }}
-                />
-              </div>
-            </div>
-          )}
-
           <div className="divide-y divide-slate-100">
             {grouped.map(g => (
               <div key={g.name}>
