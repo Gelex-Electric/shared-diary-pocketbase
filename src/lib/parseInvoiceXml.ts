@@ -16,7 +16,8 @@ export interface BieuData {
   old: number;
   moi: number;   // NewValue
   phuTru: number; // MinusIndex
-  dgia: number;   // đơn giá trước thuế (chỉ BT/CD/TD)
+  dgia: number;   // đơn giá trước thuế (chỉ BT/CD/TD) — chỉ dùng hiển thị, KHÔNG lưu DB
+  sluong: number; // sản lượng (SLuong dòng tính tiền) — đọc trực tiếp từ XML, lưu SL_BT/CD/TD
 }
 
 export interface MeterPeriodRow {
@@ -71,7 +72,7 @@ const collectTTin = (h: Element): Record<string, string> => {
   return map;
 };
 
-const emptyBieu = (): BieuData => ({ old: 0, moi: 0, phuTru: 0, dgia: 0 });
+const emptyBieu = (): BieuData => ({ old: 0, moi: 0, phuTru: 0, dgia: 0, sluong: 0 });
 const emptyRow = (SCT: string, StartDate: string, EndDate: string): MeterPeriodRow => ({
   SCT, HSN: 0, StartDate, EndDate, pointAddress: '',
   bieu: { BT: emptyBieu(), CD: emptyBieu(), TD: emptyBieu(), VC: emptyBieu() },
@@ -157,6 +158,7 @@ export function parseInvoiceXml(xml: string): ParsedInvoice {
       // Dòng tính tiền hữu công: đơn giá theo biểu + cộng dồn Tổng sản lượng & Thành
       // tiền hữu công ĐỌC TRỰC TIẾP từ XML (SLuong/ThTien), không suy từ chỉ số nữa.
       row.bieu[ref.bieu].dgia = toNum(childText(h, 'DGia'));
+      row.bieu[ref.bieu].sluong = toNum(childText(h, 'SLuong')); // sản lượng theo biểu, đọc trực tiếp
       row.TongSL_HC += toNum(childText(h, 'SLuong'));
       row.ThTien_HC += toNum(childText(h, 'ThTien'));
     }
