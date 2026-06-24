@@ -26,14 +26,15 @@ interface DebtInvoiceRecord {
   MKHang: string;
   NMua: string;
   EndDate: string;
+  SHDon?: string;
   NTToan?: string;
   LoaiHD?: string;
   HSN?: number;
-  [key: string]: any; // BT_dau/cuoi..., phu_BT..., DGia_BT..., ThTien_HC/PK
+  [key: string]: any; // BT_dau/cuoi..., phu_BT..., SL_BT..., ThTien_HC/PK
 }
 
 interface KyGroup {
-  key: string;       // mkh|endDate
+  key: string;       // mkh|S:SHDon (hoặc mkh|endDate nếu thiếu SHDon)
   endDate: string;
   ids: string[];
   tongSL: number;
@@ -160,7 +161,11 @@ export default function CustomerDebtManager() {
       const mkh = (r.MKHang || '').trim();
       const end = dateOnly(r.EndDate);
       if (!mkh || !end) return;
-      const key = `${mkh}|${end}`;
+      // Gộp theo HÓA ĐƠN (SHDon): hóa đơn đổi giá tách 1 công tơ thành nhiều khoảng
+      // ngày (nhiều EndDate) nhưng vẫn là MỘT hóa đơn → một kỳ chốt, một lần thanh toán.
+      // Bản ghi cũ chưa có SHDon thì fallback về (MKHang + EndDate).
+      const shdon = (r.SHDon || '').trim();
+      const key = shdon ? `${mkh}|S:${shdon}` : `${mkh}|${end}`;
       const { tongSL, doanhThu } = computeRecordTotals(r);
 
       let g = kyMap.get(key);
@@ -171,6 +176,8 @@ export default function CustomerDebtManager() {
       g.ids.push(r.id);
       g.tongSL += tongSL;
       g.doanhThu += doanhThu;
+      // Ngày chốt hiển thị = EndDate muộn nhất trong hóa đơn (bỏ qua ranh giới đổi giá)
+      if (end > g.endDate) g.endDate = end;
 
       if (!ntByKey.has(key)) ntByKey.set(key, []);
       ntByKey.get(key)!.push(dateOnly(r.NTToan));
