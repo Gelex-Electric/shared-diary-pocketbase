@@ -197,9 +197,11 @@ export default function QuickImportManager() {
       const existing = sctFilter
         ? await pb.collection(INVOICE_COLLECTION).getFullList<any>({ filter: sctFilter, requestKey: null })
         : [];
+      // Khóa upsert gồm cả LoaiHD: hóa đơn vô công (VC) là HÓA ĐƠN RIÊNG, tách khỏi hữu
+      // công (HC) — khách có thể thanh toán 2 hóa đơn vào ngày khác nhau.
       const idByKey = new Map<string, string>();
       existing.forEach(rec => {
-        const key = `${rec.SCT}|${(rec.StartDate || '').split('T')[0].split(' ')[0]}|${(rec.EndDate || '').split('T')[0].split(' ')[0]}`;
+        const key = `${rec.SCT}|${(rec.StartDate || '').split('T')[0].split(' ')[0]}|${(rec.EndDate || '').split('T')[0].split(' ')[0]}|${rec.LoaiHD || ''}`;
         idByKey.set(key, rec.id);
       });
 
@@ -207,12 +209,9 @@ export default function QuickImportManager() {
         const p = rows[i];
         try {
           const payload = buildPayload(p);
-          const key = `${p.row.SCT}|${p.row.StartDate}|${p.row.EndDate}`;
+          const key = `${p.row.SCT}|${p.row.StartDate}|${p.row.EndDate}|${p.invoice.loaiHD}`;
           const existingId = idByKey.get(key);
           if (existingId) {
-            // Hóa đơn VC cập nhật lên bản ghi đã có (thường do hóa đơn HC tạo): giữ
-            // nguyên LoaiHD của bản ghi (không lật HC→VC), chỉ bổ sung số liệu phản kháng.
-            if (p.invoice.loaiHD === 'VC') delete payload.LoaiHD;
             await pb.collection(INVOICE_COLLECTION).update(existingId, payload);
             updated++;
           } else {
