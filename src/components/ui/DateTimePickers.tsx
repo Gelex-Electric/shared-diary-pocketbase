@@ -330,7 +330,6 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
 /* ============================================================
    MONTH PICKER — đồng bộ phong cách với DatePicker
    value = "YYYY-MM"  | onChange(val: "YYYY-MM")
-   Hỗ trợ tuỳ chọn "Tất cả" (allowAll) → value = "all"
    Hiển thị: Tháng MM/YYYY
 ============================================================ */
 const MONTHS_SHORT = [
@@ -339,23 +338,19 @@ const MONTHS_SHORT = [
 ];
 
 interface MonthPickerProps {
-  value: string;                 // "YYYY-MM" | "all"
+  value: string;                 // "YYYY-MM"
   onChange: (val: string) => void;
   label?: string;
   className?: string;
-  allowAll?: boolean;            // hiển thị nút "Tất cả các tháng" → value "all"
-  allLabel?: string;
 }
 
 export function MonthPicker({
   value, onChange, label, className = '',
-  allowAll = false, allLabel = 'Tất cả các tháng',
 }: MonthPickerProps) {
   const today = new Date();
 
-  const isAll = allowAll && (value === 'all' || value === '');
   const parse = (v: string) => {
-    if (!v || v === 'all') return null;
+    if (!v) return null;
     const [y, mo] = v.split('-').map(Number);
     return { y, mo: mo - 1 };
   };
@@ -392,17 +387,13 @@ export function MonthPicker({
     onChange(`${t.getFullYear()}-${p2(t.getMonth() + 1)}`);
     setOpen(false);
   };
-  const selectAll = () => { onChange('all'); setOpen(false); };
-
   const prevYear = (e: React.MouseEvent) => { e.stopPropagation(); setViewYear(y => y - 1); };
   const nextYear = (e: React.MouseEvent) => { e.stopPropagation(); setViewYear(y => y + 1); };
 
   const isSel = (mo: number) => parsed && parsed.y === viewYear && parsed.mo === mo;
   const isCur = (mo: number) => today.getFullYear() === viewYear && today.getMonth() === mo;
 
-  const displayVal = isAll
-    ? allLabel
-    : parsed ? `Tháng ${p2(parsed.mo + 1)}/${parsed.y}` : '';
+  const displayVal = parsed ? `Tháng ${p2(parsed.mo + 1)}/${parsed.y}` : '';
 
   return (
     <div ref={wrapperRef} className={`space-y-1 relative ${className}`}>
@@ -476,21 +467,10 @@ export function MonthPicker({
           </div>
 
           {/* ── Footer ── */}
-          <div className="px-3 pb-3 pt-1 flex gap-2">
-            {allowAll && (
-              <button
-                onClick={selectAll}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-[0.98]
-                           ${isAll
-                             ? 'bg-[#5a8dee] text-white'
-                             : 'bg-[#e8f3ff] text-[#5a8dee] hover:bg-[#d8ebff]'}`}
-              >
-                Tất cả
-              </button>
-            )}
+          <div className="px-3 pb-3 pt-1">
             <button
               onClick={goThisMonth}
-              className="flex-1 py-1.5 bg-[#5a8dee] text-white text-xs font-bold rounded-lg
+              className="w-full py-1.5 bg-[#5a8dee] text-white text-xs font-bold rounded-lg
                          hover:bg-[#4a7de2] active:scale-[0.98] transition-all"
             >
               Tháng này
