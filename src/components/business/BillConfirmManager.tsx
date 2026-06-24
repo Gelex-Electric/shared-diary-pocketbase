@@ -54,9 +54,19 @@ interface InvoiceRecord {
   DChiNMua: string;
   SCT: string;
   HSN: number;
-  [key: string]: any; // BT_dau/cuoi..., phu_BT..., DGia_BT..., TongSL_*, ThTien_*
+  SHDon?: string;
+  [key: string]: any; // BT_dau/cuoi..., phu_BT..., SL_BT..., TongSL_*, ThTien_*
   created: string;
   updated: string;
+}
+
+/* Một dòng biên bản sau khi gộp các khoảng đổi giá (cùng SCT + SHDon) thành 1 kỳ liên tục. */
+interface BienBanRow {
+  key: string;            // SCT|S:SHDon (hoặc __id:<id> nếu thiếu SHDon)
+  ids: string[];          // id các bản ghi gốc (>1 nếu hóa đơn đổi giá)
+  primary: InvoiceRecord; // bản ghi mới nhất theo EndDate — nguồn meta/NKy + thao tác đơn lẻ
+  data: InvoiceRecord;    // dữ liệu đã gộp để tính toán & xuất Word
+  merged: boolean;        // true nếu gộp từ ≥2 khoảng
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -109,12 +119,44 @@ const fmt2 = (n: number) =>
   new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
 
 // Hiển thị ngày dd/mm/yyyy từ chuỗi PocketBase (YYYY-MM-DD hoặc ISO)
+const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
 const fmtDate = (s?: string) => {
   if (!s) return '—';
-  const datePart = s.split('T')[0].split(' ')[0];
+  const datePart = dateOnly(s);
   const [y, m, d] = datePart.split('-');
   return d && m && y ? `${d}/${m}/${y}` : s;
 };
+
+// Khóa gộp biên bản: cùng công tơ (SCT) trong cùng hóa đơn (SHDon) → 1 kỳ liên tục.
+// Thiếu SHDon (bản ghi nhập tay cũ) → mỗi bản ghi đứng riêng (không gộp nhầm).
+const bienBanKey = (r: InvoiceRecord) => {
+  const shdon = (r.SHDon || '').trim();
+  const sct = (r.SCT || '').trim();
+  return shdon && sct ? `${sct}|S:${shdon}` : `__id:${r.id}`;
+};
+
+// Gộp nhiều khoảng đổi giá của cùng công tơ thành 1 bản ghi biên bản liên tục:
+// đầu kỳ = chỉ số đầu của khoảng sớm nhất, cuối kỳ = chỉ số cuối của khoảng muộn nhất,
+// biểu phụ = tổng các khoảng (giá không ảnh hưởng biên bản chỉ số).
+function mergeBienBan(recs: InvoiceRecord[]): InvoiceRecord {
+  if (recs.length === 1) return recs[0];
+  const byStart = [...recs].sort((a, b) =>
+    dateOnly(a.StartDate).localeCompare(dateOnly(b.StartDate)) ||
+    dateOnly(a.EndDate).localeCompare(dateOnly(b.EndDate)));
+  const first = byStart[0];
+  const last = byStart[byStart.length - 1];
+  const merged: any = { ...last }; // meta (NMua/MKHang/NBan/NKy/HSN/SCT...) lấy theo khoảng muộn nhất
+  merged.StartDate = first.StartDate;
+  merged.EndDate = last.EndDate;
+  COMPONENTS.forEach(c => {
+    merged[`${c.key}_dau`] = first[`${c.key}_dau`];
+    merged[`${c.key}_cuoi`] = last[`${c.key}_cuoi`];
+  });
+  PHU_KEYS.forEach(k => {
+    merged[`phu_${k}`] = recs.reduce((s, r) => s + num(r[`phu_${k}`]), 0);
+  });
+  return merged as InvoiceRecord;
+}
 
 /* ── Tính toán dùng chung cho preview & PDF ──
    Tổng (tác dụng) = BT+CĐ+TĐ; cosφ = Tổng cuối / √(Tổng cuối² + VC cuối²). */
@@ -336,16 +378,18 @@ export default function BillConfirmManager() {
     }
   };
 
-  const handleDelete = async (r: InvoiceRecord) => {
+  const handleDelete = async (row: BienBanRow) => {
+    const r = row.data;
     const ok = await confirm({
       title: 'Xóa biên bản?',
-      message: `Biên bản công tơ ${r.SCT || '—'} sẽ bị xóa vĩnh viễn. Thao tác không thể hoàn tác.`,
+      message: `Biên bản công tơ ${r.SCT || '—'}${row.merged ? ` (${row.ids.length} khoảng đổi giá)` : ''} sẽ bị xóa vĩnh viễn. Thao tác không thể hoàn tác.`,
       confirmLabel: 'Xóa',
       variant: 'danger',
     });
     if (!ok) return;
     try {
-      await pb.collection('invoice').delete(r.id);
+      // Hóa đơn đổi giá tách nhiều bản ghi → xóa tất cả khoảng của biên bản
+      await Promise.all(row.ids.map(id => pb.collection('invoice').delete(id)));
       await loadRecords(monthFilterDate);
       showToast('Đã xóa biên bản', 'success');
     } catch (err: any) {
@@ -354,8 +398,8 @@ export default function BillConfirmManager() {
   };
 
   /* ── xuất PDF ── */
-  const exportDocx = async (r: InvoiceRecord) => {
-    setExportingId(r.id);
+  const exportDocx = async (r: InvoiceRecord, exportKey: string) => {
+    setExportingId(exportKey);
     try {
       const blob = await generateBbxnDocx(r);
       const url = URL.createObjectURL(blob);
@@ -382,6 +426,27 @@ export default function BillConfirmManager() {
     );
   }, [records, search]);
 
+  /* ── Gộp các khoảng đổi giá của cùng công tơ (SCT + SHDon) thành 1 dòng biên bản
+        liên tục — biên bản chỉ số không phụ thuộc giá nên bỏ qua mốc đổi giá. ── */
+  const mergedRows = useMemo<BienBanRow[]>(() => {
+    const map = new Map<string, InvoiceRecord[]>();
+    filteredRecords.forEach(r => {
+      const k = bienBanKey(r);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(r);
+    });
+    return Array.from(map.entries()).map(([key, recs]) => {
+      const byEndDesc = [...recs].sort((a, b) => dateOnly(b.EndDate).localeCompare(dateOnly(a.EndDate)));
+      return {
+        key,
+        ids: recs.map(r => r.id),
+        primary: byEndDesc[0],
+        data: mergeBienBan(recs),
+        merged: recs.length > 1,
+      };
+    });
+  }, [filteredRecords]);
+
   /* ── Đồng bộ thời gian lấy chỉ số: gọi API HES (0h–23h59 ngày cuối kỳ),
      so khớp BT/CD/TD của biên bản với dữ liệu trả về, điền giờ/ngày vào NKy.
      Bỏ qua các biên bản đã có NKy. ── */
@@ -389,21 +454,22 @@ export default function BillConfirmManager() {
     const token = hesAccount?.Token;
     if (!token) { showToast('Chưa có Token HES — hãy bấm "Lấy Token" trước.', 'error'); return; }
     setIsSyncing(true);
-    setSyncProgress({ done: 0, total: filteredRecords.length });
+    setSyncProgress({ done: 0, total: mergedRows.length });
     let updated = 0, skipped = 0, notFound = 0;
     try {
-      for (let i = 0; i < filteredRecords.length; i++) {
-        const r = filteredRecords[i];
-        if ((r.NKy || '').trim()) { skipped++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
-        const day = (r.EndDate || '').split('T')[0].split(' ')[0];
-        if (!r.SCT || !day) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
+      for (let i = 0; i < mergedRows.length; i++) {
+        const row = mergedRows[i];
+        const r = row.data; // chỉ số đã gộp (cuối kỳ = khoảng muộn nhất)
+        if ((r.NKy || '').trim()) { skipped++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
+        const day = dateOnly(r.EndDate);
+        if (!r.SCT || !day) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
         const start = toHesDateStr(day, '00', '00');
         const end = toHesDateStr(day, '23', '59');
         const url = `/hes/api/GetMeterDataByDate?MeterNo=${r.SCT}&StartDate=${start}&EndDate=${end}&Token=${token}`;
         const res = await fetch(url);
-        if (!res.ok) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
+        if (!res.ok) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
         const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
+        if (!Array.isArray(data) || data.length === 0) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
 
         const EPS = 0.05;
         const match = (data as DataMetter[]).find(d => {
@@ -414,18 +480,19 @@ export default function BillConfirmManager() {
                  (Number.isFinite(cd) && Math.abs(cd - num(r.CD_cuoi)) < EPS) ||
                  (Number.isFinite(td) && Math.abs(td - num(r.TD_cuoi)) < EPS);
         });
-        if (!match) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
+        if (!match) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
 
         const dt = new Date(match.DATE_TIME);
-        if (isNaN(dt.getTime())) { notFound++; setSyncProgress({ done: i + 1, total: filteredRecords.length }); continue; }
+        if (isNaN(dt.getTime())) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
         const nKySentence = `${pad2(dt.getHours())} giờ ${pad2(dt.getMinutes())} phút ngày ${pad2(dt.getDate())} tháng ${pad2(dt.getMonth() + 1)} năm ${dt.getFullYear()}`;
-        await pb.collection('invoice').update(r.id, { NKy: nKySentence });
+        // Ghi NKy cho mọi khoảng của hóa đơn (kể cả khi đổi giá tách nhiều bản ghi)
+        await Promise.all(row.ids.map(id => pb.collection('invoice').update(id, { NKy: nKySentence })));
         updated++;
-        setSyncProgress({ done: i + 1, total: filteredRecords.length });
+        setSyncProgress({ done: i + 1, total: mergedRows.length });
       }
       await loadRecords(monthFilterDate);
 
-      const attempted = filteredRecords.length - skipped;
+      const attempted = mergedRows.length - skipped;
       if (attempted > 0 && updated === 0) {
         showToast(`Không công tơ nào lấy được dữ liệu — Token HES có thể đã hết hạn, hãy bấm "Lấy Token" lại.`, 'error');
       } else {
@@ -442,25 +509,25 @@ export default function BillConfirmManager() {
   // Gom theo Tên khách hàng (NMua); mỗi nhóm sort theo ngày cuối kỳ giảm dần;
   // danh sách nhóm sắp xếp theo MKH (mã khách hàng)
   const groupedByCustomer = useMemo(() => {
-    const map = new Map<string, InvoiceRecord[]>();
-    filteredRecords.forEach(r => {
-      const name = (r.NMua || '').trim() || '(Chưa có tên khách hàng)';
+    const map = new Map<string, BienBanRow[]>();
+    mergedRows.forEach(row => {
+      const name = (row.data.NMua || '').trim() || '(Chưa có tên khách hàng)';
       if (!map.has(name)) map.set(name, []);
-      map.get(name)!.push(r);
+      map.get(name)!.push(row);
     });
     const groups = Array.from(map.entries()).map(([name, items]) => {
-      const mkhList = Array.from(new Set(items.map(it => (it.MKHang || '').trim()).filter(Boolean))).sort();
+      const mkhList = Array.from(new Set(items.map(it => (it.data.MKHang || '').trim()).filter(Boolean))).sort();
       return {
         name,
         mkh: mkhList.join(', '),
         mkhSort: mkhList[0] || '',
         items: items.sort((a, b) =>
-          (b.EndDate || '').localeCompare(a.EndDate || '')),
+          dateOnly(b.data.EndDate).localeCompare(dateOnly(a.data.EndDate))),
       };
     });
     groups.sort((a, b) => a.mkhSort.localeCompare(b.mkhSort, 'vi') || a.name.localeCompare(b.name, 'vi'));
     return groups;
-  }, [filteredRecords]);
+  }, [mergedRows]);
 
   const toggleGroup = (name: string) =>
     setExpandedGroups(prev => ({ ...prev, [name]: !prev[name] }));
@@ -468,21 +535,21 @@ export default function BillConfirmManager() {
     setExpandedGroups(Object.fromEntries(groupedByCustomer.map(g => [g.name, true])));
   const collapseAll = () => setExpandedGroups({});
 
-  /* ── chọn nhiều để tải hàng loạt ── */
-  const toggleSelection = (id: string) =>
+  /* ── chọn nhiều để tải hàng loạt (theo dòng biên bản đã gộp, không theo bản ghi gốc) ── */
+  const toggleSelection = (key: string) =>
     setSelectedIds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
-  const toggleGroupSelection = (items: InvoiceRecord[]) =>
+  const toggleGroupSelection = (items: BienBanRow[]) =>
     setSelectedIds(prev => {
       const next = new Set(prev);
-      const allSelected = items.every(it => next.has(it.id));
-      items.forEach(it => allSelected ? next.delete(it.id) : next.add(it.id));
+      const allSelected = items.every(it => next.has(it.key));
+      items.forEach(it => allSelected ? next.delete(it.key) : next.add(it.key));
       return next;
     });
-  const selectAllFiltered = () => setSelectedIds(new Set(filteredRecords.map(r => r.id)));
+  const selectAllFiltered = () => setSelectedIds(new Set(mergedRows.map(r => r.key)));
   const deselectAll = () => setSelectedIds(new Set());
 
   /* ── tải hàng loạt: ghép nhiều biên bản Word đã chọn vào 1 file .zip ── */
@@ -491,13 +558,14 @@ export default function BillConfirmManager() {
     setIsBulkExporting(true);
     try {
       const zip = new PizZip();
-      const selectedRecords = records.filter(r => selectedIds.has(r.id));
+      const selectedRows = mergedRows.filter(row => selectedIds.has(row.key));
       const usedNames = new Set<string>();
-      for (const r of selectedRecords) {
+      for (const row of selectedRows) {
+        const r = row.data;
         const blob = await generateBbxnDocx(r);
         const buf = await blob.arrayBuffer();
         let fname = `BienBan_${(r.SCT || 'CT').replace(/[^\w]/g, '')}_${fmtDate(r.EndDate).replace(/\//g, '-')}.docx`;
-        if (usedNames.has(fname)) fname = `BienBan_${(r.SCT || 'CT').replace(/[^\w]/g, '')}_${fmtDate(r.EndDate).replace(/\//g, '-')}_${r.id}.docx`;
+        if (usedNames.has(fname)) fname = `BienBan_${(r.SCT || 'CT').replace(/[^\w]/g, '')}_${fmtDate(r.EndDate).replace(/\//g, '-')}_${row.key}.docx`;
         usedNames.add(fname);
         zip.file(fname, buf);
       }
@@ -635,7 +703,7 @@ export default function BillConfirmManager() {
         <div className="vl-accordion">
           {groupedByCustomer.map(group => {
             const open = !!expandedGroups[group.name];
-            const groupSelected = group.items.length > 0 && group.items.every(it => selectedIds.has(it.id));
+            const groupSelected = group.items.length > 0 && group.items.every(it => selectedIds.has(it.key));
             return (
               <div key={group.name} className={`vl-accordion-item ${open ? 'is-open' : ''}`}>
                 {/* Group header */}
@@ -689,35 +757,47 @@ export default function BillConfirmManager() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {group.items.map(r => {
+                            {group.items.map(row => {
+                              const r = row.data;
                               const res = computeResults(r);
-                              const isSelected = selectedIds.has(r.id);
+                              const isSelected = selectedIds.has(row.key);
                               return (
-                                <tr key={r.id} className={`text-slate-700 text-sm hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-[#f4f8ff]' : ''}`}>
+                                <tr key={row.key} className={`text-slate-700 text-sm hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-[#f4f8ff]' : ''}`}>
                                   <td className="py-3.5 px-4 font-mono font-bold text-[#5a8dee]">{r.SCT || '—'}</td>
                                   <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
-                                    {fmtDate(r.StartDate)} – {fmtDate(r.EndDate)}
+                                    <div className="flex items-center gap-1.5">
+                                      <span>{fmtDate(r.StartDate)} – {fmtDate(r.EndDate)}</span>
+                                      {row.merged && (
+                                        <span title={`Hóa đơn đổi giá — gộp ${row.ids.length} khoảng`}
+                                          className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wide">
+                                          gộp {row.ids.length} khoảng
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="py-3.5 px-4 text-right font-mono font-bold text-amber-600">{fmt(res.bieu[0].cuoi)}</td>
                                   <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-700">{res.cosphi.toFixed(3)}</td>
                                   <td className="py-3.5 px-4">
                                     <div className="flex items-center justify-end gap-1.5">
-                                      <button onClick={() => openEdit(r)} title="Sửa"
-                                        className="p-2 rounded-lg text-slate-500 hover:bg-[#e8f3ff] hover:text-[#5a8dee] transition-colors">
-                                        <Pencil className="w-4 h-4" />
-                                      </button>
-                                      <button onClick={() => exportDocx(r)} disabled={exportingId === r.id} title="Tải Word"
+                                      {/* Hóa đơn đổi giá (gộp nhiều khoảng) không sửa tay được — ẩn nút Sửa */}
+                                      {!row.merged && (
+                                        <button onClick={() => openEdit(row.primary)} title="Sửa"
+                                          className="p-2 rounded-lg text-slate-500 hover:bg-[#e8f3ff] hover:text-[#5a8dee] transition-colors">
+                                          <Pencil className="w-4 h-4" />
+                                        </button>
+                                      )}
+                                      <button onClick={() => exportDocx(r, row.key)} disabled={exportingId === row.key} title="Tải Word"
                                         className="p-2 rounded-lg text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-50">
                                         <FileDown className="w-4 h-4" />
                                       </button>
-                                      <button onClick={() => handleDelete(r)} title="Xóa"
+                                      <button onClick={() => handleDelete(row)} title="Xóa"
                                         className="p-2 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors">
                                         <Trash2 className="w-4 h-4" />
                                       </button>
                                       <input
                                         type="checkbox"
                                         checked={isSelected}
-                                        onChange={() => toggleSelection(r.id)}
+                                        onChange={() => toggleSelection(row.key)}
                                         className="w-4.5 h-4.5 ml-1 rounded border-slate-300 text-[#5a8dee] focus:ring-[#5a8dee]"
                                       />
                                     </div>
