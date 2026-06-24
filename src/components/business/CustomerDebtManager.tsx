@@ -33,33 +33,41 @@ interface DebtInvoiceRecord {
   [key: string]: any; // BT_dau/cuoi..., phu_BT..., SL_BT..., ThTien_HC/PK
 }
 
-interface KyGroup {
+/* Tổng hợp 4 chỉ tiêu: sản lượng hữu công (kWh) / vô công (kVarh) và
+   doanh thu hữu công / vô công. */
+interface Totals {
+  slHC: number;   // sản lượng hữu công (kWh)
+  slVC: number;   // sản lượng vô công (kVarh)
+  dtHC: number;   // doanh thu hữu công
+  dtVC: number;   // doanh thu vô công (phản kháng)
+}
+
+interface KyGroup extends Totals {
   key: string;       // mkh|S:SHDon (hoặc mkh|endDate nếu thiếu SHDon)
   endDate: string;
   ids: string[];
-  tongSL: number;
-  doanhThu: number;
   nTToan: string;     // '' nếu chưa thanh toán đồng nhất ở mọi công tơ trong kỳ
 }
 
-interface CustomerGroup {
+interface CustomerGroup extends Totals {
   mkh: string;
   nMua: string;
   kyList: KyGroup[];   // sắp xếp giảm dần theo EndDate
-  tongSL: number;
-  doanhThu: number;
   isPaid: boolean;
   unpaidCount: number;
 }
 
-interface ZoneGroup {
+interface ZoneGroup extends Totals {
   code: string;
   name: string;
   customers: CustomerGroup[];
-  tongSL: number;
-  doanhThu: number;
   unpaidCount: number;
 }
+
+const emptyTotals = (): Totals => ({ slHC: 0, slVC: 0, dtHC: 0, dtVC: 0 });
+const addTotals = (a: Totals, b: Totals) => {
+  a.slHC += b.slHC; a.slVC += b.slVC; a.dtHC += b.dtHC; a.dtVC += b.dtVC;
+};
 
 /* Khu công nghiệp suy từ tiền tố MKHang (vd "KCNTH-002" → "KCNTH"). */
 const ZONE_MAP: Record<string, string> = {
@@ -97,13 +105,15 @@ const currentYearMonth = () => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 };
 
-// Tổng sản lượng & doanh thu của 1 bản ghi — đọc TRỰC TIẾP từ trường đã lưu
-// (TongSL_HC/ThTien_HC nạp thẳng từ XML), không suy từ chỉ số × đơn giá nữa.
-// Doanh thu = thành tiền hữu công + thành tiền phản kháng (VC: hữu công = 0).
-function computeRecordTotals(r: DebtInvoiceRecord) {
-  const tongSL = num(r.TongSL_HC);
-  const doanhThu = num(r.ThTien_HC) + num(r.ThTien_PK);
-  return { tongSL, doanhThu };
+// Sản lượng & doanh thu của 1 bản ghi — đọc TRỰC TIẾP từ trường đã lưu (nạp thẳng từ XML).
+// Hữu công: TongSL_HC (kWh) / ThTien_HC. Vô công (phản kháng): TongSL_PK (kVarh) / ThTien_PK.
+function computeRecordTotals(r: DebtInvoiceRecord): Totals {
+  return {
+    slHC: num(r.TongSL_HC),
+    slVC: num(r.TongSL_PK),
+    dtHC: num(r.ThTien_HC),
+    dtVC: num(r.ThTien_PK),
+  };
 }
 
 export default function CustomerDebtManager() {
@@ -167,16 +177,14 @@ export default function CustomerDebtManager() {
       // Bản ghi cũ chưa có SHDon thì fallback về (MKHang + EndDate).
       const shdon = (r.SHDon || '').trim();
       const key = shdon ? `${mkh}|S:${shdon}` : `${mkh}|${end}`;
-      const { tongSL, doanhThu } = computeRecordTotals(r);
 
       let g = kyMap.get(key);
       if (!g) {
-        g = { key, mkh, nMua: r.NMua || '', endDate: end, ids: [], tongSL: 0, doanhThu: 0, nTToan: '' };
+        g = { key, mkh, nMua: r.NMua || '', endDate: end, ids: [], ...emptyTotals(), nTToan: '' };
         kyMap.set(key, g);
       }
       g.ids.push(r.id);
-      g.tongSL += tongSL;
-      g.doanhThu += doanhThu;
+      addTotals(g, computeRecordTotals(r));
       // Ngày chốt hiển thị = EndDate muộn nhất trong hóa đơn (bỏ qua ranh giới đổi giá)
       if (end > g.endDate) g.endDate = end;
 
@@ -195,12 +203,11 @@ export default function CustomerDebtManager() {
     kyMap.forEach(g => {
       let c = custMap.get(g.mkh);
       if (!c) {
-        c = { mkh: g.mkh, nMua: g.nMua, kyList: [], tongSL: 0, doanhThu: 0, isPaid: true, unpaidCount: 0 };
+        c = { mkh: g.mkh, nMua: g.nMua, kyList: [], ...emptyTotals(), isPaid: true, unpaidCount: 0 };
         custMap.set(g.mkh, c);
       }
       c.kyList.push(g);
-      c.tongSL += g.tongSL;
-      c.doanhThu += g.doanhThu;
+      addTotals(c, g);
       if (!g.nTToan) { c.isPaid = false; c.unpaidCount += 1; }
     });
     custMap.forEach(c => c.kyList.sort((a, b) => b.endDate.localeCompare(a.endDate)));
@@ -243,8 +250,10 @@ export default function CustomerDebtManager() {
   /* ── KPI tổng quan (theo phạm vi tháng đang chọn, không phụ thuộc tìm kiếm/lọc) ── */
   const kpis = useMemo(() => ({
     unpaidCustomers: effectiveCustomers.filter(c => !c.isPaid).length,
-    tongSL: effectiveCustomers.reduce((s, c) => s + c.tongSL, 0),
-    doanhThu: effectiveCustomers.reduce((s, c) => s + c.doanhThu, 0),
+    slHC: effectiveCustomers.reduce((s, c) => s + c.slHC, 0),
+    slVC: effectiveCustomers.reduce((s, c) => s + c.slVC, 0),
+    dtHC: effectiveCustomers.reduce((s, c) => s + c.dtHC, 0),
+    dtVC: effectiveCustomers.reduce((s, c) => s + c.dtVC, 0),
   }), [effectiveCustomers]);
 
   /* ── lọc theo tìm kiếm + trạng thái thanh toán ── */
@@ -264,12 +273,11 @@ export default function CustomerDebtManager() {
       const code = zoneOf(c.mkh);
       let z = map.get(code);
       if (!z) {
-        z = { code, name: ZONE_MAP[code] || code || 'Khác', customers: [], tongSL: 0, doanhThu: 0, unpaidCount: 0 };
+        z = { code, name: ZONE_MAP[code] || code || 'Khác', customers: [], ...emptyTotals(), unpaidCount: 0 };
         map.set(code, z);
       }
       z.customers.push(c);
-      z.tongSL += c.tongSL;
-      z.doanhThu += c.doanhThu;
+      addTotals(z, c);
       if (!c.isPaid) z.unpaidCount += 1;
     });
     return Array.from(map.values()).sort((a, b) => {
@@ -371,11 +379,17 @@ export default function CustomerDebtManager() {
               <span className="text-rose-500/80 font-semibold text-[11px] bg-rose-50/40 px-1.5 py-0.5 rounded border border-rose-100/50">Chưa xong</span>
             )}
           </td>
-          <td className="py-3.5 px-4 text-right font-mono font-bold text-xs text-amber-600">
-            {fmtKWh(c.tongSL)}
+          <td className="py-3.5 px-4 text-right font-mono text-xs">
+            <div className="font-bold text-amber-600">{fmtKWh(c.slHC)} <span className="text-[9px] text-amber-600/60">kWh</span></div>
+            {c.slVC > 0 && (
+              <div className="text-[10px] text-slate-400 font-semibold">{fmtKWh(c.slVC)} kVarh</div>
+            )}
           </td>
-          <td className="py-3.5 px-4 text-right font-mono text-slate-800 font-bold text-xs">
-            {fmtVND(c.doanhThu)}
+          <td className="py-3.5 px-4 text-right font-mono text-xs">
+            <div className="text-slate-800 font-bold">{fmtVND(c.dtHC + c.dtVC)}</div>
+            {c.dtVC > 0 && (
+              <div className="text-[10px] text-slate-400 font-semibold">VC: {fmtVND(c.dtVC)}</div>
+            )}
           </td>
           <td className="py-3.5 px-4 text-center">
             {c.isPaid ? (
@@ -440,11 +454,17 @@ export default function CustomerDebtManager() {
                   )}
                 </div>
               </td>
-              <td className="py-3 px-4 text-right font-mono text-amber-600/80 font-bold text-[11px]">
-                {fmtKWh(ky.tongSL)}
+              <td className="py-3 px-4 text-right font-mono text-[11px]">
+                <div className="text-amber-600/80 font-bold">{fmtKWh(ky.slHC)} <span className="text-[9px] text-amber-600/50">kWh</span></div>
+                {ky.slVC > 0 && (
+                  <div className="text-[10px] text-slate-400 font-semibold">{fmtKWh(ky.slVC)} kVarh</div>
+                )}
               </td>
-              <td className="py-3 px-4 text-right font-mono text-slate-600 font-bold text-[11px]">
-                {fmtVND(ky.doanhThu)}
+              <td className="py-3 px-4 text-right font-mono text-[11px]">
+                <div className="text-slate-600 font-bold">{fmtVND(ky.dtHC + ky.dtVC)}</div>
+                {ky.dtVC > 0 && (
+                  <div className="text-[10px] text-slate-400 font-semibold">VC: {fmtVND(ky.dtVC)}</div>
+                )}
               </td>
               <td className="py-3 px-4 text-center">
                 {ky.nTToan ? (
@@ -524,12 +544,21 @@ export default function CustomerDebtManager() {
 
         <div className="vl-card p-6 md:p-7 hover:-translate-y-1 transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Tổng sản lượng (kWh)</span>
+            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Tổng sản lượng</span>
             <div className="p-2.5 bg-amber-50 rounded-2xl text-amber-500 group-hover:scale-110 transition-transform">
               <Zap className="w-5 h-5" />
             </div>
           </div>
-          <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtKWh(kpis.tongSL)}</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[9px] font-bold text-amber-600/70 uppercase tracking-wider mb-0.5">Hữu công (kWh)</p>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtKWh(kpis.slHC)}</h3>
+            </div>
+            <div className="pl-3 border-l border-slate-100">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Vô công (kVarh)</p>
+              <h3 className="text-xl font-black text-slate-500 tracking-tight leading-none font-mono">{fmtKWh(kpis.slVC)}</h3>
+            </div>
+          </div>
         </div>
 
         <div className="vl-card p-6 md:p-7 hover:-translate-y-1 transition-all group">
@@ -539,7 +568,16 @@ export default function CustomerDebtManager() {
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
-          <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtVND(kpis.doanhThu)}</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[9px] font-bold text-[#5a8dee]/70 uppercase tracking-wider mb-0.5">Hữu công</p>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtVND(kpis.dtHC)}</h3>
+            </div>
+            <div className="pl-3 border-l border-slate-100">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Vô công</p>
+              <h3 className="text-xl font-black text-slate-500 tracking-tight leading-none font-mono">{fmtVND(kpis.dtVC)}</h3>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -608,27 +646,6 @@ export default function CustomerDebtManager() {
         </div>
       </div>
 
-      {/* Thanh tiến trình lưu thay đổi */}
-      {saveProgress && (
-        <div className="vl-card p-4 md:p-5">
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1.5">
-            <span className="flex items-center gap-1.5">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5a8dee]" /> Đang lưu thay đổi thanh toán…
-            </span>
-            <span className="font-mono text-[#5a8dee]">
-              {saveProgress.done}/{saveProgress.total}
-              {' '}({Math.round((saveProgress.done / Math.max(1, saveProgress.total)) * 100)}%)
-            </span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-            <div
-              className="h-full bg-[#5a8dee] transition-all duration-200"
-              style={{ width: `${(saveProgress.done / Math.max(1, saveProgress.total)) * 100}%` }}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Loading / Empty */}
       {loading ? (
         <div className="vl-card p-16 text-center text-slate-400">
@@ -686,8 +703,14 @@ export default function CustomerDebtManager() {
                     <td colSpan={4} className="py-3.5 px-4 text-right text-slate-600 uppercase text-xs tracking-wider">
                       Tổng cộng {zone.name}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono text-amber-600">{fmtKWh(zone.tongSL)}</td>
-                    <td className="py-3.5 px-4 text-right font-mono text-[#5a8dee]">{fmtVND(zone.doanhThu)}</td>
+                    <td className="py-3.5 px-4 text-right font-mono text-amber-600">
+                      <div>{fmtKWh(zone.slHC)} <span className="text-[9px] text-amber-600/60">kWh</span></div>
+                      {zone.slVC > 0 && <div className="text-[10px] text-slate-400 font-bold">{fmtKWh(zone.slVC)} kVarh</div>}
+                    </td>
+                    <td className="py-3.5 px-4 text-right font-mono text-[#5a8dee]">
+                      <div>{fmtVND(zone.dtHC + zone.dtVC)}</div>
+                      {zone.dtVC > 0 && <div className="text-[10px] text-slate-400 font-bold">VC: {fmtVND(zone.dtVC)}</div>}
+                    </td>
                     <td className="py-3.5 px-4" />
                   </tr>
                 </tfoot>
