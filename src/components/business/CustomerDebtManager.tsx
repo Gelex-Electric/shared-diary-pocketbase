@@ -123,6 +123,8 @@ export default function CustomerDebtManager() {
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  // Bảng KCN bị thu gọn (mặc định mở); key = mã KCN
+  const [collapsedZones, setCollapsedZones] = useState<Record<string, boolean>>({});
   // Thay đổi ngày thanh toán đang soạn (chưa lưu): key kỳ → ngày ('' = chưa thanh toán)
   const [pending, setPending] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -289,6 +291,8 @@ export default function CustomerDebtManager() {
 
   const toggleGroupExpansion = (mkh: string) =>
     setExpandedGroups(prev => ({ ...prev, [mkh]: !prev[mkh] }));
+  const toggleZone = (code: string) =>
+    setCollapsedZones(prev => ({ ...prev, [code]: !prev[code] }));
 
   /* Soạn thay đổi (chưa lưu) — chỉ cập nhật state pending */
   const stagePaymentDate = (key: string, date: string) =>
@@ -357,7 +361,7 @@ export default function CustomerDebtManager() {
               ) : (
                 <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               )}
-              <span className="truncate">{c.mkh}</span>
+              <span className="whitespace-nowrap">{c.mkh}</span>
             </div>
           </td>
           <td className="py-3.5 px-4 font-semibold text-slate-800 whitespace-normal break-words leading-snug">
@@ -370,7 +374,6 @@ export default function CustomerDebtManager() {
           </td>
           <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-500">
             <div>{fmtDate(latestKy?.endDate)}</div>
-            <div className="text-[9px] font-bold text-amber-600/80 mt-0.5 uppercase tracking-wide font-sans">(Mới nhất)</div>
           </td>
           <td className="py-3.5 px-4 text-center font-mono text-xs">
             {latestKy?.nTToan ? (
@@ -566,19 +569,7 @@ export default function CustomerDebtManager() {
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
-          <div className="flex items-end justify-between gap-3">
-            <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtVND(kpis.dtHC + kpis.dtVC)}</h3>
-            <div className="text-right shrink-0 space-y-1">
-              <p className="text-[10px] font-bold text-slate-500 leading-none">
-                <span className="text-[#5a8dee]/70 uppercase tracking-wider">Hữu công</span>{' '}
-                <span className="font-mono text-slate-700">{fmtVND(kpis.dtHC)}</span>
-              </p>
-              <p className="text-[10px] font-bold text-slate-500 leading-none">
-                <span className="text-slate-400 uppercase tracking-wider">Vô công</span>{' '}
-                <span className="font-mono text-slate-600">{fmtVND(kpis.dtVC)}</span>
-              </p>
-            </div>
-          </div>
+          <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtVND(kpis.dtHC + kpis.dtVC)}</h3>
         </div>
       </div>
 
@@ -663,31 +654,40 @@ export default function CustomerDebtManager() {
         /* ── Mỗi Khu công nghiệp một bảng ── */
         zoneGroups.map(zone => (
           <div key={zone.code} className="vl-card overflow-hidden scroll-mt-6">
-            {/* Zone header — màu chung cho mọi KCN */}
-            <div className={`bg-gradient-to-r ${ZONE_HEADER_GRADIENT} px-5 md:px-7 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3`}>
-              <div className="flex items-center gap-3 text-white">
+            {/* Zone header — màu chung cho mọi KCN, bấm để đóng/mở bảng */}
+            <div
+              onClick={() => toggleZone(zone.code)}
+              className={`bg-gradient-to-r ${ZONE_HEADER_GRADIENT} px-5 md:px-7 py-4 flex items-center justify-between gap-3 cursor-pointer select-none`}
+            >
+              <div className="flex items-center gap-3 text-white min-w-0">
                 <div className="p-2 bg-white/20 rounded-xl shrink-0">
                   <Building2 className="w-5 h-5" />
                 </div>
-                <div>
-                  <h3 className="text-base font-black tracking-tight leading-tight">{zone.name}</h3>
+                <div className="min-w-0">
+                  <h3 className="text-base font-black tracking-tight leading-tight truncate">{zone.name}</h3>
                   <p className="text-[11px] font-semibold text-white/80">{zone.customers.length} khách hàng</p>
                 </div>
               </div>
 
-              {zone.unpaidCount > 0 && (
-                <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-black shadow-sm flex items-center gap-1">
-                  <XCircle className="w-3.5 h-3.5" /> {zone.unpaidCount} còn nợ
-                </span>
-              )}
+              <div className="flex items-center gap-3 shrink-0">
+                {zone.unpaidCount > 0 && (
+                  <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-black shadow-sm flex items-center gap-1">
+                    <XCircle className="w-3.5 h-3.5" /> {zone.unpaidCount} còn nợ
+                  </span>
+                )}
+                <ChevronDown
+                  className={`w-5 h-5 text-white transition-transform duration-200 ${collapsedZones[zone.code] ? '-rotate-90' : ''}`}
+                />
+              </div>
             </div>
 
             {/* Zone table */}
+            {!collapsedZones[zone.code] && (
             <div className="overflow-x-auto">
               <table className="vl-table w-full text-left border-collapse table-fixed min-w-[850px]">
                 <thead>
                   <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
-                    <th className="py-3.5 px-4 w-[130px]">Mã khách hàng</th>
+                    <th className="py-3.5 px-4 w-[150px]">Mã khách hàng</th>
                     <th className="py-3.5 px-4 w-[28%]">Tên doanh nghiệp</th>
                     <th className="py-3.5 px-4 w-[14%] text-center">Ngày chốt chỉ số</th>
                     <th className="py-3.5 px-4 w-[18%] text-center">Ngày thanh toán</th>
@@ -700,23 +700,24 @@ export default function CustomerDebtManager() {
                   {zone.customers.map(renderCustomerRows)}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-slate-100 border-t-2 border-slate-200 text-sm font-black">
-                    <td colSpan={4} className="py-3.5 px-4 text-right text-slate-600 uppercase text-xs tracking-wider">
-                      Tổng cộng {zone.name}
+                  <tr className="bg-slate-700 text-white text-sm font-black">
+                    <td colSpan={4} className="py-3.5 px-4 text-right uppercase text-xs tracking-wider">
+                      Tổng cộng
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono text-amber-600">
-                      <div>{fmtKWh(zone.slHC)} <span className="text-[9px] text-amber-600/60">kWh</span></div>
-                      {zone.slVC > 0 && <div className="text-[10px] text-slate-400 font-bold">{fmtKWh(zone.slVC)} kVarh</div>}
+                    <td className="py-3.5 px-4 text-right font-mono text-amber-300">
+                      <div>{fmtKWh(zone.slHC)} <span className="text-[9px] text-amber-300/70">kWh</span></div>
+                      {zone.slVC > 0 && <div className="text-[10px] text-slate-300 font-bold">{fmtKWh(zone.slVC)} kVarh</div>}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono text-[#5a8dee]">
+                    <td className="py-3.5 px-4 text-right font-mono text-sky-300">
                       <div>{fmtVND(zone.dtHC + zone.dtVC)}</div>
-                      {zone.dtVC > 0 && <div className="text-[10px] text-slate-400 font-bold">VC: {fmtVND(zone.dtVC)}</div>}
+                      {zone.dtVC > 0 && <div className="text-[10px] text-slate-300 font-bold">VC: {fmtVND(zone.dtVC)}</div>}
                     </td>
                     <td className="py-3.5 px-4" />
                   </tr>
                 </tfoot>
               </table>
             </div>
+            )}
           </div>
         ))
       )}
