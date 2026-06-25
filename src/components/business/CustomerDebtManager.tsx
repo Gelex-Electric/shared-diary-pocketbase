@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { pb } from '../../lib/pocketbase';
 import { DatePicker, MonthPicker } from '../ui/DateTimePickers';
 import { createNotification } from '../ui/NotificationBell';
@@ -681,10 +682,19 @@ export default function CustomerDebtManager() {
               </div>
             </div>
 
-            {/* Zone table */}
-            {!collapsedZones[zone.code] && (
-            <div className="overflow-x-auto">
-              <table className="vl-table w-full text-left border-collapse table-fixed min-w-[850px]">
+            {/* Zone table — đóng/mở có animation */}
+            <AnimatePresence initial={false}>
+              {!collapsedZones[zone.code] && (
+                <motion.div
+                  key="zone-body"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: 'easeInOut' }}
+                  className="overflow-hidden"
+                >
+                  <div className="overflow-x-auto">
+                    <table className="vl-table w-full text-left border-collapse table-fixed min-w-[850px]">
                 <thead>
                   <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
                     <th className="py-3.5 px-4 w-[150px]">Mã khách hàng</th>
@@ -700,24 +710,26 @@ export default function CustomerDebtManager() {
                   {zone.customers.map(renderCustomerRows)}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-slate-700 text-white text-sm font-black">
-                    <td colSpan={4} className="py-3.5 px-4 text-right uppercase text-xs tracking-wider">
+                  <tr className="bg-white border-t-2 border-slate-300 text-sm font-black text-slate-800">
+                    <td colSpan={4} className="py-3.5 px-4 text-right uppercase text-xs tracking-wider text-slate-700">
                       Tổng cộng
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono text-amber-300">
-                      <div>{fmtKWh(zone.slHC)} <span className="text-[9px] text-amber-300/70">kWh</span></div>
-                      {zone.slVC > 0 && <div className="text-[10px] text-slate-300 font-bold">{fmtKWh(zone.slVC)} kVarh</div>}
+                    <td className="py-3.5 px-4 text-right font-mono text-amber-600">
+                      <div>{fmtKWh(zone.slHC)} <span className="text-[9px] text-amber-600/60">kWh</span></div>
+                      {zone.slVC > 0 && <div className="text-[10px] text-slate-500 font-bold">{fmtKWh(zone.slVC)} kVarh</div>}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono text-sky-300">
+                    <td className="py-3.5 px-4 text-right font-mono text-[#5a8dee]">
                       <div>{fmtVND(zone.dtHC + zone.dtVC)}</div>
-                      {zone.dtVC > 0 && <div className="text-[10px] text-slate-300 font-bold">VC: {fmtVND(zone.dtVC)}</div>}
+                      {zone.dtVC > 0 && <div className="text-[10px] text-slate-500 font-bold">VC: {fmtVND(zone.dtVC)}</div>}
                     </td>
                     <td className="py-3.5 px-4" />
                   </tr>
                 </tfoot>
-              </table>
-            </div>
-            )}
+                    </table>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         ))
       )}
