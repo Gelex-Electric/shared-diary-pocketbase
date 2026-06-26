@@ -157,48 +157,53 @@ export async function getXML(
 }
 
 export interface FetchProgress {
-  phase: 'departments' | 'books' | 'bills' | 'xml' | 'done';
+  phase: 'books' | 'bills' | 'xml' | 'done';
   done: number;
   total: number;
   label?: string;
 }
 
+// Mặc định bỏ qua GetDepartment — chỉ duyệt 2 đơn vị KCN (DepartmentId 2 và 12).
+export const DEFAULT_DEPARTMENT_IDS = [2, 12];
+
 /**
- * Lấy toàn bộ XML hóa đơn của một tháng/năm: duyệt mọi đơn vị → mọi sổ → mọi hóa đơn.
+ * Lấy toàn bộ XML hóa đơn của một kỳ (term) trong tháng/năm:
+ * duyệt các đơn vị (mặc định ID 2 & 12) → mọi sổ của kỳ → mọi hóa đơn.
  * Trả về danh sách { fileName, xml } để parse như khi upload file.
  */
 export async function fetchAllInvoiceXml(
   year: number,
   month: number,
+  term: number,
   onProgress?: (p: FetchProgress) => void,
+  departmentIds: number[] = DEFAULT_DEPARTMENT_IDS,
 ): Promise<{ items: { fileName: string; xml: string }[]; errors: string[] }> {
   const errors: string[] = [];
   const items: { fileName: string; xml: string }[] = [];
 
-  onProgress?.({ phase: 'departments', done: 0, total: 1, label: 'Lấy danh sách đơn vị…' });
-  const departments = await getDepartments();
-
-  // Gom mọi (dept, book) trước để biết tổng số sổ
-  const deptBooks: { dept: Department; book: FigureBook }[] = [];
-  for (let i = 0; i < departments.length; i++) {
-    const dept = departments[i];
-    onProgress?.({ phase: 'books', done: i, total: departments.length, label: `Lấy sổ: ${dept.DepartmentName}` });
+  // Gom mọi (dept, book) trước để biết tổng số sổ. Bỏ qua GetDepartment.
+  const deptBooks: { deptId: number; book: FigureBook }[] = [];
+  for (let i = 0; i < departmentIds.length; i++) {
+    const deptId = departmentIds[i];
+    onProgress?.({ phase: 'books', done: i, total: departmentIds.length, label: `Đơn vị ${deptId}` });
     try {
-      const books = await getFigureBooks(dept.DepartmentId, year, month);
-      books.forEach(book => deptBooks.push({ dept, book }));
+      const books = await getFigureBooks(deptId, year, month);
+      books
+        .filter(book => !term || !book.Term || book.Term === term)
+        .forEach(book => deptBooks.push({ deptId, book }));
     } catch (e: any) {
-      errors.push(`Sổ [${dept.DepartmentName}]: ${e?.message || 'lỗi'}`);
+      errors.push(`Sổ [đơn vị ${deptId}]: ${e?.message || 'lỗi'}`);
     }
   }
 
   // Gom mọi hóa đơn
-  const billJobs: { dept: Department; book: FigureBook; bill: Bill }[] = [];
+  const billJobs: { deptId: number; book: FigureBook; bill: Bill }[] = [];
   for (let i = 0; i < deptBooks.length; i++) {
-    const { dept, book } = deptBooks[i];
-    onProgress?.({ phase: 'bills', done: i, total: deptBooks.length, label: `Lấy hóa đơn: ${book.BookName || book.BookCode}` });
+    const { deptId, book } = deptBooks[i];
+    onProgress?.({ phase: 'bills', done: i, total: deptBooks.length, label: `Sổ ${book.BookName || book.BookCode}` });
     try {
-      const bills = await getBills(book.Term, month, year, book.FigureBookId);
-      bills.forEach(bill => billJobs.push({ dept, book, bill }));
+      const bills = await getBills(book.Term || term, month, year, book.FigureBookId);
+      bills.forEach(bill => billJobs.push({ deptId, book, bill }));
     } catch (e: any) {
       errors.push(`Hóa đơn [${book.BookCode}]: ${e?.message || 'lỗi'}`);
     }
@@ -206,10 +211,10 @@ export async function fetchAllInvoiceXml(
 
   // Lấy XML từng hóa đơn
   for (let i = 0; i < billJobs.length; i++) {
-    const { dept, book, bill } = billJobs[i];
+    const { deptId, book, bill } = billJobs[i];
     onProgress?.({ phase: 'xml', done: i, total: billJobs.length, label: `XML: ${bill.CustomerName || bill.CustomerCode || bill.BillId}` });
     try {
-      const xml = await getXML(bill.BillType, bill.BillId, dept.DepartmentId, month, year, book.FigureBookId);
+      const xml = await getXML(bill.BillType, bill.BillId, deptId, month, year, book.FigureBookId);
       if (xml) {
         const name = `${bill.CustomerCode || 'HD'}_${bill.ElectricityMeterNumber || bill.BillId}_${month}-${year}.xml`;
         items.push({ fileName: name, xml });
