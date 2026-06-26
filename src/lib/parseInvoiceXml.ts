@@ -25,6 +25,10 @@ export interface MeterPeriodRow {
   HSN: number;
   StartDate: string; // YYYY-MM-DD
   EndDate: string;   // YYYY-MM-DD
+  // Mã gộp hóa đơn = MIN(MHHDVu các dòng chỉ số) của CÙNG công tơ trong file. Hóa đơn đổi
+  // giá tách 1 công tơ thành nhiều khoảng (mỗi khoảng IndexId riêng) nhưng cùng min →
+  // gộp được; công tơ khác → min khác → tách. Luôn có trong XML & duy nhất toàn cục.
+  indexId: string;
   pointAddress: string; // Địa chỉ sử dụng điện (PointAddress của từng công tơ)
   bieu: Record<Bieu, BieuData>;
   // Hóa đơn phản kháng (đọc trực tiếp, trước thuế) — 0 nếu hóa đơn thường
@@ -37,7 +41,7 @@ export interface MeterPeriodRow {
 }
 
 export interface ParsedInvoice {
-  shdon: string;
+  billId: string; // mã hóa đơn duy nhất (từ SOAP GetBill); XML không chứa nên truyền vào
   loaiHD: 'HC' | 'VC';
   nban: { ten: string; dchi: string };
   nmua: { ten: string; mst: string; dchi: string; mkhang: string };
@@ -60,6 +64,19 @@ const childText = (parent: Element | null, tag: string): string => {
   return el ? (el.textContent || '').trim() : '';
 };
 
+// Tìm giá trị TTin theo tên TTruong trong 1 element (trả giá trị KHÔNG rỗng đầu tiên).
+const ttinValue = (root: Element | null, truong: string): string => {
+  if (!root) return '';
+  const ttins = root.getElementsByTagName('TTin');
+  for (let i = 0; i < ttins.length; i++) {
+    if (childText(ttins[i], 'TTruong') === truong) {
+      const v = childText(ttins[i], 'DLieu');
+      if (v) return v;
+    }
+  }
+  return '';
+};
+
 // Gom các cặp <TTin><TTruong>k</TTruong><DLieu>v</DLieu></TTin> trong 1 HHDVu thành map
 const collectTTin = (h: Element): Record<string, string> => {
   const map: Record<string, string> = {};
@@ -74,12 +91,12 @@ const collectTTin = (h: Element): Record<string, string> => {
 
 const emptyBieu = (): BieuData => ({ old: 0, moi: 0, phuTru: 0, dgia: 0, sluong: 0 });
 const emptyRow = (SCT: string, StartDate: string, EndDate: string): MeterPeriodRow => ({
-  SCT, HSN: 0, StartDate, EndDate, pointAddress: '',
+  SCT, HSN: 0, StartDate, EndDate, indexId: '', pointAddress: '',
   bieu: { BT: emptyBieu(), CD: emptyBieu(), TD: emptyBieu(), VC: emptyBieu() },
   TongSL_HC: 0, TongSL_PK: 0, ThTien_HC: 0, ThTien_PK: 0, CosFi: 0, KCosFi: 0,
 });
 
-export function parseInvoiceXml(xml: string): ParsedInvoice {
+export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length > 0) {
     throw new Error('XML không hợp lệ');
@@ -89,8 +106,10 @@ export function parseInvoiceXml(xml: string): ParsedInvoice {
   if (!dl) throw new Error('Không tìm thấy DLHDon');
   const ndhdon = dl.getElementsByTagName('NDHDon')[0] || dl;
 
-  const shdon = childText(dl.getElementsByTagName('TTChung')[0] || null, 'SHDon');
   const thdon = childText(dl.getElementsByTagName('TTChung')[0] || null, 'THDon');
+  // BillId nằm ở TTKhac mức hóa đơn (DLHDon > TTKhac), không phải trong từng dòng HHDVu.
+  // Ưu tiên billId truyền vào (từ SOAP GetBill); nếu trống thì đọc từ XML.
+  const finalBillId = (billId || '').trim() || ttinValue(dl, 'BillId');
 
   const nbanEl = ndhdon.getElementsByTagName('NBan')[0] || null;
   const nmuaEl = ndhdon.getElementsByTagName('NMua')[0] || null;
@@ -107,6 +126,8 @@ export function parseInvoiceXml(xml: string): ParsedInvoice {
   const rowMap = new Map<string, MeterPeriodRow>();
   // indexId (MHHDVu của dòng chỉ số) -> { key, bieu } để nối dòng tính tiền
   const readingIndex = new Map<string, { key: string; bieu: Bieu }>();
+  // MIN(MHHDVu) theo từng công tơ trong file → mã gộp hóa đơn (indexId)
+  const sctMinMHH = new Map<string, number>();
 
   const hhdvus = ndhdon.getElementsByTagName('HHDVu');
 
@@ -132,8 +153,21 @@ export function parseInvoiceXml(xml: string): ParsedInvoice {
       phuTru: toNum(m['MinusIndex']),
       dgia: 0,
     };
-    if (mhh) readingIndex.set(mhh, { key, bieu: tou });
+    if (mhh) {
+      readingIndex.set(mhh, { key, bieu: tou });
+      const n = toNum(mhh);
+      if (n > 0) {
+        const cur = sctMinMHH.get(sct);
+        if (cur === undefined || n < cur) sctMinMHH.set(sct, n);
+      }
+    }
   }
+
+  // Gán indexId = MIN(MHHDVu) của công tơ → mọi khoảng đổi giá của 1 công tơ chung 1 mã.
+  rowMap.forEach(row => {
+    const min = sctMinMHH.get(row.SCT);
+    row.indexId = min !== undefined ? String(min) : '';
+  });
 
   // Vòng 2: đọc các dòng tính tiền (TChat=1) và nối qua IndexId
   for (let i = 0; i < hhdvus.length; i++) {
@@ -164,5 +198,5 @@ export function parseInvoiceXml(xml: string): ParsedInvoice {
     }
   }
 
-  return { shdon, loaiHD, nban, nmua, rows: Array.from(rowMap.values()) };
+  return { billId: finalBillId, loaiHD, nban, nmua, rows: Array.from(rowMap.values()) };
 }
