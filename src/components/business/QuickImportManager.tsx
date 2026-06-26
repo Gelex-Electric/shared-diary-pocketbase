@@ -2,9 +2,10 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { pb } from '../../lib/pocketbase';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { parseInvoiceXml, type ParsedInvoice, type MeterPeriodRow, type Bieu } from '../../lib/parseInvoiceXml';
+import { fetchAllInvoiceXml, type FetchProgress } from '../../lib/ccisApi';
 import {
   Upload, FileCode2, Database, CheckCircle2, AlertCircle, Trash2,
-  Users, Loader2, FileSpreadsheet,
+  Users, Loader2, FileSpreadsheet, CloudDownload, CalendarDays,
 } from 'lucide-react';
 
 /* ============================================================
@@ -56,6 +57,11 @@ export default function QuickImportManager() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
+  const now = new Date();
+  const [fetchYear, setFetchYear] = useState(now.getFullYear());
+  const [fetchMonth, setFetchMonth] = useState(now.getMonth() + 1); // 1-12
+  const [isFetching, setIsFetching] = useState(false);
+  const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
     setToast({ message, type: t });
@@ -93,27 +99,22 @@ export default function QuickImportManager() {
     [previewRows, selected],
   );
 
-  const handleFiles = async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
+  // Parse danh sách XML (từ file upload hoặc từ web service) rồi gộp vào danh sách xem trước.
+  const ingestXml = (list: { fileName: string; xml: string }[]): { ok: number; errors: string[] } => {
     const parsed: FileEntry[] = [];
     const errors: string[] = [];
-    for (const file of Array.from(fileList)) {
+    for (const { fileName, xml } of list) {
       try {
-        const text = await file.text();
-        const invoice = parseInvoiceXml(text);
-        parsed.push({ fileName: file.name, invoice });
+        parsed.push({ fileName, invoice: parseInvoiceXml(xml) });
       } catch (err: any) {
-        errors.push(`${file.name}: ${err?.message || 'lỗi đọc'}`);
+        errors.push(`${fileName}: ${err?.message || 'lỗi đọc'}`);
       }
     }
     if (parsed.length > 0) {
       setFiles(prev => {
-        // tránh trùng tên file
         const names = new Set(prev.map(p => p.fileName));
-        const merged = [...prev, ...parsed.filter(p => !names.has(p.fileName))];
-        return merged;
+        return [...prev, ...parsed.filter(p => !names.has(p.fileName))];
       });
-      // mặc định chọn hết các dòng mới
       setSelected(prev => {
         const next = { ...prev };
         parsed.forEach(f => f.invoice.rows.forEach(r => {
@@ -122,8 +123,43 @@ export default function QuickImportManager() {
         return next;
       });
     }
+    return { ok: parsed.length, errors };
+  };
+
+  const handleFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const list: { fileName: string; xml: string }[] = [];
+    for (const file of Array.from(fileList)) {
+      list.push({ fileName: file.name, xml: await file.text() });
+    }
+    const { ok, errors } = ingestXml(list);
     if (errors.length) showToast(`Không đọc được ${errors.length} file: ${errors[0]}`, 'warning');
-    else if (parsed.length) showToast(`Đã đọc ${parsed.length} file`, 'success');
+    else if (ok) showToast(`Đã đọc ${ok} file`, 'success');
+  };
+
+  // Lấy thẳng XML hóa đơn từ web service HĐĐT theo tháng/năm (không cần tải file).
+  const handleFetch = async () => {
+    if (isFetching) return;
+    setIsFetching(true);
+    setFetchProgress({ phase: 'departments', done: 0, total: 1, label: 'Bắt đầu…' });
+    try {
+      const { items, errors } = await fetchAllInvoiceXml(fetchYear, fetchMonth, setFetchProgress);
+      if (items.length === 0) {
+        showToast(`Không lấy được hóa đơn nào cho tháng ${fetchMonth}/${fetchYear}` + (errors.length ? ` (${errors[0]})` : ''), 'warning');
+      } else {
+        const { ok, errors: parseErrs } = ingestXml(items);
+        const allErr = errors.length + parseErrs.length;
+        showToast(
+          `Đã lấy ${ok}/${items.length} hóa đơn tháng ${fetchMonth}/${fetchYear}` + (allErr ? `, ${allErr} lỗi` : ''),
+          allErr ? 'warning' : 'success',
+        );
+      }
+    } catch (err: any) {
+      showToast(`Lỗi lấy dữ liệu: ${err?.message || ''}`, 'error');
+    } finally {
+      setIsFetching(false);
+      setFetchProgress(null);
+    }
   };
 
   const clearAll = () => { setFiles([]); setSelected({}); };
@@ -266,8 +302,70 @@ export default function QuickImportManager() {
         </p>
       </div>
 
+      {/* Lấy dữ liệu trực tiếp từ web service HĐĐT */}
+      <div className="vl-card p-6 md:p-8">
+        <div className="flex items-center gap-2 mb-1">
+          <CloudDownload className="w-5 h-5 text-[#5a8dee]" />
+          <h2 className="text-base font-black text-slate-800">Lấy hóa đơn trực tiếp (không cần tải file)</h2>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          Chọn kỳ rồi bấm một nút — hệ thống tự lấy toàn bộ hóa đơn của tháng từ dịch vụ HĐĐT GELEX.
+        </p>
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tháng</label>
+            <div className="relative">
+              <CalendarDays className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                value={fetchMonth}
+                onChange={e => setFetchMonth(Number(e.target.value))}
+                disabled={isFetching}
+                className="pl-8 pr-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#5a8dee]/40 disabled:opacity-60"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                  <option key={m} value={m}>Tháng {m}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Năm</label>
+            <input
+              type="number"
+              value={fetchYear}
+              onChange={e => setFetchYear(Number(e.target.value))}
+              disabled={isFetching}
+              min={2018}
+              max={2100}
+              className="w-28 px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#5a8dee]/40 disabled:opacity-60"
+            />
+          </div>
+          <button
+            onClick={handleFetch}
+            disabled={isFetching}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] disabled:opacity-60 shadow-sm transition-all"
+          >
+            {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudDownload className="w-4 h-4" />}
+            {isFetching ? 'Đang lấy…' : 'Lấy dữ liệu'}
+          </button>
+        </div>
+        {isFetching && fetchProgress && (
+          <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-slate-500">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5a8dee]" />
+            <span>
+              {fetchProgress.phase === 'departments' && 'Đang lấy danh sách đơn vị…'}
+              {fetchProgress.phase === 'books' && `Đang quét sổ ${fetchProgress.done}/${fetchProgress.total}`}
+              {fetchProgress.phase === 'bills' && `Đang quét hóa đơn ${fetchProgress.done}/${fetchProgress.total}`}
+              {fetchProgress.phase === 'xml' && `Đang tải XML ${fetchProgress.done}/${fetchProgress.total}`}
+            </span>
+            {fetchProgress.label && <span className="text-slate-400 truncate max-w-[280px]">· {fetchProgress.label}</span>}
+          </div>
+        )}
+      </div>
+
       {/* Dropzone */}
       <div className="vl-card p-6 md:p-8">
+        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Hoặc tải file XML thủ công</div>
         <label
           htmlFor="xml-input"
           className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-300 rounded-2xl py-10 cursor-pointer hover:border-[#5a8dee] hover:bg-[#f4f8ff]/50 transition-colors"
