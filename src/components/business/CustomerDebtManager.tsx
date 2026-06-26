@@ -26,8 +26,11 @@ interface DebtInvoiceRecord {
   id: string;
   MKHang: string;
   NMua: string;
+  SCT?: string;
+  StartDate?: string;
   EndDate: string;
-  SHDon?: string;
+  IndexId?: string;
+  BillId?: string;
   NTToan?: string;
   LoaiHD?: string;
   HSN?: number;
@@ -44,7 +47,7 @@ interface Totals {
 }
 
 interface KyGroup extends Totals {
-  key: string;       // mkh|S:SHDon (hoặc mkh|endDate nếu thiếu SHDon)
+  key: string;       // MKHang|LoaiHD|B:BillId (hoặc fallback nối ngày MKHang|LoaiHD|SCT|StartDate)
   endDate: string;
   ids: string[];
   nTToan: string;     // '' nếu chưa thanh toán đồng nhất ở mọi công tơ trong kỳ
@@ -166,38 +169,64 @@ export default function CustomerDebtManager() {
 
   useEffect(() => { loadRecords(monthFilter); }, [loadRecords, monthFilter]);
 
-  /* ── gộp cấp 1: theo MKHang ; cấp 2: theo (MKHang + EndDate) ── */
+  /* ── gộp cấp 1: theo MKHang ; cấp 2: HÓA ĐƠN (gộp khoảng đổi giá theo công tơ) ── */
   const customers = useMemo<CustomerGroup[]>(() => {
     const kyMap = new Map<string, KyGroup & { mkh: string; nMua: string }>();
     const ntByKey = new Map<string, string[]>();
 
+    // GỘP THEO HÓA ĐƠN. Ưu tiên BillId (mã hóa đơn, đọc từ XML hoặc SOAP); kế đến IndexId
+    // (=MIN MHHDVu của công tơ, luôn có trong XML khi BillId trống). Hóa đơn đổi giá tách 1
+    // công tơ thành nhiều khoảng nhưng CHUNG BillId/IndexId → một kỳ, một lần thanh toán.
+    // Thiếu cả hai (dữ liệu cũ) → fallback nối chuỗi ngày theo công tơ.
+    const upsertKy = (key: string, r: DebtInvoiceRecord) => {
+      const end = dateOnly(r.EndDate);
+      let g = kyMap.get(key);
+      if (!g) {
+        g = { key, mkh: (r.MKHang || '').trim(), nMua: r.NMua || '', endDate: end, ids: [], ...emptyTotals(), nTToan: '' };
+        kyMap.set(key, g);
+        ntByKey.set(key, []);
+      }
+      g.ids.push(r.id);
+      addTotals(g, computeRecordTotals(r));
+      if (end > g.endDate) g.endDate = end; // ngày chốt = EndDate muộn nhất
+      ntByKey.get(key)!.push(dateOnly(r.NTToan));
+    };
+
+    // Tách 2 nhóm: có BillId (gộp thẳng theo BillId) và không có BillId (nối ngày theo công tơ)
+    const noBill = new Map<string, DebtInvoiceRecord[]>();
     records.forEach(r => {
       const mkh = (r.MKHang || '').trim();
       const end = dateOnly(r.EndDate);
       if (!mkh || !end) return;
-      // Gộp theo HÓA ĐƠN: hóa đơn đổi giá tách 1 công tơ thành nhiều khoảng ngày
-      // (nhiều EndDate) nhưng vẫn là MỘT hóa đơn → một kỳ chốt, một lần thanh toán.
-      // LƯU Ý: SHDon KHÔNG duy nhất toàn cục — chỉ là số thứ tự trong từng sổ, và hóa
-      // đơn HC/VC có 2 dãy SHDon riêng nên trùng số (vd HC tháng 1 #3 ≡ VC tháng 2 #3).
-      // → khóa phải kèm LoaiHD + tháng (YYYY-MM) để không gộp nhầm khác loại/khác kỳ.
-      // Bản ghi cũ chưa có SHDon thì fallback về (LoaiHD + EndDate).
-      const shdon = (r.SHDon || '').trim();
       const loai = (r.LoaiHD || '').trim();
-      const ym = end.slice(0, 7); // YYYY-MM của kỳ chốt
-      const key = shdon ? `${mkh}|${loai}|${ym}|S:${shdon}` : `${mkh}|${loai}|${end}`;
-
-      let g = kyMap.get(key);
-      if (!g) {
-        g = { key, mkh, nMua: r.NMua || '', endDate: end, ids: [], ...emptyTotals(), nTToan: '' };
-        kyMap.set(key, g);
+      const billId = (r.BillId ?? '').toString().trim();
+      const indexId = (r.IndexId ?? '').toString().trim();
+      if (billId && billId !== '0') {
+        upsertKy(`${mkh}|${loai}|B:${billId}`, r);
+      } else if (indexId && indexId !== '0') {
+        upsertKy(`${mkh}|${loai}|I:${indexId}`, r);
+      } else {
+        const bk = `${mkh}|${loai}|${(r.SCT || '').trim()}`;
+        if (!noBill.has(bk)) noBill.set(bk, []);
+        noBill.get(bk)!.push(r);
       }
-      g.ids.push(r.id);
-      addTotals(g, computeRecordTotals(r));
-      // Ngày chốt hiển thị = EndDate muộn nhất trong hóa đơn (bỏ qua ranh giới đổi giá)
-      if (end > g.endDate) g.endDate = end;
+    });
 
-      if (!ntByKey.has(key)) ntByKey.set(key, []);
-      ntByKey.get(key)!.push(dateOnly(r.NTToan));
+    // Fallback: nối chuỗi ngày liền mạch theo công tơ cho bản ghi thiếu BillId
+    noBill.forEach((recs, bk) => {
+      recs.sort((a, b) =>
+        (dateOnly(a.StartDate) || dateOnly(a.EndDate)).localeCompare(dateOnly(b.StartDate) || dateOnly(b.EndDate)),
+      );
+      let curKey = '';
+      let curLastEnd = '';
+      recs.forEach(r => {
+        const start = dateOnly(r.StartDate);
+        const end = dateOnly(r.EndDate);
+        const continues = !!curKey && !!start && !!curLastEnd && start === curLastEnd;
+        if (!continues) curKey = `${bk}|${start || end}`;
+        upsertKy(curKey, r);
+        curLastEnd = end;
+      });
     });
 
     // Chỉ coi là "đã thanh toán" khi MỌI công tơ trong kỳ đều có NTToan
