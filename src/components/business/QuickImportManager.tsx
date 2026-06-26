@@ -24,7 +24,6 @@ const INVOICE_COLLECTION = 'invoice';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
-const ACTIVE_BIEU: Bieu[] = ['BT', 'CD', 'TD'];
 const BIEU_LABEL: Record<Bieu, string> = { BT: 'BT', CD: 'CĐ', TD: 'TĐ', VC: 'VC' };
 
 const fmt = (n: number, d = 0) =>
@@ -41,9 +40,9 @@ const trucTiep = (row: MeterPeriodRow, b: Bieu) =>
   (row.bieu[b].moi - row.bieu[b].old) * row.HSN;
 const thucTe = (row: MeterPeriodRow, b: Bieu) =>
   trucTiep(row, b) - row.bieu[b].phuTru;
-// thành tiền hữu công (trước thuế) = Σ thực tế × đơn giá của BT/CĐ/TĐ
-const thanhTienHC = (row: MeterPeriodRow) =>
-  ACTIVE_BIEU.reduce((s, b) => s + thucTe(row, b) * row.bieu[b].dgia, 0);
+// sản lượng theo biểu: BT/CĐ/TĐ đọc trực tiếp từ XML (sluong), VC = tiêu thụ thực tế
+const sanLuong = (row: MeterPeriodRow, b: Bieu) =>
+  b === 'VC' ? thucTe(row, 'VC') : row.bieu[b].sluong;
 
 interface FileEntry {
   fileName: string;
@@ -204,6 +203,32 @@ export default function QuickImportManager() {
     });
     return out;
   }, [files]);
+
+  // Tra DB xem mỗi dòng đã tồn tại chưa (để hiển thị "Cập nhật" / "Mới").
+  // Khóa giống lúc upsert: SCT|StartDate|EndDate|LoaiHD.
+  const [existingKeys, setExistingKeys] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const scts = Array.from(new Set(previewRows.map(p => p.row.SCT).filter(Boolean)));
+    if (scts.length === 0) { setExistingKeys(new Set()); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const filter = scts.map(s => pb.filter('SCT = {:s}', { s })).join(' || ');
+        const recs = await pb.collection(INVOICE_COLLECTION).getFullList<any>({ filter, requestKey: null });
+        if (cancelled) return;
+        const keys = new Set<string>();
+        recs.forEach(r => {
+          const d = (v: string) => (v || '').split('T')[0].split(' ')[0];
+          keys.add(`${r.SCT}|${d(r.StartDate)}|${d(r.EndDate)}|${r.LoaiHD || ''}`);
+        });
+        setExistingKeys(keys);
+      } catch {
+        if (!cancelled) setExistingKeys(new Set());
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [previewRows]);
+  const rowKey = (p: PreviewRow) => `${p.row.SCT}|${p.row.StartDate}|${p.row.EndDate}|${p.invoice.loaiHD}`;
 
   // Gom xem trước theo khách hàng (NMua)
   const grouped = useMemo(() => {
@@ -659,11 +684,12 @@ export default function QuickImportManager() {
                         <th className="py-2.5 px-3">Số công tơ</th>
                         <th className="py-2.5 px-3">Kỳ</th>
                         <th className="py-2.5 px-3 text-right">HSN</th>
-                        {ACTIVE_BIEU.map(b => (
-                          <th key={b} className="py-2.5 px-3 text-right">{BIEU_LABEL[b]}: thực tế / đơn giá</th>
+                        {(['BT', 'CD', 'TD', 'VC'] as Bieu[]).map(b => (
+                          <th key={b} className="py-2.5 px-3 text-right">{BIEU_LABEL[b]}</th>
                         ))}
-                        <th className="py-2.5 px-3 text-right">VC (thực tế)</th>
-                        <th className="py-2.5 px-3 text-right">Thành tiền (HC)</th>
+                        <th className="py-2.5 px-3 text-right">Tổng SL</th>
+                        <th className="py-2.5 px-3 text-right">Thành tiền</th>
+                        <th className="py-2.5 px-3 text-center">Trạng thái</th>
                         <th className="py-2.5 px-3 text-center">Loại</th>
                       </tr>
                     </thead>
@@ -671,6 +697,8 @@ export default function QuickImportManager() {
                       {g.rows.map(p => {
                         const r = p.row;
                         const isVC = p.invoice.loaiHD === 'VC';
+                        const exists = existingKeys.has(rowKey(p));
+                        const tongSL = isVC ? r.TongSL_PK : r.TongSL_HC;
                         return (
                           <tr key={p.id} className={`hover:bg-slate-50/70 transition-colors ${selected[p.id] ? '' : 'opacity-50'}`}>
                             <td className="py-2.5 px-3">
@@ -679,15 +707,19 @@ export default function QuickImportManager() {
                             <td className="py-2.5 px-3 font-mono font-bold text-[#5a8dee]">{r.SCT}</td>
                             <td className="py-2.5 px-3 text-xs font-semibold text-slate-500">{fmtDate(r.StartDate)}–{fmtDate(r.EndDate)}</td>
                             <td className="py-2.5 px-3 text-right font-mono">{fmt(r.HSN)}</td>
-                            {ACTIVE_BIEU.map(b => (
-                              <td key={b} className="py-2.5 px-3 text-right font-mono text-xs">
-                                <span className="text-amber-600 font-bold">{fmt(thucTe(r, b))}</span>
-                                <span className="text-slate-400"> / {fmt(r.bieu[b].dgia)}</span>
+                            {(['BT', 'CD', 'TD', 'VC'] as Bieu[]).map(b => (
+                              <td key={b} className="py-2.5 px-3 text-right font-mono text-xs text-slate-600">
+                                {fmt(sanLuong(r, b))}
                               </td>
                             ))}
-                            <td className="py-2.5 px-3 text-right font-mono text-xs text-slate-600">{fmt(thucTe(r, 'VC'))}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-amber-600">{fmt(tongSL)}</td>
                             <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
-                              {isVC ? <span className="text-violet-600">PK {fmt(r.ThTien_PK)}</span> : fmt(thanhTienHC(r))}
+                              {isVC ? <span className="text-violet-600">{fmt(r.ThTien_PK)}</span> : fmt(r.ThTien_HC)}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${exists ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
+                                {exists ? 'Cập nhật' : 'Mới'}
+                              </span>
                             </td>
                             <td className="py-2.5 px-3 text-center">
                               <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${isVC ? 'bg-violet-100 text-violet-700' : 'bg-emerald-100 text-emerald-700'}`}>
