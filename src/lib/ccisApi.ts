@@ -269,9 +269,9 @@ export async function fetchInvoiceXmlForBook(
   month: number,
   year: number,
   onProgress?: (p: FetchProgress) => void,
-): Promise<{ items: { fileName: string; xml: string }[]; errors: string[] }> {
+): Promise<{ items: { fileName: string; xml: string; billId: string }[]; errors: string[] }> {
   const errors: string[] = [];
-  const items: { fileName: string; xml: string }[] = [];
+  const items: { fileName: string; xml: string; billId: string }[] = [];
 
   onProgress?.({ phase: 'bills', done: 0, total: 1, label: 'Lấy danh sách hóa đơn…' });
   let bills: Bill[] = [];
@@ -289,7 +289,7 @@ export async function fetchInvoiceXmlForBook(
       const xml = await getXML(bill.BillType, bill.BillId, bill.DepartmentId, month, year, figureBookId);
       if (xml) {
         const name = `${bill.CustomerCode || 'HD'}_${bill.ElectricityMeterNumber || bill.BillId}_${month}-${year}.xml`;
-        items.push({ fileName: name, xml });
+        items.push({ fileName: name, xml, billId: bill.BillId });
       } else {
         errors.push(`XML trống: ${bill.CustomerName || bill.BillId}`);
       }
