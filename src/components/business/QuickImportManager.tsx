@@ -6,7 +6,7 @@ import { fetchAllInvoiceXml, type FetchProgress } from '../../lib/ccisApi';
 import { MonthPicker } from '../ui/DateTimePickers';
 import {
   Upload, FileCode2, Database, CheckCircle2, AlertCircle, Trash2,
-  Users, Loader2, FileSpreadsheet, CloudDownload, Check,
+  Users, Loader2, FileSpreadsheet, CloudDownload, Check, Layers, ChevronDown,
 } from 'lucide-react';
 
 /* ============================================================
@@ -60,64 +60,77 @@ const FETCH_STEPS: { phase: FetchProgress['phase']; label: string }[] = [
   { phase: 'done', label: 'Hoàn tất' },
 ];
 
-function FetchStepper({ progress }: { progress: FetchProgress }) {
-  const current = FETCH_STEPS.findIndex(s => s.phase === progress.phase);
+function FetchStepper({ progress, active }: { progress: FetchProgress | null; active: boolean }) {
+  // Khi không chạy: -1 (tất cả chờ). Khi xong (done): coi như mọi pha đã hoàn tất.
+  const current = progress ? FETCH_STEPS.findIndex(s => s.phase === progress.phase) : -1;
+  const allDone = progress?.phase === 'done';
+
   return (
-    <div className="mt-6 px-1">
+    <div className="mt-6 rounded-2xl border border-slate-150 bg-gradient-to-b from-slate-50/80 to-white p-5 md:p-6">
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${active ? 'bg-[#5a8dee] animate-pulse' : allDone ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+          <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+            {active ? 'Đang lấy hóa đơn…' : allDone ? 'Đã hoàn tất' : 'Tiến trình lấy hóa đơn'}
+          </span>
+        </div>
+        {progress && progress.phase !== 'done' && progress.total > 0 && (
+          <span className="text-[11px] font-mono font-bold text-[#5a8dee]">
+            {progress.done}/{progress.total}
+          </span>
+        )}
+      </div>
+
       <div className="flex items-start">
         {FETCH_STEPS.map((step, i) => {
-          const done = i < current;
-          const active = i === current;
+          const done = allDone || i < current;
+          const isActive = !allDone && i === current;
           const isLast = i === FETCH_STEPS.length - 1;
-          const showCount = active && step.phase !== 'done' && progress.total > 0;
           return (
-            <div key={step.phase} className="flex-1 flex flex-col items-center relative">
+            <div key={step.phase} className="flex-1 flex flex-col items-center relative min-w-0">
               {/* Đường nối sang bước kế */}
               {!isLast && (
-                <div className="absolute top-4 left-1/2 w-full h-[3px] rounded-full overflow-hidden bg-slate-200">
-                  <div
-                    className={`h-full bg-[#7c3aed] transition-all duration-300 ${done ? 'w-full' : 'w-0'}`}
-                  />
+                <div className="absolute top-[18px] left-1/2 w-full h-[3px] rounded-full bg-slate-200 overflow-hidden">
+                  <div className={`h-full bg-[#5a8dee] transition-all duration-500 ${done ? 'w-full' : 'w-0'}`} />
                 </div>
               )}
               {/* Vòng tròn bước */}
               <div
-                className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all duration-300 ${
+                className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center text-xs font-black transition-all duration-300 ${
                   done
-                    ? 'bg-[#7c3aed] text-white shadow-md shadow-violet-300/50'
-                    : active
-                    ? 'bg-[#7c3aed] text-white shadow-md shadow-violet-300/50 ring-4 ring-violet-100'
+                    ? 'bg-[#5a8dee] text-white shadow-md shadow-[#5a8dee]/30'
+                    : isActive
+                    ? 'bg-[#5a8dee] text-white shadow-lg shadow-[#5a8dee]/40 ring-4 ring-[#5a8dee]/15 scale-110'
                     : 'bg-white text-slate-400 border-2 border-slate-200'
                 }`}
               >
                 {done ? (
                   <Check className="w-4 h-4" strokeWidth={3} />
-                ) : active && step.phase !== 'done' ? (
+                ) : isActive ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   String(i + 1).padStart(2, '0')
                 )}
               </div>
               {/* Nhãn */}
-              <div className="mt-2 text-center px-1">
-                <div className={`text-[11px] font-bold ${active || done ? 'text-slate-700' : 'text-slate-400'}`}>
+              <div className="mt-2.5 text-center px-1">
+                <div className={`text-[11px] font-bold transition-colors ${isActive ? 'text-[#5a8dee]' : done ? 'text-slate-600' : 'text-slate-400'}`}>
                   {step.label}
                 </div>
-                {showCount && (
-                  <div className="text-[10px] font-mono font-bold text-[#7c3aed] mt-0.5">
-                    {progress.done}/{progress.total}
-                  </div>
-                )}
               </div>
             </div>
           );
         })}
       </div>
-      {progress.label && progress.phase !== 'done' && (
-        <div className="mt-3 text-center text-[11px] font-semibold text-slate-400 truncate">
-          {progress.label}
-        </div>
-      )}
+
+      {/* Dòng chi tiết đang xử lý */}
+      <div className="mt-4 h-4 text-center">
+        {active && progress?.label && progress.phase !== 'done' && (
+          <span className="text-[11px] font-semibold text-slate-400 truncate inline-block max-w-full px-4">
+            {progress.label}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -391,16 +404,20 @@ export default function QuickImportManager() {
         <div className="flex flex-col sm:flex-row sm:items-end gap-3">
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Kỳ</label>
-            <select
-              value={fetchTerm}
-              onChange={e => setFetchTerm(Number(e.target.value))}
-              disabled={isFetching}
-              className="w-24 px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#5a8dee]/40 disabled:opacity-60"
-            >
-              {[1, 2, 3].map(t => (
-                <option key={t} value={t}>Kỳ {t}</option>
-              ))}
-            </select>
+            <div className="relative w-28 group">
+              <Layers className={`w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] peer-focus:text-[#5a8dee] transition-colors`} />
+              <select
+                value={fetchTerm}
+                onChange={e => setFetchTerm(Number(e.target.value))}
+                disabled={isFetching}
+                className="peer w-full appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 cursor-pointer transition-all hover:border-[#5a8dee]/50 focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {[1, 2, 3].map(t => (
+                  <option key={t} value={t}>Kỳ {t}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 peer-focus:text-[#5a8dee] transition-colors" />
+            </div>
           </div>
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tháng</label>
@@ -415,9 +432,7 @@ export default function QuickImportManager() {
             {isFetching ? 'Đang lấy…' : 'Lấy dữ liệu'}
           </button>
         </div>
-        {isFetching && fetchProgress && (
-          <FetchStepper progress={fetchProgress} />
-        )}
+        <FetchStepper progress={fetchProgress} active={isFetching} />
       </div>
 
       {/* Dropzone */}
