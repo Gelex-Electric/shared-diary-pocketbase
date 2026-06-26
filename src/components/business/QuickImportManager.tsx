@@ -1,13 +1,17 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { pb } from '../../lib/pocketbase';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { parseInvoiceXml, type ParsedInvoice, type MeterPeriodRow, type Bieu } from '../../lib/parseInvoiceXml';
-import { fetchAllInvoiceXml, type FetchProgress } from '../../lib/ccisApi';
+import { fetchFigureBooks, fetchInvoiceXmlForBook, type FetchProgress } from '../../lib/ccisApi';
 import { MonthPicker } from '../ui/DateTimePickers';
 import {
   Upload, FileCode2, Database, CheckCircle2, AlertCircle, Trash2,
   Users, Loader2, FileSpreadsheet, CloudDownload, Check, Layers, ChevronDown,
+  BookOpen, ListChecks,
 } from 'lucide-react';
+
+const FIGUREBOOK_COLLECTION = 'FigureBook';
+interface BookOption { FigureBookId: number; BookName: string; }
 
 /* ============================================================
    Nạp dữ liệu nhanh — tải nhiều XML hóa đơn điện, xem trước,
@@ -52,70 +56,81 @@ interface PreviewRow {
   row: MeterPeriodRow;
 }
 
-/* Thanh tiến trình dạng stepper ngang (giống quy trình các bước) cho việc lấy hóa đơn. */
+/* Thanh tiến trình dạng stepper ngang cho luồng 2 bước: Lấy sổ → Hóa đơn → XML → Hoàn tất. */
 const FETCH_STEPS: { phase: FetchProgress['phase']; label: string }[] = [
-  { phase: 'books', label: 'Quét sổ' },
-  { phase: 'bills', label: 'Quét hóa đơn' },
+  { phase: 'books', label: 'Lấy sổ' },
+  { phase: 'bills', label: 'Lấy hóa đơn' },
   { phase: 'xml', label: 'Tải XML' },
   { phase: 'done', label: 'Hoàn tất' },
 ];
 
-function FetchStepper({ progress, active }: { progress: FetchProgress | null; active: boolean }) {
-  // Khi không chạy: -1 (tất cả chờ). Khi xong (done): coi như mọi pha đã hoàn tất.
-  const current = progress ? FETCH_STEPS.findIndex(s => s.phase === progress.phase) : -1;
-  const allDone = progress?.phase === 'done';
+interface StepperState {
+  current: number;          // chỉ số bước đang/đến lượt (>= length ⇒ hoàn tất)
+  running: boolean;         // có tác vụ đang chạy không
+  label?: string;           // mô tả chi tiết đang xử lý
+  count?: { done: number; total: number } | null;
+}
 
+function FetchStepper({ current, running, label, count }: StepperState) {
+  const allDone = current >= FETCH_STEPS.length;
   return (
-    <div className="mt-6 rounded-2xl border border-slate-150 bg-gradient-to-b from-slate-50/80 to-white p-5 md:p-6">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${active ? 'bg-[#5a8dee] animate-pulse' : allDone ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-          <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-            {active ? 'Đang lấy hóa đơn…' : allDone ? 'Đã hoàn tất' : 'Tiến trình lấy hóa đơn'}
-          </span>
-        </div>
-        {progress && progress.phase !== 'done' && progress.total > 0 && (
-          <span className="text-[11px] font-mono font-bold text-[#5a8dee]">
-            {progress.done}/{progress.total}
-          </span>
-        )}
-      </div>
-
+    <div className="mt-6 rounded-2xl bg-white border border-slate-100 shadow-[0_8px_24px_-12px_rgba(25,42,70,0.18)] px-6 md:px-8 py-7">
       <div className="flex items-start">
         {FETCH_STEPS.map((step, i) => {
-          const done = allDone || i < current;
+          const done = i < current;
           const isActive = !allDone && i === current;
           const isLast = i === FETCH_STEPS.length - 1;
           return (
-            <div key={step.phase} className="flex-1 flex flex-col items-center relative min-w-0">
-              {/* Đường nối sang bước kế */}
+            <div key={step.phase} className="flex-1 flex flex-col items-start relative min-w-0">
+              {/* Đường nối sang bước kế (từ tâm vòng tròn này tới tâm vòng tròn kế) */}
               {!isLast && (
-                <div className="absolute top-[18px] left-1/2 w-full h-[3px] rounded-full bg-slate-200 overflow-hidden">
-                  <div className={`h-full bg-[#5a8dee] transition-all duration-500 ${done ? 'w-full' : 'w-0'}`} />
+                <div className="absolute top-[13px] left-[14px] w-full h-[3px] rounded-full bg-blue-100 overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-500 ${
+                      done ? 'w-full bg-emerald-500'
+                      : isActive ? 'w-1/2 bg-gradient-to-r from-[#2f6bff] to-blue-200'
+                      : 'w-0'
+                    }`}
+                  />
                 </div>
               )}
+
               {/* Vòng tròn bước */}
               <div
-                className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center text-xs font-black transition-all duration-300 ${
+                className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 ${
                   done
-                    ? 'bg-[#5a8dee] text-white shadow-md shadow-[#5a8dee]/30'
+                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300/40'
                     : isActive
-                    ? 'bg-[#5a8dee] text-white shadow-lg shadow-[#5a8dee]/40 ring-4 ring-[#5a8dee]/15 scale-110'
-                    : 'bg-white text-slate-400 border-2 border-slate-200'
+                    ? 'bg-[#2f6bff] shadow-lg shadow-[#2f6bff]/30'
+                    : 'bg-blue-100'
                 }`}
               >
                 {done ? (
-                  <Check className="w-4 h-4" strokeWidth={3} />
+                  <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                ) : isActive && running ? (
+                  <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
                 ) : isActive ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  String(i + 1).padStart(2, '0')
-                )}
+                  <span className="w-2.5 h-2.5 rounded-full bg-white ring-2 ring-white/60" />
+                ) : null}
               </div>
+
               {/* Nhãn */}
-              <div className="mt-2.5 text-center px-1">
-                <div className={`text-[11px] font-bold transition-colors ${isActive ? 'text-[#5a8dee]' : done ? 'text-slate-600' : 'text-slate-400'}`}>
+              <div className="mt-3 pr-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Step {i + 1}
+                </div>
+                <div className={`text-sm font-bold mt-0.5 ${done || isActive ? 'text-slate-800' : 'text-slate-400'}`}>
                   {step.label}
+                </div>
+                <div
+                  className={`text-[11px] font-semibold mt-0.5 ${
+                    done ? 'text-emerald-500' : isActive ? 'text-[#2f6bff]' : 'text-slate-400'
+                  }`}
+                >
+                  {done ? 'Hoàn tất' : isActive ? (running ? 'Đang xử lý' : 'Sẵn sàng') : 'Chờ'}
+                  {isActive && running && count && count.total > 0 && (
+                    <span className="font-mono"> · {count.done}/{count.total}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -124,13 +139,11 @@ function FetchStepper({ progress, active }: { progress: FetchProgress | null; ac
       </div>
 
       {/* Dòng chi tiết đang xử lý */}
-      <div className="mt-4 h-4 text-center">
-        {active && progress?.label && progress.phase !== 'done' && (
-          <span className="text-[11px] font-semibold text-slate-400 truncate inline-block max-w-full px-4">
-            {progress.label}
-          </span>
-        )}
-      </div>
+      {running && label && (
+        <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] font-semibold text-slate-400 truncate">
+          {label}
+        </div>
+      )}
     </div>
   );
 }
@@ -146,13 +159,30 @@ export default function QuickImportManager() {
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
   ); // "YYYY-MM"
   const [fetchTerm, setFetchTerm] = useState(1); // kỳ 1/2/3
-  const [isFetching, setIsFetching] = useState(false);
+  const [books, setBooks] = useState<BookOption[]>([]);          // danh sách sổ (collection FigureBook)
+  const [selectedBookId, setSelectedBookId] = useState<number | ''>('');
+  const [isFetchingBooks, setIsFetchingBooks] = useState(false);
+  const [isFetchingInvoices, setIsFetchingInvoices] = useState(false);
   const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
+  const [invoicesDone, setInvoicesDone] = useState(false);      // đã hoàn tất lấy hóa đơn (cho stepper)
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
     setToast({ message, type: t });
     setTimeout(() => setToast(null), 4500);
   }, []);
+
+  // Nạp danh sách sổ từ collection FigureBook
+  const loadBooks = useCallback(async () => {
+    try {
+      const recs = await pb.collection(FIGUREBOOK_COLLECTION).getFullList<any>({ sort: 'BookName', requestKey: null });
+      const opts = recs.map(r => ({ FigureBookId: Number(r.FigureBookId), BookName: r.BookName || String(r.FigureBookId) }));
+      setBooks(opts);
+      setSelectedBookId(prev => (prev !== '' && opts.some(o => o.FigureBookId === prev) ? prev : (opts[0]?.FigureBookId ?? '')));
+    } catch {
+      /* collection có thể chưa có quyền/ chưa tạo — bỏ qua, để trống dropdown */
+    }
+  }, []);
+  useEffect(() => { loadBooks(); }, [loadBooks]);
 
   const previewRows = useMemo<PreviewRow[]>(() => {
     const out: PreviewRow[] = [];
@@ -223,32 +253,79 @@ export default function QuickImportManager() {
     else if (ok) showToast(`Đã đọc ${ok} file`, 'success');
   };
 
-  // Lấy thẳng XML hóa đơn từ web service HĐĐT theo tháng/năm (không cần tải file).
-  const handleFetch = async () => {
-    if (isFetching) return;
+  const parseYM = () => {
     const [yStr, mStr] = fetchYM.split('-');
-    const fetchYear = Number(yStr);
-    const fetchMonth = Number(mStr);
-    if (!fetchYear || !fetchMonth) { showToast('Chưa chọn kỳ/tháng', 'warning'); return; }
-    setIsFetching(true);
+    return { year: Number(yStr), month: Number(mStr) };
+  };
+
+  // BƯỚC A — Lấy danh sách sổ (GetFigureBook) và lưu vào collection FigureBook.
+  const handleFetchBooks = async () => {
+    if (isFetchingBooks || isFetchingInvoices) return;
+    const { year, month } = parseYM();
+    if (!year || !month) { showToast('Chưa chọn tháng', 'warning'); return; }
+    setIsFetchingBooks(true);
+    setInvoicesDone(false);
     setFetchProgress({ phase: 'books', done: 0, total: 1, label: 'Bắt đầu…' });
     try {
-      const { items, errors } = await fetchAllInvoiceXml(fetchYear, fetchMonth, fetchTerm, setFetchProgress);
+      const { books: fetched, errors } = await fetchFigureBooks(year, month, fetchTerm, setFetchProgress);
+      // Upsert theo FigureBookId vào collection FigureBook
+      const ids = Array.from(new Set(fetched.map(b => b.FigureBookId).filter(Boolean)));
+      const existing = ids.length
+        ? await pb.collection(FIGUREBOOK_COLLECTION).getFullList<any>({
+            filter: ids.map(id => pb.filter('FigureBookId = {:id}', { id })).join(' || '),
+            requestKey: null,
+          })
+        : [];
+      const idByBook = new Map<number, string>();
+      existing.forEach(r => idByBook.set(Number(r.FigureBookId), r.id));
+      let saved = 0;
+      for (const b of fetched) {
+        if (!b.FigureBookId) continue;
+        const data = { FigureBookId: b.FigureBookId, BookName: b.BookName || b.BookCode || String(b.FigureBookId) };
+        try {
+          const exId = idByBook.get(b.FigureBookId);
+          if (exId) await pb.collection(FIGUREBOOK_COLLECTION).update(exId, data);
+          else { const rec = await pb.collection(FIGUREBOOK_COLLECTION).create(data); idByBook.set(b.FigureBookId, rec.id); }
+          saved++;
+        } catch { /* bỏ qua lỗi từng sổ */ }
+      }
+      await loadBooks();
+      showToast(`Đã lưu ${saved} sổ` + (errors.length ? `, ${errors.length} lỗi` : ''), errors.length ? 'warning' : 'success');
+    } catch (err: any) {
+      showToast(`Lỗi lấy sổ: ${err?.data?.message || err?.message || ''}`, 'error');
+    } finally {
+      setIsFetchingBooks(false);
+      setFetchProgress(null);
+    }
+  };
+
+  // BƯỚC B — Lấy hóa đơn (GetBill + GetXML) theo FigureBookId đã chọn.
+  const handleFetchInvoices = async () => {
+    if (isFetchingBooks || isFetchingInvoices) return;
+    if (selectedBookId === '') { showToast('Chưa chọn sổ', 'warning'); return; }
+    const { year, month } = parseYM();
+    if (!year || !month) { showToast('Chưa chọn tháng', 'warning'); return; }
+    const bookName = books.find(b => b.FigureBookId === selectedBookId)?.BookName || String(selectedBookId);
+    setIsFetchingInvoices(true);
+    setInvoicesDone(false);
+    setFetchProgress({ phase: 'bills', done: 0, total: 1, label: 'Bắt đầu…' });
+    try {
+      const { items, errors } = await fetchInvoiceXmlForBook(Number(selectedBookId), fetchTerm, month, year, setFetchProgress);
       if (items.length === 0) {
-        showToast(`Không lấy được hóa đơn nào cho kỳ ${fetchTerm} tháng ${fetchMonth}/${fetchYear}` + (errors.length ? ` (${errors[0]})` : ''), 'warning');
+        showToast(`Sổ "${bookName}" không có hóa đơn nào (kỳ ${fetchTerm} tháng ${month}/${year})` + (errors.length ? ` · ${errors[0]}` : ''), 'warning');
       } else {
         const { ok, errors: parseErrs } = ingestXml(items);
         const allErr = errors.length + parseErrs.length;
+        setInvoicesDone(true);
         showToast(
-          `Đã lấy ${ok}/${items.length} hóa đơn kỳ ${fetchTerm} tháng ${fetchMonth}/${fetchYear}` + (allErr ? `, ${allErr} lỗi` : ''),
+          `Sổ "${bookName}": lấy ${ok}/${items.length} hóa đơn` + (allErr ? `, ${allErr} lỗi` : ''),
           allErr ? 'warning' : 'success',
         );
       }
     } catch (err: any) {
-      showToast(`Lỗi lấy dữ liệu: ${err?.message || ''}`, 'error');
+      showToast(`Lỗi lấy hóa đơn: ${err?.message || ''}`, 'error');
     } finally {
-      setIsFetching(false);
-      setFetchProgress(null);
+      setIsFetchingInvoices(false);
     }
   };
 
@@ -362,6 +439,23 @@ export default function QuickImportManager() {
     }
   };
 
+  // ── Trạng thái stepper (gộp 2 hành động Lấy sổ / Lấy hóa đơn) ──
+  const busy = isFetchingBooks || isFetchingInvoices;
+  const booksLoaded = books.length > 0;
+  const stepperState: StepperState = (() => {
+    if (busy && fetchProgress) {
+      const idx = FETCH_STEPS.findIndex(s => s.phase === fetchProgress.phase);
+      return {
+        current: idx < 0 ? 0 : idx,
+        running: true,
+        label: fetchProgress.label,
+        count: fetchProgress.total > 0 ? { done: fetchProgress.done, total: fetchProgress.total } : null,
+      };
+    }
+    if (invoicesDone) return { current: FETCH_STEPS.length, running: false };
+    return { current: booksLoaded ? 1 : 0, running: false };
+  })();
+
   return (
     <div className="space-y-6 pb-12 animate-fade-in relative">
       {/* Toast */}
@@ -399,17 +493,19 @@ export default function QuickImportManager() {
           <h2 className="text-base font-black text-slate-800">Lấy hóa đơn trực tiếp (không cần tải file)</h2>
         </div>
         <p className="text-xs text-slate-400 mb-4">
-          Chọn kỳ rồi bấm một nút — hệ thống tự lấy toàn bộ hóa đơn của tháng từ dịch vụ HĐĐT GELEX.
+          Bước 1: chọn kỳ/tháng rồi <b>Lấy sổ</b> để cập nhật danh mục sổ. Bước 2: chọn sổ trong danh sách rồi <b>Lấy hóa đơn</b> của sổ đó.
         </p>
+
+        {/* Hàng 1: Kỳ + Tháng + Lấy sổ */}
         <div className="flex flex-col sm:flex-row sm:items-end gap-3">
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Kỳ</label>
             <div className="relative w-28 group">
-              <Layers className={`w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] peer-focus:text-[#5a8dee] transition-colors`} />
+              <Layers className="w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] transition-colors" />
               <select
                 value={fetchTerm}
                 onChange={e => setFetchTerm(Number(e.target.value))}
-                disabled={isFetching}
+                disabled={busy}
                 className="peer w-full appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 cursor-pointer transition-all hover:border-[#5a8dee]/50 focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {[1, 2, 3].map(t => (
@@ -424,15 +520,48 @@ export default function QuickImportManager() {
             <MonthPicker value={fetchYM} onChange={setFetchYM} className="w-44" />
           </div>
           <button
-            onClick={handleFetch}
-            disabled={isFetching}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] disabled:opacity-60 shadow-sm transition-all"
+            onClick={handleFetchBooks}
+            disabled={busy}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold text-[#5a8dee] bg-[#e8f3ff] hover:bg-[#d8eaff] disabled:opacity-60 transition-all"
           >
-            {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudDownload className="w-4 h-4" />}
-            {isFetching ? 'Đang lấy…' : 'Lấy dữ liệu'}
+            {isFetchingBooks ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
+            {isFetchingBooks ? 'Đang lấy sổ…' : 'Lấy sổ'}
           </button>
         </div>
-        <FetchStepper progress={fetchProgress} active={isFetching} />
+
+        {/* Hàng 2: Dropdown sổ + Lấy hóa đơn */}
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3 mt-3">
+          <div className="flex-1 min-w-0">
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Sổ {books.length > 0 && <span className="text-slate-400 font-semibold normal-case">({books.length})</span>}
+            </label>
+            <div className="relative group sm:max-w-md">
+              <BookOpen className="w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] transition-colors" />
+              <select
+                value={selectedBookId}
+                onChange={e => setSelectedBookId(e.target.value === '' ? '' : Number(e.target.value))}
+                disabled={busy || books.length === 0}
+                className="peer w-full appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 cursor-pointer transition-all hover:border-[#5a8dee]/50 focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {books.length === 0 && <option value="">— Chưa có sổ, hãy bấm "Lấy sổ" —</option>}
+                {books.map(b => (
+                  <option key={b.FigureBookId} value={b.FigureBookId}>{b.BookName}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 peer-focus:text-[#5a8dee] transition-colors" />
+            </div>
+          </div>
+          <button
+            onClick={handleFetchInvoices}
+            disabled={busy || selectedBookId === ''}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] disabled:opacity-60 shadow-sm transition-all"
+          >
+            {isFetchingInvoices ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
+            {isFetchingInvoices ? 'Đang lấy hóa đơn…' : 'Lấy hóa đơn'}
+          </button>
+        </div>
+
+        <FetchStepper {...stepperState} />
       </div>
 
       {/* Dropzone */}
