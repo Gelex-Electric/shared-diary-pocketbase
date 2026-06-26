@@ -369,7 +369,7 @@ export default function CustomerDebtManager() {
             <div className="flex flex-col">
               <span>{c.nMua || '(Chưa có tên)'}</span>
               <span className="text-[10px] font-bold text-[#5a8dee] mt-1 uppercase tracking-wider bg-[#e8f3ff]/70 px-1.5 py-0.5 rounded-md w-fit">
-                {c.kyList.length} kỳ
+                {c.kyList.length} hóa đơn
               </span>
             </div>
           </td>
