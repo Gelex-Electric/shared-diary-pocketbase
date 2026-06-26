@@ -44,6 +44,23 @@ async function startServer() {
     }
   }));
 
+  // ==================== PROXY CCIS / HĐĐT (SOAP muabandien) ====================
+  // Lấy XML hóa đơn điện tử trực tiếp từ web service GELEX (tránh CORS trình duyệt).
+  app.use('/ccis', createProxyMiddleware({
+    target: 'https://muabandien.gelex-electric.com',
+    changeOrigin: true,
+    pathRewrite: { '^/ccis': '' },
+    timeout: 120000,
+    proxyTimeout: 120000,
+    on: {
+      error: (err, req, res) => {
+        console.error('Proxy CCIS error:', err.message);
+        // @ts-ignore
+        res.status(502).send('Dịch vụ HĐĐT (muabandien) không phản hồi. Vui lòng thử lại.');
+      }
+    }
+  }));
+
   // Redirect /_/ → /pb/_/ cho tiện vào Admin UI
   app.get('/_', (req, res) => res.redirect('/pb/_/'));
 
@@ -68,7 +85,7 @@ async function startServer() {
 
     // SPA fallback
     app.get('*', (req, res) => {
-      if (req.path.startsWith('/pb') || req.path === '/_' || req.path.startsWith('/hes')) return;
+      if (req.path.startsWith('/pb') || req.path === '/_' || req.path.startsWith('/hes') || req.path.startsWith('/ccis')) return;
       res.sendFile(path.join(distPath, 'index.html'));
     });
 
