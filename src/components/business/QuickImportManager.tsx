@@ -4,9 +4,10 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { parseInvoiceXml, type ParsedInvoice, type MeterPeriodRow, type Bieu } from '../../lib/parseInvoiceXml';
 import { fetchFigureBooks, fetchInvoiceXmlForBook, type FetchProgress } from '../../lib/ccisApi';
 import { MonthPicker } from '../ui/DateTimePickers';
+import { Select } from '../ui/Select';
 import {
   Upload, FileCode2, Database, CheckCircle2, AlertCircle, Trash2,
-  Users, Loader2, FileSpreadsheet, CloudDownload, Check, Layers, ChevronDown,
+  Users, Loader2, FileSpreadsheet, CloudDownload, Check, Layers,
   BookOpen, ListChecks,
 } from 'lucide-react';
 
@@ -487,7 +488,7 @@ export default function QuickImportManager() {
           <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Nạp dữ liệu nhanh</h1>
         </div>
         <p className="text-sm text-slate-500 max-w-2xl">
-          Tải lên hàng loạt file XML hóa đơn điện, xem trước rồi ghi vào hệ thống. Hỗ trợ hóa đơn thường, đổi giá giữa kỳ (tách 2 dòng) và hóa đơn phản kháng.
+          Cho phép đồng bộ hóa đơn xml từ CCIS hoặc tải lên hàng loạt file XML hóa đơn điện, xem trước rồi ghi vào hệ thống
         </p>
       </div>
 
@@ -524,20 +525,14 @@ export default function QuickImportManager() {
             <div className="flex flex-col sm:flex-row sm:items-end gap-3">
               <div className="shrink-0">
                 <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Kỳ</label>
-                <div className="relative w-28 group">
-                  <Layers className="w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] transition-colors" />
-                  <select
-                    value={fetchTerm}
-                    onChange={e => setFetchTerm(Number(e.target.value))}
-                    disabled={busy}
-                    className="peer w-full appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 cursor-pointer transition-all hover:border-[#5a8dee]/50 focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {[1, 2, 3].map(t => (
-                      <option key={t} value={t}>Kỳ {t}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 peer-focus:text-[#5a8dee] transition-colors" />
-                </div>
+                <Select
+                  value={String(fetchTerm)}
+                  onChange={v => setFetchTerm(Number(v))}
+                  disabled={busy}
+                  icon={Layers}
+                  options={[1, 2, 3].map(t => ({ value: String(t), label: `Kỳ ${t}` }))}
+                  className="w-28"
+                />
               </div>
               <div className="shrink-0">
                 <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tháng</label>
@@ -547,21 +542,15 @@ export default function QuickImportManager() {
                 <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                   Sổ {books.length > 0 && <span className="text-slate-400 font-semibold normal-case">({books.length})</span>}
                 </label>
-                <div className="relative group">
-                  <BookOpen className="w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] transition-colors" />
-                  <select
-                    value={selectedBookId}
-                    onChange={e => setSelectedBookId(e.target.value === '' ? '' : Number(e.target.value))}
-                    disabled={busy || books.length === 0}
-                    className="peer w-full appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 cursor-pointer transition-all hover:border-[#5a8dee]/50 focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {books.length === 0 && <option value="">— Chưa có sổ, hãy bấm "Lấy sổ" —</option>}
-                    {books.map(b => (
-                      <option key={b.FigureBookId} value={b.FigureBookId}>{b.BookName}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 peer-focus:text-[#5a8dee] transition-colors" />
-                </div>
+                <Select
+                  value={selectedBookId === '' ? '' : String(selectedBookId)}
+                  onChange={v => setSelectedBookId(v === '' ? '' : Number(v))}
+                  disabled={busy || books.length === 0}
+                  icon={BookOpen}
+                  searchable
+                  placeholder={books.length === 0 ? '— Chưa có sổ, hãy bấm "Lấy sổ" —' : 'Chọn sổ'}
+                  options={books.map(b => ({ value: String(b.FigureBookId), label: b.BookName }))}
+                />
               </div>
             </div>
 
