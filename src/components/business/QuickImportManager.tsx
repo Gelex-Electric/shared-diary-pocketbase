@@ -71,51 +71,52 @@ interface StepperState {
   count?: { done: number; total: number } | null;
 }
 
-function FetchStepper({ current, running, label, count }: StepperState) {
+function FetchStepper({ current, running, label, count, actions }: StepperState & { actions?: Record<number, React.ReactNode> }) {
   const allDone = current >= FETCH_STEPS.length;
+  const len = FETCH_STEPS.length;
   return (
     <div className="mt-6 rounded-2xl bg-white border border-slate-100 shadow-[0_8px_24px_-12px_rgba(25,42,70,0.18)] px-6 md:px-8 py-7">
-      <div className="flex items-start">
+      <div className="flex items-stretch">
         {FETCH_STEPS.map((step, i) => {
           const done = i < current;
           const isActive = !allDone && i === current;
-          const isLast = i === FETCH_STEPS.length - 1;
+          const isLast = i === len - 1;
           return (
-            <div key={step.phase} className="flex-1 flex flex-col items-start relative min-w-0">
-              {/* Đường nối sang bước kế (từ tâm vòng tròn này tới tâm vòng tròn kế) */}
-              {!isLast && (
-                <div className="absolute top-[13px] left-[14px] w-full h-[3px] rounded-full bg-blue-100 overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-500 ${
-                      done ? 'w-full bg-emerald-500'
-                      : isActive ? 'w-1/2 bg-gradient-to-r from-[#2f6bff] to-blue-200'
-                      : 'w-0'
-                    }`}
-                  />
+            <div key={step.phase} className={`flex flex-col ${isLast ? 'items-end' : 'flex-1 items-start'} min-w-0`}>
+              {/* Hàng vòng tròn + đường nối (co giãn để trải đều 0→100%) */}
+              <div className="flex items-center w-full">
+                <div
+                  className={`relative z-10 shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 ${
+                    done
+                      ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300/40'
+                      : isActive
+                      ? 'bg-[#2f6bff] shadow-lg shadow-[#2f6bff]/30'
+                      : 'bg-blue-100'
+                  }`}
+                >
+                  {done ? (
+                    <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                  ) : isActive && running ? (
+                    <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                  ) : isActive ? (
+                    <span className="w-2.5 h-2.5 rounded-full bg-white ring-2 ring-white/60" />
+                  ) : null}
                 </div>
-              )}
-
-              {/* Vòng tròn bước */}
-              <div
-                className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 ${
-                  done
-                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300/40'
-                    : isActive
-                    ? 'bg-[#2f6bff] shadow-lg shadow-[#2f6bff]/30'
-                    : 'bg-blue-100'
-                }`}
-              >
-                {done ? (
-                  <Check className="w-3.5 h-3.5" strokeWidth={3} />
-                ) : isActive && running ? (
-                  <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
-                ) : isActive ? (
-                  <span className="w-2.5 h-2.5 rounded-full bg-white ring-2 ring-white/60" />
-                ) : null}
+                {!isLast && (
+                  <div className="flex-1 h-[3px] mx-1.5 rounded-full bg-blue-100 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        done ? 'w-full bg-emerald-500'
+                        : isActive ? 'w-1/2 bg-gradient-to-r from-[#2f6bff] to-blue-200'
+                        : 'w-0'
+                      }`}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Nhãn */}
-              <div className="mt-3 pr-3">
+              <div className={`mt-3 ${isLast ? 'text-right pl-3' : 'pr-3'}`}>
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Step {i + 1}
                 </div>
@@ -133,6 +134,9 @@ function FetchStepper({ current, running, label, count }: StepperState) {
                   )}
                 </div>
               </div>
+
+              {/* Nút hành động gắn dưới bước (nếu có) */}
+              {actions?.[i] && <div className="mt-3 pr-3">{actions[i]}</div>}
             </div>
           );
         })}
@@ -165,6 +169,7 @@ export default function QuickImportManager() {
   const [isFetchingInvoices, setIsFetchingInvoices] = useState(false);
   const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
   const [invoicesDone, setInvoicesDone] = useState(false);      // đã hoàn tất lấy hóa đơn (cho stepper)
+  const [mode, setMode] = useState<'direct' | 'manual'>('direct'); // tab: lấy trực tiếp / tải thủ công
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
     setToast({ message, type: t });
@@ -486,120 +491,143 @@ export default function QuickImportManager() {
         </p>
       </div>
 
-      {/* Lấy dữ liệu trực tiếp từ web service HĐĐT */}
+      {/* Card lấy dữ liệu — có tab chuyển chế độ */}
       <div className="vl-card p-6 md:p-8">
-        <div className="flex items-center gap-2 mb-1">
-          <CloudDownload className="w-5 h-5 text-[#5a8dee]" />
-          <h2 className="text-base font-black text-slate-800">Lấy hóa đơn trực tiếp (không cần tải file)</h2>
-        </div>
-        <p className="text-xs text-slate-400 mb-4">
-          Bước 1: chọn kỳ/tháng rồi <b>Lấy sổ</b> để cập nhật danh mục sổ. Bước 2: chọn sổ trong danh sách rồi <b>Lấy hóa đơn</b> của sổ đó.
-        </p>
-
-        {/* Hàng 1: Kỳ + Tháng + Lấy sổ */}
-        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Kỳ</label>
-            <div className="relative w-28 group">
-              <Layers className="w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] transition-colors" />
-              <select
-                value={fetchTerm}
-                onChange={e => setFetchTerm(Number(e.target.value))}
-                disabled={busy}
-                className="peer w-full appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 cursor-pointer transition-all hover:border-[#5a8dee]/50 focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] disabled:opacity-60 disabled:cursor-not-allowed"
+        {/* Tab bar */}
+        <div className="inline-flex p-1 bg-slate-100 rounded-xl mb-6">
+          {([
+            { key: 'direct' as const, icon: CloudDownload, label: 'Lấy trực tiếp' },
+            { key: 'manual' as const, icon: Upload, label: 'Tải XML thủ công' },
+          ]).map(t => {
+            const on = mode === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setMode(t.key)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                  on ? 'bg-white text-[#5a8dee] shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
               >
-                {[1, 2, 3].map(t => (
-                  <option key={t} value={t}>Kỳ {t}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 peer-focus:text-[#5a8dee] transition-colors" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tháng</label>
-            <MonthPicker value={fetchYM} onChange={setFetchYM} className="w-44" />
-          </div>
-          <button
-            onClick={handleFetchBooks}
-            disabled={busy}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold text-[#5a8dee] bg-[#e8f3ff] hover:bg-[#d8eaff] disabled:opacity-60 transition-all"
-          >
-            {isFetchingBooks ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
-            {isFetchingBooks ? 'Đang lấy sổ…' : 'Lấy sổ'}
-          </button>
+                <t.icon className="w-4 h-4" /> {t.label}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Hàng 2: Dropdown sổ + Lấy hóa đơn */}
-        <div className="flex flex-col sm:flex-row sm:items-end gap-3 mt-3">
-          <div className="flex-1 min-w-0">
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Sổ {books.length > 0 && <span className="text-slate-400 font-semibold normal-case">({books.length})</span>}
+        {mode === 'direct' ? (
+          <>
+            <p className="text-xs text-slate-400 mb-4">
+              Bước 1: chọn kỳ/tháng rồi <b>Lấy sổ</b> để cập nhật danh mục sổ. Bước 2: chọn sổ rồi <b>Lấy hóa đơn</b> của sổ đó.
+            </p>
+
+            {/* Hàng chọn: Kỳ + Tháng + Sổ (cùng một hàng) */}
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="shrink-0">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Kỳ</label>
+                <div className="relative w-28 group">
+                  <Layers className="w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] transition-colors" />
+                  <select
+                    value={fetchTerm}
+                    onChange={e => setFetchTerm(Number(e.target.value))}
+                    disabled={busy}
+                    className="peer w-full appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 cursor-pointer transition-all hover:border-[#5a8dee]/50 focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {[1, 2, 3].map(t => (
+                      <option key={t} value={t}>Kỳ {t}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 peer-focus:text-[#5a8dee] transition-colors" />
+                </div>
+              </div>
+              <div className="shrink-0">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tháng</label>
+                <MonthPicker value={fetchYM} onChange={setFetchYM} className="w-44" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Sổ {books.length > 0 && <span className="text-slate-400 font-semibold normal-case">({books.length})</span>}
+                </label>
+                <div className="relative group">
+                  <BookOpen className="w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] transition-colors" />
+                  <select
+                    value={selectedBookId}
+                    onChange={e => setSelectedBookId(e.target.value === '' ? '' : Number(e.target.value))}
+                    disabled={busy || books.length === 0}
+                    className="peer w-full appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 cursor-pointer transition-all hover:border-[#5a8dee]/50 focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {books.length === 0 && <option value="">— Chưa có sổ, hãy bấm "Lấy sổ" —</option>}
+                    {books.map(b => (
+                      <option key={b.FigureBookId} value={b.FigureBookId}>{b.BookName}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 peer-focus:text-[#5a8dee] transition-colors" />
+                </div>
+              </div>
+            </div>
+
+            <FetchStepper
+              {...stepperState}
+              actions={{
+                0: (
+                  <button
+                    onClick={handleFetchBooks}
+                    disabled={busy}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-[#5a8dee] bg-[#e8f3ff] hover:bg-[#d8eaff] disabled:opacity-60 transition-all"
+                  >
+                    {isFetchingBooks ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
+                    {isFetchingBooks ? 'Đang lấy sổ…' : 'Lấy sổ'}
+                  </button>
+                ),
+                1: (
+                  <button
+                    onClick={handleFetchInvoices}
+                    disabled={busy || selectedBookId === ''}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] disabled:opacity-60 shadow-sm transition-all"
+                  >
+                    {isFetchingInvoices ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
+                    {isFetchingInvoices ? 'Đang lấy…' : 'Lấy hóa đơn'}
+                  </button>
+                ),
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <label
+              htmlFor="xml-input"
+              className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-300 rounded-2xl py-10 cursor-pointer hover:border-[#5a8dee] hover:bg-[#f4f8ff]/50 transition-colors"
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+            >
+              <div className="p-3 bg-[#e8f3ff] rounded-2xl text-[#5a8dee]"><Upload className="w-7 h-7" /></div>
+              <div className="text-center">
+                <p className="text-sm font-bold text-slate-700">Kéo–thả hoặc bấm để chọn nhiều file .xml</p>
+                <p className="text-xs text-slate-400 mt-1">Có thể chọn nhiều hóa đơn cùng lúc</p>
+              </div>
+              <input
+                id="xml-input"
+                type="file"
+                accept=".xml,application/xml,text/xml"
+                multiple
+                className="hidden"
+                onChange={e => { handleFiles(e.target.files); e.currentTarget.value = ''; }}
+              />
             </label>
-            <div className="relative group sm:max-w-md">
-              <BookOpen className="w-4 h-4 shrink-0 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#5a8dee] transition-colors" />
-              <select
-                value={selectedBookId}
-                onChange={e => setSelectedBookId(e.target.value === '' ? '' : Number(e.target.value))}
-                disabled={busy || books.length === 0}
-                className="peer w-full appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 cursor-pointer transition-all hover:border-[#5a8dee]/50 focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {books.length === 0 && <option value="">— Chưa có sổ, hãy bấm "Lấy sổ" —</option>}
-                {books.map(b => (
-                  <option key={b.FigureBookId} value={b.FigureBookId}>{b.BookName}</option>
+
+            {files.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mt-4">
+                {files.map(f => (
+                  <span key={f.fileName} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
+                    <FileCode2 className="w-3.5 h-3.5 text-[#5a8dee]" /> {f.fileName}
+                    <span className="text-slate-400">({f.invoice.rows.length})</span>
+                  </span>
                 ))}
-              </select>
-              <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 peer-focus:text-[#5a8dee] transition-colors" />
-            </div>
-          </div>
-          <button
-            onClick={handleFetchInvoices}
-            disabled={busy || selectedBookId === ''}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] disabled:opacity-60 shadow-sm transition-all"
-          >
-            {isFetchingInvoices ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
-            {isFetchingInvoices ? 'Đang lấy hóa đơn…' : 'Lấy hóa đơn'}
-          </button>
-        </div>
-
-        <FetchStepper {...stepperState} />
-      </div>
-
-      {/* Dropzone */}
-      <div className="vl-card p-6 md:p-8">
-        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Hoặc tải file XML thủ công</div>
-        <label
-          htmlFor="xml-input"
-          className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-300 rounded-2xl py-10 cursor-pointer hover:border-[#5a8dee] hover:bg-[#f4f8ff]/50 transition-colors"
-          onDragOver={e => e.preventDefault()}
-          onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
-        >
-          <div className="p-3 bg-[#e8f3ff] rounded-2xl text-[#5a8dee]"><Upload className="w-7 h-7" /></div>
-          <div className="text-center">
-            <p className="text-sm font-bold text-slate-700">Kéo–thả hoặc bấm để chọn nhiều file .xml</p>
-            <p className="text-xs text-slate-400 mt-1">Có thể chọn nhiều hóa đơn cùng lúc</p>
-          </div>
-          <input
-            id="xml-input"
-            type="file"
-            accept=".xml,application/xml,text/xml"
-            multiple
-            className="hidden"
-            onChange={e => { handleFiles(e.target.files); e.currentTarget.value = ''; }}
-          />
-        </label>
-
-        {files.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 mt-4">
-            {files.map(f => (
-              <span key={f.fileName} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
-                <FileCode2 className="w-3.5 h-3.5 text-[#5a8dee]" /> {f.fileName}
-                <span className="text-slate-400">({f.invoice.rows.length})</span>
-              </span>
-            ))}
-            <button onClick={clearAll} className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors">
-              <Trash2 className="w-3.5 h-3.5" /> Xóa hết
-            </button>
-          </div>
+                <button onClick={clearAll} className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Xóa hết
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
