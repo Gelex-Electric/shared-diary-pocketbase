@@ -54,15 +54,16 @@ interface InvoiceRecord {
   DChiNMua: string;
   SCT: string;
   HSN: number;
-  SHDon?: string;
+  IndexId?: string;
+  BillId?: string;
   [key: string]: any; // BT_dau/cuoi..., phu_BT..., SL_BT..., TongSL_*, ThTien_*
   created: string;
   updated: string;
 }
 
-/* Một dòng biên bản sau khi gộp các khoảng đổi giá (cùng SCT + SHDon) thành 1 kỳ liên tục. */
+/* Một dòng biên bản sau khi gộp các khoảng đổi giá (cùng BillId) thành 1 kỳ liên tục. */
 interface BienBanRow {
-  key: string;            // SCT|S:SHDon (hoặc __id:<id> nếu thiếu SHDon)
+  key: string;            // SCT|B:BillId (fallback nối ngày SCT|StartDate, hoặc __id:<id>)
   ids: string[];          // id các bản ghi gốc (>1 nếu hóa đơn đổi giá)
   primary: InvoiceRecord; // bản ghi mới nhất theo EndDate — nguồn meta/NKy + thao tác đơn lẻ
   data: InvoiceRecord;    // dữ liệu đã gộp để tính toán & xuất Word
@@ -125,14 +126,6 @@ const fmtDate = (s?: string) => {
   const datePart = dateOnly(s);
   const [y, m, d] = datePart.split('-');
   return d && m && y ? `${d}/${m}/${y}` : s;
-};
-
-// Khóa gộp biên bản: cùng công tơ (SCT) trong cùng hóa đơn (SHDon) → 1 kỳ liên tục.
-// Thiếu SHDon (bản ghi nhập tay cũ) → mỗi bản ghi đứng riêng (không gộp nhầm).
-const bienBanKey = (r: InvoiceRecord) => {
-  const shdon = (r.SHDon || '').trim();
-  const sct = (r.SCT || '').trim();
-  return shdon && sct ? `${sct}|S:${shdon}` : `__id:${r.id}`;
 };
 
 // Gộp nhiều khoảng đổi giá của cùng công tơ thành 1 bản ghi biên bản liên tục:
@@ -426,25 +419,69 @@ export default function BillConfirmManager() {
     );
   }, [records, search]);
 
-  /* ── Gộp các khoảng đổi giá của cùng công tơ (SCT + SHDon) thành 1 dòng biên bản
-        liên tục — biên bản chỉ số không phụ thuộc giá nên bỏ qua mốc đổi giá. ── */
+  /* ── Gộp các khoảng đổi giá thành 1 dòng biên bản liên tục.
+        Ưu tiên gộp theo BillId (mã hóa đơn, từ XML/SOAP), kế đến IndexId (=MIN MHHDVu công
+        tơ, luôn có khi BillId trống). Thiếu cả hai (dữ liệu cũ) → fallback nối các khoảng
+        CHUNG RANH GIỚI NGÀY của cùng công tơ. Bản ghi không có SCT → đứng riêng. ── */
   const mergedRows = useMemo<BienBanRow[]>(() => {
-    const map = new Map<string, InvoiceRecord[]>();
-    filteredRecords.forEach(r => {
-      const k = bienBanKey(r);
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(r);
-    });
-    return Array.from(map.entries()).map(([key, recs]) => {
+    const rows: BienBanRow[] = [];
+    const pushGroup = (key: string, recs: InvoiceRecord[]) => {
+      if (!recs.length) return;
       const byEndDesc = [...recs].sort((a, b) => dateOnly(b.EndDate).localeCompare(dateOnly(a.EndDate)));
-      return {
+      rows.push({
         key,
         ids: recs.map(r => r.id),
         primary: byEndDesc[0],
         data: mergeBienBan(recs),
         merged: recs.length > 1,
-      };
+      });
+    };
+
+    // Tách 3 nhóm: gộp được theo IndexId/BillId / nối ngày theo công tơ / đứng riêng
+    const byId = new Map<string, InvoiceRecord[]>();
+    const byMeter = new Map<string, InvoiceRecord[]>();
+    const singles: InvoiceRecord[] = [];
+    filteredRecords.forEach(r => {
+      const billId = (r.BillId ?? '').toString().trim();
+      const indexId = (r.IndexId ?? '').toString().trim();
+      const sct = (r.SCT || '').trim();
+      const uid = (billId && billId !== '0') ? `B:${billId}` : (indexId && indexId !== '0') ? `I:${indexId}` : '';
+      if (uid) {
+        const k = `${sct}|${uid}`;
+        if (!byId.has(k)) byId.set(k, []);
+        byId.get(k)!.push(r);
+      } else if (sct) {
+        if (!byMeter.has(sct)) byMeter.set(sct, []);
+        byMeter.get(sct)!.push(r);
+      } else {
+        singles.push(r);
+      }
     });
+
+    byId.forEach((recs, key) => pushGroup(key, recs));
+
+    // Fallback nối ngày cho bản ghi thiếu BillId
+    byMeter.forEach(recs => {
+      recs.sort((a, b) =>
+        (dateOnly(a.StartDate) || dateOnly(a.EndDate)).localeCompare(dateOnly(b.StartDate) || dateOnly(b.EndDate)),
+      );
+      let chain: InvoiceRecord[] = [];
+      let lastEnd = '';
+      const flush = () => {
+        if (chain.length) pushGroup(`${(chain[0].SCT || '').trim()}|${dateOnly(chain[0].StartDate) || dateOnly(chain[0].EndDate)}`, chain);
+        chain = [];
+      };
+      recs.forEach(r => {
+        const start = dateOnly(r.StartDate);
+        if (chain.length && start && lastEnd && start === lastEnd) chain.push(r);
+        else { flush(); chain = [r]; }
+        lastEnd = dateOnly(r.EndDate);
+      });
+      flush();
+    });
+
+    singles.forEach(r => rows.push({ key: `__id:${r.id}`, ids: [r.id], primary: r, data: r, merged: false }));
+    return rows;
   }, [filteredRecords]);
 
   /* ── Đồng bộ thời gian lấy chỉ số: gọi API HES (0h–23h59 ngày cuối kỳ),
