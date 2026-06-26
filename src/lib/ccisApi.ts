@@ -229,3 +229,75 @@ export async function fetchAllInvoiceXml(
   onProgress?.({ phase: 'done', done: billJobs.length, total: billJobs.length });
   return { items, errors };
 }
+
+/* ============================================================
+   Luồng 2 bước tách rời (dùng collection FigureBook):
+   - Bước A: lấy danh sách sổ (GetFigureBook) để lưu vào collection.
+   - Bước B: với 1 FigureBookId đã chọn → GetBill → GetXML.
+============================================================ */
+
+/** Lấy danh sách sổ của kỳ/tháng/năm trên các đơn vị (mặc định 2 & 12). */
+export async function fetchFigureBooks(
+  year: number,
+  month: number,
+  term: number,
+  onProgress?: (p: FetchProgress) => void,
+  departmentIds: number[] = DEFAULT_DEPARTMENT_IDS,
+): Promise<{ books: FigureBook[]; errors: string[] }> {
+  const errors: string[] = [];
+  const books: FigureBook[] = [];
+  for (let i = 0; i < departmentIds.length; i++) {
+    const deptId = departmentIds[i];
+    onProgress?.({ phase: 'books', done: i, total: departmentIds.length, label: `Đơn vị ${deptId}` });
+    try {
+      const list = await getFigureBooks(deptId, year, month);
+      list
+        .filter(book => !term || !book.Term || book.Term === term)
+        .forEach(book => books.push(book));
+    } catch (e: any) {
+      errors.push(`Đơn vị ${deptId}: ${e?.message || 'lỗi'}`);
+    }
+  }
+  onProgress?.({ phase: 'done', done: departmentIds.length, total: departmentIds.length });
+  return { books, errors };
+}
+
+/** Lấy toàn bộ XML hóa đơn của MỘT sổ (figureBookId) trong kỳ/tháng/năm. */
+export async function fetchInvoiceXmlForBook(
+  figureBookId: number,
+  term: number,
+  month: number,
+  year: number,
+  onProgress?: (p: FetchProgress) => void,
+): Promise<{ items: { fileName: string; xml: string }[]; errors: string[] }> {
+  const errors: string[] = [];
+  const items: { fileName: string; xml: string }[] = [];
+
+  onProgress?.({ phase: 'bills', done: 0, total: 1, label: 'Lấy danh sách hóa đơn…' });
+  let bills: Bill[] = [];
+  try {
+    bills = await getBills(term, month, year, figureBookId);
+  } catch (e: any) {
+    errors.push(`Hóa đơn: ${e?.message || 'lỗi'}`);
+  }
+
+  for (let i = 0; i < bills.length; i++) {
+    const bill = bills[i];
+    onProgress?.({ phase: 'xml', done: i, total: bills.length, label: bill.CustomerName || bill.CustomerCode || bill.BillId });
+    try {
+      // vDepartmentId lấy từ chính hóa đơn (collection FigureBook không lưu đơn vị).
+      const xml = await getXML(bill.BillType, bill.BillId, bill.DepartmentId, month, year, figureBookId);
+      if (xml) {
+        const name = `${bill.CustomerCode || 'HD'}_${bill.ElectricityMeterNumber || bill.BillId}_${month}-${year}.xml`;
+        items.push({ fileName: name, xml });
+      } else {
+        errors.push(`XML trống: ${bill.CustomerName || bill.BillId}`);
+      }
+    } catch (e: any) {
+      errors.push(`XML [${bill.CustomerName || bill.BillId}]: ${e?.message || 'lỗi'}`);
+    }
+  }
+
+  onProgress?.({ phase: 'done', done: bills.length, total: bills.length });
+  return { items, errors };
+}
