@@ -175,11 +175,16 @@ export default function CustomerDebtManager() {
       const mkh = (r.MKHang || '').trim();
       const end = dateOnly(r.EndDate);
       if (!mkh || !end) return;
-      // Gộp theo HÓA ĐƠN (SHDon): hóa đơn đổi giá tách 1 công tơ thành nhiều khoảng
-      // ngày (nhiều EndDate) nhưng vẫn là MỘT hóa đơn → một kỳ chốt, một lần thanh toán.
-      // Bản ghi cũ chưa có SHDon thì fallback về (MKHang + EndDate).
+      // Gộp theo HÓA ĐƠN: hóa đơn đổi giá tách 1 công tơ thành nhiều khoảng ngày
+      // (nhiều EndDate) nhưng vẫn là MỘT hóa đơn → một kỳ chốt, một lần thanh toán.
+      // LƯU Ý: SHDon KHÔNG duy nhất toàn cục — chỉ là số thứ tự trong từng sổ, và hóa
+      // đơn HC/VC có 2 dãy SHDon riêng nên trùng số (vd HC tháng 1 #3 ≡ VC tháng 2 #3).
+      // → khóa phải kèm LoaiHD + tháng (YYYY-MM) để không gộp nhầm khác loại/khác kỳ.
+      // Bản ghi cũ chưa có SHDon thì fallback về (LoaiHD + EndDate).
       const shdon = (r.SHDon || '').trim();
-      const key = shdon ? `${mkh}|S:${shdon}` : `${mkh}|${end}`;
+      const loai = (r.LoaiHD || '').trim();
+      const ym = end.slice(0, 7); // YYYY-MM của kỳ chốt
+      const key = shdon ? `${mkh}|${loai}|${ym}|S:${shdon}` : `${mkh}|${loai}|${end}`;
 
       let g = kyMap.get(key);
       if (!g) {
