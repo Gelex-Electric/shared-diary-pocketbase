@@ -3,9 +3,10 @@ import { pb } from '../../lib/pocketbase';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { parseInvoiceXml, type ParsedInvoice, type MeterPeriodRow, type Bieu } from '../../lib/parseInvoiceXml';
 import { fetchAllInvoiceXml, type FetchProgress } from '../../lib/ccisApi';
+import { MonthPicker } from '../ui/DateTimePickers';
 import {
   Upload, FileCode2, Database, CheckCircle2, AlertCircle, Trash2,
-  Users, Loader2, FileSpreadsheet, CloudDownload, CalendarDays,
+  Users, Loader2, FileSpreadsheet, CloudDownload, Check,
 } from 'lucide-react';
 
 /* ============================================================
@@ -51,6 +52,76 @@ interface PreviewRow {
   row: MeterPeriodRow;
 }
 
+/* Thanh tiến trình dạng stepper ngang (giống quy trình các bước) cho việc lấy hóa đơn. */
+const FETCH_STEPS: { phase: FetchProgress['phase']; label: string }[] = [
+  { phase: 'books', label: 'Quét sổ' },
+  { phase: 'bills', label: 'Quét hóa đơn' },
+  { phase: 'xml', label: 'Tải XML' },
+  { phase: 'done', label: 'Hoàn tất' },
+];
+
+function FetchStepper({ progress }: { progress: FetchProgress }) {
+  const current = FETCH_STEPS.findIndex(s => s.phase === progress.phase);
+  return (
+    <div className="mt-6 px-1">
+      <div className="flex items-start">
+        {FETCH_STEPS.map((step, i) => {
+          const done = i < current;
+          const active = i === current;
+          const isLast = i === FETCH_STEPS.length - 1;
+          const showCount = active && step.phase !== 'done' && progress.total > 0;
+          return (
+            <div key={step.phase} className="flex-1 flex flex-col items-center relative">
+              {/* Đường nối sang bước kế */}
+              {!isLast && (
+                <div className="absolute top-4 left-1/2 w-full h-[3px] rounded-full overflow-hidden bg-slate-200">
+                  <div
+                    className={`h-full bg-[#7c3aed] transition-all duration-300 ${done ? 'w-full' : 'w-0'}`}
+                  />
+                </div>
+              )}
+              {/* Vòng tròn bước */}
+              <div
+                className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all duration-300 ${
+                  done
+                    ? 'bg-[#7c3aed] text-white shadow-md shadow-violet-300/50'
+                    : active
+                    ? 'bg-[#7c3aed] text-white shadow-md shadow-violet-300/50 ring-4 ring-violet-100'
+                    : 'bg-white text-slate-400 border-2 border-slate-200'
+                }`}
+              >
+                {done ? (
+                  <Check className="w-4 h-4" strokeWidth={3} />
+                ) : active && step.phase !== 'done' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  String(i + 1).padStart(2, '0')
+                )}
+              </div>
+              {/* Nhãn */}
+              <div className="mt-2 text-center px-1">
+                <div className={`text-[11px] font-bold ${active || done ? 'text-slate-700' : 'text-slate-400'}`}>
+                  {step.label}
+                </div>
+                {showCount && (
+                  <div className="text-[10px] font-mono font-bold text-[#7c3aed] mt-0.5">
+                    {progress.done}/{progress.total}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {progress.label && progress.phase !== 'done' && (
+        <div className="mt-3 text-center text-[11px] font-semibold text-slate-400 truncate">
+          {progress.label}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function QuickImportManager() {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -58,8 +129,10 @@ export default function QuickImportManager() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const now = new Date();
-  const [fetchYear, setFetchYear] = useState(now.getFullYear());
-  const [fetchMonth, setFetchMonth] = useState(now.getMonth() + 1); // 1-12
+  const [fetchYM, setFetchYM] = useState(
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+  ); // "YYYY-MM"
+  const [fetchTerm, setFetchTerm] = useState(1); // kỳ 1/2/3
   const [isFetching, setIsFetching] = useState(false);
   const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
@@ -140,17 +213,21 @@ export default function QuickImportManager() {
   // Lấy thẳng XML hóa đơn từ web service HĐĐT theo tháng/năm (không cần tải file).
   const handleFetch = async () => {
     if (isFetching) return;
+    const [yStr, mStr] = fetchYM.split('-');
+    const fetchYear = Number(yStr);
+    const fetchMonth = Number(mStr);
+    if (!fetchYear || !fetchMonth) { showToast('Chưa chọn kỳ/tháng', 'warning'); return; }
     setIsFetching(true);
-    setFetchProgress({ phase: 'departments', done: 0, total: 1, label: 'Bắt đầu…' });
+    setFetchProgress({ phase: 'books', done: 0, total: 1, label: 'Bắt đầu…' });
     try {
-      const { items, errors } = await fetchAllInvoiceXml(fetchYear, fetchMonth, setFetchProgress);
+      const { items, errors } = await fetchAllInvoiceXml(fetchYear, fetchMonth, fetchTerm, setFetchProgress);
       if (items.length === 0) {
-        showToast(`Không lấy được hóa đơn nào cho tháng ${fetchMonth}/${fetchYear}` + (errors.length ? ` (${errors[0]})` : ''), 'warning');
+        showToast(`Không lấy được hóa đơn nào cho kỳ ${fetchTerm} tháng ${fetchMonth}/${fetchYear}` + (errors.length ? ` (${errors[0]})` : ''), 'warning');
       } else {
         const { ok, errors: parseErrs } = ingestXml(items);
         const allErr = errors.length + parseErrs.length;
         showToast(
-          `Đã lấy ${ok}/${items.length} hóa đơn tháng ${fetchMonth}/${fetchYear}` + (allErr ? `, ${allErr} lỗi` : ''),
+          `Đã lấy ${ok}/${items.length} hóa đơn kỳ ${fetchTerm} tháng ${fetchMonth}/${fetchYear}` + (allErr ? `, ${allErr} lỗi` : ''),
           allErr ? 'warning' : 'success',
         );
       }
@@ -313,32 +390,21 @@ export default function QuickImportManager() {
         </p>
         <div className="flex flex-col sm:flex-row sm:items-end gap-3">
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tháng</label>
-            <div className="relative">
-              <CalendarDays className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
-                value={fetchMonth}
-                onChange={e => setFetchMonth(Number(e.target.value))}
-                disabled={isFetching}
-                className="pl-8 pr-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#5a8dee]/40 disabled:opacity-60"
-              >
-                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                  <option key={m} value={m}>Tháng {m}</option>
-                ))}
-              </select>
-            </div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Kỳ</label>
+            <select
+              value={fetchTerm}
+              onChange={e => setFetchTerm(Number(e.target.value))}
+              disabled={isFetching}
+              className="w-24 px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#5a8dee]/40 disabled:opacity-60"
+            >
+              {[1, 2, 3].map(t => (
+                <option key={t} value={t}>Kỳ {t}</option>
+              ))}
+            </select>
           </div>
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Năm</label>
-            <input
-              type="number"
-              value={fetchYear}
-              onChange={e => setFetchYear(Number(e.target.value))}
-              disabled={isFetching}
-              min={2018}
-              max={2100}
-              className="w-28 px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#5a8dee]/40 disabled:opacity-60"
-            />
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tháng</label>
+            <MonthPicker value={fetchYM} onChange={setFetchYM} className="w-44" />
           </div>
           <button
             onClick={handleFetch}
@@ -350,16 +416,7 @@ export default function QuickImportManager() {
           </button>
         </div>
         {isFetching && fetchProgress && (
-          <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-slate-500">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5a8dee]" />
-            <span>
-              {fetchProgress.phase === 'departments' && 'Đang lấy danh sách đơn vị…'}
-              {fetchProgress.phase === 'books' && `Đang quét sổ ${fetchProgress.done}/${fetchProgress.total}`}
-              {fetchProgress.phase === 'bills' && `Đang quét hóa đơn ${fetchProgress.done}/${fetchProgress.total}`}
-              {fetchProgress.phase === 'xml' && `Đang tải XML ${fetchProgress.done}/${fetchProgress.total}`}
-            </span>
-            {fetchProgress.label && <span className="text-slate-400 truncate max-w-[280px]">· {fetchProgress.label}</span>}
-          </div>
+          <FetchStepper progress={fetchProgress} />
         )}
       </div>
 
