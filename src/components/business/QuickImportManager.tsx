@@ -247,12 +247,12 @@ export default function QuickImportManager() {
   );
 
   // Parse danh sách XML (từ file upload hoặc từ web service) rồi gộp vào danh sách xem trước.
-  const ingestXml = (list: { fileName: string; xml: string }[]): { ok: number; errors: string[] } => {
+  const ingestXml = (list: { fileName: string; xml: string; billId?: string }[]): { ok: number; errors: string[] } => {
     const parsed: FileEntry[] = [];
     const errors: string[] = [];
-    for (const { fileName, xml } of list) {
+    for (const { fileName, xml, billId } of list) {
       try {
-        parsed.push({ fileName, invoice: parseInvoiceXml(xml) });
+        parsed.push({ fileName, invoice: parseInvoiceXml(xml, billId || '') });
       } catch (err: any) {
         errors.push(`${fileName}: ${err?.message || 'lỗi đọc'}`);
       }
@@ -381,7 +381,8 @@ export default function QuickImportManager() {
       NBan: inv.nban.ten,
       DChiNBan: inv.nban.dchi,
       DChiNMua: r.pointAddress || inv.nmua.dchi,
-      SHDon: inv.shdon,
+      BillId: inv.billId,
+      IndexId: r.indexId,
       LoaiHD: inv.loaiHD,
       BT_dau: r.bieu.BT.old, BT_cuoi: r.bieu.BT.moi,
       CD_dau: r.bieu.CD.old, CD_cuoi: r.bieu.CD.moi,
