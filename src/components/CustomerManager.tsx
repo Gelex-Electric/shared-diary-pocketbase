@@ -8,6 +8,12 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
+import { toast as notify, type ToastType } from '../lib/toast';
+
+/** Tiêu đề mặc định cho từng loại thông báo (toast hiển thị tiêu đề + nội dung). */
+const TOAST_TITLE: Record<ToastType, string> = {
+  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo', alert: 'Thông báo',
+};
 
 /* ---- Types ---- */
 type CustomerGroup = { code: string; name: string; area: string; meters: MeterInfoRow[] };
@@ -24,11 +30,9 @@ export default function CustomerManager() {
   /* ---- Accordion ---- */
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  /* ---- Toast ---- */
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
-  const showToast = useCallback((msg: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
-    setToast({ message: msg, type });
-    setTimeout(() => setToast(null), 4000);
+  /* ---- Toast (dùng chung hệ thống toast của app) ---- */
+  const showToast = useCallback((msg: string, type: ToastType = 'info') => {
+    notify.show(type, TOAST_TITLE[type], msg);
   }, []);
 
   /* ---- Area helpers ---- */
@@ -87,38 +91,12 @@ export default function CustomerManager() {
   const toggleExpand = (cid: string) =>
     setExpandedIds(prev => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
 
-  /* ================================================================
-     TOAST CONFIG
-  ================================================================ */
-  const toastCfg = {
-    success: { icon: CheckCircle2, cls: 'vl-alert vl-alert-success' },
-    error:   { icon: XCircle,      cls: 'vl-alert vl-alert-danger'  },
-    warning: { icon: AlertCircle,  cls: 'vl-alert vl-alert-warning' },
-    info:    { icon: Info,         cls: 'vl-alert vl-alert-primary' },
-  };
 
   /* ================================================================
      RENDER
   ================================================================ */
   return (
     <div className="space-y-6">
-
-      {/* ---- Toast ---- */}
-      <AnimatePresence>
-        {toast && (() => {
-          const c = toastCfg[toast.type]; const Icon = c.icon;
-          return (
-            <motion.div key="toast"
-              initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              className={`fixed top-4 right-4 z-[120] max-w-sm flex items-center gap-3 px-4 py-3 rounded shadow-xl text-white text-sm font-medium ${c.cls}`}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="flex-1">{toast.message}</span>
-              <button onClick={() => setToast(null)} className="hover:opacity-60"><X className="w-3.5 h-3.5" /></button>
-            </motion.div>
-          );
-        })()}
-      </AnimatePresence>
 
       {/* ================================================================
           PAGE HEADER + TOOLBAR
