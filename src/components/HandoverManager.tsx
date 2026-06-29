@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
 import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
+import { toast as notify } from '../lib/toast';
 import pdfMake from 'pdfmake/build/pdfmake';
 
 const timesUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Regular.ttf';
@@ -161,7 +162,7 @@ export default function HandoverManager() {
       setLogs(result);
     } catch (err: any) {
       console.error('FULL ERROR LOGS:', err);
-      alert(`Lỗi tải nhật ký (Status: ${err.status}): ` + (err.data?.message || err.message));
+      notify.error('Lỗi tải nhật ký', `Status ${err.status}: ` + (err.data?.message || err.message));
     } finally {
       setIsLoading(false);
     }
@@ -320,7 +321,7 @@ export default function HandoverManager() {
       loadLogs();
     } catch (err) {
       console.error('Save log error:', err);
-      alert('Lỗi khi lưu lịch trực. Vui lòng thử lại.');
+      notify.error('Lỗi', 'Lỗi khi lưu lịch trực. Vui lòng thử lại.');
     } finally {
       setIsSaving(false);
     }
@@ -339,7 +340,7 @@ export default function HandoverManager() {
 
   const handleAutoAssign = () => {
     if (staffList.length < 6) {
-      alert('Cần ít nhất 6 nhân sự trực để tự động xoay ca!');
+      notify.warning('Lưu ý', 'Cần ít nhất 6 nhân sự trực để tự động xoay ca!');
       return;
     }
     
