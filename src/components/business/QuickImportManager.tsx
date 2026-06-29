@@ -75,7 +75,7 @@ function FetchStepper({ current, running, label, count, actions }: StepperState 
   const allDone = current >= FETCH_STEPS.length;
   const len = FETCH_STEPS.length;
   return (
-    <div className="mt-6 rounded-2xl bg-white border border-slate-100 shadow-[0_8px_24px_-12px_rgba(25,42,70,0.18)] px-6 md:px-8 py-7">
+    <div className="mt-6 rounded-2xl bg-surface border border-[var(--border)] shadow-[0_8px_24px_-12px_rgba(25,42,70,0.18)] px-6 md:px-8 py-7">
       <div className="flex items-stretch">
         {FETCH_STEPS.map((step, i) => {
           const done = i < current;
@@ -90,7 +90,7 @@ function FetchStepper({ current, running, label, count, actions }: StepperState 
                     done
                       ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300/40'
                       : isActive
-                      ? 'bg-[#2f6bff] shadow-lg shadow-[#2f6bff]/30'
+                      ? 'bg-[var(--accent)] shadow-lg shadow-[var(--accent)]/30'
                       : 'bg-blue-100'
                   }`}
                 >
@@ -99,7 +99,7 @@ function FetchStepper({ current, running, label, count, actions }: StepperState 
                   ) : isActive && running ? (
                     <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
                   ) : isActive ? (
-                    <span className="w-2.5 h-2.5 rounded-full bg-white ring-2 ring-white/60" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-surface ring-2 ring-white/60" />
                   ) : null}
                 </div>
                 {!isLast && (
@@ -107,7 +107,7 @@ function FetchStepper({ current, running, label, count, actions }: StepperState 
                     <div
                       className={`h-full transition-all duration-500 ${
                         done ? 'w-full bg-emerald-500'
-                        : isActive ? 'w-1/2 bg-gradient-to-r from-[#2f6bff] to-blue-200'
+                        : isActive ? 'w-1/2 bg-gradient-to-r from-[var(--accent)] to-blue-200'
                         : 'w-0'
                       }`}
                     />
@@ -117,15 +117,15 @@ function FetchStepper({ current, running, label, count, actions }: StepperState 
 
               {/* Nhãn */}
               <div className={`mt-3 ${isLast ? 'text-right pl-3' : 'pr-3'}`}>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-faint">
                   Step {i + 1}
                 </div>
-                <div className={`text-sm font-bold mt-0.5 ${done || isActive ? 'text-slate-800' : 'text-slate-400'}`}>
+                <div className={`text-sm font-bold mt-0.5 ${done || isActive ? 'text-ink' : 'text-faint'}`}>
                   {step.label}
                 </div>
                 <div
                   className={`text-[11px] font-semibold mt-0.5 ${
-                    done ? 'text-emerald-500' : isActive ? 'text-[#2f6bff]' : 'text-slate-400'
+                    done ? 'text-emerald-500' : isActive ? 'text-[var(--accent)]' : 'text-faint'
                   }`}
                 >
                   {done ? 'Hoàn tất' : isActive ? (running ? 'Đang xử lý' : 'Sẵn sàng') : 'Chờ'}
@@ -144,7 +144,7 @@ function FetchStepper({ current, running, label, count, actions }: StepperState 
 
       {/* Dòng chi tiết đang xử lý */}
       {running && label && (
-        <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] font-semibold text-slate-400 truncate">
+        <div className="mt-4 pt-3 border-t border-[var(--border)] text-[11px] font-semibold text-faint truncate">
           {label}
         </div>
       )}
@@ -508,12 +508,12 @@ export default function QuickImportManager() {
       {/* Header */}
       <div className="vl-card p-6 md:p-8">
         <div className="flex items-center gap-3 mb-2">
-          <div className="p-2.5 bg-[#e8f3ff] rounded-2xl text-[#5a8dee]">
+          <div className="p-2.5 bg-accent-soft rounded-2xl text-accent">
             <Database className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Nạp dữ liệu nhanh</h1>
+          <h1 className="text-2xl font-black text-ink tracking-tight uppercase">Nạp dữ liệu nhanh</h1>
         </div>
-        <p className="text-sm text-slate-500 max-w-2xl">
+        <p className="text-sm text-soft max-w-2xl">
           Cho phép đồng bộ hóa đơn xml từ CCIS hoặc tải lên hàng loạt file XML hóa đơn điện, xem trước rồi ghi vào hệ thống
         </p>
       </div>
@@ -521,7 +521,7 @@ export default function QuickImportManager() {
       {/* Card lấy dữ liệu — có tab chuyển chế độ */}
       <div className="vl-card p-6 md:p-8">
         {/* Tab bar */}
-        <div className="inline-flex p-1 bg-slate-100 rounded-xl mb-6">
+        <div className="inline-flex p-1 bg-subtle rounded-xl mb-6">
           {([
             { key: 'direct' as const, icon: CloudDownload, label: 'Lấy trực tiếp' },
             { key: 'manual' as const, icon: Upload, label: 'Tải XML thủ công' },
@@ -532,7 +532,7 @@ export default function QuickImportManager() {
                 key={t.key}
                 onClick={() => setMode(t.key)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                  on ? 'bg-white text-[#5a8dee] shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  on ? 'bg-surface text-accent shadow-sm' : 'text-soft hover:text-dim'
                 }`}
               >
                 <t.icon className="w-4 h-4" /> {t.label}
@@ -543,14 +543,14 @@ export default function QuickImportManager() {
 
         {mode === 'direct' ? (
           <>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-faint mb-4">
               Bước 1: chọn kỳ/tháng rồi <b>Lấy sổ</b> để cập nhật danh mục sổ. Bước 2: chọn sổ rồi <b>Lấy hóa đơn</b> của sổ đó.
             </p>
 
             {/* Hàng chọn: Kỳ + Tháng + Sổ (cùng một hàng) */}
             <div className="flex flex-col sm:flex-row sm:items-end gap-3">
               <div className="shrink-0">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Kỳ</label>
+                <label className="block text-[11px] font-bold text-soft uppercase tracking-wider mb-1">Kỳ</label>
                 <Select
                   value={String(fetchTerm)}
                   onChange={v => setFetchTerm(Number(v))}
@@ -561,12 +561,12 @@ export default function QuickImportManager() {
                 />
               </div>
               <div className="shrink-0">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tháng</label>
+                <label className="block text-[11px] font-bold text-soft uppercase tracking-wider mb-1">Tháng</label>
                 <MonthPicker value={fetchYM} onChange={setFetchYM} className="w-44" />
               </div>
               <div className="flex-1 min-w-0">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  Sổ {books.length > 0 && <span className="text-slate-400 font-semibold normal-case">({books.length})</span>}
+                <label className="block text-[11px] font-bold text-soft uppercase tracking-wider mb-1">
+                  Sổ {books.length > 0 && <span className="text-faint font-semibold normal-case">({books.length})</span>}
                 </label>
                 <Select
                   value={selectedBookId === '' ? '' : String(selectedBookId)}
@@ -587,7 +587,7 @@ export default function QuickImportManager() {
                   <button
                     onClick={handleFetchBooks}
                     disabled={busy}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-[#5a8dee] bg-[#e8f3ff] hover:bg-[#d8eaff] disabled:opacity-60 transition-all"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-accent bg-accent-soft hover:bg-[var(--accent-soft)] disabled:opacity-60 transition-all"
                   >
                     {isFetchingBooks ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
                     {isFetchingBooks ? 'Đang lấy sổ…' : 'Lấy sổ'}
@@ -597,7 +597,7 @@ export default function QuickImportManager() {
                   <button
                     onClick={handleFetchInvoices}
                     disabled={busy || selectedBookId === ''}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] disabled:opacity-60 shadow-sm transition-all"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] disabled:opacity-60 shadow-sm transition-all"
                   >
                     {isFetchingInvoices ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
                     {isFetchingInvoices ? 'Đang lấy…' : 'Lấy hóa đơn'}
@@ -610,14 +610,14 @@ export default function QuickImportManager() {
           <>
             <label
               htmlFor="xml-input"
-              className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-300 rounded-2xl py-10 cursor-pointer hover:border-[#5a8dee] hover:bg-[#f4f8ff]/50 transition-colors"
+              className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-[var(--border-strong)] rounded-2xl py-10 cursor-pointer hover:border-accent hover:bg-accent-soft/50 transition-colors"
               onDragOver={e => e.preventDefault()}
               onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
             >
-              <div className="p-3 bg-[#e8f3ff] rounded-2xl text-[#5a8dee]"><Upload className="w-7 h-7" /></div>
+              <div className="p-3 bg-accent-soft rounded-2xl text-accent"><Upload className="w-7 h-7" /></div>
               <div className="text-center">
-                <p className="text-sm font-bold text-slate-700">Kéo–thả hoặc bấm để chọn nhiều file .xml</p>
-                <p className="text-xs text-slate-400 mt-1">Có thể chọn nhiều hóa đơn cùng lúc</p>
+                <p className="text-sm font-bold text-dim">Kéo–thả hoặc bấm để chọn nhiều file .xml</p>
+                <p className="text-xs text-faint mt-1">Có thể chọn nhiều hóa đơn cùng lúc</p>
               </div>
               <input
                 id="xml-input"
@@ -632,9 +632,9 @@ export default function QuickImportManager() {
             {files.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 mt-4">
                 {files.map(f => (
-                  <span key={f.fileName} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
-                    <FileCode2 className="w-3.5 h-3.5 text-[#5a8dee]" /> {f.fileName}
-                    <span className="text-slate-400">({f.invoice.rows.length})</span>
+                  <span key={f.fileName} className="inline-flex items-center gap-1.5 text-xs font-semibold text-dim bg-subtle border border-[var(--border)] px-2.5 py-1 rounded-lg">
+                    <FileCode2 className="w-3.5 h-3.5 text-accent" /> {f.fileName}
+                    <span className="text-faint">({f.invoice.rows.length})</span>
                   </span>
                 ))}
                 <button onClick={clearAll} className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors">
@@ -649,18 +649,18 @@ export default function QuickImportManager() {
       {/* Preview + actions */}
       {previewRows.length > 0 && (
         <div className="vl-card overflow-hidden">
-          <div className="p-5 md:p-6 border-b border-slate-150 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+          <div className="p-5 md:p-6 border-b border-slate-150 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-subtle/50">
             <div>
-              <h3 className="text-base font-black text-slate-800">Xem trước ({previewRows.length} công tơ · đã chọn {selectedCount})</h3>
+              <h3 className="text-base font-black text-ink">Xem trước ({previewRows.length} công tơ · đã chọn {selectedCount})</h3>
               <div className="flex items-center gap-2 mt-2">
-                <button onClick={() => setAll(true)} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50">Chọn hết</button>
-                <button onClick={() => setAll(false)} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50">Bỏ chọn</button>
+                <button onClick={() => setAll(true)} className="px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle">Chọn hết</button>
+                <button onClick={() => setAll(false)} className="px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle">Bỏ chọn</button>
               </div>
             </div>
             <button
               onClick={doImport}
               disabled={isImporting || selectedCount === 0}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] disabled:opacity-60 shadow-sm transition-all"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] disabled:opacity-60 shadow-sm transition-all"
             >
               {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
               {isImporting
@@ -669,18 +669,18 @@ export default function QuickImportManager() {
             </button>
           </div>
 
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-[var(--border)]">
             {grouped.map(g => (
               <div key={g.name}>
-                <div className="px-5 py-3 bg-slate-50/40 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-[#5a8dee]" />
-                  <span className="font-bold text-slate-800 text-sm">{g.name}</span>
-                  <span className="text-[11px] font-semibold text-slate-400">· {g.rows.length} công tơ</span>
+                <div className="px-5 py-3 bg-subtle/40 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-accent" />
+                  <span className="font-bold text-ink text-sm">{g.name}</span>
+                  <span className="text-[11px] font-semibold text-faint">· {g.rows.length} công tơ</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse min-w-[1040px] text-sm">
                     <thead>
-                      <tr className="text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                      <tr className="text-[11px] font-bold text-faint uppercase tracking-wider border-b border-[var(--border)]">
                         <th className="py-2.5 px-3 w-10"></th>
                         <th className="py-2.5 px-3">Số công tơ</th>
                         <th className="py-2.5 px-3">Kỳ</th>
@@ -694,36 +694,36 @@ export default function QuickImportManager() {
                         <th className="py-2.5 px-3 text-center">Loại</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-[var(--border)]">
                       {g.rows.map(p => {
                         const r = p.row;
                         const isVC = p.invoice.loaiHD === 'VC';
                         const exists = existingKeys.has(rowKey(p));
                         const tongSL = isVC ? r.TongSL_PK : r.TongSL_HC;
                         return (
-                          <tr key={p.id} className={`hover:bg-slate-50/70 transition-colors ${selected[p.id] ? '' : 'opacity-50'}`}>
+                          <tr key={p.id} className={`hover:bg-subtle/70 transition-colors ${selected[p.id] ? '' : 'opacity-50'}`}>
                             <td className="py-2.5 px-3">
-                              <input type="checkbox" checked={!!selected[p.id]} onChange={() => toggleRow(p.id)} className="w-4 h-4 accent-[#5a8dee]" />
+                              <input type="checkbox" checked={!!selected[p.id]} onChange={() => toggleRow(p.id)} className="w-4 h-4 accent-[var(--accent)]" />
                             </td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-[#5a8dee]">{r.SCT}</td>
-                            <td className="py-2.5 px-3 text-xs font-semibold text-slate-500">{fmtDate(r.StartDate)}–{fmtDate(r.EndDate)}</td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-accent">{r.SCT}</td>
+                            <td className="py-2.5 px-3 text-xs font-semibold text-soft">{fmtDate(r.StartDate)}–{fmtDate(r.EndDate)}</td>
                             <td className="py-2.5 px-3 text-right font-mono">{fmt(r.HSN)}</td>
                             {(['BT', 'CD', 'TD', 'VC'] as Bieu[]).map(b => (
-                              <td key={b} className="py-2.5 px-3 text-right font-mono text-xs text-slate-600">
+                              <td key={b} className="py-2.5 px-3 text-right font-mono text-xs text-dim">
                                 {fmt(sanLuong(r, b))}
                               </td>
                             ))}
-                            <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-amber-600">{fmt(tongSL)}</td>
-                            <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
+                            <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-warn">{fmt(tongSL)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono font-bold text-ink">
                               {isVC ? <span className="text-violet-600">{fmt(r.ThTien_PK)}</span> : fmt(r.ThTien_HC)}
                             </td>
                             <td className="py-2.5 px-3 text-center">
-                              <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${exists ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${exists ? 'bg-amber-100 text-warn' : 'bg-sky-100 text-sky-700'}`}>
                                 {exists ? 'Cập nhật' : 'Mới'}
                               </span>
                             </td>
                             <td className="py-2.5 px-3 text-center">
-                              <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${isVC ? 'bg-violet-100 text-violet-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${isVC ? 'bg-violet-100 text-violet-700' : 'bg-emerald-100 text-ok'}`}>
                                 {isVC ? 'Phản kháng' : 'Hữu công'}
                               </span>
                             </td>
@@ -740,9 +740,9 @@ export default function QuickImportManager() {
       )}
 
       {previewRows.length === 0 && files.length === 0 && (
-        <div className="vl-card py-16 text-center text-slate-400">
+        <div className="vl-card py-16 text-center text-faint">
           <div className="flex flex-col items-center justify-center">
-            <FileSpreadsheet className="w-12 h-12 text-slate-200 mb-3" />
+            <FileSpreadsheet className="w-12 h-12 text-faint mb-3" />
             <p className="text-sm">Chưa có dữ liệu. Hãy tải lên file XML hóa đơn.</p>
           </div>
         </div>
