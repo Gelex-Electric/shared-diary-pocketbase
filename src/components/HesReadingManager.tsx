@@ -357,7 +357,7 @@ export default function HesReadingManager() {
     info:    { icon: Info,         cls: 'vl-alert vl-alert-primary' },
   };
 
-  const SECTION_COLOR = ['bg-[#5a8dee] shadow-[#5a8dee]/20', 'bg-purple-600 shadow-purple-600/20'];
+  const SECTION_COLOR = ['bg-accent shadow-[var(--accent)]/20', 'bg-purple-600 shadow-purple-600/20'];
 
   /* ================================================================
      RENDER
@@ -385,11 +385,11 @@ export default function HesReadingManager() {
       {/* ================================================================
           TOOLBAR: Lấy Token
       ================================================================ */}
-      <div className="flex items-center justify-between px-4 py-3 bg-white rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <Zap className="w-4 h-4 text-[#5a8dee]" />
+      <div className="flex items-center justify-between px-4 py-3 bg-surface rounded-xl border border-[var(--border)] shadow-sm">
+        <div className="flex items-center gap-2 text-sm text-soft">
+          <Zap className="w-4 h-4 text-accent" />
           <span>Token HES:</span>
-          <span className={`font-mono text-xs px-2 py-0.5 rounded ${hesAccount?.Token ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-500'}`}>
+          <span className={`font-mono text-xs px-2 py-0.5 rounded ${hesAccount?.Token ? 'bg-[var(--success-soft)] text-ok' : 'bg-[var(--danger-soft)] text-red-500'}`}>
             {hesAccount?.Token ? hesAccount.Token.slice(0, 20) + '…' : 'Chưa có token'}
           </span>
         </div>
@@ -413,17 +413,17 @@ export default function HesReadingManager() {
           <div key={section.id} className="vl-card overflow-hidden flex flex-col">
 
             {/* Card header */}
-            <div className="p-5 border-b border-slate-100 bg-slate-50/30">
+            <div className="p-5 border-b border-[var(--border)] bg-subtle/30">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className={`p-2.5 rounded-lg shadow-md ${SECTION_COLOR[si]}`}>
                     <Zap className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-slate-800">
+                    <h3 className="text-base font-bold text-ink">
                       {section.id === 1 ? 'Lấy chỉ số đầu kỳ' : 'Lấy chỉ số cuối kỳ'}
                     </h3>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Chỉ số tức thời HES</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Chỉ số tức thời HES</p>
                   </div>
                 </div>
                 <button
@@ -456,21 +456,21 @@ export default function HesReadingManager() {
             {/* Reading table */}
             <div className="flex-1 overflow-x-auto" style={{ maxHeight: 440 }}>
               <table className="vl-table w-full text-left border-collapse">
-                <thead className="sticky top-0 z-10 bg-white">
+                <thead className="sticky top-0 z-10 bg-surface">
                   <tr>
                     <th>Công tơ</th>
-                    <th className="text-center text-slate-400">Thời gian</th>
-                    <th className="text-center text-[#5a8dee]">Tổng</th>
-                    <th className="text-center text-[#5a8dee]">Biểu 1</th>
+                    <th className="text-center text-faint">Thời gian</th>
+                    <th className="text-center text-accent">Tổng</th>
+                    <th className="text-center text-accent">Biểu 1</th>
                     <th className="text-center text-orange-500">Biểu 2</th>
                     <th className="text-center text-purple-600">Biểu 3</th>
-                    <th className="text-center text-slate-500">Vô công</th>
+                    <th className="text-center text-soft">Vô công</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-[var(--border)]">
                   {meters.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-10 text-center text-slate-400 text-sm italic">
+                      <td colSpan={7} className="py-10 text-center text-faint text-sm italic">
                         Chưa có danh sách công tơ
                       </td>
                     </tr>
@@ -482,28 +482,28 @@ export default function HesReadingManager() {
                       const isOk      = r?.status === 'success';
 
                       const cell = (val: string) => isLoading
-                        ? <RefreshCw className="w-3 h-3 animate-spin text-slate-300 mx-auto" />
-                        : <span className={isError ? 'text-red-400' : isOk ? '' : 'text-slate-300'}>{val}</span>;
+                        ? <RefreshCw className="w-3 h-3 animate-spin text-faint mx-auto" />
+                        : <span className={isError ? 'text-red-400' : isOk ? '' : 'text-faint'}>{val}</span>;
 
                       return (
-                        <tr key={m.id} className="hover:bg-[#f4f8ff] transition-colors">
+                        <tr key={m.id} className="hover:bg-accent-soft transition-colors">
                           <td>
                             <div>
-                              <span className="font-mono text-xs font-bold text-[#5a8dee]">{m.MeterNo}</span>
-                              {m.Line && <div className="text-[10px] text-slate-400">{m.Line}</div>}
+                              <span className="font-mono text-xs font-bold text-accent">{m.MeterNo}</span>
+                              {m.Line && <div className="text-[10px] text-faint">{m.Line}</div>}
                             </div>
                           </td>
                           <td className="text-center whitespace-nowrap">
                             {isLoading
-                              ? <RefreshCw className="w-3 h-3 animate-spin text-slate-300 mx-auto" />
-                              : <span className="text-[11px] font-mono text-slate-400">{fmtRecordTime(r?.recordTime)}</span>
+                              ? <RefreshCw className="w-3 h-3 animate-spin text-faint mx-auto" />
+                              : <span className="text-[11px] font-mono text-faint">{fmtRecordTime(r?.recordTime)}</span>
                             }
                           </td>
-                          <td className="text-center text-xs font-bold text-[#5a8dee]">{cell(r?.pg || '-')}</td>
-                          <td className="text-center text-xs font-bold text-[#5a8dee]">{cell(r?.bt || '-')}</td>
+                          <td className="text-center text-xs font-bold text-accent">{cell(r?.pg || '-')}</td>
+                          <td className="text-center text-xs font-bold text-accent">{cell(r?.bt || '-')}</td>
                           <td className="text-center text-xs font-bold text-orange-500">{cell(r?.cd || '-')}</td>
                           <td className="text-center text-xs font-bold text-purple-600">{cell(r?.td || '-')}</td>
-                          <td className="text-center text-xs font-bold text-slate-500">{cell(r?.vc || '-')}</td>
+                          <td className="text-center text-xs font-bold text-soft">{cell(r?.vc || '-')}</td>
                         </tr>
                       );
                     })
@@ -519,14 +519,14 @@ export default function HesReadingManager() {
           CONSUMPTION TABLE (Cuối kỳ − Đầu kỳ)
       ================================================================ */}
       <div className="vl-card overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="px-5 py-4 border-b border-[var(--border)] bg-subtle/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-[#5a8dee] rounded-lg shadow-md shadow-[#5a8dee]/20">
+            <div className="p-2.5 bg-accent rounded-lg shadow-md shadow-[var(--accent)]/20">
               <TableIcon className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-800">Chi tiết sản lượng</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">Tiêu thụ = (Cuối kỳ − Đầu kỳ) × Hệ số nhân</p>
+              <h3 className="text-base font-bold text-ink">Chi tiết sản lượng</h3>
+              <p className="text-[10px] text-faint mt-0.5">Tiêu thụ = (Cuối kỳ − Đầu kỳ) × Hệ số nhân</p>
             </div>
           </div>
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -554,25 +554,25 @@ export default function HesReadingManager() {
                 <th>Số công tơ</th>
                 <th>Trạm</th>
                 <th className="text-center">Hệ số nhân</th>
-                <th className="text-center text-slate-400">Thời gian đầu kỳ</th>
-                <th className="text-center text-slate-400">Thời gian cuối kỳ</th>
-                <th className="text-center text-white bg-[#5a8dee] font-extrabold">Tổng (kWh)</th>
-                <th className="text-center text-[#5a8dee]">Biểu 1 (kWh)</th>
+                <th className="text-center text-faint">Thời gian đầu kỳ</th>
+                <th className="text-center text-faint">Thời gian cuối kỳ</th>
+                <th className="text-center text-white bg-accent font-extrabold">Tổng (kWh)</th>
+                <th className="text-center text-accent">Biểu 1 (kWh)</th>
                 <th className="text-center text-orange-500">Biểu 2 (kWh)</th>
                 <th className="text-center text-purple-600">Biểu 3 (kWh)</th>
-                <th className="text-center text-slate-500">Vô công (kVarh)</th>
+                <th className="text-center text-soft">Vô công (kVarh)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-[var(--border)]">
               {isLoadingMeters ? (
                 <tr>
                   <td colSpan={10} className="py-10 text-center">
-                    <RefreshCw className="w-5 h-5 animate-spin text-slate-300 mx-auto" />
+                    <RefreshCw className="w-5 h-5 animate-spin text-faint mx-auto" />
                   </td>
                 </tr>
               ) : meters.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-slate-400 text-sm italic">
+                  <td colSpan={10} className="py-10 text-center text-faint text-sm italic">
                     Không có dữ liệu công tơ
                   </td>
                 </tr>
@@ -580,28 +580,28 @@ export default function HesReadingManager() {
                 meters.map(m => {
                   const isMax = m.id === maxTotalMeterId;
                   return (
-                  <tr key={m.id} className={`transition-colors ${isMax ? 'bg-amber-50 hover:bg-amber-100/70' : 'hover:bg-[#f4f8ff]'}`}>
+                  <tr key={m.id} className={`transition-colors ${isMax ? 'bg-[var(--warning-soft)] hover:bg-amber-100/70' : 'hover:bg-accent-soft'}`}>
                     <td>
                       <span className="inline-flex items-center gap-1.5">
                         {isMax && <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                        <span className="font-mono text-xs font-bold text-[#5a8dee] bg-[#e8f3ff] px-2 py-1 rounded">
+                        <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">
                           {m.MeterNo}
                         </span>
                       </span>
                     </td>
-                    <td className="text-sm text-slate-500">{m.Line || '—'}</td>
-                    <td className="text-center text-xs font-mono text-slate-500">{m.HSN || '1'}</td>
-                    <td className="text-center text-[11px] font-mono text-slate-400 whitespace-nowrap">
+                    <td className="text-sm text-soft">{m.Line || '—'}</td>
+                    <td className="text-center text-xs font-mono text-soft">{m.HSN || '1'}</td>
+                    <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">
                       {fmtRecordTime(sections[0].readings[m.MeterNo]?.recordTime)}
                     </td>
-                    <td className="text-center text-[11px] font-mono text-slate-400 whitespace-nowrap">
+                    <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">
                       {fmtRecordTime(sections[1].readings[m.MeterNo]?.recordTime)}
                     </td>
-                    <td className={`text-center text-sm font-extrabold text-[#3b6fd4] ${isMax ? 'bg-amber-100/60' : 'bg-[#e8f3ff]/60'}`}>{fmt(getConsumption(m.MeterNo, 'pg', m.HSN))}</td>
-                    <td className="text-center text-xs font-bold text-[#5a8dee]">{fmt(getConsumption(m.MeterNo, 'bt', m.HSN))}</td>
+                    <td className={`text-center text-sm font-extrabold text-[var(--accent)] ${isMax ? 'bg-amber-100/60' : 'bg-accent-soft/60'}`}>{fmt(getConsumption(m.MeterNo, 'pg', m.HSN))}</td>
+                    <td className="text-center text-xs font-bold text-accent">{fmt(getConsumption(m.MeterNo, 'bt', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-orange-500">{fmt(getConsumption(m.MeterNo, 'cd', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-purple-600">{fmt(getConsumption(m.MeterNo, 'td', m.HSN))}</td>
-                    <td className="text-center text-xs font-bold text-slate-500">{fmt(getConsumption(m.MeterNo, 'vc', m.HSN))}</td>
+                    <td className="text-center text-xs font-bold text-soft">{fmt(getConsumption(m.MeterNo, 'vc', m.HSN))}</td>
                   </tr>
                   );
                 })
