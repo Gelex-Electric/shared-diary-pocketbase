@@ -622,15 +622,15 @@ export default function BillConfirmManager() {
 
   /* ── style helpers ── */
   const inputCls =
-    'w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-sm text-slate-700 ' +
-    'focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:border-[#5a8dee] transition-all';
-  const labelCls = 'block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5';
+    'w-full px-3 py-2 border border-[var(--border)] bg-surface rounded-lg text-sm text-dim ' +
+    'focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent transition-all';
+  const labelCls = 'block text-[11px] font-bold text-faint uppercase tracking-wider mb-1.5';
   // input gọn nằm trong ô bảng (không viền riêng, dùng viền của ô)
   const cellInputCls =
     'w-full px-2 py-1.5 text-sm text-center font-mono tabular-nums bg-transparent outline-none ' +
-    'rounded focus:bg-[#e8f3ff] transition-colors';
-  const tdCls = 'border border-slate-300 px-1 py-1';
-  const thCls = 'border border-slate-300 px-2 py-2 text-center font-bold align-middle';
+    'rounded focus:bg-accent-soft transition-colors';
+  const tdCls = 'border border-[var(--border-strong)] px-1 py-1';
+  const thCls = 'border border-[var(--border-strong)] px-2 py-2 text-center font-bold align-middle';
   // ô số tính sẵn — căn giữa, đồng bộ cỡ chữ
   const calcCell = tdCls + ' text-center font-mono text-sm tabular-nums';
 
@@ -641,12 +641,12 @@ export default function BillConfirmManager() {
       <div className="vl-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-[#e8f3ff] rounded-2xl text-[#5a8dee]">
+            <div className="p-2.5 bg-accent-soft rounded-2xl text-accent">
               <FileCheck2 className="w-6 h-6" />
             </div>
-            <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Biên bản xác nhận chỉ số</h1>
+            <h1 className="text-2xl font-black text-ink tracking-tight uppercase">Biên bản xác nhận chỉ số</h1>
           </div>
-          <p className="text-sm text-slate-500 max-w-2xl">
+          <p className="text-sm text-soft max-w-2xl">
             Lưu theo từng khách hàng. Tạo mới, xem lại, chỉnh sửa, xóa hoặc tải PDF.
           </p>
         </div>
@@ -659,18 +659,18 @@ export default function BillConfirmManager() {
           />
           {/* Search */}
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-faint absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Tìm khách hàng, SCT..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-[#5a8dee] w-full sm:w-[260px]"
+              className="pl-10 pr-4 py-2 border border-[var(--border)] bg-surface rounded text-dim text-sm focus:outline-none focus:ring-1 focus:ring-accent w-full sm:w-[260px]"
             />
           </div>
           <button
             onClick={openCreate}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] shadow-sm transition-all shrink-0"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] shadow-sm transition-all shrink-0"
           >
             <Plus className="w-4 h-4" /> Tạo biên bản mới
           </button>
@@ -680,15 +680,15 @@ export default function BillConfirmManager() {
       {/* Filter bar */}
       <div className="vl-card p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={expandAll} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">Mở tất cả</button>
-          <button onClick={collapseAll} className="px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">Thu tất cả</button>
+          <button onClick={expandAll} className="px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors">Mở tất cả</button>
+          <button onClick={collapseAll} className="px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors">Thu tất cả</button>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={getToken}
             disabled={isGettingToken || !hesAccount}
             title={hesAccount?.Token ? `Token: ${hesAccount.Token.slice(0, 16)}…` : 'Chưa có token'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50"
           >
             {isGettingToken ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CreditCard className="w-3.5 h-3.5" />}
             {isGettingToken ? 'Đang lấy...' : 'Lấy Token'}
@@ -696,7 +696,7 @@ export default function BillConfirmManager() {
           <button
             onClick={syncNKyTimes}
             disabled={isSyncing || !hesAccount?.Token}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-white bg-accent hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
           >
             {isSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             {isSyncing ? `Đang đồng bộ... ${syncProgress ? `${syncProgress.done}/${syncProgress.total}` : ''}` : 'Đồng bộ thời gian lấy chỉ số'}
@@ -704,21 +704,21 @@ export default function BillConfirmManager() {
           <button
             onClick={selectAllFiltered}
             disabled={filteredRecords.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50"
           >
             <CheckSquare className="w-3.5 h-3.5" /> Chọn hết
           </button>
           <button
             onClick={deselectAll}
             disabled={selectedIds.size === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50"
           >
             <Square className="w-3.5 h-3.5" /> Bỏ chọn {selectedIds.size > 0 && `(${selectedIds.size})`}
           </button>
           <button
             onClick={bulkExportZip}
             disabled={selectedIds.size === 0 || isBulkExporting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:bg-slate-300"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:bg-[var(--border-strong)]"
           >
             {isBulkExporting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
             {isBulkExporting ? 'Đang nén...' : `Tải hàng loạt${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
@@ -728,11 +728,11 @@ export default function BillConfirmManager() {
 
       {/* Grouped accordion list */}
       {loadingList ? (
-        <div className="vl-card py-16 text-center text-slate-400 text-sm">Đang tải...</div>
+        <div className="vl-card py-16 text-center text-faint text-sm">Đang tải...</div>
       ) : groupedByCustomer.length === 0 ? (
-        <div className="vl-card py-16 text-center text-slate-400">
+        <div className="vl-card py-16 text-center text-faint">
           <div className="flex flex-col items-center justify-center">
-            <FileSpreadsheet className="w-12 h-12 text-slate-200 mb-3" />
+            <FileSpreadsheet className="w-12 h-12 text-faint mb-3" />
             <p className="text-sm">Không có biên bản nào khớp bộ lọc. Nhấn "Tạo biên bản mới".</p>
           </div>
         </div>
@@ -748,15 +748,15 @@ export default function BillConfirmManager() {
                   onClick={() => toggleGroup(group.name)}
                   className="vl-accordion-header"
                 >
-                  <div className="p-2 bg-white rounded shadow-xs text-[#5a8dee] shrink-0">
+                  <div className="p-2 bg-surface rounded shadow-xs text-accent shrink-0">
                     <Users className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
                     <p className="font-bold truncate">{group.name}</p>
-                    <p className="text-[11px] font-semibold text-slate-400 flex items-center gap-2 flex-wrap">
+                    <p className="text-[11px] font-semibold text-faint flex items-center gap-2 flex-wrap">
                       <span>{group.items.length} biên bản</span>
                       {group.mkh && (
-                        <span className="px-1.5 py-0.5 rounded bg-[#e8f3ff] text-[#5a8dee] font-bold">MKH: {group.mkh}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent font-bold">MKH: {group.mkh}</span>
                       )}
                     </p>
                   </div>
@@ -767,7 +767,7 @@ export default function BillConfirmManager() {
                       type="checkbox"
                       checked={groupSelected}
                       onChange={() => toggleGroupSelection(group.items)}
-                      className="w-4.5 h-4.5 rounded border-slate-300 text-[#5a8dee] focus:ring-[#5a8dee]"
+                      className="w-4.5 h-4.5 rounded border-[var(--border-strong)] text-accent focus:ring-accent"
                     />
                   </div>
                 </div>
@@ -785,7 +785,7 @@ export default function BillConfirmManager() {
                       <div className="overflow-x-auto">
                         <table className="vl-table w-full text-left border-collapse min-w-[760px]">
                           <thead>
-                            <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                            <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
                               <th className="py-3 px-4">Số công tơ</th>
                               <th className="py-3 px-4">Kỳ</th>
                               <th className="py-3 px-4 text-right">Sản lượng Tổng</th>
@@ -793,49 +793,49 @@ export default function BillConfirmManager() {
                               <th className="py-3 px-4 text-center w-[200px]">Thao tác</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100">
+                          <tbody className="divide-y divide-[var(--border)]">
                             {group.items.map(row => {
                               const r = row.data;
                               const res = computeResults(r);
                               const isSelected = selectedIds.has(row.key);
                               return (
-                                <tr key={row.key} className={`text-slate-700 text-sm hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-[#f4f8ff]' : ''}`}>
-                                  <td className="py-3.5 px-4 font-mono font-bold text-[#5a8dee]">{r.SCT || '—'}</td>
-                                  <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
+                                <tr key={row.key} className={`text-dim text-sm hover:bg-subtle/80 transition-colors ${isSelected ? 'bg-accent-soft' : ''}`}>
+                                  <td className="py-3.5 px-4 font-mono font-bold text-accent">{r.SCT || '—'}</td>
+                                  <td className="py-3.5 px-4 text-xs font-semibold text-soft">
                                     <div className="flex items-center gap-1.5">
                                       <span>{fmtDate(r.StartDate)} – {fmtDate(r.EndDate)}</span>
                                       {row.merged && (
                                         <span title={`Hóa đơn đổi giá — gộp ${row.ids.length} khoảng`}
-                                          className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wide">
+                                          className="px-1.5 py-0.5 rounded bg-[var(--warning-soft)] text-warn text-[10px] font-bold uppercase tracking-wide">
                                           đổi giá điện
                                         </span>
                                       )}
                                     </div>
                                   </td>
-                                  <td className="py-3.5 px-4 text-right font-mono font-bold text-amber-600">{fmt(res.bieu[0].cuoi)}</td>
-                                  <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-700">{res.cosphi.toFixed(3)}</td>
+                                  <td className="py-3.5 px-4 text-right font-mono font-bold text-warn">{fmt(res.bieu[0].cuoi)}</td>
+                                  <td className="py-3.5 px-4 text-center font-mono font-bold text-dim">{res.cosphi.toFixed(3)}</td>
                                   <td className="py-3.5 px-4">
                                     <div className="flex items-center justify-end gap-1.5">
                                       {/* Hóa đơn đổi giá (gộp nhiều khoảng) không sửa tay được — ẩn nút Sửa */}
                                       {!row.merged && (
                                         <button onClick={() => openEdit(row.primary)} title="Sửa"
-                                          className="p-2 rounded-lg text-slate-500 hover:bg-[#e8f3ff] hover:text-[#5a8dee] transition-colors">
+                                          className="p-2 rounded-lg text-soft hover:bg-accent-soft hover:text-accent transition-colors">
                                           <Pencil className="w-4 h-4" />
                                         </button>
                                       )}
                                       <button onClick={() => exportDocx(r, row.key)} disabled={exportingId === row.key} title="Tải Word"
-                                        className="p-2 rounded-lg text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-50">
+                                        className="p-2 rounded-lg text-soft hover:bg-[var(--success-soft)] hover:text-ok transition-colors disabled:opacity-50">
                                         <FileDown className="w-4 h-4" />
                                       </button>
                                       <button onClick={() => handleDelete(row)} title="Xóa"
-                                        className="p-2 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors">
+                                        className="p-2 rounded-lg text-soft hover:bg-rose-50 hover:text-rose-600 transition-colors">
                                         <Trash2 className="w-4 h-4" />
                                       </button>
                                       <input
                                         type="checkbox"
                                         checked={isSelected}
                                         onChange={() => toggleSelection(row.key)}
-                                        className="w-4.5 h-4.5 ml-1 rounded border-slate-300 text-[#5a8dee] focus:ring-[#5a8dee]"
+                                        className="w-4.5 h-4.5 ml-1 rounded border-[var(--border-strong)] text-accent focus:ring-accent"
                                       />
                                     </div>
                                   </td>
@@ -873,17 +873,17 @@ export default function BillConfirmManager() {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 10 }}
             transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            className="relative w-full max-w-5xl max-h-[90vh] my-4 flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
+            className="relative w-full max-w-5xl max-h-[90vh] my-4 flex flex-col bg-surface rounded-2xl shadow-2xl overflow-hidden"
           >
             {/* Modal header */}
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50/60 shrink-0">
-              <div className="p-2 bg-[#e8f3ff] rounded-xl text-[#5a8dee]">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-[var(--border)] bg-subtle/60 shrink-0">
+              <div className="p-2 bg-accent-soft rounded-xl text-accent">
                 <FileCheck2 className="w-5 h-5" />
               </div>
-              <h3 className="flex-1 text-lg font-black text-slate-800 tracking-tight">
+              <h3 className="flex-1 text-lg font-black text-ink tracking-tight">
                 {editingId ? 'Sửa biên bản' : 'Tạo biên bản mới'}
               </h3>
-              <button onClick={closeModal} className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+              <button onClick={closeModal} className="p-2 rounded-lg text-faint hover:bg-subtle hover:text-dim transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -892,8 +892,8 @@ export default function BillConfirmManager() {
             <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
       {/* Thông tin đầu biên bản */}
       <div className="vl-card p-6 md:p-8">
-        <h3 className="text-base font-black text-slate-800 mb-5 flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-[#5a8dee]" /> Thông tin biên bản
+        <h3 className="text-base font-black text-ink mb-5 flex items-center gap-2">
+          <Building2 className="w-5 h-5 text-accent" /> Thông tin biên bản
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -929,13 +929,13 @@ export default function BillConfirmManager() {
 
       {/* Bảng xác nhận chỉ số & sản lượng (giống biên bản giấy) */}
       <div className="vl-card p-4 md:p-6">
-        <h3 className="text-base font-black text-slate-800 mb-2 flex items-center gap-2 px-2">
-          <Gauge className="w-5 h-5 text-[#5a8dee]" /> Xác nhận chỉ số công tơ & sản lượng
+        <h3 className="text-base font-black text-ink mb-2 flex items-center gap-2 px-2">
+          <Gauge className="w-5 h-5 text-accent" /> Xác nhận chỉ số công tơ & sản lượng
         </h3>
-        <p className="text-xs text-slate-500 mb-4 px-2">Cùng nhau xác nhận chỉ số công tơ, sản lượng điện giao nhận giữa hai bên như sau:</p>
+        <p className="text-xs text-soft mb-4 px-2">Cùng nhau xác nhận chỉ số công tơ, sản lượng điện giao nhận giữa hai bên như sau:</p>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-slate-700 min-w-[920px]">
-            <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase">
+          <table className="w-full border-collapse text-dim min-w-[920px]">
+            <thead className="bg-subtle text-[11px] text-soft uppercase">
               <tr>
                 <th className={thCls} rowSpan={2}>Số công tơ</th>
                 <th className={thCls} rowSpan={2}>Thanh ghi</th>
@@ -964,24 +964,24 @@ export default function BillConfirmManager() {
                     <tr>
                       <td className={tdCls + ' align-middle'} rowSpan={totalRows}>
                         <input
-                          className={cellInputCls + ' font-bold text-[#5a8dee]'}
+                          className={cellInputCls + ' font-bold text-accent'}
                           value={sct}
                           onChange={e => setSct(e.target.value)}
                           placeholder="Số công tơ"
                         />
                       </td>
-                      <td className={tdCls + ' text-center font-bold text-slate-700'}>Tổng Pg</td>
-                      <td className={calcCell + ' text-slate-500'}>{fmt2(sum3('dau'))}</td>
-                      <td className={calcCell + ' text-slate-500'}>{fmt2(sum3('cuoi'))}</td>
+                      <td className={tdCls + ' text-center font-bold text-dim'}>Tổng Pg</td>
+                      <td className={calcCell + ' text-soft'}>{fmt2(sum3('dau'))}</td>
+                      <td className={calcCell + ' text-soft'}>{fmt2(sum3('cuoi'))}</td>
                       <td className={tdCls + ' align-middle'} rowSpan={totalRows}>
                         <input className={cellInputCls + ' font-bold'} inputMode="decimal"
                           value={hsn} onChange={e => setHsn(e.target.value)} placeholder="1" />
                       </td>
-                      <td className={calcCell + ' font-bold text-amber-600'}>{fmt(tongB.sanLuong)}</td>
+                      <td className={calcCell + ' font-bold text-warn'}>{fmt(tongB.sanLuong)}</td>
                       <td className={calcCell}>{fmt(phuTong)}</td>
-                      <td className={calcCell + ' font-extrabold text-slate-800'}>{fmt(tongB.cuoi)}</td>
+                      <td className={calcCell + ' font-extrabold text-ink'}>{fmt(tongB.cuoi)}</td>
                       <td className={tdCls + ' align-middle text-center'} rowSpan={totalRows}>
-                        <span className="text-base font-black font-mono text-[#5a8dee]">{calc.cosphi.toFixed(2)}</span>
+                        <span className="text-base font-black font-mono text-accent">{calc.cosphi.toFixed(2)}</span>
                       </td>
                     </tr>
 
@@ -990,7 +990,7 @@ export default function BillConfirmManager() {
                       const bieu = calc.bieu.find(b => b.key === row.res)!;
                       return (
                         <tr key={row.comp}>
-                          <td className={tdCls + ' text-center font-bold text-slate-700'}>{row.label}</td>
+                          <td className={tdCls + ' text-center font-bold text-dim'}>{row.label}</td>
                           <td className={tdCls}>
                             <input className={cellInputCls} inputMode="decimal"
                               value={readings[`${row.comp}_dau`] ?? ''}
@@ -1001,13 +1001,13 @@ export default function BillConfirmManager() {
                               value={readings[`${row.comp}_cuoi`] ?? ''}
                               onChange={e => setReading(`${row.comp}_cuoi`, e.target.value)} placeholder="0" />
                           </td>
-                          <td className={calcCell + ' font-bold text-amber-600'}>{fmt(bieu.sanLuong)}</td>
+                          <td className={calcCell + ' font-bold text-warn'}>{fmt(bieu.sanLuong)}</td>
                           <td className={tdCls}>
                             <input className={cellInputCls} inputMode="decimal"
                               value={phu[row.res] ?? ''}
                               onChange={e => setPhuVal(row.res, e.target.value)} placeholder="0" />
                           </td>
-                          <td className={calcCell + ' font-extrabold text-slate-800'}>{fmt(bieu.cuoi)}</td>
+                          <td className={calcCell + ' font-extrabold text-ink'}>{fmt(bieu.cuoi)}</td>
                         </tr>
                       );
                     })}
@@ -1027,7 +1027,7 @@ export default function BillConfirmManager() {
               <TimePicker value={nKyTime} onChange={setNKyTime} className="flex-1" />
             </div>
             {nKyDate && (
-              <p className="mt-1.5 text-xs text-slate-400 italic">{buildNKySentence(nKyDate, nKyTime)}</p>
+              <p className="mt-1.5 text-xs text-faint italic">{buildNKySentence(nKyDate, nKyTime)}</p>
             )}
           </div>
         </div>
@@ -1035,23 +1035,23 @@ export default function BillConfirmManager() {
             </div>
 
             {/* Modal footer */}
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/60 shrink-0">
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[var(--border)] bg-subtle/60 shrink-0">
               <button
                 onClick={resetForm}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors"
               >
                 <RotateCcw className="w-4 h-4" /> Làm mới
               </button>
               <button
                 onClick={closeModal}
-                className="px-4 py-2.5 rounded-lg text-sm font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+                className="px-4 py-2.5 rounded-lg text-sm font-bold text-dim border border-[var(--border)] hover:bg-subtle transition-colors"
               >
                 Hủy
               </button>
               <button
                 onClick={save}
                 disabled={isSaving}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] disabled:opacity-60 shadow-sm transition-all"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] disabled:opacity-60 shadow-sm transition-all"
               >
                 <Save className="w-4 h-4" /> {isSaving ? 'Đang lưu...' : 'Lưu biên bản'}
               </button>
