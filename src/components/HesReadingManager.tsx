@@ -10,6 +10,11 @@ import {
   Table as TableIcon, CreditCard, Crown,
 } from 'lucide-react';
 import { DatePicker, TimePicker } from './ui/DateTimePickers';
+import { toast as notify, type ToastType } from '../lib/toast';
+
+const TOAST_TITLE: Record<ToastType, string> = {
+  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo', alert: 'Thông báo',
+};
 import { Select } from './ui/Select';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
@@ -82,10 +87,8 @@ export default function HesReadingManager() {
   ]);
 
   /* ---- Toast ---- */
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
-  const showToast = useCallback((msg: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
-    setToast({ message: msg, type });
-    setTimeout(() => setToast(null), 4000);
+  const showToast = useCallback((msg: string, type: ToastType = 'info') => {
+    notify.show(type, TOAST_TITLE[type], msg);
   }, []);
 
   /* ---- User areas ---- */
@@ -347,16 +350,6 @@ export default function HesReadingManager() {
     XLSX.writeFile(wb, `SanLuong_HES_${Date.now()}.xlsx`);
   };
 
-  /* ================================================================
-     TOAST CONFIG
-  ================================================================ */
-  const toastCfg = {
-    success: { icon: CheckCircle2, cls: 'vl-alert vl-alert-success' },
-    error:   { icon: XCircle,      cls: 'vl-alert vl-alert-danger'  },
-    warning: { icon: AlertCircle,  cls: 'vl-alert vl-alert-warning' },
-    info:    { icon: Info,         cls: 'vl-alert vl-alert-primary' },
-  };
-
   const SECTION_COLOR = ['bg-accent shadow-[var(--accent)]/20', 'bg-purple-600 shadow-purple-600/20'];
 
   /* ================================================================
@@ -364,23 +357,6 @@ export default function HesReadingManager() {
   ================================================================ */
   return (
     <div className="space-y-6 pb-6">
-
-      {/* ---- Toast ---- */}
-      <AnimatePresence>
-        {toast && (() => {
-          const c = toastCfg[toast.type]; const Icon = c.icon;
-          return (
-            <motion.div key="toast"
-              initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              className={`fixed top-4 right-4 z-[120] max-w-sm flex items-center gap-3 px-4 py-3 rounded shadow-xl text-white text-sm font-medium ${c.cls}`}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="flex-1">{toast.message}</span>
-              <button onClick={() => setToast(null)} className="hover:opacity-60"><X className="w-3.5 h-3.5" /></button>
-            </motion.div>
-          );
-        })()}
-      </AnimatePresence>
 
       {/* ================================================================
           TOOLBAR: Lấy Token
