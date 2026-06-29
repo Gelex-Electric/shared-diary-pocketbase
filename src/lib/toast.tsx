@@ -118,20 +118,13 @@ const ICONS: Record<ToastType, LucideIcon> = {
   alert: Bell,
 };
 
-// Mỗi loại: biến màu (token) cho thanh accent / icon / progress.
-const ACCENT: Record<ToastType, string> = {
-  success: 'var(--success)',
-  error: 'var(--danger)',
-  warning: 'var(--warning)',
-  info: 'var(--info)',
-  alert: 'var(--accent)',
-};
-const TINT: Record<ToastType, string> = {
-  success: 'var(--success-soft)',
-  error: 'var(--danger-soft)',
-  warning: 'var(--warning-soft)',
-  info: 'var(--info-soft)',
-  alert: 'var(--accent-soft)',
+// Nền đặc kín cho mỗi loại (cố định, đọc tốt cả nền sáng lẫn tối với chữ trắng).
+const SOLID: Record<ToastType, string> = {
+  success: '#2fa64f',
+  info: '#1a73e8',
+  warning: '#f1a124',
+  error: '#e8483a',
+  alert: '#475569',
 };
 
 const POSITION_CLASS: Record<ToastPosition, string> = {
@@ -155,7 +148,7 @@ const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 function ToastItem({ data }: { data: ToastData }) {
   const Icon = ICONS[data.type];
-  const accent = ACCENT[data.type];
+  const solid = SOLID[data.type];
   const off = enterOffset(data.position);
 
   // Tự đóng + tạm dừng khi rê chuột (đóng băng cả progress bar lẫn timer).
@@ -195,27 +188,24 @@ function ToastItem({ data }: { data: ToastData }) {
       onMouseLeave={onLeave}
       onClick={data.clickToClose ? () => dismiss(data.id) : undefined}
       role={data.type === 'error' || data.type === 'alert' ? 'alert' : 'status'}
-      className={`pointer-events-auto relative w-[340px] max-w-[calc(100vw-32px)] overflow-hidden rounded-[10px] bg-raised border border-[var(--border)] ${
+      className={`pointer-events-auto relative w-[360px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg text-white ${
         data.clickToClose ? 'cursor-pointer' : ''
       }`}
-      style={{ boxShadow: 'var(--shadow-pop)', borderLeft: `3px solid ${accent}` }}
+      style={{ background: solid, boxShadow: 'var(--shadow-pop)' }}
     >
-      <div className="flex items-start gap-3 p-3.5 pr-9">
-        {/* Icon */}
-        <span
-          className="mt-0.5 grid h-7 w-7 shrink-0 place-content-center rounded-lg"
-          style={{ background: TINT[data.type], color: accent }}
-        >
-          <Icon className="h-[18px] w-[18px]" strokeWidth={2.2} />
+      <div className="flex items-center gap-3 p-3 pr-10">
+        {/* Icon — ô bo góc viền trắng */}
+        <span className="grid h-9 w-9 shrink-0 place-content-center rounded-lg border-2 border-white/80">
+          <Icon className="h-5 w-5 text-white" strokeWidth={2.4} />
         </span>
 
         {/* Nội dung */}
-        <div className="min-w-0 flex-1 pt-0.5">
+        <div className="min-w-0 flex-1">
           {data.title && (
-            <p className="text-[13px] font-bold leading-snug text-ink">{data.title}</p>
+            <p className="text-[13px] font-bold leading-snug text-white">{data.title}</p>
           )}
           {data.message && (
-            <p className="mt-0.5 text-[12px] leading-snug text-soft">{data.message}</p>
+            <p className="mt-0.5 text-[12px] leading-snug text-white/90">{data.message}</p>
           )}
 
           {hasActions && (
@@ -223,8 +213,8 @@ function ToastItem({ data }: { data: ToastData }) {
               {data.confirm && (
                 <button
                   onClick={(e) => { e.stopPropagation(); data.confirm?.onConfirm?.(); dismiss(data.id); }}
-                  className="rounded-md px-2.5 py-1 text-[12px] font-bold text-[var(--on-accent)] transition-opacity hover:opacity-90 active:scale-[0.98]"
-                  style={{ background: accent }}
+                  className="rounded-md bg-white px-2.5 py-1 text-[12px] font-bold transition-opacity hover:opacity-90 active:scale-[0.98]"
+                  style={{ color: solid }}
                 >
                   {data.confirm.text}
                 </button>
@@ -232,7 +222,7 @@ function ToastItem({ data }: { data: ToastData }) {
               {data.cancel && (
                 <button
                   onClick={(e) => { e.stopPropagation(); data.cancel?.onCancel?.(); dismiss(data.id); }}
-                  className="rounded-md px-2.5 py-1 text-[12px] font-semibold text-soft transition-colors hover:bg-subtle hover:text-dim active:scale-[0.98]"
+                  className="rounded-md px-2.5 py-1 text-[12px] font-semibold text-white/90 underline transition-colors hover:bg-white/15 active:scale-[0.98]"
                 >
                   {data.cancel.text}
                 </button>
@@ -246,18 +236,17 @@ function ToastItem({ data }: { data: ToastData }) {
       <button
         onClick={(e) => { e.stopPropagation(); dismiss(data.id); }}
         aria-label="Đóng thông báo"
-        className="absolute right-2 top-2 grid h-6 w-6 place-content-center rounded-md text-faint transition-colors hover:bg-subtle hover:text-dim"
+        className="absolute right-2 top-2 grid h-6 w-6 place-content-center rounded-md text-white/80 transition-colors hover:bg-white/15 hover:text-white"
       >
         <X className="h-4 w-4" />
       </button>
 
       {/* Progress bar */}
       {data.autoClose && data.progressBar && (
-        <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: 'var(--border)' }}>
+        <div className="absolute inset-x-0 bottom-0 h-[3px] bg-white/25">
           <div
-            className="h-full origin-left"
+            className="h-full origin-left bg-white/70"
             style={{
-              background: accent,
               animation: `toast-progress ${data.duration}ms linear forwards`,
               animationPlayState: paused ? 'paused' : 'running',
             }}
