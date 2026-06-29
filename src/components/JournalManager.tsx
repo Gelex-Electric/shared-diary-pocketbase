@@ -11,12 +11,12 @@ export default function JournalManager() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-slate-800">Sổ nhật ký vận hành</h2>
-        <p className="text-slate-500 text-sm mt-1">Quản lý lịch trực và nhân sự trực vận hành</p>
+        <h2 className="text-2xl font-bold text-ink">Sổ nhật ký vận hành</h2>
+        <p className="text-soft text-sm mt-1">Quản lý lịch trực và nhân sự trực vận hành</p>
       </div>
 
       {/* Tabs */}
-      <div className="vl-nav-tabs flex flex-wrap border-b border-slate-200">
+      <div className="vl-nav-tabs flex flex-wrap border-b border-[var(--border)]">
         <button
           onClick={() => setTab('schedule')}
           className={`vl-nav-link px-6 py-3 text-sm font-bold transition-all ${tab === 'schedule' ? 'active' : ''}`}
