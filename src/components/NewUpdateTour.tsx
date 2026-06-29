@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import {
   Check, Sparkles, X, ArrowRight, FileText,
   Palette, Zap, Wrench, Tag, Layers, CloudDownload,
+  Moon, Bell,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from '../lib/toast';
 
 /** Tab đích để điều hướng khi nhấn "Xem ngay" — khớp với type Tab trong Dashboard */
 export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'sld' | 'later';
@@ -20,60 +22,43 @@ interface UpdateItem {
 }
 
 // Phiên bản & ngày phát hành hiển thị trên header
-const VERSION      = '1.3';
-const RELEASE_DATE = '19/06/2026';
+const VERSION      = '1.4';
+const RELEASE_DATE = '29/06/2026';
 
 const UPDATES: UpdateItem[] = [
   {
-    title: 'Sơ đồ một sợi cho từng khu công nghiệp',
-    desc: 'Trang mới trong "Thông số vận hành": bản vẽ sơ đồ một sợi (single line diagram) riêng cho mỗi KCN, giúp nắm nhanh cấu trúc lưới điện.',
-    tag: 'Mới',
-    link: { tab: 'sld', label: 'Xem ngay' },
-  },
-  {
-    title: 'Thông tin khách hàng & công tơ đọc trực tiếp từ HES',
-    desc: 'Danh sách khách hàng/công tơ nay sẽ đọc trực tiếp từ HES loại bỏ hoàn toàn khả năng thêm thủ công dữ liệu sẽ được làm mới sau mỗi ngày.',
-    tag: 'Cải tiến',
-    link: { tab: 'operating', label: 'Xem ngay' },
-  },
-  {
-    title: 'Thêm khách hàng ngoài danh sách khi soạn thông báo ngừng điện',
-    desc: 'Danh sách khách hàng trong phụ lục thông báo ngừng cấp điện có thể thêm thủ công cho những khách khác chưa có trong HES',
-    tag: 'Cải tiến',
-    link: { tab: 'outage', label: 'Thử ngay' },
-  },
-  {
-    title: 'Gộp cột Phạm vi & Phụ lục trong bảng khung giờ',
-    desc: 'Bảng khung giờ của thông báo ngừng cấp điện chỉ còn một cột "Phạm vi", bộ chọn phụ lục được đặt ngay dưới ô nhập phạm vi.',
+    title: 'Giao diện "Phòng điều khiển" hoàn toàn mới',
+    desc: 'Toàn bộ ứng dụng được thiết kế lại theo phong cách bảng điều khiển trạm: phân cấp rõ ràng, số liệu dạng đồng hồ đo, đèn trạng thái và bố cục gọn — dễ đọc khi trực ban.',
     tag: 'Giao diện',
-    link: { tab: 'outage', label: 'Xem ngay' },
   },
   {
-    title: 'Đồ thị điện áp & công suất bỏ qua khách hàng không sử dụng điện',
-    desc: 'Trang "Đồ thị điện áp & công suất" ở chế độ mặc định sẽ không đọc những khách hàng không sử dụng điện nhưng vẫn đóng điện (điện áp pha >0 nhưng dòng = 0).',
+    title: 'Chế độ Sáng / Tối',
+    desc: 'Thêm nút chuyển nền sáng–tối ngay trên thanh công cụ. Lựa chọn được ghi nhớ cho lần sau và tự khớp theo thiết lập hệ điều hành.',
+    tag: 'Mới',
+  },
+  {
+    title: 'Thanh thông báo (toast) phản hồi tức thì',
+    desc: 'Mỗi thao tác lưu, lỗi hay xác nhận nay đều hiện một thanh thông báo nhỏ, tự đóng kèm thanh đếm thời gian và nút thao tác nhanh.',
+    tag: 'Mới',
+  },
+  {
+    title: 'Số liệu canh cột, không nhảy layout',
+    desc: 'Các con số (công suất, điện áp, chỉ số) dùng phông canh cột (tabular) nên bảng và biểu đồ không còn bị giật khi giá trị thay đổi.',
     tag: 'Cải tiến',
-    link: { tab: 'opchart', label: 'Xem ngay' },
   },
 ];
 
-/** Màu nền + chữ cho từng nhóm danh mục */
-const TAG_STYLE: Record<string, string> = {
-  'Mới':      'bg-blue-100 text-blue-700',
-  'Đổi tên':  'bg-violet-100 text-violet-700',
-  'Giao diện':'bg-indigo-100 text-indigo-700',
-  'Cải tiến': 'bg-emerald-100 text-ok',
-  'Sửa lỗi':  'bg-rose-100 text-rose-700',
+/** Tông màu (theo token design system) cho từng nhóm danh mục */
+const TAG_TONE: Record<string, { soft: string; color: string; Icon: React.ElementType }> = {
+  'Mới':       { soft: 'var(--accent-soft)',  color: 'var(--accent)',  Icon: Sparkles },
+  'Giao diện': { soft: 'var(--info-soft)',    color: 'var(--info)',    Icon: Palette },
+  'Cải tiến':  { soft: 'var(--success-soft)', color: 'var(--success)', Icon: Zap },
+  'Sửa lỗi':   { soft: 'var(--danger-soft)',  color: 'var(--danger)',  Icon: Wrench },
+  'Đổi tên':   { soft: 'var(--warning-soft)', color: 'var(--warning)', Icon: Tag },
 };
+const DEFAULT_TONE = { soft: 'var(--surface-3)', color: 'var(--text-3)', Icon: Layers };
 
-/** Icon + màu vòng tròn đại diện cho từng nhóm danh mục */
-const TAG_ICON: Record<string, { Icon: React.ElementType; ring: string }> = {
-  'Mới':      { Icon: Sparkles,      ring: 'bg-blue-600' },
-  'Đổi tên':  { Icon: Tag,           ring: 'bg-violet-600' },
-  'Giao diện':{ Icon: Palette,       ring: 'bg-indigo-600' },
-  'Cải tiến': { Icon: Zap,           ring: 'bg-emerald-600' },
-  'Sửa lỗi':  { Icon: Wrench,        ring: 'bg-rose-600' },
-};
-const DEFAULT_ICON = { Icon: Layers, ring: 'bg-[var(--text-4)]' };
+const toneOf = (tag?: string) => (tag && TAG_TONE[tag]) || DEFAULT_TONE;
 
 interface Props {
   onDismiss: () => void;
@@ -93,8 +78,12 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
   // Nhấn "Đóng": LUÔN mở hướng dẫn sử dụng trước, sau đó mới đóng thông báo.
   const handleClose = () => {
     openGuide();
-    if (checked) onDismiss();
-    else onClose();
+    if (checked) {
+      onDismiss();
+      toast.info('Đã ẩn thông báo cập nhật', 'Bạn có thể xem lại trong tài liệu hướng dẫn.');
+    } else {
+      onClose();
+    }
   };
 
   // Nhấn "Xem ngay": điều hướng tới trang liên quan rồi đóng modal.
@@ -123,39 +112,44 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 8 }}
         transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-        className="relative z-10 bg-surface rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+        className="relative z-10 w-full max-w-md overflow-hidden rounded-3xl border border-[var(--border)] bg-surface"
+        style={{ boxShadow: 'var(--shadow-pop)' }}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 pt-6 pb-5">
+        <div
+          className="px-6 pt-6 pb-5"
+          style={{ background: 'linear-gradient(90deg, var(--accent), var(--accent-hover))' }}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-surface/20 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/20">
+                <Sparkles className="h-4 w-4 text-white" />
               </div>
               <div>
-                <h2 className="text-white font-black text-base leading-tight">Cập nhật mới</h2>
-                <p className="text-blue-200 text-xs mt-0.5">Những thay đổi trong phiên bản này</p>
+                <h2 className="text-base font-black leading-tight text-white">Cập nhật mới</h2>
+                <p className="mt-0.5 text-xs text-white/75">Những thay đổi trong phiên bản này</p>
               </div>
             </div>
             <button
               onClick={handleClose}
-              className="w-8 h-8 rounded-xl bg-surface/15 hover:bg-surface/25 flex items-center justify-center transition-colors"
+              aria-label="Đóng"
+              className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/15 transition-colors hover:bg-white/25"
             >
-              <X className="w-4 h-4 text-white" />
+              <X className="h-4 w-4 text-white" />
             </button>
           </div>
 
           {/* Hàng phiên bản + ngày phát hành */}
-          <div className="flex items-center gap-2 mt-4">
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-surface/20 px-2 py-1 rounded-lg">
-              <CloudDownload className="w-3 h-3" />
+          <div className="mt-4 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-lg bg-white/20 px-2 py-1 text-[11px] font-bold text-white">
+              <CloudDownload className="h-3 w-3" />
               Phiên bản {VERSION}
             </span>
-            <span className="text-[11px] font-medium text-blue-100">
+            <span className="text-[11px] font-medium text-white/80">
               Phát hành {RELEASE_DATE}
             </span>
             {newCount > 0 && (
-              <span className="ml-auto text-[10px] font-bold text-blue-700 bg-surface px-2 py-1 rounded-lg">
+              <span className="ml-auto rounded-lg bg-surface px-2 py-1 text-[10px] font-bold text-accent">
                 {newCount} tính năng mới
               </span>
             )}
@@ -163,9 +157,10 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
         </div>
 
         {/* Update list */}
-        <div className="px-6 py-4 space-y-3 max-h-[55vh] overflow-y-auto">
+        <div className="max-h-[55vh] space-y-3 overflow-y-auto px-6 py-4">
           {UPDATES.map((item, idx) => {
-            const { Icon, ring } = item.tag ? (TAG_ICON[item.tag] ?? DEFAULT_ICON) : DEFAULT_ICON;
+            const tone = toneOf(item.tag);
+            const Icon = tone.Icon;
             return (
               <motion.div
                 key={idx}
@@ -175,31 +170,37 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
                 className="flex items-start gap-3"
               >
                 {/* Icon nhóm danh mục */}
-                <span className={`shrink-0 mt-0.5 w-6 h-6 rounded-lg ${ring} text-white flex items-center justify-center`}>
-                  <Icon className="w-3.5 h-3.5" />
+                <span
+                  className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
+                  style={{ background: tone.color, color: '#fff' }}
+                >
+                  <Icon className="h-3.5 w-3.5" />
                 </span>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-ink leading-snug">{item.title}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold leading-snug text-ink">{item.title}</p>
                     {item.tag && (
-                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${TAG_STYLE[item.tag] ?? 'bg-subtle text-dim'}`}>
+                      <span
+                        className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold"
+                        style={{ background: tone.soft, color: tone.color }}
+                      >
                         {item.tag}
                       </span>
                     )}
                   </div>
                   {item.desc && (
-                    <p className="text-xs text-soft mt-0.5 leading-snug">{item.desc}</p>
+                    <p className="mt-0.5 text-xs leading-snug text-soft">{item.desc}</p>
                   )}
 
                   {/* Nút điều hướng tới trang liên quan */}
                   {item.link && (
                     <button
                       onClick={() => handleNavigate(item.link!.tab)}
-                      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:gap-1.5 transition-all"
+                      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-accent transition-all hover:gap-1.5 hover:opacity-80"
                     >
                       {item.link.label}
-                      <ArrowRight className="w-3 h-3" />
+                      <ArrowRight className="h-3 w-3" />
                     </button>
                   )}
                 </div>
@@ -208,22 +209,35 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
           })}
         </div>
 
+        {/* Gợi ý nhanh hai tính năng nổi bật */}
+        <div className="mx-6 mb-1 grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-2 rounded-xl bg-subtle px-3 py-2">
+            <Moon className="h-4 w-4 text-accent" />
+            <span className="text-[11px] font-semibold text-dim">Nút Sáng/Tối ở góc phải</span>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl bg-subtle px-3 py-2">
+            <Bell className="h-4 w-4 text-accent" />
+            <span className="text-[11px] font-semibold text-dim">Thông báo toast tức thì</span>
+          </div>
+        </div>
+
         {/* Divider */}
-        <div className="mx-6 h-px bg-subtle" />
+        <div className="mx-6 my-1 h-px bg-[var(--border)]" />
 
         {/* Footer */}
-        <div className="px-6 py-4 flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 px-6 py-4">
           {/* Checkbox */}
           <button
             onClick={() => setChecked(v => !v)}
-            className="flex items-center gap-2.5 group select-none"
+            className="group flex select-none items-center gap-2.5"
           >
             <div
-              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-150 ${
+              className="flex h-5 w-5 items-center justify-center rounded-md border-2 transition-all duration-150"
+              style={
                 checked
-                  ? 'bg-emerald-500 border-emerald-500'
-                  : 'border-[var(--border-strong)] group-hover:border-emerald-400'
-              }`}
+                  ? { background: 'var(--success)', borderColor: 'var(--success)' }
+                  : { borderColor: 'var(--border-strong)' }
+              }
             >
               <AnimatePresence>
                 {checked && (
@@ -233,7 +247,7 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
                     exit={{ scale: 0 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                   >
-                    <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                    <Check className="h-3 w-3 text-white" strokeWidth={3} />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -246,18 +260,15 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
           {/* Close button — mở hướng dẫn sử dụng rồi đóng */}
           <button
             onClick={handleClose}
-            className={`inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-150 active:scale-[0.97] ${
-              checked
-                ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/25'
-                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25'
-            }`}
+            className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-bold text-[var(--on-accent)] transition-all duration-150 hover:opacity-90 active:scale-[0.97]"
+            style={{ background: checked ? 'var(--success)' : 'var(--accent)' }}
           >
-            <FileText className="w-4 h-4" />
+            <FileText className="h-4 w-4" />
             {checked ? 'Đã hiểu, mở hướng dẫn' : 'Mở hướng dẫn & đóng'}
           </button>
         </div>
 
-        <p className="text-center text-[10px] text-faint pb-3 -mt-1 select-none">
+        <p className="-mt-1 select-none pb-3 text-center text-[10px] text-faint">
           Nhấn nút bên trên để mở hướng dẫn sử dụng và đóng thông báo
         </p>
       </motion.div>
