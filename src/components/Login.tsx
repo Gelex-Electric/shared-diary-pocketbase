@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { pb } from '../lib/pocketbase';
+import { toast } from '../lib/toast';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Lock, Eye, EyeOff, AlertCircle, Zap, Activity, Briefcase } from 'lucide-react';
 
@@ -58,6 +59,9 @@ export default function Login() {
       }
 
       try { localStorage.setItem('loginMode', mode); } catch { /* ignore */ }
+
+      const who = pb.authStore.model?.name || username;
+      toast.success('Đăng nhập thành công', `Xin chào, ${who}.`, { position: 'top right' });
     } catch (err: any) {
       setError(
         err?.message?.includes('Invalid')
