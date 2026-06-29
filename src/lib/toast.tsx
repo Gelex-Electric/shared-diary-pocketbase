@@ -118,13 +118,13 @@ const ICONS: Record<ToastType, LucideIcon> = {
   alert: Bell,
 };
 
-// Nền đặc kín cho mỗi loại (cố định, đọc tốt cả nền sáng lẫn tối với chữ trắng).
+// Nền đặc kín cho mỗi loại — dùng chung token với .vl-alert (xem index.css).
 const SOLID: Record<ToastType, string> = {
-  success: '#2fa64f',
-  info: '#1a73e8',
-  warning: '#f1a124',
-  error: '#e8483a',
-  alert: '#475569',
+  success: 'var(--toast-success)',
+  info: 'var(--toast-info)',
+  warning: 'var(--toast-warning)',
+  error: 'var(--toast-danger)',
+  alert: 'var(--toast-alert)',
 };
 
 const POSITION_CLASS: Record<ToastPosition, string> = {
