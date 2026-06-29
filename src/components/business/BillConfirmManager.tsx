@@ -22,7 +22,13 @@ import {
    Chỉ dành cho khối Kinh doanh.
 ============================================================ */
 
+import { toast as notify } from '../../lib/toast';
+
 type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+const TOAST_TITLE: Record<ToastType, string> = {
+  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
+};
 
 // 4 thành phần chỉ số nhập tay. Tổng (tác dụng) = BT+CĐ+TĐ; VC = vô công (phản kháng).
 const COMPONENTS = [
@@ -219,10 +225,8 @@ export default function BillConfirmManager() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [exportingId, setExportingId] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
-    setToast({ message, type: t });
-    setTimeout(() => setToast(null), 4000);
+    notify.show(t, TOAST_TITLE[t], message);
   }, []);
 
   /* ── load list ──
@@ -1064,21 +1068,6 @@ export default function BillConfirmManager() {
 
   return (
     <div className="relative">
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed top-24 right-6 z-[200] flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold shadow-lg ${
-            toast.type === 'success' ? 'bg-emerald-600 text-white'
-            : toast.type === 'error' ? 'bg-rose-600 text-white'
-            : toast.type === 'warning' ? 'bg-amber-500 text-white'
-            : 'bg-slate-700 text-white'
-          }`}
-        >
-          {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-          {toast.message}
-        </div>
-      )}
-
       {renderList()}
       {renderModal()}
       {confirmDialog}
