@@ -125,16 +125,16 @@ export default function CustomerManager() {
       ================================================================ */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Thông tin khách hàng &amp; Công tơ</h2>
-          <p className="text-slate-500 text-sm mt-1">Danh sách khách hàng và thiết bị đo đếm (Đồng bộ trực tiếp từ HES sau mỗi 1 ngày)</p>
+          <h2 className="text-2xl font-bold text-ink">Thông tin khách hàng &amp; Công tơ</h2>
+          <p className="text-soft text-sm mt-1">Danh sách khách hàng và thiết bị đo đếm (Đồng bộ trực tiếp từ HES sau mỗi 1 ngày)</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             {/* Search */}
             <div className="relative flex-1 md:w-56">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
               <input type="text" placeholder="Tìm tên, mã KH, số CT..."
                 value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded text-sm focus:ring-2 focus:ring-[#5a8dee] outline-none"
+                className="w-full pl-10 pr-4 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none"
               />
             </div>
 
@@ -150,11 +150,11 @@ export default function CustomerManager() {
           MAIN CONTENT
       ================================================================ */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+        <div className="flex flex-col items-center justify-center py-20 text-faint">
           <RefreshCw className="w-10 h-10 animate-spin mb-4" /><p>Đang tải dữ liệu...</p>
         </div>
       ) : customerGroups.length === 0 ? (
-        <div className="vl-card flex flex-col items-center justify-center py-20 text-slate-400">
+        <div className="vl-card flex flex-col items-center justify-center py-20 text-faint">
           <Users className="w-14 h-14 mb-4 opacity-20" />
           <p className="font-semibold">Không có dữ liệu phù hợp</p>
         </div>
@@ -176,8 +176,8 @@ export default function CustomerManager() {
                   onClick={() => toggleExpand(cid)}
                 >
                   <div className="flex-1 flex flex-wrap items-center gap-2.5 min-w-0">
-                    <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded shrink-0">{code || '—'}</span>
-                    <span className="font-bold text-slate-800 truncate">{name || '—'}</span>
+                    <span className="font-mono text-xs font-bold text-soft bg-subtle px-2 py-0.5 rounded shrink-0">{code || '—'}</span>
+                    <span className="font-bold text-ink truncate">{name || '—'}</span>
                     {area && (
                       <span className="vl-badge-primary text-xs font-bold px-2 py-0.5 rounded flex items-center gap-1 shrink-0">
                         <MapPin className="w-3 h-3" />{area}
@@ -212,20 +212,20 @@ export default function CustomerManager() {
                               <th>Trạng thái</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-50">
+                          <tbody className="divide-y divide-[var(--border)]">
                             {meters.map(meter => {
                               const isAct = meter.STATUS === 'Yes';
                               return (
-                                <tr key={meter.METER_NO} className="hover:bg-[#f4f8ff] transition-colors">
+                                <tr key={meter.METER_NO} className="hover:bg-accent-soft transition-colors">
                                   <td className="pl-12">
-                                    <span className="font-mono text-sm font-bold text-[#5a8dee] bg-[#e8f3ff] px-2 py-1 rounded">{meter.METER_NO}</span>
+                                    <span className="font-mono text-sm font-bold text-accent bg-accent-soft px-2 py-1 rounded">{meter.METER_NO}</span>
                                   </td>
-                                  <td><span className="text-sm text-slate-600">{meter.METER_NAME || '—'}</span></td>
-                                  <td><span className="text-sm text-slate-600">{meter.METER_MODEL_DESC || '—'}</span></td>
-                                  <td><span className="text-sm text-slate-600">{meter.LINE_NAME || '—'}</span></td>
-                                  <td><span className="text-sm text-slate-500 flex items-center gap-1"><MapPin className="w-3 h-3" />{meter.ADDRESS || '—'}</span></td>
+                                  <td><span className="text-sm text-dim">{meter.METER_NAME || '—'}</span></td>
+                                  <td><span className="text-sm text-dim">{meter.METER_MODEL_DESC || '—'}</span></td>
+                                  <td><span className="text-sm text-dim">{meter.LINE_NAME || '—'}</span></td>
+                                  <td><span className="text-sm text-soft flex items-center gap-1"><MapPin className="w-3 h-3" />{meter.ADDRESS || '—'}</span></td>
                                   <td>
-                                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded ${isAct ? 'vl-badge-success' : 'bg-slate-100 text-slate-400'}`}>
+                                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded ${isAct ? 'vl-badge-success' : 'bg-subtle text-faint'}`}>
                                       {isAct ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                                       {isAct ? 'Hoạt động' : 'Ngừng'}
                                     </span>
