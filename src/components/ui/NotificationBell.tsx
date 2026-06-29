@@ -141,7 +141,7 @@ export default function NotificationBell() {
         onClick={toggle}
         title="Thông báo"
         className={`relative p-2 rounded-full transition-colors ${
-          open ? 'text-[#5a8dee] bg-[#e8f3ff]' : 'text-[#6c757d] hover:bg-gray-100'
+          open ? 'text-accent bg-accent-soft' : 'text-soft hover:bg-subtle'
         }`}
       >
         <Bell className="w-[20px] h-[20px]" />
@@ -154,14 +154,14 @@ export default function NotificationBell() {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-[340px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl overflow-hidden z-[200] animate-in fade-in slide-in-from-top-2 duration-150"
-          style={{ boxShadow: '0 12px 32px 0 rgba(25,42,70,0.18)', border: '1px solid #eef1f6' }}
+          className="absolute right-0 top-full mt-2 w-[340px] max-w-[calc(100vw-2rem)] bg-surface rounded-2xl overflow-hidden z-[200] animate-in fade-in slide-in-from-top-2 duration-150"
+          style={{ boxShadow: '0 12px 32px 0 rgba(25,42,70,0.18)', border: '1px solid var(--surface-inset)' }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-subtle/60">
             <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-[#5a8dee]" />
-              <span className="text-sm font-black text-slate-700">Thông báo</span>
+              <Bell className="w-4 h-4 text-accent" />
+              <span className="text-sm font-black text-dim">Thông báo</span>
               {unreadCount > 0 && (
                 <span className="px-1.5 py-0.5 rounded-full bg-[#ff5b5c] text-white text-[9px] font-black">{unreadCount} mới</span>
               )}
@@ -169,7 +169,7 @@ export default function NotificationBell() {
             {unreadCount > 0 && (
               <button
                 onClick={markAllRead}
-                className="flex items-center gap-1 text-[11px] font-bold text-[#5a8dee] hover:text-[#4a7de2] transition-colors"
+                className="flex items-center gap-1 text-[11px] font-bold text-accent hover:text-[var(--accent-hover)] transition-colors"
               >
                 <CheckCheck className="w-3.5 h-3.5" /> Đánh dấu đã đọc
               </button>
@@ -177,10 +177,10 @@ export default function NotificationBell() {
           </div>
 
           {/* List */}
-          <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-50">
+          <div className="max-h-[380px] overflow-y-auto divide-y divide-[var(--border)]">
             {merged.length === 0 ? (
-              <div className="py-12 text-center text-slate-400">
-                <Bell className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+              <div className="py-12 text-center text-faint">
+                <Bell className="w-8 h-8 text-faint mx-auto mb-2" />
                 <p className="text-xs font-semibold">Chưa có thông báo nào</p>
               </div>
             ) : merged.map(it => {
@@ -189,18 +189,18 @@ export default function NotificationBell() {
               return (
                 <div
                   key={it.id}
-                  className={`flex items-start gap-3 px-4 py-3 transition-colors ${isUnread ? 'bg-[#f4f8ff]' : 'bg-white'} hover:bg-slate-50`}
+                  className={`flex items-start gap-3 px-4 py-3 transition-colors ${isUnread ? 'bg-accent-soft' : 'bg-surface'} hover:bg-subtle`}
                 >
-                  <div className={`p-2 rounded-xl shrink-0 ${isPayment ? 'bg-emerald-50 text-emerald-500' : 'bg-[#e8f3ff] text-[#5a8dee]'}`}>
+                  <div className={`p-2 rounded-xl shrink-0 ${isPayment ? 'bg-[var(--success-soft)] text-emerald-500' : 'bg-accent-soft text-accent'}`}>
                     {isPayment ? <Wallet className="w-4 h-4" /> : <Info className="w-4 h-4" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-[13px] font-bold text-slate-800 truncate">{it.title}</p>
+                      <p className="text-[13px] font-bold text-ink truncate">{it.title}</p>
                       {isUnread && <span className="w-1.5 h-1.5 rounded-full bg-[#ff5b5c] shrink-0" />}
                     </div>
-                    <p className="text-[12px] text-slate-500 leading-snug mt-0.5 break-words">{it.message}</p>
-                    <p className="text-[10px] font-semibold text-slate-400 mt-1">{fmtWhen(it.created)}</p>
+                    <p className="text-[12px] text-soft leading-snug mt-0.5 break-words">{it.message}</p>
+                    <p className="text-[10px] font-semibold text-faint mt-1">{fmtWhen(it.created)}</p>
                   </div>
                 </div>
               );
