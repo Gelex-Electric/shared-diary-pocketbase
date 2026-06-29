@@ -17,9 +17,9 @@ export default function SldPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-slate-200">
-        <h2 className="text-base font-semibold text-slate-800">{image.title}</h2>
-        <p className="text-xs text-slate-500">
+      <div className="px-4 py-3 border-b border-[var(--border)]">
+        <h2 className="text-base font-semibold text-ink">{image.title}</h2>
+        <p className="text-xs text-soft">
           {isPdf
             ? 'Dùng thanh công cụ PDF để phóng to/thu nhỏ và cuộn xem bản vẽ.'
             : 'Lăn chuột để phóng to/thu nhỏ, kéo để di chuyển. Bấm nút góc phải để về vừa màn hình.'}
