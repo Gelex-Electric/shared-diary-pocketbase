@@ -47,10 +47,10 @@ const TYPE_SHIFT_CONFIG: Record<string, {
   border: string;
   label: string;
 }> = {
-  'Bình thường':        { icon: ShieldCheck,     color: 'text-emerald-600', bg: 'bg-emerald-50',  border: 'border-emerald-200', label: 'Bình thường' },
-  'Sự cố':              { icon: AlertTriangle,    color: 'text-red-600',     bg: 'bg-red-50',      border: 'border-red-200',     label: 'Sự cố' },
-  'Đóng cắt':           { icon: ZapOff,           color: 'text-amber-600',   bg: 'bg-amber-50',    border: 'border-amber-200',   label: 'Đóng cắt' },
-  'Kiểm tra định kỳ':   { icon: ClipboardCheck,   color: 'text-blue-600',    bg: 'bg-blue-50',     border: 'border-blue-200',    label: 'Kiểm tra định kỳ' },
+  'Bình thường':        { icon: ShieldCheck,     color: 'text-ok', bg: 'bg-[var(--success-soft)]',  border: 'border-emerald-200', label: 'Bình thường' },
+  'Sự cố':              { icon: AlertTriangle,    color: 'text-bad',     bg: 'bg-[var(--danger-soft)]',      border: 'border-red-200',     label: 'Sự cố' },
+  'Đóng cắt':           { icon: ZapOff,           color: 'text-warn',   bg: 'bg-[var(--warning-soft)]',    border: 'border-amber-200',   label: 'Đóng cắt' },
+  'Kiểm tra định kỳ':   { icon: ClipboardCheck,   color: 'text-blue-600',    bg: 'bg-accent-soft',     border: 'border-blue-200',    label: 'Kiểm tra định kỳ' },
 };
 
 const TYPE_SHIFT_OPTIONS = Object.keys(TYPE_SHIFT_CONFIG);
@@ -429,13 +429,13 @@ export default function HandoverManager() {
       { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 0, 0, 6] },
       {
         table: { headerRows: 1, widths: ['25%', '37.5%', '37.5%'], body: [
-          [{ text: '', fillColor: '#f3f4f6', bold: true, alignment: 'center' },
-           { text: 'Trực đội QLVH', fillColor: '#f3f4f6', bold: true, alignment: 'center' },
-           { text: 'Trực điều độ điện lực', fillColor: '#f3f4f6', bold: true, alignment: 'center' }],
+          [{ text: '', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
+           { text: 'Trực đội QLVH', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
+           { text: 'Trực điều độ điện lực', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' }],
           ['Trực chính', log.main_duty || '', log.main_power || ''],
           ['Trực phụ', log.sub_duty || '', log.sub_power || '']
         ]},
-        layout: { hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
+        layout: { hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'var(--text-4)', vLineColor:()=>'var(--text-4)', padding: [8,8,8,8] }
       },
       { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 8, 0, 5] },
       {
@@ -444,13 +444,13 @@ export default function HandoverManager() {
           widths: ['13%', '*'],
           heights: [22, 28, 28, 28, 28, 28, 28],
           body: [
-            [{ text: 'Thời gian', fillColor: '#f3f4f6', bold: true, alignment: 'center' },
-             { text: 'Nội dung', fillColor: '#f3f4f6', bold: true, alignment: 'center' }],
+            [{ text: 'Thời gian', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
+             { text: 'Nội dung', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' }],
             ...displaySituations,
             ...padRows
           ]
         },
-        layout: { hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
+        layout: { hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'var(--text-4)', vLineColor:()=>'var(--text-4)', padding: [8,8,8,8] }
       },
       { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 8, 0, 5] },
       { text: '1. Những lưu ý và tồn tại ca sau cần giải quyết:', style: 'boldSection', margin: [0, 4, 0, 3] },
@@ -464,9 +464,9 @@ export default function HandoverManager() {
           heights: [22, 30, 30],
           body: [
             [
-              { text: 'Giờ giao ca', fillColor: '#f3f4f6', bold: true, alignment: 'center' },
-              { text: 'Người nhận ca ký', fillColor: '#f3f4f6', bold: true, alignment: 'center' },
-              { text: 'Người giao ca ký', fillColor: '#f3f4f6', bold: true, alignment: 'center' }
+              { text: 'Giờ giao ca', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
+              { text: 'Người nhận ca ký', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
+              { text: 'Người giao ca ký', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' }
             ],
             [
               { text: giaoCaStr, rowSpan: 2, alignment: 'center', bold: true },
@@ -476,7 +476,7 @@ export default function HandoverManager() {
             ['', { text: ' ', alignment: 'center' }, { text: ' ', alignment: 'center' }]
           ]
         },
-        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#9ca3af', vLineColor: () => '#9ca3af', padding: [8, 8, 8, 8] }
+        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => 'var(--text-4)', vLineColor: () => 'var(--text-4)', padding: [8, 8, 8, 8] }
       },
       { text: '3. Ý kiến lãnh đạo đơn vị:', style: 'boldSection', margin: [0, 8, 0, 3] },
       { text: log.opinions || 'Không có', margin: [0, 0, 0, 0] }
@@ -593,11 +593,11 @@ export default function HandoverManager() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-2xl font-bold text-slate-800">Sổ nhật ký điện tử</h2>
+            <h2 className="text-2xl font-bold text-ink">Sổ nhật ký điện tử</h2>
             {!isLoading && logs.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded shadow-xs">
-                  <Calendar className="w-3.5 h-3.5 text-[#5a8dee]" />
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-soft bg-surface border border-[var(--border)] px-2.5 py-1 rounded shadow-xs">
+                  <Calendar className="w-3.5 h-3.5 text-accent" />
                   T{filter.month.split('-')[1]}: {uniqueDaysCount} ngày · {logs.length} ca
                 </span>
                 {([
@@ -606,7 +606,7 @@ export default function HandoverManager() {
                   { key: 'Đóng cắt',   dot: 'bg-amber-500',   label: 'ĐC' },
                   { key: 'Kiểm tra định kỳ', dot: 'bg-blue-500', label: 'KTĐK' },
                 ] as const).filter(({ key }) => typeShiftCounts[key] > 0).map(({ key, dot, label }) => (
-                  <span key={key} className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded shadow-xs">
+                  <span key={key} className="inline-flex items-center gap-1 text-xs font-bold text-soft bg-surface border border-[var(--border)] px-2 py-1 rounded shadow-xs">
                     <span className={`w-2 h-2 rounded-full ${dot}`} />
                     {label}: {typeShiftCounts[key]}
                   </span>
@@ -614,7 +614,7 @@ export default function HandoverManager() {
               </div>
             )}
           </div>
-          <p className="text-slate-500 text-sm mt-1">Quản lý lịch trực và tình hình vận hành</p>
+          <p className="text-soft text-sm mt-1">Quản lý lịch trực và tình hình vận hành</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <Select
@@ -638,7 +638,7 @@ export default function HandoverManager() {
           <button
             disabled={selectedIds.size === 0 || isExportingPdf}
             onClick={exportMultipleToPDF}
-            className={`flex-1 md:flex-none px-6 py-2.5 font-medium text-[13px] flex items-center justify-center gap-2 transition-all ${selectedIds.size > 0 && !isExportingPdf ? 'vl-btn vl-btn-secondary shadow-lg shadow-slate-700/20' : 'bg-slate-100 text-slate-400 rounded cursor-not-allowed'}`}
+            className={`flex-1 md:flex-none px-6 py-2.5 font-medium text-[13px] flex items-center justify-center gap-2 transition-all ${selectedIds.size > 0 && !isExportingPdf ? 'vl-btn vl-btn-secondary shadow-lg shadow-slate-700/20' : 'bg-subtle text-faint rounded cursor-not-allowed'}`}
           >
             {isExportingPdf ? (
               <RefreshCw className="w-5 h-5 animate-spin" />
@@ -666,32 +666,32 @@ export default function HandoverManager() {
                 initial={{ scale: 0.95, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col"
+                className="relative w-full max-w-4xl max-h-[90vh] bg-surface rounded-lg shadow-2xl overflow-hidden flex flex-col"
               >
-                <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="p-8 border-b border-[var(--border)] flex items-center justify-between bg-subtle/50">
                   <div className="flex items-center gap-4">
                     <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/20">
                       <ClipboardList className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-slate-800">{editingLogId ? 'Sửa lịch trực' : 'Tạo lịch trực mới'}</h3>
-                      <p className="text-slate-500 text-xs mt-0.5">Vui lòng điền đầy đủ thông tin vận hành trong ca</p>
+                      <h3 className="text-xl font-bold text-ink">{editingLogId ? 'Sửa lịch trực' : 'Tạo lịch trực mới'}</h3>
+                      <p className="text-soft text-xs mt-0.5">Vui lòng điền đầy đủ thông tin vận hành trong ca</p>
                     </div>
                   </div>
-                  <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded transition-colors">
-                    <X className="w-6 h-6 text-slate-400" />
+                  <button onClick={closeModal} className="p-2 hover:bg-subtle rounded transition-colors">
+                    <X className="w-6 h-6 text-faint" />
                   </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Khu vực</label>
+                      <label className="text-xs font-bold text-faint uppercase ml-1">Khu vực</label>
                       <Select value={formData.area} onChange={(v) => setFormData({ ...formData, area: v })}
                         options={effectiveAreas.map(area => ({ value: area, label: area }))} />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Ca trực</label>
+                      <label className="text-xs font-bold text-faint uppercase ml-1">Ca trực</label>
                       <Select
                         value={formData.shift}
                         options={[
@@ -739,7 +739,7 @@ export default function HandoverManager() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Thời gian bắt đầu</label>
+                      <label className="text-xs font-bold text-faint uppercase ml-1 block">Thời gian bắt đầu</label>
                       <div className="flex items-center gap-3">
                         <DatePicker
                           value={formData.startDate}
@@ -762,7 +762,7 @@ export default function HandoverManager() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">Thời gian kết thúc</label>
+                      <label className="text-xs font-bold text-faint uppercase ml-1 block">Thời gian kết thúc</label>
                       <div className="flex items-center gap-3">
                         <DatePicker
                           value={formData.endDate}
@@ -779,8 +779,8 @@ export default function HandoverManager() {
                   {/* Loại ca – multi-select */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 ml-1">
-                      <label className="text-xs font-bold text-slate-400 uppercase">Loại ca trực</label>
-                      <span className="text-[10px] text-slate-400 font-medium">(có thể chọn nhiều)</span>
+                      <label className="text-xs font-bold text-faint uppercase">Loại ca trực</label>
+                      <span className="text-[10px] text-faint font-medium">(có thể chọn nhiều)</span>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {TYPE_SHIFT_OPTIONS.map((key) => {
@@ -801,7 +801,7 @@ export default function HandoverManager() {
                             className={`relative flex flex-col items-center gap-2 p-3.5 rounded-2xl border-2 transition-all select-none ${
                               isSelected
                                 ? `${cfg.bg} ${cfg.border} ${cfg.color} shadow-sm`
-                                : 'border-slate-200 text-slate-400 bg-white hover:border-slate-300 hover:bg-slate-50'
+                                : 'border-[var(--border)] text-faint bg-surface hover:border-[var(--border-strong)] hover:bg-subtle'
                             }`}
                           >
                             {isSelected && (
@@ -815,14 +815,14 @@ export default function HandoverManager() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 space-y-6">
+                  <div className="bg-subtle p-6 rounded-lg border border-[var(--border)] space-y-6">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-slate-800 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Nhân sự trực</h4>
-                      <button onClick={handleAutoAssign} className="text-xs font-bold text-blue-600 bg-white border border-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">Tự động phân ca</button>
+                      <h4 className="font-bold text-ink flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Nhân sự trực</h4>
+                      <button onClick={handleAutoAssign} className="text-xs font-bold text-blue-600 bg-surface border border-blue-100 px-3 py-1.5 rounded-lg hover:bg-accent-soft transition-colors">Tự động phân ca</button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trực đội QLVH</div>
+                        <div className="text-[10px] font-bold text-faint uppercase tracking-wider">Trực đội QLVH</div>
                         <Select value={formData.main_duty} onChange={(v) => setFormData({ ...formData, main_duty: v })}
                           placeholder="Chọn trực chính" searchable
                           options={[{ value: '', label: 'Chọn trực chính' }, ...staffList.map(s => ({ value: s.Name, label: s.Name }))]} />
@@ -831,16 +831,16 @@ export default function HandoverManager() {
                           options={[{ value: '', label: 'Chọn trực phụ' }, ...staffList.map(s => ({ value: s.Name, label: s.Name }))]} />
                       </div>
                       <div className="space-y-3">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trực điều độ điện lực</div>
-                        <input type="text" placeholder="Trực chính điện lực" value={formData.main_power} onChange={(e) => setFormData({ ...formData, main_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee]" />
-                        <input type="text" placeholder="Trực phụ điện lực" value={formData.sub_power} onChange={(e) => setFormData({ ...formData, sub_power: e.target.value })} className="w-full p-3 bg-white border border-slate-200 rounded text-sm outline-none focus:ring-2 focus:ring-[#5a8dee]" />
+                        <div className="text-[10px] font-bold text-faint uppercase tracking-wider">Trực điều độ điện lực</div>
+                        <input type="text" placeholder="Trực chính điện lực" value={formData.main_power} onChange={(e) => setFormData({ ...formData, main_power: e.target.value })} className="w-full p-3 bg-surface border border-[var(--border)] rounded text-sm outline-none focus:ring-2 focus:ring-accent" />
+                        <input type="text" placeholder="Trực phụ điện lực" value={formData.sub_power} onChange={(e) => setFormData({ ...formData, sub_power: e.target.value })} className="w-full p-3 bg-surface border border-[var(--border)] rounded text-sm outline-none focus:ring-2 focus:ring-accent" />
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-slate-800 flex items-center gap-2"><Activity className="w-5 h-5 text-blue-600" /> Tình hình vận hành trong ca</h4>
+                      <h4 className="font-bold text-ink flex items-center gap-2"><Activity className="w-5 h-5 text-blue-600" /> Tình hình vận hành trong ca</h4>
                       <button 
                         onClick={() => setSituationRows([...situationRows, { time: '', content: '' }])}
                         className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"
@@ -848,16 +848,16 @@ export default function HandoverManager() {
                         <Plus className="w-4 h-4" /> Thêm dòng
                       </button>
                     </div>
-                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <div className="border border-[var(--border)] rounded-lg overflow-hidden">
                       <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
+                        <thead className="bg-subtle border-b border-[var(--border)]">
                           <tr>
-                            <th className="px-4 py-3 text-left font-bold text-slate-500 w-32">Thời gian</th>
-                            <th className="px-4 py-3 text-left font-bold text-slate-500">Nội dung</th>
+                            <th className="px-4 py-3 text-left font-bold text-soft w-32">Thời gian</th>
+                            <th className="px-4 py-3 text-left font-bold text-soft">Nội dung</th>
                             <th className="px-4 py-3 w-12"></th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-[var(--border)]">
                           {situationRows.map((row, idx) => (
                             <tr key={idx}>
                               <td className="p-2">
@@ -870,7 +870,7 @@ export default function HandoverManager() {
                                     newRows[idx].time = e.target.value;
                                     setSituationRows(newRows);
                                   }}
-                                  className="w-full p-2 bg-transparent outline-none focus:bg-slate-50 rounded-lg"
+                                  className="w-full p-2 bg-transparent outline-none focus:bg-subtle rounded-lg"
                                 />
                               </td>
                               <td className="p-2">
@@ -883,11 +883,11 @@ export default function HandoverManager() {
                                     newRows[idx].content = e.target.value;
                                     setSituationRows(newRows);
                                   }}
-                                  className="w-full p-2 bg-transparent outline-none focus:bg-slate-50 rounded-lg resize-none text-sm leading-relaxed"
+                                  className="w-full p-2 bg-transparent outline-none focus:bg-subtle rounded-lg resize-none text-sm leading-relaxed"
                                 />
                               </td>
                               <td className="p-2">
-                                <button onClick={() => setSituationRows(situationRows.filter((_, i) => i !== idx))} className="p-1 text-slate-300 hover:text-red-500">
+                                <button onClick={() => setSituationRows(situationRows.filter((_, i) => i !== idx))} className="p-1 text-faint hover:text-red-500">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </td>
@@ -900,21 +900,21 @@ export default function HandoverManager() {
 
                   <div className="grid grid-cols-1 gap-6">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Những lưu ý và tồn tại ca sau cần giải quyết</label>
-                      <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] min-h-[100px]" placeholder="Nhập các lưu ý cho ca sau..." />
+                      <label className="text-xs font-bold text-faint uppercase ml-1">Những lưu ý và tồn tại ca sau cần giải quyết</label>
+                      <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="w-full p-4 bg-subtle border border-[var(--border)] rounded outline-none focus:ring-2 focus:ring-accent min-h-[100px]" placeholder="Nhập các lưu ý cho ca sau..." />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp</label>
-                      <textarea value={formData.equipment} onChange={(e) => setFormData({ ...formData, equipment: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] min-h-[100px]" placeholder="Tình trạng trang thiết bị..." />
+                      <label className="text-xs font-bold text-faint uppercase ml-1">Trang bị vận hành, thông tin liên lạc, vệ sinh công nghiệp</label>
+                      <textarea value={formData.equipment} onChange={(e) => setFormData({ ...formData, equipment: e.target.value })} className="w-full p-4 bg-subtle border border-[var(--border)] rounded outline-none focus:ring-2 focus:ring-accent min-h-[100px]" placeholder="Tình trạng trang thiết bị..." />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Ý kiến lãnh đạo đơn vị</label>
-                      <textarea value={formData.opinions} onChange={(e) => setFormData({ ...formData, opinions: e.target.value })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] min-h-[100px]" placeholder="Ý kiến chỉ đạo..." />
+                      <label className="text-xs font-bold text-faint uppercase ml-1">Ý kiến lãnh đạo đơn vị</label>
+                      <textarea value={formData.opinions} onChange={(e) => setFormData({ ...formData, opinions: e.target.value })} className="w-full p-4 bg-subtle border border-[var(--border)] rounded outline-none focus:ring-2 focus:ring-accent min-h-[100px]" placeholder="Ý kiến chỉ đạo..." />
                     </div>
                   </div>
                 </div>
 
-                <div className="p-8 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
+                <div className="p-8 border-t border-[var(--border)] flex justify-end gap-3 bg-subtle/50">
                   <button 
                     onClick={closeModal} 
                     disabled={isSaving}
@@ -957,16 +957,16 @@ export default function HandoverManager() {
                 initial={{ scale: 0.95, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col"
+                className="relative w-full max-w-4xl max-h-[90vh] bg-surface rounded-lg shadow-2xl overflow-hidden flex flex-col"
               >
-                <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="p-8 border-b border-[var(--border)] flex items-center justify-between bg-subtle/50">
                   <div className="flex items-center gap-4">
                     <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/20">
                       <FileText className="w-6 h-6 text-white" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <h3 className="text-xl font-bold text-slate-800">Chi tiết lịch trực</h3>
+                        <h3 className="text-xl font-bold text-ink">Chi tiết lịch trực</h3>
                         {(Array.isArray(selectedLog.type_shift) ? selectedLog.type_shift : [selectedLog.type_shift || 'Bình thường']).map(ts => {
                           const cfg = TYPE_SHIFT_CONFIG[ts] ?? TYPE_SHIFT_CONFIG['Bình thường'];
                           const Icon = cfg.icon;
@@ -978,61 +978,61 @@ export default function HandoverManager() {
                           );
                         })}
                       </div>
-                      <p className="text-slate-500 text-xs">
+                      <p className="text-soft text-xs">
                         {formatFullDateTime(selectedLog.startdate)} — {formatFullDateTime(selectedLog.enddate)}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => exportToPDF(selectedLog)} className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-all" title="Tải PDF"><Download className="w-6 h-6" /></button>
-                    <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded transition-colors">
-                      <X className="w-6 h-6 text-slate-400" />
+                    <button onClick={() => exportToPDF(selectedLog)} className="p-2 text-blue-600 hover:bg-accent-soft rounded transition-all" title="Tải PDF"><Download className="w-6 h-6" /></button>
+                    <button onClick={closeModal} className="p-2 hover:bg-subtle rounded transition-colors">
+                      <X className="w-6 h-6 text-faint" />
                     </button>
                   </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 space-y-6">
                   {/* Row 1: Thời gian giao nhận ca */}
-                  <div className="bg-blue-50/50 p-5 rounded-lg border border-blue-100">
+                  <div className="bg-accent-soft/50 p-5 rounded-lg border border-blue-100">
                     <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2 mb-4"><Clock className="w-4 h-4" /> Thời gian giao nhận ca</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <div className="text-[10px] font-bold text-blue-500 uppercase">Bắt đầu (Nhận ca)</div>
-                        <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.startdate)}</p>
+                        <p className="text-sm font-bold text-dim">{formatFullDateTime(selectedLog.startdate)}</p>
                       </div>
                       <div className="space-y-1">
                         <div className="text-[10px] font-bold text-blue-500 uppercase">Kết thúc (Giao ca)</div>
-                        <p className="text-sm font-bold text-slate-700">{formatFullDateTime(selectedLog.enddate)}</p>
+                        <p className="text-sm font-bold text-dim">{formatFullDateTime(selectedLog.enddate)}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Row 2: Nhân viên vận hành */}
-                  <div className="bg-slate-50 p-5 rounded-lg border border-slate-200">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><Users className="w-4 h-4" /> Nhân viên vận hành các đơn vị</h4>
+                  <div className="bg-subtle p-5 rounded-lg border border-[var(--border)]">
+                    <h4 className="text-xs font-bold text-faint uppercase tracking-widest flex items-center gap-2 mb-4"><Users className="w-4 h-4" /> Nhân viên vận hành các đơn vị</h4>
                     <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">Trực đội QLVH</div>
+                        <div className="text-[10px] font-bold text-faint uppercase">Trực đội QLVH</div>
                         <div className="flex flex-col gap-1.5">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
+                            <span className="text-[10px] font-bold text-faint w-10">Chính</span>
                             <span className="px-2.5 py-1 vl-badge-primary rounded text-xs font-bold">{selectedLog.main_duty || '—'}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
+                            <span className="text-[10px] font-bold text-faint w-10">Phụ</span>
                             <span className="px-2.5 py-1 vl-badge-primary rounded text-xs font-semibold">{selectedLog.sub_duty || '—'}</span>
                           </div>
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">Trực điều độ điện lực</div>
+                        <div className="text-[10px] font-bold text-faint uppercase">Trực điều độ điện lực</div>
                         <div className="flex flex-col gap-1.5">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-400 w-10">Chính</span>
+                            <span className="text-[10px] font-bold text-faint w-10">Chính</span>
                             <span className="px-2.5 py-1 vl-badge-primary rounded text-xs font-bold">{selectedLog.main_power || '—'}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-400 w-10">Phụ</span>
+                            <span className="text-[10px] font-bold text-faint w-10">Phụ</span>
                             <span className="px-2.5 py-1 vl-badge-primary rounded text-xs font-semibold">{selectedLog.sub_power || '—'}</span>
                           </div>
                         </div>
@@ -1042,26 +1042,26 @@ export default function HandoverManager() {
 
                   {/* Row 2: Operation situation */}
                   <div className="space-y-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Activity className="w-4 h-4 text-blue-600" /> I. Tình hình vận hành trong ca</h4>
-                    <div className="border border-slate-100 rounded-lg overflow-hidden bg-slate-50/50">
+                    <h4 className="text-xs font-bold text-faint uppercase tracking-widest flex items-center gap-2"><Activity className="w-4 h-4 text-blue-600" /> I. Tình hình vận hành trong ca</h4>
+                    <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-subtle/50">
                       <table className="vl-table w-full text-sm border-collapse">
-                        <thead className="bg-slate-100 border-b border-slate-200">
+                        <thead className="bg-subtle border-b border-[var(--border)]">
                           <tr>
-                            <th className="px-6 py-3.5 text-left font-bold text-slate-500 w-32">Thời gian</th>
-                            <th className="px-6 py-3.5 text-left font-bold text-slate-500">Nội dung</th>
+                            <th className="px-6 py-3.5 text-left font-bold text-soft w-32">Thời gian</th>
+                            <th className="px-6 py-3.5 text-left font-bold text-soft">Nội dung</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-[var(--border)]">
                           {selectedLog.situations && selectedLog.situations.length > 0 ? (
                             selectedLog.situations.map((row, idx) => (
-                              <tr key={idx} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 font-semibold text-slate-600">{row.time}</td>
-                                <td className="px-6 py-4 text-slate-800 font-medium">{row.content}</td>
+                              <tr key={idx} className="hover:bg-subtle">
+                                <td className="px-6 py-4 font-semibold text-dim">{row.time}</td>
+                                <td className="px-6 py-4 text-ink font-medium">{row.content}</td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={2} className="px-6 py-6 text-center text-slate-400 italic">Không có ghi chép tình hình vận hành</td>
+                              <td colSpan={2} className="px-6 py-6 text-center text-faint italic">Không có ghi chép tình hình vận hành</td>
                             </tr>
                           )}
                         </tbody>
@@ -1071,22 +1071,22 @@ export default function HandoverManager() {
 
                   {/* Row 3: Notes & Equipment & Leader comments */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 space-y-2">
-                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">1. Những lưu ý ca sau giải quyết</h4>
+                    <div className="bg-subtle p-6 rounded-lg border border-[var(--border)] space-y-2">
+                      <h4 className="text-[11px] font-bold text-faint uppercase tracking-wide">1. Những lưu ý ca sau giải quyết</h4>
                       <p className="text-sm text-slate-750 font-medium whitespace-pre-wrap">{selectedLog.notes || 'Không có'}</p>
                     </div>
-                    <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 space-y-2">
-                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">2. Trang bị vận hành, vệ sinh</h4>
+                    <div className="bg-subtle p-6 rounded-lg border border-[var(--border)] space-y-2">
+                      <h4 className="text-[11px] font-bold text-faint uppercase tracking-wide">2. Trang bị vận hành, vệ sinh</h4>
                       <p className="text-sm text-slate-750 font-medium whitespace-pre-wrap">{selectedLog.equipment || 'Không có'}</p>
                     </div>
-                    <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 space-y-2">
-                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">3. Ý kiến lãnh đạo đơn vị</h4>
+                    <div className="bg-subtle p-6 rounded-lg border border-[var(--border)] space-y-2">
+                      <h4 className="text-[11px] font-bold text-faint uppercase tracking-wide">3. Ý kiến lãnh đạo đơn vị</h4>
                       <p className="text-sm text-slate-750 font-medium whitespace-pre-wrap">{selectedLog.opinions || 'Không có'}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-8 border-t border-slate-100 flex justify-end bg-slate-50/50">
+                <div className="p-8 border-t border-[var(--border)] flex justify-end bg-subtle/50">
                   <button onClick={closeModal} className="vl-btn vl-btn-secondary px-8 py-3 font-bold transition-all shadow-lg active:scale-95">Đóng cửa sổ</button>
                 </div>
               </motion.div>
@@ -1100,14 +1100,14 @@ export default function HandoverManager() {
             <div className="flex items-center gap-2">
               <button
                 onClick={expandAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-dim rounded-lg text-xs font-bold hover:bg-subtle transition-all shadow-xs"
               >
                 <ChevronDown className="w-3.5 h-3.5" />
                 Mở tất cả
               </button>
               <button
                 onClick={collapseAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-dim rounded-lg text-xs font-bold hover:bg-subtle transition-all shadow-xs"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
                 Thu tất cả
@@ -1117,7 +1117,7 @@ export default function HandoverManager() {
               <button
                 onClick={selectAllInMonth}
                 disabled={logs.length === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-xs disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-dim rounded-lg text-xs font-bold hover:bg-subtle transition-all shadow-xs disabled:opacity-50"
               >
                 <CheckSquare className="w-3.5 h-3.5" />
                 Chọn hết
@@ -1125,7 +1125,7 @@ export default function HandoverManager() {
               <button
                 onClick={deselectAll}
                 disabled={selectedIds.size === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-xs disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-dim rounded-lg text-xs font-bold hover:bg-subtle transition-all shadow-xs disabled:opacity-50"
               >
                 <Square className="w-3.5 h-3.5" />
                 Bỏ chọn {selectedIds.size > 0 && `(${selectedIds.size})`}
@@ -1137,12 +1137,12 @@ export default function HandoverManager() {
         {/* Data List grouped by Date & Industrial park */}
         <div className="vl-accordion">
           {isLoading ? (
-            <div className="vl-card flex flex-col items-center justify-center p-20 text-slate-400">
+            <div className="vl-card flex flex-col items-center justify-center p-20 text-faint">
               <RefreshCw className="w-10 h-10 animate-spin mb-4" />
               <p className="text-sm">Đang tải nhật ký lịch trực...</p>
             </div>
           ) : logs.length === 0 ? (
-            <div className="vl-card flex flex-col items-center justify-center p-20 text-slate-400">
+            <div className="vl-card flex flex-col items-center justify-center p-20 text-faint">
               <Calendar className="w-16 h-16 opacity-20 mb-4" />
               <p className="text-sm font-semibold">Chưa có lịch trực nào được ghi nhận cho bộ lọc hiện tại</p>
             </div>
@@ -1163,21 +1163,21 @@ export default function HandoverManager() {
                     className="vl-accordion-header flex-wrap"
                     onClick={() => toggleGroupExpand(group.id)}
                   >
-                    <div className="p-2 bg-white rounded shadow-xs shrink-0">
+                    <div className="p-2 bg-surface rounded shadow-xs shrink-0">
                       <Calendar className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
                       <h3 className="font-bold text-[15px]">{formatGroupHeaderDate(group.date)}</h3>
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-bold text-[10px] uppercase tracking-wider mt-1">{group.area}</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-accent-soft text-blue-600 rounded-full font-bold text-[10px] uppercase tracking-wider mt-1">{group.area}</span>
                     </div>
                     {/* Checkbox ở cuối — stopPropagation để không trigger toggle card */}
                     <div className="flex items-center gap-3 ml-auto" onClick={e => e.stopPropagation()}>
-                      <span className="text-xs font-bold text-slate-400 uppercase bg-white border border-slate-100 px-3 py-1.5 rounded-lg">{group.records.length} ca trực</span>
+                      <span className="text-xs font-bold text-faint uppercase bg-surface border border-[var(--border)] px-3 py-1.5 rounded-lg">{group.records.length} ca trực</span>
                       <input
                         type="checkbox"
                         checked={groupSelected}
                         onChange={() => toggleGroupSelection(group.records)}
-                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-[#5a8dee]"
+                        className="w-5 h-5 rounded border-[var(--border-strong)] text-blue-600 focus:ring-accent"
                       />
                     </div>
                     <ChevronRight className="vl-accordion-chevron w-5 h-5" style={{ marginLeft: '0.25rem' }} />
@@ -1190,19 +1190,19 @@ export default function HandoverManager() {
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden vl-accordion-body divide-y divide-slate-100"
+                        className="overflow-hidden vl-accordion-body divide-y divide-[var(--border)]"
                       >
                         {group.records.map((log) => {
                           const isSelected = selectedIds.has(log.id);
 
                           return (
-                            <div key={log.id} className={`p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-50/40 transition-colors ${isSelected ? 'bg-blue-50/10' : ''}`}>
+                            <div key={log.id} className={`p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-subtle/40 transition-colors ${isSelected ? 'bg-accent-soft/10' : ''}`}>
                               <div className="flex items-start gap-4">
                                 <input 
                                   type="checkbox" 
                                   checked={isSelected}
                                   onChange={() => toggleSelection(log.id)}
-                                  className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-1"
+                                  className="w-5 h-5 rounded border-[var(--border-strong)] text-blue-600 focus:ring-blue-500 mt-1"
                                 />
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-2 flex-wrap">
@@ -1217,16 +1217,16 @@ export default function HandoverManager() {
                                         </span>
                                       );
                                     })}
-                                    <span className="text-xs text-slate-400 font-medium">{formatTime(log.startdate)} — {formatTime(log.enddate)}</span>
+                                    <span className="text-xs text-faint font-medium">{formatTime(log.startdate)} — {formatTime(log.enddate)}</span>
                                   </div>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
-                                    <div className="flex items-center gap-2 text-slate-600">
-                                      <Users className="w-4 h-4 text-slate-400" />
-                                      <span>Tổ QLVH: <strong className="text-slate-700">{log.main_duty || '—'}</strong> (Chính) / <span className="text-slate-500">{log.sub_duty || '—'}</span> (Phụ)</span>
+                                    <div className="flex items-center gap-2 text-dim">
+                                      <Users className="w-4 h-4 text-faint" />
+                                      <span>Tổ QLVH: <strong className="text-dim">{log.main_duty || '—'}</strong> (Chính) / <span className="text-soft">{log.sub_duty || '—'}</span> (Phụ)</span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-slate-600">
-                                      <Zap className="w-4 h-4 text-slate-400" />
-                                      <span>Điều độ: <strong className="text-slate-700">{log.main_power || '—'}</strong> (Chính) / <span className="text-slate-500">{log.sub_power || '—'}</span> (Phụ)</span>
+                                    <div className="flex items-center gap-2 text-dim">
+                                      <Zap className="w-4 h-4 text-faint" />
+                                      <span>Điều độ: <strong className="text-dim">{log.main_power || '—'}</strong> (Chính) / <span className="text-soft">{log.sub_power || '—'}</span> (Phụ)</span>
                                     </div>
                                   </div>
                                 </div>
@@ -1234,20 +1234,20 @@ export default function HandoverManager() {
                               <div className="flex items-center gap-3 self-end md:self-auto">
                                 <button
                                   onClick={() => openDetail(log)}
-                                  className="px-4 py-2 hover:bg-slate-100 rounded font-bold text-xs text-slate-600 border border-slate-200 transition-all shadow-xs"
+                                  className="px-4 py-2 hover:bg-subtle rounded font-bold text-xs text-dim border border-[var(--border)] transition-all shadow-xs"
                                 >
                                   Chi tiết
                                 </button>
                                 <button
                                   onClick={() => startEditLog(log)}
-                                  className="p-2 hover:bg-slate-100 hover:text-blue-600 text-slate-400 rounded border border-slate-100 transition-all shadow-xs"
+                                  className="p-2 hover:bg-subtle hover:text-blue-600 text-faint rounded border border-[var(--border)] transition-all shadow-xs"
                                   title="Chỉnh sửa"
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => handleDelete(log.id)}
-                                  className="p-2 hover:bg-slate-100 hover:text-red-500 text-slate-400 rounded border border-slate-100 transition-all shadow-xs"
+                                  className="p-2 hover:bg-subtle hover:text-red-500 text-faint rounded border border-[var(--border)] transition-all shadow-xs"
                                   title="Xóa bỏ"
                                 >
                                   <Trash2 className="w-4 h-4" />
