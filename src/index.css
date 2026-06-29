@@ -43,6 +43,14 @@
   --danger-soft:  rgba(212, 50, 47, 0.11);
   --info-soft:    rgba(14, 143, 163, 0.12);
 
+  /* Solid notification palette — shared by toasts AND .vl-alert banners.
+     Fixed (mode-independent): saturated fill + white text, readable in both themes. */
+  --toast-success: #2fa64f;
+  --toast-info:    #1a73e8;
+  --toast-warning: #f1a124;
+  --toast-danger:  #e8483a;
+  --toast-alert:   #475569;
+
   /* Status lamps (the energized-indicator dot) */
   --lamp-on:   #1aa85a;
   --lamp-warn: #d98a0a;
@@ -291,10 +299,12 @@ p { text-wrap: pretty; }
    ============================================================ */
 .vl-alert { border: 1px solid transparent; border-radius: var(--radius-sm); padding: 0.75rem 1rem; }
 .vl-alert p { margin-bottom: 0; }
-.vl-alert-primary { background-color: var(--accent-soft);  color: var(--accent);  border-color: var(--accent); }
-.vl-alert-success { background-color: var(--success-soft); color: var(--success); border-color: var(--success); }
-.vl-alert-warning { background-color: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
-.vl-alert-danger  { background-color: var(--danger-soft);  color: var(--danger);  border-color: var(--danger);  }
+/* Solid variants — match the toast notification palette (white text). */
+.vl-alert-primary { background-color: var(--toast-info);    color: #fff; box-shadow: var(--shadow-card); }
+.vl-alert-success { background-color: var(--toast-success); color: #fff; box-shadow: var(--shadow-card); }
+.vl-alert-warning { background-color: var(--toast-warning); color: #fff; box-shadow: var(--shadow-card); }
+.vl-alert-danger  { background-color: var(--toast-danger);  color: #fff; box-shadow: var(--shadow-card); }
+/* Light variants — soft tint + colored text (kept for subtle inline notices). */
 .vl-alert-light-primary { background-color: var(--accent-soft);  color: var(--accent);  }
 .vl-alert-light-success { background-color: var(--success-soft); color: var(--success); }
 .vl-alert-light-warning { background-color: var(--warning-soft); color: var(--warning); }
