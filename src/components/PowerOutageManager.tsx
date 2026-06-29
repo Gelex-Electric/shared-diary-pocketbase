@@ -377,7 +377,7 @@ export default function PowerOutageManager() {
     info:    { icon: Info,         cls: 'vl-alert vl-alert-primary' },
   };
 
-  const inputCls = 'w-full px-3 py-2 bg-white border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] text-sm';
+  const inputCls = 'w-full px-3 py-2 bg-surface border border-[var(--border)] rounded outline-none focus:ring-2 focus:ring-accent text-sm';
 
   const appendixOptions = appendices.map((_, i) => ({
     value: String(i),
@@ -434,8 +434,8 @@ export default function PowerOutageManager() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Thông báo ngừng cấp điện</h2>
-          <p className="text-slate-500 text-sm mt-1">Soạn, lưu và phát hành thông báo ngừng cấp điện tới khách hàng</p>
+          <h2 className="text-2xl font-bold text-ink">Thông báo ngừng cấp điện</h2>
+          <p className="text-soft text-sm mt-1">Soạn, lưu và phát hành thông báo ngừng cấp điện tới khách hàng</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <MonthPicker value={filterMonth} onChange={setFilterMonth} className="min-w-[150px]" />
@@ -452,18 +452,18 @@ export default function PowerOutageManager() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Tổng thông báo', value: stats.total, color: 'bg-blue-600', light: 'bg-blue-50 text-blue-700', icon: ZapOff },
-          { label: 'Theo kế hoạch', value: stats.planned, color: 'bg-[#5a8dee]', light: 'bg-indigo-50 text-indigo-700', icon: CalendarClock },
-          { label: 'Khẩn cấp', value: stats.emergency, color: 'bg-red-500', light: 'bg-red-50 text-red-700', icon: AlertTriangle },
-          { label: 'Khách hàng', value: stats.totalKH, color: 'bg-emerald-500', light: 'bg-emerald-50 text-emerald-700', icon: Users },
+          { label: 'Tổng thông báo', value: stats.total, color: 'bg-blue-600', light: 'bg-accent-soft text-blue-700', icon: ZapOff },
+          { label: 'Theo kế hoạch', value: stats.planned, color: 'bg-accent', light: 'bg-indigo-50 text-indigo-700', icon: CalendarClock },
+          { label: 'Khẩn cấp', value: stats.emergency, color: 'bg-red-500', light: 'bg-[var(--danger-soft)] text-bad', icon: AlertTriangle },
+          { label: 'Khách hàng', value: stats.totalKH, color: 'bg-emerald-500', light: 'bg-[var(--success-soft)] text-ok', icon: Users },
         ].map(({ label, value, light, icon: Icon }) => (
           <div key={label} className="vl-card px-5 py-4 flex items-center gap-4">
             <div className={`p-2.5 rounded-xl ${light}`}>
               <Icon className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-slate-800 leading-none">{value}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{label}</div>
+              <div className="text-2xl font-extrabold text-ink leading-none">{value}</div>
+              <div className="text-xs text-soft mt-0.5">{label}</div>
             </div>
           </div>
         ))}
@@ -471,12 +471,12 @@ export default function PowerOutageManager() {
 
       {/* List */}
       {isLoading ? (
-        <div className="vl-card flex flex-col items-center justify-center p-20 text-slate-400">
+        <div className="vl-card flex flex-col items-center justify-center p-20 text-faint">
           <RefreshCw className="w-10 h-10 animate-spin mb-4" />
           <p className="text-sm">Đang tải thông báo...</p>
         </div>
       ) : filteredNotices.length === 0 ? (
-        <div className="vl-card flex flex-col items-center justify-center p-20 text-slate-400">
+        <div className="vl-card flex flex-col items-center justify-center p-20 text-faint">
           <ZapOff className="w-16 h-16 opacity-20 mb-4" />
           <p className="text-sm font-semibold">Không có thông báo nào trong khoảng thời gian này</p>
         </div>
@@ -486,45 +486,45 @@ export default function PowerOutageManager() {
             <table className="vl-table w-full text-left border-collapse">
               <thead>
                 <tr>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ngày TB</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loại</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Khung giờ đầu</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Khu vực</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Khung / Phụ lục / KH</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Thao tác</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest">Ngày TB</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest">Loại</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest">Khung giờ đầu</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest">Khu vực</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest text-center">Khung / Phụ lục / KH</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[var(--border)]">
                 {filteredNotices.map(n => {
                   const first = n.slots?.[0];
                   const totalKH = (n.appendices || []).reduce((acc, a) => acc + (a.customers?.length || 0), 0);
                   return (
-                    <tr key={n.id} className="hover:bg-[#f4f8ff] transition-colors">
-                      <td className="px-6 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">{n.noticeDate || '---'}</td>
+                    <tr key={n.id} className="hover:bg-accent-soft transition-colors">
+                      <td className="px-6 py-4 text-sm font-semibold text-dim whitespace-nowrap">{n.noticeDate || '---'}</td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold ${n.type === 'emergency' ? 'vl-badge-danger' : 'vl-badge-primary'}`}>
                           {n.type === 'emergency' ? <AlertTriangle className="w-3.5 h-3.5" /> : <CalendarClock className="w-3.5 h-3.5" />}
                           {TYPE_LABEL[n.type]}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-xs text-slate-600 whitespace-nowrap">
+                      <td className="px-6 py-4 text-xs text-dim whitespace-nowrap">
                         {first ? (
                           <>
-                            <div className="font-semibold text-slate-700">{fmtFull(first.startTime)}</div>
-                            <div className="text-slate-400">→ {fmtFull(first.endTime)}</div>
+                            <div className="font-semibold text-dim">{fmtFull(first.startTime)}</div>
+                            <div className="text-faint">→ {fmtFull(first.endTime)}</div>
                           </>
                         ) : '---'}
                       </td>
                       <td className="px-6 py-4 text-xs">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-bold text-[10px] uppercase tracking-wide">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent-soft text-blue-600 rounded-full font-bold text-[10px] uppercase tracking-wide">
                           <MapPin className="w-3 h-3" /> {n.area}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <div className="flex flex-col items-center gap-0.5 text-xs text-slate-500">
+                        <div className="flex flex-col items-center gap-0.5 text-xs text-soft">
                           <span className="font-bold">{(n.slots || []).length} khung</span>
                           <span>{(n.appendices || []).length} phụ lục</span>
-                          <span className="inline-flex items-center gap-1 text-slate-400">
+                          <span className="inline-flex items-center gap-1 text-faint">
                             <Users className="w-3 h-3" />{totalKH} KH
                           </span>
                         </div>
@@ -532,13 +532,13 @@ export default function PowerOutageManager() {
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button onClick={() => exportDocx(n)} disabled={isExporting}
-                            className="p-2 hover:bg-slate-100 hover:text-blue-600 text-slate-400 rounded border border-slate-100 transition-all disabled:opacity-50"
+                            className="p-2 hover:bg-subtle hover:text-blue-600 text-faint rounded border border-[var(--border)] transition-all disabled:opacity-50"
                             title="Tải file Word"><Download className="w-4 h-4" /></button>
                           <button onClick={() => startEdit(n)}
-                            className="p-2 hover:bg-slate-100 hover:text-blue-600 text-slate-400 rounded border border-slate-100 transition-all"
+                            className="p-2 hover:bg-subtle hover:text-blue-600 text-faint rounded border border-[var(--border)] transition-all"
                             title="Chỉnh sửa"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => handleDelete(n.id)}
-                            className="p-2 hover:bg-slate-100 hover:text-red-500 text-slate-400 rounded border border-slate-100 transition-all"
+                            className="p-2 hover:bg-subtle hover:text-red-500 text-faint rounded border border-[var(--border)] transition-all"
                             title="Xóa"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </td>
@@ -561,43 +561,43 @@ export default function PowerOutageManager() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative w-full max-w-5xl max-h-[96vh] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col">
+              className="relative w-full max-w-5xl max-h-[96vh] bg-surface rounded-lg shadow-2xl overflow-hidden flex flex-col">
 
               {/* Modal header */}
-              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+              <div className="px-6 py-5 border-b border-[var(--border)] flex items-center justify-between bg-subtle/50 shrink-0">
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/20">
                     <ZapOff className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800">{editingId ? 'Sửa thông báo' : 'Thêm thông báo ngừng cấp điện'}</h3>
-                    <p className="text-slate-500 text-xs mt-0.5">Điền thông tin, phân khung giờ và chọn khách hàng theo phụ lục</p>
+                    <h3 className="text-xl font-bold text-ink">{editingId ? 'Sửa thông báo' : 'Thêm thông báo ngừng cấp điện'}</h3>
+                    <p className="text-soft text-xs mt-0.5">Điền thông tin, phân khung giờ và chọn khách hàng theo phụ lục</p>
                   </div>
                 </div>
-                <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded transition-colors">
-                  <X className="w-6 h-6 text-slate-400" />
+                <button onClick={closeModal} className="p-2 hover:bg-subtle rounded transition-colors">
+                  <X className="w-6 h-6 text-faint" />
                 </button>
               </div>
 
               {/* Modal body */}
-              <div className="flex-1 overflow-y-auto bg-slate-100 p-4 space-y-4">
+              <div className="flex-1 overflow-y-auto bg-subtle p-4 space-y-4">
 
                 {/* KCN + Ngày TB */}
                 <div className="mx-auto max-w-3xl grid grid-cols-2 gap-4">
                   <div className="flex items-center gap-3">
-                    <label className="text-[11px] font-bold text-slate-500 uppercase shrink-0">Khu vực</label>
+                    <label className="text-[11px] font-bold text-soft uppercase shrink-0">Khu vực</label>
                     <Select value={area} onChange={setArea}
                       options={effectiveAreas.map((a: string) => ({ value: a, label: a }))}
                       placeholder="Chọn khu vực" />
                   </div>
                   <div className="flex items-center gap-3">
-                    <label className="text-[11px] font-bold text-slate-500 uppercase shrink-0">Ngày TB</label>
+                    <label className="text-[11px] font-bold text-soft uppercase shrink-0">Ngày TB</label>
                     <DatePicker value={noticeDate} onChange={setNoticeDate} />
                   </div>
                 </div>
 
                 {/* ── Tờ văn bản ── */}
-                <div className="bg-white shadow rounded-sm mx-auto max-w-3xl px-12 py-8 space-y-3 text-[13px] leading-relaxed" style={{ fontFamily: 'Times New Roman, serif' }}>
+                <div className="bg-surface shadow rounded-sm mx-auto max-w-3xl px-12 py-8 space-y-3 text-[13px] leading-relaxed" style={{ fontFamily: 'Times New Roman, serif' }}>
 
                   {/* Tiêu đề */}
                   <div className="text-center space-y-1">
@@ -609,8 +609,8 @@ export default function PowerOutageManager() {
                       {(['emergency', 'planned'] as const).map(t => (
                         <button key={t} type="button" onClick={() => setType(t)}
                           className={`flex items-center gap-1 text-[11px] px-3 py-1 rounded border font-bold transition-all ${type === t
-                            ? t === 'emergency' ? 'bg-red-50 border-red-300 text-red-600' : 'bg-blue-50 border-blue-300 text-blue-600'
-                            : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>
+                            ? t === 'emergency' ? 'bg-[var(--danger-soft)] border-red-300 text-bad' : 'bg-accent-soft border-blue-300 text-blue-600'
+                            : 'border-[var(--border)] text-faint hover:border-[var(--border-strong)]'}`}>
                           {t === 'emergency' ? <AlertTriangle className="w-3 h-3" /> : <CalendarClock className="w-3 h-3" />}
                           {TYPE_LABEL[t]}
                         </button>
@@ -628,7 +628,7 @@ export default function PowerOutageManager() {
                       <span className="shrink-0 mt-1">-</span>
                       <textarea value={addLegal} onChange={e => setAddLegal(e.target.value)}
                         placeholder="Căn cứ bổ sung (để trống để bỏ dòng này)" rows={2}
-                        className="flex-1 border border-dashed border-blue-300 bg-blue-50/40 px-2 py-1 text-[12px] outline-none focus:border-blue-500 rounded-sm placeholder:text-slate-400 placeholder:italic resize-none" />
+                        className="flex-1 border border-dashed border-blue-300 bg-accent-soft/40 px-2 py-1 text-[12px] outline-none focus:border-blue-500 rounded-sm placeholder:text-faint placeholder:italic resize-none" />
                     </div>
                     <div>- Căn cứ Hợp đồng mua bán điện đã ký kết.</div>
                   </div>
@@ -656,14 +656,14 @@ export default function PowerOutageManager() {
                           <td className="border border-black px-2 py-3">
                             <div className="space-y-2">
                               <div>
-                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Bắt đầu ngừng</div>
+                                <div className="text-[10px] font-bold text-faint uppercase mb-1">Bắt đầu ngừng</div>
                                 <div className="flex items-center gap-1.5">
                                   <DatePicker value={s.startDate} onChange={v => updateSlot(i, { startDate: v })} />
                                   <TimePicker value={s.startTime} onChange={v => updateSlot(i, { startTime: v })} />
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Cấp điện trở lại</div>
+                                <div className="text-[10px] font-bold text-faint uppercase mb-1">Cấp điện trở lại</div>
                                 <div className="flex items-center gap-1.5">
                                   <DatePicker value={s.endDate} onChange={v => updateSlot(i, { endDate: v })} />
                                   <TimePicker value={s.endTime} onChange={v => updateSlot(i, { endTime: v })} />
@@ -672,12 +672,12 @@ export default function PowerOutageManager() {
                             </div>
                           </td>
                           <td className="border border-black px-2 py-3 text-center align-middle text-[12px] font-medium">
-                            {area || <span className="text-slate-400 italic text-[11px]">—</span>}
+                            {area || <span className="text-faint italic text-[11px]">—</span>}
                           </td>
                           <td className="border border-black px-2 py-3">
                             <textarea value={s.scope} onChange={e => updateSlot(i, { scope: e.target.value })}
                               placeholder="Phạm vi..." rows={4}
-                              className="w-full text-[12px] bg-blue-50/40 border border-dashed border-blue-200 rounded outline-none resize-none focus:border-blue-400 p-1.5 placeholder:text-slate-400 placeholder:italic" />
+                              className="w-full text-[12px] bg-accent-soft/40 border border-dashed border-blue-200 rounded outline-none resize-none focus:border-blue-400 p-1.5 placeholder:text-faint placeholder:italic" />
                           </td>
                           <td className="border border-black px-2 py-3 align-middle">
                             <Select
@@ -688,7 +688,7 @@ export default function PowerOutageManager() {
                           <td className="border border-black px-1 py-3 text-center align-top">
                             {slots.length > 1 && (
                               <button type="button" onClick={() => removeSlot(i)}
-                                className="p-1 text-slate-300 hover:text-red-500 transition-colors mt-1">
+                                className="p-1 text-faint hover:text-red-500 transition-colors mt-1">
                                 <X className="w-3.5 h-3.5" />
                               </button>
                             )}
@@ -707,7 +707,7 @@ export default function PowerOutageManager() {
                     <span className="font-bold">Lý do ngừng cấp điện:</span>
                     <textarea value={reason} onChange={e => setReason(e.target.value)}
                       placeholder="Nhập lý do..." rows={3}
-                      className="w-full border border-dashed border-blue-300 bg-blue-50/40 px-2 py-1 text-[12px] outline-none focus:border-blue-500 rounded-sm placeholder:text-slate-400 placeholder:italic resize-none" />
+                      className="w-full border border-dashed border-blue-300 bg-accent-soft/40 px-2 py-1 text-[12px] outline-none focus:border-blue-500 rounded-sm placeholder:text-faint placeholder:italic resize-none" />
                   </div>
                 </div>
 
@@ -720,7 +720,7 @@ export default function PowerOutageManager() {
                     .filter((x): x is number => x !== null);
 
                   return (
-                    <div key={ai} className="bg-white shadow rounded-sm mx-auto max-w-3xl px-12 py-6 space-y-3" style={{ fontFamily: 'Times New Roman, serif' }}>
+                    <div key={ai} className="bg-surface shadow rounded-sm mx-auto max-w-3xl px-12 py-6 space-y-3" style={{ fontFamily: 'Times New Roman, serif' }}>
                       {/* Header */}
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-3">
@@ -731,16 +731,16 @@ export default function PowerOutageManager() {
                         </div>
                         <div className="flex items-center gap-2">
                           {refSlots.length > 0 && (
-                            <span className="text-[10px] text-slate-400 italic">
+                            <span className="text-[10px] text-faint italic">
                               Khung giờ: {refSlots.join(', ')}
                             </span>
                           )}
-                          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                          <span className="text-xs font-bold text-blue-600 bg-accent-soft px-2 py-0.5 rounded-full">
                             {app.selectedIds.length} KH
                           </span>
                           {appendices.length > 1 && (
                             <button type="button" onClick={() => removeAppendix(ai)}
-                              className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                              className="p-1 text-faint hover:text-red-500 transition-colors"
                               title="Xóa phụ lục">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -751,60 +751,60 @@ export default function PowerOutageManager() {
                       {/* Search + toggle all */}
                       <div className="flex items-center gap-2">
                         <div className="relative flex-1">
-                          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <Search className="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2" />
                           <input type="text" value={app.search}
                             onChange={e => updateAppendix(ai, { search: e.target.value })}
                             placeholder="Tìm theo tên hoặc mã khách hàng..."
                             className={`${inputCls} pl-9`} />
                         </div>
                         <button type="button" onClick={() => toggleAll(ai)} disabled={filtered.length === 0}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded text-xs font-bold hover:bg-slate-50 transition-all disabled:opacity-50 shrink-0">
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-dim rounded text-xs font-bold hover:bg-subtle transition-all disabled:opacity-50 shrink-0">
                           {allSel ? <Square className="w-3.5 h-3.5" /> : <CheckSquare className="w-3.5 h-3.5" />}
                           {allSel ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                         </button>
                         <button type="button"
                           onClick={() => setManualForm(manualForm?.appIdx === ai ? null : { appIdx: ai, MKH: '', Name: '' })}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-blue-600 rounded text-xs font-bold hover:bg-blue-50 transition-all shrink-0">
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-blue-600 rounded text-xs font-bold hover:bg-accent-soft transition-all shrink-0">
                           <UserPlus className="w-3.5 h-3.5" /> Thêm KH ngoài danh sách
                         </button>
                       </div>
 
                       {/* Form thêm khách hàng ngoài danh sách */}
                       {manualForm?.appIdx === ai && (
-                        <div className="flex items-center gap-2 bg-blue-50/60 border border-dashed border-blue-300 rounded p-2.5">
+                        <div className="flex items-center gap-2 bg-accent-soft/60 border border-dashed border-blue-300 rounded p-2.5">
                           <input type="text" placeholder="Mã KH (tùy chọn)" value={manualForm.MKH}
                             onChange={e => setManualForm({ ...manualForm, MKH: e.target.value })}
-                            className="w-32 px-2 py-1.5 bg-white border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] text-sm" />
+                            className="w-32 px-2 py-1.5 bg-surface border border-[var(--border)] rounded outline-none focus:ring-2 focus:ring-accent text-sm" />
                           <input type="text" placeholder="Tên khách hàng" value={manualForm.Name}
                             onChange={e => setManualForm({ ...manualForm, Name: e.target.value })}
-                            className="flex-1 px-2 py-1.5 bg-white border border-slate-200 rounded outline-none focus:ring-2 focus:ring-[#5a8dee] text-sm" autoFocus />
+                            className="flex-1 px-2 py-1.5 bg-surface border border-[var(--border)] rounded outline-none focus:ring-2 focus:ring-accent text-sm" autoFocus />
                           <button type="button" onClick={addManualCustomer}
                             className="vl-btn vl-btn-primary vl-btn-sm">Thêm</button>
                           <button type="button" onClick={() => setManualForm(null)}
-                            className="p-1.5 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+                            className="p-1.5 text-faint hover:bg-subtle rounded"><X className="w-4 h-4" /></button>
                         </div>
                       )}
 
                       {/* Customer list */}
-                      <div className="border border-slate-200 rounded max-h-52 overflow-y-auto divide-y divide-slate-100">
+                      <div className="border border-[var(--border)] rounded max-h-52 overflow-y-auto divide-y divide-[var(--border)]">
                         {loadingCustomers ? (
-                          <div className="flex items-center justify-center gap-2 p-6 text-slate-400 text-sm">
+                          <div className="flex items-center justify-center gap-2 p-6 text-faint text-sm">
                             <RefreshCw className="w-4 h-4 animate-spin" /> Đang tải khách hàng...
                           </div>
                         ) : filtered.length === 0 ? (
-                          <div className="p-6 text-center text-slate-400 text-sm italic">
+                          <div className="p-6 text-center text-faint text-sm italic">
                             {area ? 'Không có khách hàng phù hợp' : 'Vui lòng chọn khu vực trước'}
                           </div>
                         ) : (
                           filtered.map(c => {
                             const checked = app.selectedIds.includes(c.id);
                             return (
-                              <label key={c.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${checked ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
+                              <label key={c.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${checked ? 'bg-accent-soft/50' : 'hover:bg-subtle'}`}>
                                 <input type="checkbox" checked={checked}
                                   onChange={() => toggleCustomer(ai, c.id)}
-                                  className="w-4 h-4 rounded border-slate-300 text-blue-600" />
-                                <span className="text-xs font-bold text-slate-400 w-24 shrink-0">{c.MKH}</span>
-                                <span className="text-sm text-slate-700 font-medium">{c.Name}</span>
+                                  className="w-4 h-4 rounded border-[var(--border-strong)] text-blue-600" />
+                                <span className="text-xs font-bold text-faint w-24 shrink-0">{c.MKH}</span>
+                                <span className="text-sm text-dim font-medium">{c.Name}</span>
                               </label>
                             );
                           })
@@ -817,14 +817,14 @@ export default function PowerOutageManager() {
                 {/* Add appendix button */}
                 <div className="mx-auto max-w-3xl">
                   <button type="button" onClick={addAppendix}
-                    className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600 rounded-sm text-[13px] font-bold transition-colors">
+                    className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-[var(--border-strong)] text-soft hover:border-blue-400 hover:text-blue-600 rounded-sm text-[13px] font-bold transition-colors">
                     <Plus className="w-4 h-4" /> Thêm phụ lục
                   </button>
                 </div>
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50 shrink-0">
+              <div className="px-6 py-4 border-t border-[var(--border)] flex justify-end gap-3 bg-subtle/50 shrink-0">
                 <button onClick={closeModal} disabled={isSaving}
                   className="vl-btn vl-btn-secondary px-6 py-2.5 font-bold disabled:opacity-50">
                   Hủy bỏ
