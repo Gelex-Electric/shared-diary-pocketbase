@@ -22,7 +22,13 @@ interface BookOption { FigureBookId: number; BookName: string; }
 
 const INVOICE_COLLECTION = 'invoice';
 
+import { toast as notify } from '../../lib/toast';
+
 type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+const TOAST_TITLE: Record<ToastType, string> = {
+  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
+};
 
 const BIEU_LABEL: Record<Bieu, string> = { BT: 'BT', CD: 'CĐ', TD: 'TĐ', VC: 'VC' };
 
@@ -170,10 +176,8 @@ export default function QuickImportManager() {
   const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
   const [invoicesDone, setInvoicesDone] = useState(false);      // đã hoàn tất lấy hóa đơn (cho stepper)
   const [mode, setMode] = useState<'direct' | 'manual'>('direct'); // tab: lấy trực tiếp / tải thủ công
-  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
-    setToast({ message, type: t });
-    setTimeout(() => setToast(null), 4500);
+    notify.show(t, TOAST_TITLE[t], message, { duration: 4500 });
   }, []);
 
   // Nạp danh sách sổ từ collection FigureBook
@@ -490,21 +494,6 @@ export default function QuickImportManager() {
 
   return (
     <div className="space-y-6 pb-12 animate-fade-in relative">
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed top-24 right-6 z-[200] flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold shadow-lg ${
-            toast.type === 'success' ? 'bg-emerald-600 text-white'
-            : toast.type === 'error' ? 'bg-rose-600 text-white'
-            : toast.type === 'warning' ? 'bg-amber-500 text-white'
-            : 'bg-slate-700 text-white'
-          }`}
-        >
-          {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-          {toast.message}
-        </div>
-      )}
-
       {/* Header */}
       <div className="vl-card p-6 md:p-8">
         <div className="flex items-center gap-3 mb-2">
