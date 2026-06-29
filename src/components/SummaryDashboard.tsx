@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { toast as notify } from '../lib/toast';
 import {
   ResponsiveContainer,
   XAxis,
@@ -524,26 +525,35 @@ export default function SummaryDashboard() {
     return set.size;
   }, [accountFilteredRecords, selectedMonth]);
 
-  // Alert nổi "Cảnh báo công nợ": chỉ hiện một lúc rồi tự ẩn; nội dung luôn nằm
-  // trong chuông thông báo (thông báo cục bộ) trong khi còn khách chưa thanh toán.
-  const [showFloatingAlert, setShowFloatingAlert] = useState(false);
+  // Cảnh báo công nợ: bắn toast (kèm nút "Xem chi tiết") + ghi vào chuông thông báo.
+  const debtToastSig = useRef<string>('');
+  const jumpToDebtList = () => {
+    setPaymentFilter('unpaid');
+    setCurrentPage(1);
+    setTimeout(() => {
+      document.getElementById('debt-table-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
   useEffect(() => {
     if (overallUnpaidKpis.isAnyUnpaid) {
       const extra = otherMonthsUnpaidCount > 0
         ? ` Trong đó ${otherMonthsUnpaidCount} khách còn nợ ở các tháng khác.`
         : '';
-      setLocalNotification({
-        id: 'debt-warning',
-        title: 'Cảnh báo công nợ',
-        message: `Còn ${overallUnpaidKpis.unpaidCustomers} doanh nghiệp chưa thanh toán tiền điện.${extra}`,
-        type: 'info',
-      });
-      setShowFloatingAlert(true);
-      const t = setTimeout(() => setShowFloatingAlert(false), 6000);
-      return () => clearTimeout(t);
+      const message = `Còn ${overallUnpaidKpis.unpaidCustomers} doanh nghiệp chưa thanh toán tiền điện.${extra}`;
+      setLocalNotification({ id: 'debt-warning', title: 'Cảnh báo công nợ', message, type: 'info' });
+
+      // Chỉ bắn toast khi nội dung đổi (tránh lặp mỗi lần render).
+      if (debtToastSig.current !== message) {
+        debtToastSig.current = message;
+        notify.warning('Cảnh báo công nợ', message, {
+          autoClose: false,
+          confirm: { text: 'Xem chi tiết', onConfirm: jumpToDebtList },
+        });
+      }
+    } else {
+      clearLocalNotification('debt-warning');
+      debtToastSig.current = '';
     }
-    clearLocalNotification('debt-warning');
-    setShowFloatingAlert(false);
   }, [overallUnpaidKpis.isAnyUnpaid, overallUnpaidKpis.unpaidCustomers, otherMonthsUnpaidCount]);
 
   // Dynamic Top 2 customers of selected month for default charts selection
@@ -674,42 +684,6 @@ export default function SummaryDashboard() {
 
   return (
     <div className="space-y-8 pb-12 animate-fade-in relative">
-      {/* Floating alert for unpaid customers in the top-right corner — tự ẩn sau ít giây */}
-      {showFloatingAlert && overallUnpaidKpis.isAnyUnpaid && (
-        <div 
-          onClick={() => {
-            setPaymentFilter('unpaid');
-            setCurrentPage(1);
-            setTimeout(() => {
-              const tableEl = document.getElementById('debt-table-section');
-              if (tableEl) tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 50);
-          }}
-          className="md:fixed absolute top-4 md:top-24 right-4 md:right-10 z-[100] max-w-sm vl-alert vl-alert-danger rounded-lg p-4 cursor-pointer hover:opacity-90 transition-all duration-300 flex items-start gap-4 mx-4 md:mx-0"
-        >
-          <div className="p-2 bg-surface/20 text-white rounded shrink-0">
-            <XCircle className="w-5.5 h-5.5 animate-pulse" />
-          </div>
-          <div className="text-left">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black text-white uppercase tracking-widest">Cảnh báo công nợ</span>
-              <span className="px-1.5 py-0.5 bg-surface/20 text-white text-[8px] font-black rounded uppercase animate-pulse">Lưu ý</span>
-            </div>
-            <p className="text-xs font-semibold text-white mt-1 leading-relaxed">
-              Còn <span className="text-white font-extrabold font-mono text-sm">{overallUnpaidKpis.unpaidCustomers}</span> doanh nghiệp chưa thanh toán tiền điện.
-            </p>
-            {otherMonthsUnpaidCount > 0 && (
-              <p className="text-[11px] font-semibold text-white/90 mt-1 leading-relaxed">
-                Trong đó <span className="font-extrabold font-mono">{otherMonthsUnpaidCount}</span> khách còn nợ ở các tháng khác.
-              </p>
-            )}
-            <p className="text-[10px] text-white/70 mt-1.5 font-semibold flex items-center gap-0.5">
-              Cuộn xuống danh sách chi tiết ↓
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Header and Account Badge Panel */}
       <div className="vl-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
