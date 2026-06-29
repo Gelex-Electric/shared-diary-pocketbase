@@ -10,6 +10,7 @@ import BillConfirmManager from './BillConfirmManager';
 import QuickImportManager from './QuickImportManager';
 import CustomerDebtManager from './CustomerDebtManager';
 import NotificationBell from '../ui/NotificationBell';
+import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab = 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt';
 
@@ -37,12 +38,12 @@ export default function BusinessDashboard() {
       {/* Logo */}
       <div className="px-8 pt-8 pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-[#5a8dee] flex items-center justify-center shrink-0">
-            <Briefcase className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center shrink-0">
+            <Briefcase className="w-5 h-5 text-[var(--on-accent)]" />
           </div>
           <div className="leading-tight">
-            <p className="text-[0.7rem] font-semibold text-[#a3afbd] uppercase tracking-wider">Phần mềm</p>
-            <p className="text-[0.95rem] font-bold text-[#5a8dee] leading-snug">Khối kinh doanh GETC</p>
+            <p className="text-[0.7rem] font-semibold text-faint uppercase tracking-wider">Phần mềm</p>
+            <p className="text-[0.95rem] font-bold text-accent leading-snug">Khối kinh doanh GETC</p>
           </div>
         </div>
       </div>
@@ -58,7 +59,7 @@ export default function BusinessDashboard() {
             <button
               onClick={() => { setTopTab('summary'); onNavigate?.(); }}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'summary' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'summary' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
@@ -72,12 +73,12 @@ export default function BusinessDashboard() {
               id="nav-business"
               onClick={() => setIsBusinessExpanded(v => !v)}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'bill-confirm' || topTab === 'quick-import' || topTab === 'customer-debt' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'bill-confirm' || topTab === 'quick-import' || topTab === 'customer-debt' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <Briefcase className="w-5 h-5 shrink-0" />
               <span className="flex-1 text-left">Hồ sơ kinh doanh</span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isBusinessExpanded ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isBusinessExpanded ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence initial={false}>
               {isBusinessExpanded && (
@@ -93,7 +94,7 @@ export default function BusinessDashboard() {
                       id="nav-bill-confirm-sub"
                       onClick={() => { setTopTab('bill-confirm'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'bill-confirm' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'bill-confirm' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -105,7 +106,7 @@ export default function BusinessDashboard() {
                       id="nav-customer-debt-sub"
                       onClick={() => { setTopTab('customer-debt'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'customer-debt' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'customer-debt' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -118,7 +119,7 @@ export default function BusinessDashboard() {
                       id="nav-quick-import-sub"
                       onClick={() => { setTopTab('quick-import'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'quick-import' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'quick-import' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -155,12 +156,12 @@ export default function BusinessDashboard() {
           <motion.div
             initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
             transition={{ type: 'spring', damping: 26, stiffness: 200 }}
-            className="fixed top-0 left-0 z-50 h-screen bg-white lg:hidden"
-            style={{ width: 260, borderRight: '1px solid #eee', boxShadow: '0 0 10px #ececec' }}
+            className="fixed top-0 left-0 z-50 h-screen bg-surface lg:hidden"
+            style={{ width: 260, borderRight: '1px solid var(--border)' }}
           >
             <button
               onClick={() => setIsSidebarOpen(false)}
-              className="absolute top-2 right-2 p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+              className="absolute top-2 right-2 p-2 rounded-lg hover:bg-subtle transition-colors text-soft"
             >
               <X className="w-4 h-4" />
             </button>
@@ -170,8 +171,8 @@ export default function BusinessDashboard() {
       </AnimatePresence>
 
       <aside
-        className="hidden lg:block fixed top-0 left-0 h-screen bg-white z-30"
-        style={{ width: 260, borderRight: '1px solid #eee', boxShadow: '0 0 10px #ececec' }}
+        className="hidden lg:block fixed top-0 left-0 h-screen bg-surface z-30"
+        style={{ width: 260, borderRight: '1px solid var(--border)' }}
       >
         <SidebarNav />
       </aside>
@@ -181,23 +182,23 @@ export default function BusinessDashboard() {
 
         {/* Navbar — page title left, user actions right */}
         <nav
-          className="sticky top-0 z-20 bg-white flex items-center px-4 md:px-6 gap-3"
-          style={{ height: 70, borderBottom: '1px solid #eee', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}
+          className="sticky top-0 z-20 bg-surface flex items-center px-4 md:px-6 gap-3"
+          style={{ height: 70, borderBottom: '1px solid var(--border)' }}
         >
           {/* Mobile hamburger */}
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors text-[#6c757d]"
+            className="lg:hidden p-2 rounded-lg hover:bg-subtle transition-colors text-soft"
           >
             <Menu className="w-5 h-5" />
           </button>
 
           {/* Current page title */}
           <div className="flex-1 min-w-0">
-            <h2 className="text-[1.1rem] font-bold text-[#222f3e] leading-tight truncate">
+            <h2 className="text-[1.1rem] font-bold text-ink leading-tight truncate">
               {TAB_LABEL[topTab]}
             </h2>
-            <p className="text-[11px] font-semibold text-[#a3afbd] uppercase tracking-wider leading-tight hidden sm:block">
+            <p className="text-[11px] font-semibold text-faint uppercase tracking-wider leading-tight hidden sm:block">
               Khối kinh doanh
             </p>
           </div>
@@ -208,7 +209,7 @@ export default function BusinessDashboard() {
               href="/document.pdf"
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 rounded-full transition-colors text-[#6c757d] hover:bg-gray-100"
+              className="p-2 rounded-full transition-colors text-soft hover:bg-subtle"
               title="Hướng dẫn sử dụng"
             >
               <FileText className="w-[20px] h-[20px]" />
@@ -217,20 +218,23 @@ export default function BusinessDashboard() {
             {/* Thông báo */}
             <NotificationBell />
 
-            <div className="w-px h-6 bg-gray-200 mx-1" />
+            {/* Theme */}
+            <ThemeToggle />
+
+            <div className="w-px h-6 bg-[var(--border)] mx-1" />
 
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-[#5a8dee] flex items-center justify-center text-white text-[13px] font-bold shrink-0">
+              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-[var(--on-accent)] text-[13px] font-bold shrink-0">
                 {userInitial}
               </div>
-              <span className="hidden md:block text-[13px] font-semibold text-[#475f7b] max-w-[200px] truncate">
+              <span className="hidden md:block text-[13px] font-semibold text-dim max-w-[200px] truncate">
                 {userName}
               </span>
             </div>
 
             <button
               onClick={handleLogout}
-              className="p-2 rounded-full hover:bg-red-50 transition-colors text-[#ff5b5c]"
+              className="p-2 rounded-full hover:bg-[var(--danger-soft)] transition-colors text-bad"
               title="Đăng xuất"
             >
               <LogOut className="w-[18px] h-[18px]" />
