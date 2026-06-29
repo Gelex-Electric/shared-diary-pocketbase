@@ -120,8 +120,8 @@ export default function ElectricShiftManager() {
       {/* Header and top filters */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Quản lý nhân sự trực</h2>
-          <p className="text-slate-500 text-sm mt-1">Danh sách nhân sự phân bổ theo tổ vận hành</p>
+          <h2 className="text-2xl font-bold text-ink">Quản lý nhân sự trực</h2>
+          <p className="text-soft text-sm mt-1">Danh sách nhân sự phân bổ theo tổ vận hành</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <Select
@@ -145,17 +145,17 @@ export default function ElectricShiftManager() {
         <div className="overflow-x-auto">
           <table className="vl-table w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-100">
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-10 w-24">Số thứ tự</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Họ & Tên</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Khu vực</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right pr-10 w-32">Thao tác</th>
+              <tr className="border-b border-[var(--border)]">
+                <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest pl-10 w-24">Số thứ tự</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest">Họ & Tên</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest">Khu vực</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest text-right pr-10 w-32">Thao tác</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[var(--border)]">
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={4} className="px-6 py-12 text-center text-faint">
                     <div className="flex justify-center items-center gap-3">
                       <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                       <span>Đang tải danh sách...</span>
@@ -164,31 +164,31 @@ export default function ElectricShiftManager() {
                 </tr>
               ) : shifts.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">
+                  <td colSpan={4} className="px-6 py-12 text-center text-faint italic">
                     Chưa có nhân sự trực nào được ghi nhận.
                   </td>
                 </tr>
               ) : (
                 shifts.map((shift) => (
-                  <tr key={shift.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={shift.id} className="hover:bg-subtle/50 transition-colors">
                     <td className="px-6 py-4 pl-10">
-                      <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">{shift.IDnum}</span>
+                      <span className="font-mono text-xs font-bold text-soft bg-subtle px-2.5 py-1 rounded-md">{shift.IDnum}</span>
                     </td>
-                    <td className="px-6 py-4 font-bold text-slate-800">{shift.Name}</td>
-                    <td className="px-6 py-4 text-slate-500 text-sm">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-bold text-[11px] uppercase tracking-wider">{shift.area}</span>
+                    <td className="px-6 py-4 font-bold text-ink">{shift.Name}</td>
+                    <td className="px-6 py-4 text-soft text-sm">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-accent-soft text-blue-600 rounded-full font-bold text-[11px] uppercase tracking-wider">{shift.area}</span>
                     </td>
                     <td className="px-6 py-4 text-right pr-10">
                       <div className="flex gap-2 justify-end">
                         <button 
                           onClick={() => handleOpenEdit(shift)} 
-                          className="p-2 hover:bg-[#f4f8ff] rounded text-slate-500 hover:text-blue-600 transition-colors"
+                          className="p-2 hover:bg-accent-soft rounded text-soft hover:text-blue-600 transition-colors"
                         >
                           <Edit2 className="w-5 h-5" />
                         </button>
                         <button 
                           onClick={() => handleDelete(shift.id)} 
-                          className="p-2 hover:bg-red-50 rounded text-slate-500 hover:text-red-500 transition-colors"
+                          className="p-2 hover:bg-[var(--danger-soft)] rounded text-soft hover:text-red-500 transition-colors"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -217,41 +217,41 @@ export default function ElectricShiftManager() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-lg bg-white rounded-lg shadow-2xl p-8 overflow-hidden"
+              className="relative w-full max-w-lg bg-surface rounded-lg shadow-2xl p-8 overflow-hidden"
             >
-              <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-                <h3 className="text-xl font-bold text-slate-800">{editingId ? 'Chỉnh sửa nhân sự' : 'Thêm nhân sự mới'}</h3>
-                <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
-                  <X className="w-6 h-6 text-slate-400" />
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border)]">
+                <h3 className="text-xl font-bold text-ink">{editingId ? 'Chỉnh sửa nhân sự' : 'Thêm nhân sự mới'}</h3>
+                <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-subtle rounded-lg transition-colors">
+                  <X className="w-6 h-6 text-faint" />
                 </button>
               </div>
 
               <form onSubmit={handleSave} className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Số thứ tự (ID)</label>
+                  <label className="text-[10px] font-bold text-faint uppercase ml-1">Số thứ tự (ID)</label>
                   <input 
                     type="number" 
                     required
                     value={formData.IDnum} 
                     onChange={(e) => setFormData({ ...formData, IDnum: parseInt(e.target.value) || 1 })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:bg-white transition-all text-sm font-bold font-mono"
+                    className="w-full bg-subtle border border-[var(--border)] px-4 py-3 rounded focus:outline-none focus:ring-2 focus:ring-accent focus:bg-surface transition-all text-sm font-bold font-mono"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Họ & Tên</label>
+                  <label className="text-[10px] font-bold text-faint uppercase ml-1">Họ & Tên</label>
                   <input 
                     type="text" 
                     placeholder="Nguyễn Văn A" 
                     required
                     value={formData.Name} 
                     onChange={(e) => setFormData({ ...formData, Name: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded focus:outline-none focus:ring-2 focus:ring-[#5a8dee] focus:bg-white transition-all text-sm font-bold"
+                    className="w-full bg-subtle border border-[var(--border)] px-4 py-3 rounded focus:outline-none focus:ring-2 focus:ring-accent focus:bg-surface transition-all text-sm font-bold"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Khu vực phân bổ</label>
+                  <label className="text-[10px] font-bold text-faint uppercase ml-1">Khu vực phân bổ</label>
                   <Select
                     value={formData.area}
                     onChange={(v) => setFormData({ ...formData, area: v })}
@@ -259,7 +259,7 @@ export default function ElectricShiftManager() {
                   />
                 </div>
 
-                <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
+                <div className="flex gap-3 justify-end pt-4 border-t border-[var(--border)]">
                   <button 
                     type="button" 
                     onClick={() => setIsModalOpen(false)}
