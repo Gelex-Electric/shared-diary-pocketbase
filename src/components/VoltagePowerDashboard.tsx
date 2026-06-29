@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { toast as notify } from '../lib/toast';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -207,6 +208,11 @@ export default function VoltagePowerDashboard() {
   /* ---- CSV ---- */
   const [csvContent, setCsvContent] = useState<string>(_meterCsvCache ?? '');
   const [csvError, setCsvError] = useState<string>('');
+
+  // Lỗi đọc dữ liệu → toast (thay cho banner inline cũ).
+  useEffect(() => {
+    if (csvError) notify.error('Lỗi dữ liệu', csvError);
+  }, [csvError]);
 
   useEffect(() => {
     if (_meterCsvCache !== null) return;
@@ -655,11 +661,7 @@ export default function VoltagePowerDashboard() {
         </div>
       </div>
 
-      {/* ---- Trạng thái tải / lỗi / rỗng ---- */}
-      {csvError && (
-        <div className="vl-alert vl-alert-danger p-4 rounded-xl text-sm">{csvError}</div>
-      )}
-
+      {/* ---- Trạng thái tải / rỗng (lỗi hiển thị bằng toast) ---- */}
       {!isReady && !csvError && (
         <div className="vl-card flex flex-col items-center justify-center py-20 text-faint">
           <Gauge className="w-12 h-12 mb-3 animate-pulse opacity-40" />
