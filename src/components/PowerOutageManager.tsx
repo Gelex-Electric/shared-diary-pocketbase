@@ -12,6 +12,11 @@ import { Select } from './ui/Select';
 import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
 import { generateOutageDocx } from '../lib/outageDocx';
+import { toast as notify } from '../lib/toast';
+
+const TOAST_TITLE: Record<ToastType, string> = {
+  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
+};
 
 const TYPE_LABEL: Record<PowerOutage['type'], string> = {
   emergency: 'Khẩn cấp',
@@ -118,10 +123,8 @@ export default function PowerOutageManager() {
     return Array.from(map.values());
   }, [customerList, manualCustomers]);
 
-  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
-    setToast({ message, type: t });
-    setTimeout(() => setToast(null), 4000);
+    notify.show(t, TOAST_TITLE[t], message);
   }, []);
 
   const userAreas = React.useMemo(() => {
@@ -370,13 +373,6 @@ export default function PowerOutageManager() {
     }
   };
 
-  const toastCfg: Record<ToastType, { icon: React.ElementType; cls: string }> = {
-    success: { icon: CheckCircle2, cls: 'vl-alert vl-alert-success' },
-    error:   { icon: XCircle,      cls: 'vl-alert vl-alert-danger' },
-    warning: { icon: AlertCircle,  cls: 'vl-alert vl-alert-warning' },
-    info:    { icon: Info,         cls: 'vl-alert vl-alert-primary' },
-  };
-
   const inputCls = 'w-full px-3 py-2 bg-surface border border-[var(--border)] rounded outline-none focus:ring-2 focus:ring-accent text-sm';
 
   const appendixOptions = appendices.map((_, i) => ({
@@ -414,22 +410,6 @@ export default function PowerOutageManager() {
   return (
     <div className="space-y-8 relative">
       {confirmDialog}
-      {/* Toast */}
-      <AnimatePresence>
-        {toast && (() => {
-          const cfg = toastCfg[toast.type];
-          const Icon = cfg.icon;
-          return (
-            <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }}
-              className="fixed top-6 right-6 z-[120]">
-              <div className={`${cfg.cls} flex items-center gap-2 px-4 py-3 rounded shadow-lg`}>
-                <Icon className="w-5 h-5 shrink-0" />
-                <span className="text-sm font-semibold">{toast.message}</span>
-              </div>
-            </motion.div>
-          );
-        })()}
-      </AnimatePresence>
 
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
