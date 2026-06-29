@@ -191,7 +191,7 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
   return (
     <div ref={wrapperRef} className={`space-y-1 relative ${className}`}>
       {label && (
-        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 select-none pointer-events-none">
+        <label className="text-[10px] font-bold text-faint uppercase flex items-center gap-1 select-none pointer-events-none">
           <Calendar className="w-3 h-3" /> {label}
         </label>
       )}
@@ -199,15 +199,15 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
       {/* Trigger input — cho phép gõ tay dd/mm/yyyy */}
       <div
         ref={triggerRef}
-        className={`relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-white border rounded-lg
+        className={`relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-surface border rounded-lg
                     text-sm font-bold transition-all
                     ${open
-                      ? 'ring-2 ring-[#5a8dee] border-[#5a8dee]'
-                      : 'border-slate-200 hover:border-[#5a8dee]/50 focus-within:ring-2 focus-within:ring-[#5a8dee] focus-within:border-[#5a8dee]'}`}
+                      ? 'ring-2 ring-accent border-accent'
+                      : 'border-[var(--border)] hover:border-accent/50 focus-within:ring-2 focus-within:ring-accent focus-within:border-accent'}`}
       >
         <Calendar
           onClick={() => setOpen(o => !o)}
-          className={`w-4 h-4 shrink-0 cursor-pointer ${open ? 'text-[#5a8dee]' : 'text-slate-400'}`}
+          className={`w-4 h-4 shrink-0 cursor-pointer ${open ? 'text-accent' : 'text-faint'}`}
         />
         <input
           type="text"
@@ -221,7 +221,7 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
             else if (e.key === 'Escape') { setText(displayVal); setOpen(false); }
           }}
           placeholder="dd/mm/yyyy"
-          className="flex-1 min-w-0 bg-transparent outline-none text-slate-700 placeholder:text-slate-300 placeholder:font-normal"
+          className="flex-1 min-w-0 bg-transparent outline-none text-dim placeholder:text-faint placeholder:font-normal"
         />
       </div>
 
@@ -231,51 +231,51 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
           <div
             ref={portalRef}
             className={usePortal
-              ? 'fixed z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in duration-150'
-              : 'absolute top-full mt-1.5 left-0 z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150'}
+              ? 'fixed z-[200] bg-surface rounded-2xl overflow-hidden animate-in fade-in duration-150'
+              : 'absolute top-full mt-1.5 left-0 z-[200] bg-surface rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150'}
             style={usePortal
               ? { boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 270, top: portalPos!.top, left: portalPos!.left }
               : { boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 270 }}
             onClick={e => e.stopPropagation()}
           >
             {/* ── Hàng Năm ── */}
-            <div className="flex items-center justify-between bg-[#5a8dee] px-3 py-2">
+            <div className="flex items-center justify-between bg-accent px-3 py-2">
               <button
                 onClick={prevYear}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-surface/20 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-white font-extrabold text-sm tracking-wide">{viewYear}</span>
               <button
                 onClick={nextYear}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-surface/20 transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
             {/* ── Hàng Tháng ── */}
-            <div className="flex items-center justify-between bg-[#4880e8] px-3 py-2">
+            <div className="flex items-center justify-between bg-[var(--accent)] px-3 py-2">
               <button
                 onClick={prevMonth}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-surface/20 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-white font-semibold text-sm">{VN_MONTHS[viewMonth]}</span>
               <button
                 onClick={nextMonth}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-surface/20 transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
             {/* ── Header ngày trong tuần ── */}
-            <div className="grid grid-cols-7 bg-[#e8f3ff] px-3 py-1.5">
+            <div className="grid grid-cols-7 bg-accent-soft px-3 py-1.5">
               {VN_WEEKDAYS.map(wd => (
-                <div key={wd} className="text-center text-[10px] font-extrabold text-[#5a8dee]">{wd}</div>
+                <div key={wd} className="text-center text-[10px] font-extrabold text-accent">{wd}</div>
               ))}
             </div>
 
@@ -292,14 +292,14 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
                     className={[
                       'mx-auto w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all',
                       cell.kind !== 'cur'
-                        ? 'text-slate-300 cursor-default'
+                        ? 'text-faint cursor-default'
                         : 'cursor-pointer',
                       sel
-                        ? 'bg-[#5a8dee] text-white font-bold shadow-md shadow-[#5a8dee]/40'
+                        ? 'bg-accent text-white font-bold shadow-md shadow-[var(--accent)]/40'
                         : td
-                          ? 'border-2 border-[#5a8dee] text-[#5a8dee] font-bold'
+                          ? 'border-2 border-accent text-accent font-bold'
                           : cell.kind === 'cur'
-                            ? 'text-slate-600 font-medium hover:bg-[#e8f3ff] hover:text-[#5a8dee]'
+                            ? 'text-dim font-medium hover:bg-accent-soft hover:text-accent'
                             : '',
                     ].join(' ')}
                   >
@@ -313,8 +313,8 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
             <div className="px-3 pb-3 pt-1">
               <button
                 onClick={goToday}
-                className="w-full py-1.5 bg-[#5a8dee] text-white text-xs font-bold rounded-lg
-                           hover:bg-[#4a7de2] active:scale-[0.98] transition-all"
+                className="w-full py-1.5 bg-accent text-white text-xs font-bold rounded-lg
+                           hover:bg-[var(--accent-hover)] active:scale-[0.98] transition-all"
               >
                 Hôm Nay
               </button>
@@ -398,7 +398,7 @@ export function MonthPicker({
   return (
     <div ref={wrapperRef} className={`space-y-1 relative ${className}`}>
       {label && (
-        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 select-none pointer-events-none">
+        <label className="text-[10px] font-bold text-faint uppercase flex items-center gap-1 select-none pointer-events-none">
           <Calendar className="w-3 h-3" /> {label}
         </label>
       )}
@@ -406,14 +406,14 @@ export function MonthPicker({
       {/* Trigger input */}
       <div
         onClick={() => setOpen(o => !o)}
-        className={`relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-white border rounded-lg
+        className={`relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-surface border rounded-lg
                     text-sm font-bold cursor-pointer select-none transition-all
                     ${open
-                      ? 'ring-2 ring-[#5a8dee] border-[#5a8dee]'
-                      : 'border-slate-200 hover:border-[#5a8dee]/50'}`}
+                      ? 'ring-2 ring-accent border-accent'
+                      : 'border-[var(--border)] hover:border-accent/50'}`}
       >
-        <Calendar className={`w-4 h-4 shrink-0 ${open ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
-        <span className={displayVal ? 'text-slate-700' : 'text-slate-300 font-normal'}>
+        <Calendar className={`w-4 h-4 shrink-0 ${open ? 'text-accent' : 'text-faint'}`} />
+        <span className={displayVal ? 'text-dim' : 'text-faint font-normal'}>
           {displayVal || 'Chọn tháng'}
         </span>
       </div>
@@ -421,22 +421,22 @@ export function MonthPicker({
       {/* Dropdown */}
       {open && (
         <div
-          className="absolute top-full mt-1.5 left-0 z-[200] bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+          className="absolute top-full mt-1.5 left-0 z-[200] bg-surface rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
           style={{ boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 240 }}
           onClick={e => e.stopPropagation()}
         >
           {/* ── Hàng Năm ── */}
-          <div className="flex items-center justify-between bg-[#5a8dee] px-3 py-2">
+          <div className="flex items-center justify-between bg-accent px-3 py-2">
             <button
               onClick={prevYear}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-surface/20 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="text-white font-extrabold text-sm tracking-wide">{viewYear}</span>
             <button
               onClick={nextYear}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-white/20 transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-white hover:bg-surface/20 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -454,10 +454,10 @@ export function MonthPicker({
                   className={[
                     'h-9 rounded-lg text-xs font-bold flex items-center justify-center transition-all',
                     sel
-                      ? 'bg-[#5a8dee] text-white shadow-md shadow-[#5a8dee]/40'
+                      ? 'bg-accent text-white shadow-md shadow-[var(--accent)]/40'
                       : cur
-                        ? 'border-2 border-[#5a8dee] text-[#5a8dee]'
-                        : 'text-slate-600 hover:bg-[#e8f3ff] hover:text-[#5a8dee]',
+                        ? 'border-2 border-accent text-accent'
+                        : 'text-dim hover:bg-accent-soft hover:text-accent',
                   ].join(' ')}
                 >
                   {m}
@@ -470,8 +470,8 @@ export function MonthPicker({
           <div className="px-3 pb-3 pt-1">
             <button
               onClick={goThisMonth}
-              className="w-full py-1.5 bg-[#5a8dee] text-white text-xs font-bold rounded-lg
-                         hover:bg-[#4a7de2] active:scale-[0.98] transition-all"
+              className="w-full py-1.5 bg-accent text-white text-xs font-bold rounded-lg
+                         hover:bg-[var(--accent-hover)] active:scale-[0.98] transition-all"
             >
               Tháng này
             </button>
@@ -552,23 +552,23 @@ export function TimePicker({ value, onChange, label, className = '' }: TimePicke
     if (e.key === 'Enter') { commitM(m); }
   };
 
-  const inputCls = `w-7 text-center text-sm font-bold text-[#5a8dee] bg-transparent outline-none
-                    focus:bg-[#e8f3ff] focus:rounded transition-colors tabular-nums`;
+  const inputCls = `w-7 text-center text-sm font-bold text-accent bg-transparent outline-none
+                    focus:bg-accent-soft focus:rounded transition-colors tabular-nums`;
 
   return (
     <div className={`space-y-1 ${className}`}>
       {label && (
-        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 select-none">
+        <label className="text-[10px] font-bold text-faint uppercase flex items-center gap-1 select-none">
           <Clock className="w-3 h-3" /> {label}
         </label>
       )}
 
       {/* Container giống input thường, chứa 2 ô nhập bên trong */}
-      <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-lg
+      <div className="flex items-center gap-0.5 bg-surface border border-[var(--border)] rounded-lg
                       px-2.5 py-2 transition-colors
-                      focus-within:ring-2 focus-within:ring-[#5a8dee] focus-within:border-[#5a8dee]
-                      hover:border-[#5a8dee]/50">
-        <Clock className="w-4 h-4 text-slate-400 shrink-0 mr-1" />
+                      focus-within:ring-2 focus-within:ring-accent focus-within:border-accent
+                      hover:border-accent/50">
+        <Clock className="w-4 h-4 text-faint shrink-0 mr-1" />
 
         {/* Giờ */}
         <input
@@ -584,7 +584,7 @@ export function TimePicker({ value, onChange, label, className = '' }: TimePicke
           aria-label="Giờ (0–23)"
         />
 
-        <span className="text-[#5a8dee] font-extrabold text-sm select-none leading-none">:</span>
+        <span className="text-accent font-extrabold text-sm select-none leading-none">:</span>
 
         {/* Phút */}
         <input
