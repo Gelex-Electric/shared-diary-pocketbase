@@ -19,8 +19,14 @@ import {
    trong 1 kỳ. Chỉ dành cho khối Kinh doanh.
 ============================================================ */
 
+import { toast as notify } from '../../lib/toast';
+
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 type PaymentFilter = 'all' | 'paid' | 'unpaid';
+
+const TOAST_TITLE: Record<ToastType, string> = {
+  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
+};
 
 interface DebtInvoiceRecord {
   id: string;
@@ -133,11 +139,8 @@ export default function CustomerDebtManager() {
   const [pending, setPending] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState<{ done: number; total: number } | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
-
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
-    setToast({ message, type: t });
-    setTimeout(() => setToast(null), 4000);
+    notify.show(t, TOAST_TITLE[t], message);
   }, []);
 
   /* ── load: chỉ tải theo tháng đang xem (server-side filter trên EndDate) ── */
@@ -522,15 +525,6 @@ export default function CustomerDebtManager() {
 
   return (
     <div className="space-y-6 pb-12 animate-fade-in relative">
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed top-5 right-5 z-[300] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-semibold text-white
-          ${toast.type === 'success' ? 'bg-emerald-500' : toast.type === 'error' ? 'bg-red-500' : toast.type === 'warning' ? 'bg-amber-500' : 'bg-accent'}`}>
-          {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-          {toast.message}
-        </div>
-      )}
-
       {/* Header */}
       <div className="vl-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
