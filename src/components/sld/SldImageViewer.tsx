@@ -8,7 +8,7 @@ import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 // ===================================================================
 export default function SldImageViewer({ src, title }: { src: string; title?: string }) {
   return (
-    <div className="relative w-full h-full bg-slate-50">
+    <div className="relative w-full h-full bg-subtle">
       <TransformWrapper
         initialScale={1}
         minScale={0.2}
@@ -22,15 +22,15 @@ export default function SldImageViewer({ src, title }: { src: string; title?: st
             {/* Nút điều khiển */}
             <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
               <button onClick={() => zoomIn()} title="Phóng to"
-                className="w-9 h-9 flex items-center justify-center rounded-md bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-600">
+                className="w-9 h-9 flex items-center justify-center rounded-md bg-surface border border-[var(--border)] shadow-sm hover:bg-subtle text-dim">
                 <ZoomIn className="w-4 h-4" />
               </button>
               <button onClick={() => zoomOut()} title="Thu nhỏ"
-                className="w-9 h-9 flex items-center justify-center rounded-md bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-600">
+                className="w-9 h-9 flex items-center justify-center rounded-md bg-surface border border-[var(--border)] shadow-sm hover:bg-subtle text-dim">
                 <ZoomOut className="w-4 h-4" />
               </button>
               <button onClick={() => resetTransform()} title="Vừa màn hình"
-                className="w-9 h-9 flex items-center justify-center rounded-md bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-600">
+                className="w-9 h-9 flex items-center justify-center rounded-md bg-surface border border-[var(--border)] shadow-sm hover:bg-subtle text-dim">
                 <Maximize className="w-4 h-4" />
               </button>
             </div>
