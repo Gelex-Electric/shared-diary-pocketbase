@@ -83,7 +83,7 @@ const ZONE_MAP: Record<string, string> = {
 };
 const ZONE_ORDER = Object.keys(ZONE_MAP);
 // Màu header chung cho mọi bảng KCN
-const ZONE_HEADER_GRADIENT = 'from-[#5a8dee] to-[#4880e8]';
+const ZONE_HEADER_GRADIENT = 'from-[var(--accent)] to-[var(--accent)]';
 const zoneOf = (mkh: string) => (mkh.split('-')[0] || '').trim();
 
 const num = (v: any) => {
@@ -385,52 +385,52 @@ export default function CustomerDebtManager() {
           onClick={() => toggleGroupExpansion(c.mkh)}
           className={`transition-colors text-sm cursor-pointer ${
             c.isPaid
-              ? 'bg-emerald-50/40 border-l-4 border-l-emerald-400 text-slate-700 hover:bg-emerald-50/80'
+              ? 'bg-[var(--success-soft)]/40 border-l-4 border-l-emerald-400 text-dim hover:bg-[var(--success-soft)]/80'
               : 'bg-rose-50/70 border-l-4 border-l-rose-500 text-rose-950 font-semibold hover:bg-rose-100/50'
           }`}
         >
-          <td className="py-3.5 px-4 font-mono font-bold text-[11px] text-slate-500">
+          <td className="py-3.5 px-4 font-mono font-bold text-[11px] text-soft">
             <div className="flex items-center gap-1.5">
               {isExpanded ? (
-                <ChevronDown className="w-3.5 h-3.5 text-[#5a8dee] shrink-0" />
+                <ChevronDown className="w-3.5 h-3.5 text-accent shrink-0" />
               ) : (
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <ChevronRight className="w-3.5 h-3.5 text-faint shrink-0" />
               )}
               <span className="whitespace-nowrap">{c.mkh}</span>
             </div>
           </td>
-          <td className="py-3.5 px-4 font-semibold text-slate-800 whitespace-normal break-words leading-snug">
+          <td className="py-3.5 px-4 font-semibold text-ink whitespace-normal break-words leading-snug">
             <div className="flex flex-col">
               <span>{c.nMua || '(Chưa có tên)'}</span>
-              <span className="text-[10px] font-bold text-[#5a8dee] mt-1 uppercase tracking-wider bg-[#e8f3ff]/70 px-1.5 py-0.5 rounded-md w-fit">
+              <span className="text-[10px] font-bold text-accent mt-1 uppercase tracking-wider bg-accent-soft/70 px-1.5 py-0.5 rounded-md w-fit">
                 {c.kyList.length} hóa đơn
               </span>
             </div>
           </td>
-          <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-500">
+          <td className="py-3.5 px-4 text-center font-mono text-xs text-soft">
             <div>{fmtDate(latestKy?.endDate)}</div>
           </td>
           <td className="py-3.5 px-4 text-center font-mono text-xs">
             {latestKy?.nTToan ? (
-              <span className="text-emerald-600 font-bold">{fmtDate(latestKy.nTToan)}</span>
+              <span className="text-ok font-bold">{fmtDate(latestKy.nTToan)}</span>
             ) : (
               <span className="text-rose-500/80 font-semibold text-[11px] bg-rose-50/40 px-1.5 py-0.5 rounded border border-rose-100/50">Chưa xong</span>
             )}
           </td>
           <td className="py-3.5 px-4 text-right font-mono text-xs">
             {(c.slHC > 0 || c.slVC === 0) && (
-              <div className="font-bold text-amber-600">{fmtKWh(c.slHC)} <span className="text-[9px] text-amber-600/60">kWh</span></div>
+              <div className="font-bold text-warn">{fmtKWh(c.slHC)} <span className="text-[9px] text-warn/60">kWh</span></div>
             )}
             {c.slVC > 0 && (
-              <div className="text-[10px] text-slate-400 font-semibold">{fmtKWh(c.slVC)} kVarh</div>
+              <div className="text-[10px] text-faint font-semibold">{fmtKWh(c.slVC)} kVarh</div>
             )}
           </td>
           <td className="py-3.5 px-4 text-right font-mono text-xs">
-            <div className="text-slate-800 font-bold">{fmtVND(c.dtHC + c.dtVC)}</div>
+            <div className="text-ink font-bold">{fmtVND(c.dtHC + c.dtVC)}</div>
           </td>
           <td className="py-3.5 px-4 text-center">
             {c.isPaid ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-md bg-emerald-100 text-emerald-700">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-md bg-emerald-100 text-ok">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                 Đã thanh toán
               </span>
@@ -452,21 +452,21 @@ export default function CustomerDebtManager() {
               key={ky.key}
               className={`transition-colors text-xs border-l-[3px] ${
                 ky.nTToan
-                  ? 'bg-emerald-50/30 border-l-emerald-300 hover:bg-emerald-50/60'
+                  ? 'bg-[var(--success-soft)]/30 border-l-emerald-300 hover:bg-[var(--success-soft)]/60'
                   : 'bg-rose-50/30 border-l-rose-300 hover:bg-rose-50/60'
               }`}
               onClick={e => e.stopPropagation()}
             >
-              <td className="py-3 px-4 font-mono font-bold text-slate-400 pl-8">
+              <td className="py-3 px-4 font-mono font-bold text-faint pl-8">
                 <div className="flex items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ky.nTToan ? 'bg-emerald-400' : 'bg-rose-400'}`} />
                   <span>Kỳ {fmtDate(ky.endDate)}</span>
                 </div>
               </td>
-              <td className="py-3 px-4 text-slate-500 italic pl-6 whitespace-normal break-words leading-relaxed text-[11px]">
+              <td className="py-3 px-4 text-soft italic pl-6 whitespace-normal break-words leading-relaxed text-[11px]">
                 {ky.ids.length} công tơ
               </td>
-              <td className="py-3 px-4 text-center font-mono text-[11px] text-slate-500">
+              <td className="py-3 px-4 text-center font-mono text-[11px] text-soft">
                 {fmtDate(ky.endDate)}
               </td>
               <td className="py-3 px-4 text-center">
@@ -481,7 +481,7 @@ export default function CustomerDebtManager() {
                     <button
                       onClick={() => stagePaymentDate(ky.key, '')}
                       title="Đánh dấu chưa thanh toán"
-                      className="p-1 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors shrink-0"
+                      className="p-1 rounded-lg text-faint hover:bg-[var(--danger-soft)] hover:text-red-500 transition-colors shrink-0"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -493,18 +493,18 @@ export default function CustomerDebtManager() {
               </td>
               <td className="py-3 px-4 text-right font-mono text-[11px]">
                 {(ky.slHC > 0 || ky.slVC === 0) && (
-                  <div className="text-amber-600/80 font-bold">{fmtKWh(ky.slHC)} <span className="text-[9px] text-amber-600/50">kWh</span></div>
+                  <div className="text-warn/80 font-bold">{fmtKWh(ky.slHC)} <span className="text-[9px] text-warn/50">kWh</span></div>
                 )}
                 {ky.slVC > 0 && (
-                  <div className="text-[10px] text-slate-400 font-semibold">{fmtKWh(ky.slVC)} kVarh</div>
+                  <div className="text-[10px] text-faint font-semibold">{fmtKWh(ky.slVC)} kVarh</div>
                 )}
               </td>
               <td className="py-3 px-4 text-right font-mono text-[11px]">
-                <div className="text-slate-600 font-bold">{fmtVND(ky.dtHC + ky.dtVC)}</div>
+                <div className="text-dim font-bold">{fmtVND(ky.dtHC + ky.dtVC)}</div>
               </td>
               <td className="py-3 px-4 text-center">
                 {ky.nTToan ? (
-                  <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-emerald-700">
+                  <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-ok">
                     Đã xong
                   </span>
                 ) : (
@@ -525,7 +525,7 @@ export default function CustomerDebtManager() {
       {/* Toast */}
       {toast && (
         <div className={`fixed top-5 right-5 z-[300] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-semibold text-white
-          ${toast.type === 'success' ? 'bg-emerald-500' : toast.type === 'error' ? 'bg-red-500' : toast.type === 'warning' ? 'bg-amber-500' : 'bg-[#5a8dee]'}`}>
+          ${toast.type === 'success' ? 'bg-emerald-500' : toast.type === 'error' ? 'bg-red-500' : toast.type === 'warning' ? 'bg-amber-500' : 'bg-accent'}`}>
           {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
           {toast.message}
         </div>
@@ -535,12 +535,12 @@ export default function CustomerDebtManager() {
       <div className="vl-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-[#e8f3ff] rounded-2xl text-[#5a8dee]">
+            <div className="p-2.5 bg-accent-soft rounded-2xl text-accent">
               <Wallet className="w-6 h-6" />
             </div>
-            <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Công nợ khách hàng</h1>
+            <h1 className="text-2xl font-black text-ink tracking-tight uppercase">Công nợ khách hàng</h1>
           </div>
-          <p className="text-sm text-slate-500 max-w-2xl">
+          <p className="text-sm text-soft max-w-2xl">
             Tổng hợp sản lượng &amp; doanh thu theo từng kỳ chốt chỉ số của khách hàng, tách theo khu công nghiệp.
           </p>
         </div>
@@ -554,13 +554,13 @@ export default function CustomerDebtManager() {
             className="min-w-[170px]"
           />
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-faint absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Tìm MKH, tên công ty..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-lg text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-[#5a8dee] w-full sm:w-[240px]"
+              className="pl-10 pr-4 py-2 border border-[var(--border)] bg-surface rounded-lg text-dim text-sm focus:outline-none focus:ring-1 focus:ring-accent w-full sm:w-[240px]"
             />
           </div>
         </div>
@@ -575,42 +575,42 @@ export default function CustomerDebtManager() {
               <UserX className="w-5 h-5" />
             </div>
           </div>
-          <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtKWh(kpis.unpaidCustomers)}</h3>
+          <h3 className="text-2xl font-black text-ink tracking-tight leading-none font-mono">{fmtKWh(kpis.unpaidCustomers)}</h3>
         </div>
 
         <div className="vl-card p-6 md:p-7 hover:-translate-y-1 transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Tổng sản lượng</span>
-            <div className="p-2.5 bg-amber-50 rounded-2xl text-amber-500 group-hover:scale-110 transition-transform">
+            <span className="text-[10px] font-bold text-warn uppercase tracking-wider">Tổng sản lượng</span>
+            <div className="p-2.5 bg-[var(--warning-soft)] rounded-2xl text-amber-500 group-hover:scale-110 transition-transform">
               <Zap className="w-5 h-5" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-[9px] font-bold text-amber-600/70 uppercase tracking-wider mb-0.5">Hữu công (kWh)</p>
-              <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtKWh(kpis.slHC)}</h3>
+              <p className="text-[9px] font-bold text-warn/70 uppercase tracking-wider mb-0.5">Hữu công (kWh)</p>
+              <h3 className="text-xl font-black text-ink tracking-tight leading-none font-mono">{fmtKWh(kpis.slHC)}</h3>
             </div>
-            <div className="pl-3 border-l border-slate-100">
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Vô công (kVarh)</p>
-              <h3 className="text-xl font-black text-slate-500 tracking-tight leading-none font-mono">{fmtKWh(kpis.slVC)}</h3>
+            <div className="pl-3 border-l border-[var(--border)]">
+              <p className="text-[9px] font-bold text-faint uppercase tracking-wider mb-0.5">Vô công (kVarh)</p>
+              <h3 className="text-xl font-black text-soft tracking-tight leading-none font-mono">{fmtKWh(kpis.slVC)}</h3>
             </div>
           </div>
         </div>
 
         <div className="vl-card p-6 md:p-7 hover:-translate-y-1 transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-[10px] font-bold text-[#5a8dee] uppercase tracking-wider">Doanh thu (đồng)</span>
-            <div className="p-2.5 bg-[#f4f8ff] rounded-2xl text-[#5a8dee] group-hover:scale-110 transition-transform">
+            <span className="text-[10px] font-bold text-accent uppercase tracking-wider">Doanh thu (đồng)</span>
+            <div className="p-2.5 bg-accent-soft rounded-2xl text-accent group-hover:scale-110 transition-transform">
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
-          <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-none font-mono">{fmtVND(kpis.dtHC + kpis.dtVC)}</h3>
+          <h3 className="text-2xl font-black text-ink tracking-tight leading-none font-mono">{fmtVND(kpis.dtHC + kpis.dtVC)}</h3>
         </div>
       </div>
 
       {/* Thanh điều khiển: tải lại + lọc trạng thái + chú thích màu */}
       <div className="vl-card p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4 text-[11px] font-semibold text-slate-500">
+        <div className="flex items-center gap-4 text-[11px] font-semibold text-soft">
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-emerald-100 border-l-4 border-l-emerald-400 shrink-0" /> Đã thanh toán
           </span>
@@ -624,7 +624,7 @@ export default function CustomerDebtManager() {
           <button
             onClick={saveChanges}
             disabled={saving || pendingCount === 0}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold text-white bg-[#5a8dee] hover:bg-[#4a7de2] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             {saving
@@ -635,7 +635,7 @@ export default function CustomerDebtManager() {
           {pendingCount > 0 && !saving && (
             <button
               onClick={discardChanges}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-[var(--border)] rounded-lg text-sm font-bold text-soft hover:bg-subtle transition-colors"
             >
               <X className="w-3.5 h-3.5" /> Hủy
             </button>
@@ -644,28 +644,28 @@ export default function CustomerDebtManager() {
           <button
             onClick={() => { setPending({}); loadRecords(monthFilter); }}
             disabled={loading || saving}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-[var(--border)] rounded-lg text-sm font-bold text-dim hover:bg-subtle transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Tải lại
           </button>
 
           {/* Status Filter Tab */}
-          <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
+          <div className="bg-subtle p-1 rounded-xl flex items-center border border-[var(--border)]">
             <button
               onClick={() => setPaymentFilter('all')}
-              className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${paymentFilter === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${paymentFilter === 'all' ? 'bg-surface text-ink shadow-sm' : 'text-faint hover:text-dim'}`}
             >
               Tất cả
             </button>
             <button
               onClick={() => setPaymentFilter('paid')}
-              className={`px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'paid' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-emerald-600'}`}
+              className={`px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'paid' ? 'bg-emerald-600 text-white shadow-sm' : 'text-faint hover:text-ok'}`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-current" /> Đã xong
             </button>
             <button
               onClick={() => setPaymentFilter('unpaid')}
-              className={`px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'unpaid' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-400 hover:text-rose-600'}`}
+              className={`px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center gap-1 ${paymentFilter === 'unpaid' ? 'bg-rose-600 text-white shadow-sm' : 'text-faint hover:text-rose-600'}`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-current" /> Còn nợ
             </button>
@@ -675,13 +675,13 @@ export default function CustomerDebtManager() {
 
       {/* Loading / Empty */}
       {loading ? (
-        <div className="vl-card p-16 text-center text-slate-400">
+        <div className="vl-card p-16 text-center text-faint">
           <Loader2 className="w-6 h-6 animate-spin inline-block mr-2" /> Đang tải dữ liệu...
         </div>
       ) : zoneGroups.length === 0 ? (
-        <div className="vl-card p-16 text-center text-slate-400">
+        <div className="vl-card p-16 text-center text-faint">
           <div className="flex flex-col items-center justify-center">
-            <FileSpreadsheet className="w-12 h-12 text-slate-200 mb-3" />
+            <FileSpreadsheet className="w-12 h-12 text-faint mb-3" />
             <p className="text-sm">Không tìm thấy khách hàng nào khớp bộ lọc</p>
           </div>
         </div>
@@ -695,7 +695,7 @@ export default function CustomerDebtManager() {
               className={`bg-gradient-to-r ${ZONE_HEADER_GRADIENT} px-5 md:px-7 py-4 flex items-center justify-between gap-3 cursor-pointer select-none`}
             >
               <div className="flex items-center gap-3 text-white min-w-0">
-                <div className="p-2 bg-white/20 rounded-xl shrink-0">
+                <div className="p-2 bg-surface/20 rounded-xl shrink-0">
                   <Building2 className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
@@ -730,7 +730,7 @@ export default function CustomerDebtManager() {
                   <div className="overflow-x-auto">
                     <table className="vl-table w-full text-left border-collapse table-fixed min-w-[850px]">
                 <thead>
-                  <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                  <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
                     <th className="py-3.5 px-4 w-[150px]">Mã khách hàng</th>
                     <th className="py-3.5 px-4 w-[28%]">Tên doanh nghiệp</th>
                     <th className="py-3.5 px-4 w-[14%] text-center">Ngày chốt chỉ số</th>
@@ -740,21 +740,21 @@ export default function CustomerDebtManager() {
                     <th className="py-3.5 px-4 text-center w-[14%]">Trạng thái</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[var(--border)]">
                   {zone.customers.map(renderCustomerRows)}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-white border-t-2 border-slate-300 text-sm font-black text-slate-800">
-                    <td colSpan={4} className="py-3.5 px-4 text-right uppercase text-xs tracking-wider text-slate-700">
+                  <tr className="bg-surface border-t-2 border-[var(--border-strong)] text-sm font-black text-ink">
+                    <td colSpan={4} className="py-3.5 px-4 text-right uppercase text-xs tracking-wider text-dim">
                       Tổng cộng
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono text-amber-600">
-                      <div>{fmtKWh(zone.slHC)} <span className="text-[9px] text-amber-600/60">kWh</span></div>
-                      {zone.slVC > 0 && <div className="text-[10px] text-slate-500 font-bold">{fmtKWh(zone.slVC)} kVarh</div>}
+                    <td className="py-3.5 px-4 text-right font-mono text-warn">
+                      <div>{fmtKWh(zone.slHC)} <span className="text-[9px] text-warn/60">kWh</span></div>
+                      {zone.slVC > 0 && <div className="text-[10px] text-soft font-bold">{fmtKWh(zone.slVC)} kVarh</div>}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono text-[#5a8dee]">
+                    <td className="py-3.5 px-4 text-right font-mono text-accent">
                       <div>{fmtVND(zone.dtHC + zone.dtVC)}</div>
-                      {zone.dtVC > 0 && <div className="text-[10px] text-slate-500 font-bold">VC: {fmtVND(zone.dtVC)}</div>}
+                      {zone.dtVC > 0 && <div className="text-[10px] text-soft font-bold">VC: {fmtVND(zone.dtVC)}</div>}
                     </td>
                     <td className="py-3.5 px-4" />
                   </tr>
