@@ -24,8 +24,8 @@ export default function App() {
 
   if (isAuth === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <RefreshCw className="w-10 h-10 text-blue-600 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-canvas">
+        <RefreshCw className="w-10 h-10 text-accent animate-spin" />
       </div>
     );
   }
