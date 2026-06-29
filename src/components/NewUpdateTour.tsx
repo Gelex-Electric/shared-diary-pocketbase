@@ -61,7 +61,7 @@ const TAG_STYLE: Record<string, string> = {
   'Mới':      'bg-blue-100 text-blue-700',
   'Đổi tên':  'bg-violet-100 text-violet-700',
   'Giao diện':'bg-indigo-100 text-indigo-700',
-  'Cải tiến': 'bg-emerald-100 text-emerald-700',
+  'Cải tiến': 'bg-emerald-100 text-ok',
   'Sửa lỗi':  'bg-rose-100 text-rose-700',
 };
 
@@ -73,7 +73,7 @@ const TAG_ICON: Record<string, { Icon: React.ElementType; ring: string }> = {
   'Cải tiến': { Icon: Zap,           ring: 'bg-emerald-600' },
   'Sửa lỗi':  { Icon: Wrench,        ring: 'bg-rose-600' },
 };
-const DEFAULT_ICON = { Icon: Layers, ring: 'bg-slate-500' };
+const DEFAULT_ICON = { Icon: Layers, ring: 'bg-[var(--text-4)]' };
 
 interface Props {
   onDismiss: () => void;
@@ -123,13 +123,13 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 8 }}
         transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-        className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+        className="relative z-10 bg-surface rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
       >
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 pt-6 pb-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-surface/20 flex items-center justify-center">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <div>
@@ -139,7 +139,7 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
             </div>
             <button
               onClick={handleClose}
-              className="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-xl bg-surface/15 hover:bg-surface/25 flex items-center justify-center transition-colors"
             >
               <X className="w-4 h-4 text-white" />
             </button>
@@ -147,7 +147,7 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
 
           {/* Hàng phiên bản + ngày phát hành */}
           <div className="flex items-center gap-2 mt-4">
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-white/20 px-2 py-1 rounded-lg">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-surface/20 px-2 py-1 rounded-lg">
               <CloudDownload className="w-3 h-3" />
               Phiên bản {VERSION}
             </span>
@@ -155,7 +155,7 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
               Phát hành {RELEASE_DATE}
             </span>
             {newCount > 0 && (
-              <span className="ml-auto text-[10px] font-bold text-blue-700 bg-white px-2 py-1 rounded-lg">
+              <span className="ml-auto text-[10px] font-bold text-blue-700 bg-surface px-2 py-1 rounded-lg">
                 {newCount} tính năng mới
               </span>
             )}
@@ -181,15 +181,15 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-slate-800 leading-snug">{item.title}</p>
+                    <p className="text-sm font-semibold text-ink leading-snug">{item.title}</p>
                     {item.tag && (
-                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${TAG_STYLE[item.tag] ?? 'bg-slate-100 text-slate-600'}`}>
+                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${TAG_STYLE[item.tag] ?? 'bg-subtle text-dim'}`}>
                         {item.tag}
                       </span>
                     )}
                   </div>
                   {item.desc && (
-                    <p className="text-xs text-slate-500 mt-0.5 leading-snug">{item.desc}</p>
+                    <p className="text-xs text-soft mt-0.5 leading-snug">{item.desc}</p>
                   )}
 
                   {/* Nút điều hướng tới trang liên quan */}
@@ -209,7 +209,7 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
         </div>
 
         {/* Divider */}
-        <div className="mx-6 h-px bg-slate-100" />
+        <div className="mx-6 h-px bg-subtle" />
 
         {/* Footer */}
         <div className="px-6 py-4 flex items-center justify-between gap-4">
@@ -222,7 +222,7 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
               className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-150 ${
                 checked
                   ? 'bg-emerald-500 border-emerald-500'
-                  : 'border-slate-300 group-hover:border-emerald-400'
+                  : 'border-[var(--border-strong)] group-hover:border-emerald-400'
               }`}
             >
               <AnimatePresence>
@@ -238,7 +238,7 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
                 )}
               </AnimatePresence>
             </div>
-            <span className={`text-xs font-semibold transition-colors ${checked ? 'text-emerald-600' : 'text-slate-500 group-hover:text-slate-700'}`}>
+            <span className={`text-xs font-semibold transition-colors ${checked ? 'text-ok' : 'text-soft group-hover:text-dim'}`}>
               Không hiển thị lại
             </span>
           </button>
@@ -257,7 +257,7 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
           </button>
         </div>
 
-        <p className="text-center text-[10px] text-slate-400 pb-3 -mt-1 select-none">
+        <p className="text-center text-[10px] text-faint pb-3 -mt-1 select-none">
           Nhấn nút bên trên để mở hướng dẫn sử dụng và đóng thông báo
         </p>
       </motion.div>
