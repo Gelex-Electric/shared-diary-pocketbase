@@ -29,7 +29,7 @@ const VARIANT_CFG = {
   info: {
     ring:    'bg-blue-100',
     icon:    <CheckCircle2 className="w-8 h-8 text-blue-500" />,
-    btnCls:  'bg-[#5a8dee] hover:bg-blue-600 shadow-blue-300/40',
+    btnCls:  'bg-accent hover:bg-blue-600 shadow-blue-300/40',
   },
 };
 
@@ -64,12 +64,12 @@ export default function ConfirmDialog({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 10 }}
             transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-            className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+            className="relative z-10 bg-surface rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
           >
             {/* Close */}
             <button
               onClick={onCancel}
-              className="absolute top-3 right-3 p-1.5 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              className="absolute top-3 right-3 p-1.5 rounded-full text-faint hover:bg-subtle hover:text-dim transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -82,9 +82,9 @@ export default function ConfirmDialog({
               </div>
 
               <div className="space-y-1.5">
-                <h3 className="text-lg font-extrabold text-slate-800 leading-snug">{title}</h3>
+                <h3 className="text-lg font-extrabold text-ink leading-snug">{title}</h3>
                 {message && (
-                  <p className="text-sm text-slate-500 leading-relaxed">{message}</p>
+                  <p className="text-sm text-soft leading-relaxed">{message}</p>
                 )}
               </div>
             </div>
@@ -93,7 +93,7 @@ export default function ConfirmDialog({
             <div className="px-8 pb-8 flex items-center gap-3">
               <button
                 onClick={onCancel}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-dim font-bold text-sm hover:bg-subtle transition-colors"
               >
                 {cancelLabel}
               </button>
