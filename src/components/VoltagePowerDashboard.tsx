@@ -128,7 +128,7 @@ interface CustomerChart {
    MÀU SẮC — đồng bộ palette SummaryDashboard.
    Mỗi biểu đồ chỉ vẽ 1 trạm: 3 đường điện áp + 1 cột công suất.
 ================================================================ */
-const PHASE_COLOR = { ua: '#3b82f6', ub: '#10b981', uc: '#f59e0b' }; // Ua xanh dương, Ub xanh lá, Uc hổ phách
+const PHASE_COLOR = { ua: 'var(--accent)', ub: '#10b981', uc: '#f59e0b' }; // Ua xanh dương, Ub xanh lá, Uc hổ phách
 const P_FILL = '#a5b4fc';                                            // cột P (kW)
 
 /** Nhãn trạm để hiển thị (vd: YM.KIMTIN.3000KVA.ECHO). */
@@ -181,7 +181,7 @@ function LineSwatch({ color }: { color: string }) {
 
 function ChartLegend({ hasOutages }: { hasOutages: boolean }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 pt-3 border-t border-slate-100 text-[10px] font-semibold text-slate-500">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 pt-3 border-t border-[var(--border)] text-[10px] font-semibold text-soft">
       <span className="inline-flex items-center gap-1"><LineSwatch color={PHASE_COLOR.ua} /> Ua</span>
       <span className="inline-flex items-center gap-1"><LineSwatch color={PHASE_COLOR.ub} /> Ub</span>
       <span className="inline-flex items-center gap-1"><LineSwatch color={PHASE_COLOR.uc} /> Uc</span>
@@ -451,7 +451,7 @@ export default function VoltagePowerDashboard() {
     { title: 'P max cao nhất', Icon: TrendingUp, tone: 'text-rose-600' },
     { title: 'P max cao thứ 2', Icon: TrendingUp, tone: 'text-rose-500' },
     { title: 'P max cao thứ 3', Icon: TrendingUp, tone: 'text-rose-400' },
-    { title: 'P max thấp nhất', Icon: TrendingDown, tone: 'text-emerald-600' },
+    { title: 'P max thấp nhất', Icon: TrendingDown, tone: 'text-ok' },
     { title: 'P max thấp thứ 2', Icon: TrendingDown, tone: 'text-emerald-500' },
     { title: 'P max thấp thứ 3', Icon: TrendingDown, tone: 'text-emerald-400' },
   ];
@@ -477,16 +477,16 @@ export default function VoltagePowerDashboard() {
         <div className="flex flex-col gap-2.5 mb-4">
           <div className="flex items-center gap-2">
             <meta.Icon className={`w-4 h-4 ${meta.tone}`} />
-            <span className="text-[10px] font-black text-slate-400 tracking-wider uppercase font-mono">
+            <span className="text-[10px] font-black text-faint tracking-wider uppercase font-mono">
               Biểu đồ {i + 1} · {meta.title}
             </span>
           </div>
 
           {/* Chọn khách hàng */}
           <div className={`border rounded p-2.5 flex items-center gap-2.5 transition-colors ${
-            cust ? 'bg-[#f4f8ff] border-[#5a8dee] ring-4 ring-[#e8f3ff]' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+            cust ? 'bg-accent-soft border-accent ring-4 ring-[var(--accent-soft)]' : 'bg-subtle border-[var(--border)] hover:border-[var(--border-strong)]'
           }`}>
-            <Building2 className={`w-5 h-5 shrink-0 ${cust ? 'text-[#5a8dee]' : 'text-slate-400'}`} />
+            <Building2 className={`w-5 h-5 shrink-0 ${cust ? 'text-accent' : 'text-faint'}`} />
             <div className="flex-1 min-w-0">
               <Select
                 variant="bare"
@@ -504,10 +504,10 @@ export default function VoltagePowerDashboard() {
 
           {/* Dropdown trạm (khi nhiều điểm đo) + thông tin P max */}
           {cust && (
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-soft">
               {multiStation ? (
                 <div className="flex items-center gap-1.5">
-                  <Gauge className="w-3.5 h-3.5 text-[#5a8dee] shrink-0" />
+                  <Gauge className="w-3.5 h-3.5 text-accent shrink-0" />
                   <Select
                     value={effMeter}
                     onChange={v => setStation(i, v)}
@@ -516,14 +516,14 @@ export default function VoltagePowerDashboard() {
                   />
                 </div>
               ) : station && (
-                <span className="inline-flex items-center gap-1 font-mono font-bold text-[#5a8dee] bg-[#e8f3ff] px-1.5 py-0.5 rounded">
+                <span className="inline-flex items-center gap-1 font-mono font-bold text-accent bg-accent-soft px-1.5 py-0.5 rounded">
                   <Gauge className="w-3 h-3" /> {stationLabel(station)}
                 </span>
               )}
               {station && (
                 <span className="font-mono">
-                  P max: <strong className="text-amber-600">{fmtVal(station.peakP)} kW</strong>
-                  {station.peakLabel && <span className="text-slate-400"> @ {station.peakLabel}</span>}
+                  P max: <strong className="text-warn">{fmtVal(station.peakP)} kW</strong>
+                  {station.peakLabel && <span className="text-faint"> @ {station.peakLabel}</span>}
                 </span>
               )}
               {station && station.outagePeriods.length > 0 && (
@@ -531,7 +531,7 @@ export default function VoltagePowerDashboard() {
                   {station.outagePeriods.map((op, idx) => {
                     const dur = fmtDuration(op.x1, op.x2);
                     return (
-                      <span key={idx} className="inline-flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 text-[10px] font-mono px-1.5 py-0.5 rounded">
+                      <span key={idx} className="inline-flex items-center gap-1 bg-[var(--danger-soft)] border border-red-200 text-bad text-[10px] font-mono px-1.5 py-0.5 rounded">
                         <ZapOff className="w-2.5 h-2.5 shrink-0" />
                         {op.x1}–{op.x2}{dur && <span className="text-red-400 ml-0.5">({dur})</span>}
                       </span>
@@ -544,15 +544,15 @@ export default function VoltagePowerDashboard() {
         </div>
 
         {/* Biểu đồ — 1 trạm */}
-        <div className="w-full text-slate-700 h-[280px]">
+        <div className="w-full text-dim h-[280px]">
           {station && station.data.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={station.data} margin={{ top: 16, right: 4, left: 4, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
                 <XAxis
                   dataKey="label"
                   tickLine={false}
-                  stroke="#94a3b8"
+                  stroke="var(--text-4)"
                   style={{ fontSize: '10px', fontWeight: 'bold' }}
                   interval="preserveStartEnd"
                   minTickGap={24}
@@ -598,8 +598,8 @@ export default function VoltagePowerDashboard() {
               </ComposedChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400">
-              <HelpCircle className="w-7 h-7 text-slate-300 mb-2 animate-pulse" />
+            <div className="flex flex-col items-center justify-center h-full text-faint">
+              <HelpCircle className="w-7 h-7 text-faint mb-2 animate-pulse" />
               <p className="text-xs font-semibold text-center px-2">
                 {selId ? 'Khách hàng này không có dữ liệu điện áp trong ngày' : 'Vui lòng chọn khách hàng'}
               </p>
@@ -624,14 +624,14 @@ export default function VoltagePowerDashboard() {
       <div className="vl-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-[#e8f3ff] rounded-2xl text-[#5a8dee]">
+            <div className="p-2.5 bg-accent-soft rounded-2xl text-accent">
               <Activity className="w-6 h-6" />
             </div>
-            <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">
+            <h1 className="text-2xl font-black text-ink tracking-tight uppercase">
               Đồ thị điện áp &amp; công suất
             </h1>
           </div>
-          <p className="text-sm text-slate-500 max-w-2xl flex items-start gap-1.5">
+          <p className="text-sm text-soft max-w-2xl flex items-start gap-1.5">
             <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
             Thông số vận hành sẽ lấy dữ liệu chậm hơn so với HES khoảng{' '}
             <strong>1 đến 2 giờ</strong> và chỉ lưu trong vòng{' '}
@@ -648,7 +648,7 @@ export default function VoltagePowerDashboard() {
             className="w-[200px]"
           />
           {dateKeys.length > 0 && (
-            <p className="text-[11px] text-slate-400 mt-1.5 font-medium">
+            <p className="text-[11px] text-faint mt-1.5 font-medium">
               Có dữ liệu: {fmtDateVN(dateKeys[0])} – {fmtDateVN(dateKeys[dateKeys.length - 1])}
             </p>
           )}
@@ -661,14 +661,14 @@ export default function VoltagePowerDashboard() {
       )}
 
       {!isReady && !csvError && (
-        <div className="vl-card flex flex-col items-center justify-center py-20 text-slate-400">
+        <div className="vl-card flex flex-col items-center justify-center py-20 text-faint">
           <Gauge className="w-12 h-12 mb-3 animate-pulse opacity-40" />
           <p className="font-semibold">Đang tải dữ liệu đo xa &amp; danh sách công tơ…</p>
         </div>
       )}
 
       {noData && (
-        <div className="vl-card flex flex-col items-center justify-center py-20 text-slate-400">
+        <div className="vl-card flex flex-col items-center justify-center py-20 text-faint">
           <HelpCircle className="w-12 h-12 mb-3 opacity-30" />
           <p className="font-semibold">Không có khách hàng nào đủ điều kiện vẽ biểu đồ</p>
           <p className="text-sm mt-1">
