@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, AREA_TO_CLASS, ID_TO_AREA } from '../lib/pocketbase';
 import { ElectricShift } from '../types';
+import { toast as notify } from '../lib/toast';
 import { Plus, Trash2, Edit2, X, Check, Search, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
@@ -84,7 +85,7 @@ export default function ElectricShiftManager() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.Name) {
-      alert('Vui lòng điền họ tên!');
+      notify.warning('Lưu ý', 'Vui lòng điền họ tên!');
       return;
     }
 
@@ -98,7 +99,7 @@ export default function ElectricShiftManager() {
       loadShifts();
     } catch (err) {
       console.error('Error saving shift personnel:', err);
-      alert('Có lỗi xảy ra khi lưu thông tin.');
+      notify.error('Lỗi', 'Có lỗi xảy ra khi lưu thông tin.');
     }
   };
 
@@ -110,7 +111,7 @@ export default function ElectricShiftManager() {
       loadShifts();
     } catch (err) {
       console.error('Error deleting shift personnel:', err);
-      alert('Có lỗi xảy ra khi xóa nhân sự.');
+      notify.error('Lỗi', 'Có lỗi xảy ra khi xóa nhân sự.');
     }
   };
 
