@@ -164,6 +164,9 @@ body {
 h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
 
+/* Toast progress countdown (GPU-composited) */
+@keyframes toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
 /* ============================================================
    Card
    ============================================================ */
