@@ -15,6 +15,7 @@ import PowerOutageManager from './PowerOutageManager';
 import NewUpdateTour from './NewUpdateTour';
 import SldPage from './sld/SldPage';
 import NotificationBell from './ui/NotificationBell';
+import ThemeToggle from './ui/ThemeToggle';
 
 type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'operating' | 'hes' | 'opchart' | 'sld' | 'later';
 
@@ -101,12 +102,12 @@ export default function Dashboard() {
       {/* Logo */}
       <div className="px-8 pt-8 pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-[#5a8dee] flex items-center justify-center shrink-0">
-            <ClipboardList className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center shrink-0">
+            <ClipboardList className="w-5 h-5 text-[var(--on-accent)]" />
           </div>
           <div className="leading-tight">
-            <p className="text-[0.7rem] font-semibold text-[#a3afbd] uppercase tracking-wider">Phần mềm</p>
-            <p className="text-[0.95rem] font-bold text-[#5a8dee] leading-snug">Quản lý vận hành GETC</p>
+            <p className="text-[0.7rem] font-semibold text-faint uppercase tracking-wider">Phần mềm</p>
+            <p className="text-[0.95rem] font-bold text-accent leading-snug">Quản lý vận hành GETC</p>
           </div>
         </div>
       </div>
@@ -122,7 +123,7 @@ export default function Dashboard() {
             <button
               onClick={() => { setTopTab('summary'); onNavigate?.(); }}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'summary' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'summary' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
@@ -136,12 +137,12 @@ export default function Dashboard() {
               id="nav-journal"
               onClick={() => toggleSection('journal')}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'journal' || topTab === 'outage' || topTab === 'handover-record' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'journal' || topTab === 'outage' || topTab === 'handover-record' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <ClipboardList className="w-5 h-5 shrink-0" />
               <span className="flex-1 text-left">Hồ sơ vận hành</span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isJournalExpanded ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isJournalExpanded ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence initial={false}>
               {isJournalExpanded && (
@@ -157,7 +158,7 @@ export default function Dashboard() {
                       id="nav-journal-sub"
                       onClick={() => { setTopTab('journal'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'journal' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'journal' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -169,7 +170,7 @@ export default function Dashboard() {
                       id="nav-outage-sub"
                       onClick={() => { setTopTab('outage'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'outage' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'outage' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -181,7 +182,7 @@ export default function Dashboard() {
                       id="nav-handover-record-sub"
                       onClick={() => { setTopTab('handover-record'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'handover-record' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'handover-record' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -199,12 +200,12 @@ export default function Dashboard() {
             <button
               onClick={() => toggleSection('operating')}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'operating' || topTab === 'hes' || topTab === 'opchart' || topTab === 'sld' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'operating' || topTab === 'hes' || topTab === 'opchart' || topTab === 'sld' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <Activity className="w-5 h-5 shrink-0" />
               <span className="flex-1 text-left">Thông số vận hành</span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isOperatingExpanded ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isOperatingExpanded ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence initial={false}>
               {isOperatingExpanded && (
@@ -220,7 +221,7 @@ export default function Dashboard() {
                       id="nav-operating-sub"
                       onClick={() => { setTopTab('operating'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'operating' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'operating' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -232,7 +233,7 @@ export default function Dashboard() {
                       id="nav-hes-sub"
                       onClick={() => { setTopTab('hes'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'hes' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'hes' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -244,7 +245,7 @@ export default function Dashboard() {
                       id="nav-opchart-sub"
                       onClick={() => { setTopTab('opchart'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'opchart' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'opchart' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -257,7 +258,7 @@ export default function Dashboard() {
                       id="nav-sld-sub"
                       onClick={() => { setTopTab('sld'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'sld' ? 'text-[#5a8dee]' : 'text-[#676767] hover:text-[#475f7b]'
+                        topTab === 'sld' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
@@ -279,7 +280,7 @@ export default function Dashboard() {
             <button
               onClick={() => { setTopTab('later'); onNavigate?.(); }}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'later' ? 'vl-sidebar-active text-[#5a8dee]' : 'text-[#053382] hover:bg-[#f4f8ff]'
+                topTab === 'later' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <RefreshCw className="w-5 h-5 shrink-0" />
@@ -327,12 +328,12 @@ export default function Dashboard() {
           <motion.div
             initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
             transition={{ type: 'spring', damping: 26, stiffness: 200 }}
-            className="fixed top-0 left-0 z-50 h-screen bg-white lg:hidden"
-            style={{ width: 260, borderRight: '1px solid #eee', boxShadow: '0 0 10px #ececec' }}
+            className="fixed top-0 left-0 z-50 h-screen bg-surface lg:hidden"
+            style={{ width: 260, borderRight: '1px solid var(--border)' }}
           >
             <button
               onClick={() => setIsSidebarOpen(false)}
-              className="absolute top-2 right-2 p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+              className="absolute top-2 right-2 p-2 rounded-lg hover:bg-subtle transition-colors text-soft"
             >
               <X className="w-4 h-4" />
             </button>
@@ -342,8 +343,8 @@ export default function Dashboard() {
       </AnimatePresence>
 
       <aside
-        className="hidden lg:block fixed top-0 left-0 h-screen bg-white z-30"
-        style={{ width: 260, borderRight: '1px solid #eee', boxShadow: '0 0 10px #ececec' }}
+        className="hidden lg:block fixed top-0 left-0 h-screen bg-surface z-30"
+        style={{ width: 260, borderRight: '1px solid var(--border)' }}
       >
         <SidebarNav />
       </aside>
@@ -353,24 +354,24 @@ export default function Dashboard() {
 
         {/* Navbar — page title left, user actions right */}
         <nav
-          className="sticky top-0 z-20 bg-white flex items-center px-4 md:px-6 gap-3"
-          style={{ height: 70, borderBottom: '1px solid #eee', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}
+          className="sticky top-0 z-20 bg-surface flex items-center px-4 md:px-6 gap-3"
+          style={{ height: 70, borderBottom: '1px solid var(--border)' }}
         >
           {/* Mobile hamburger */}
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors text-[#6c757d]"
+            className="lg:hidden p-2 rounded-lg hover:bg-subtle transition-colors text-soft"
           >
             <Menu className="w-5 h-5" />
           </button>
 
           {/* Current page title */}
           <div className="flex-1 min-w-0">
-            <h2 className="text-[1.1rem] font-bold text-[#222f3e] leading-tight truncate">
+            <h2 className="text-[1.1rem] font-bold text-ink leading-tight truncate">
               {TAB_LABEL[topTab]}
             </h2>
             {userArea && (
-              <p className="text-[11px] font-semibold text-[#a3afbd] uppercase tracking-wider leading-tight hidden sm:block">
+              <p className="text-[11px] font-semibold text-faint uppercase tracking-wider leading-tight hidden sm:block">
                 {userArea}
               </p>
             )}
@@ -385,8 +386,8 @@ export default function Dashboard() {
               rel="noopener noreferrer"
               className={`p-2 rounded-full transition-colors ${
                 showNewUpdate
-                  ? 'text-[#5a8dee] bg-[#e8f3ff] animate-pulse'
-                  : 'text-[#6c757d] hover:bg-gray-100'
+                  ? 'text-accent bg-accent-soft animate-pulse'
+                  : 'text-soft hover:bg-subtle'
               }`}
               title="Hướng dẫn sử dụng"
             >
@@ -396,15 +397,18 @@ export default function Dashboard() {
             {/* Thông báo */}
             <NotificationBell />
 
+            {/* Theme */}
+            <ThemeToggle />
+
             {/* Divider */}
-            <div className="w-px h-6 bg-gray-200 mx-1" />
+            <div className="w-px h-6 bg-[var(--border)] mx-1" />
 
             {/* User avatar + name */}
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-[#5a8dee] flex items-center justify-center text-white text-[13px] font-bold shrink-0">
+              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-[var(--on-accent)] text-[13px] font-bold shrink-0">
                 {userInitial}
               </div>
-              <span className="hidden md:block text-[13px] font-semibold text-[#475f7b] max-w-[200px] truncate">
+              <span className="hidden md:block text-[13px] font-semibold text-dim max-w-[200px] truncate">
                 {userName}
               </span>
             </div>
@@ -412,7 +416,7 @@ export default function Dashboard() {
             {/* Logout */}
             <button
               onClick={handleLogout}
-              className="p-2 rounded-full hover:bg-red-50 transition-colors text-[#ff5b5c]"
+              className="p-2 rounded-full hover:bg-[var(--danger-soft)] transition-colors text-bad"
               title="Đăng xuất"
             >
               <LogOut className="w-[18px] h-[18px]" />
@@ -440,21 +444,18 @@ export default function Dashboard() {
             ) : topTab === 'outage' ? (
               <PowerOutageManager />
             ) : topTab === 'handover-record' ? (
-              <div className="vl-card flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
-                <RefreshCw className="w-14 h-14 animate-[spin_3s_linear_infinite]" style={{ color: '#a3afbd' }} />
-                <p className="text-base font-bold text-slate-500">Tính năng đang được phát triển</p>
-                <p className="text-sm text-slate-400">Biên bản treo tháo sẽ sớm được ra mắt trong phiên bản tiếp theo.</p>
+              <div className="vl-card flex flex-col items-center justify-center py-24 gap-4 text-faint">
+                <RefreshCw className="w-14 h-14 animate-[spin_3s_linear_infinite] text-faint" />
+                <p className="text-base font-bold text-dim">Tính năng đang được phát triển</p>
+                <p className="text-sm text-soft">Biên bản treo tháo sẽ sớm được ra mắt trong phiên bản tiếp theo.</p>
               </div>
             ) : (
               <div className="vl-card flex flex-col items-center justify-center py-20">
-                <RefreshCw
-                  className="w-14 h-14 mb-4 animate-[spin_3s_linear_infinite]"
-                  style={{ color: '#a3afbd' }}
-                />
-                <h3 className="text-lg font-bold" style={{ color: '#475f7b' }}>
+                <RefreshCw className="w-14 h-14 mb-4 animate-[spin_3s_linear_infinite] text-faint" />
+                <h3 className="text-lg font-bold text-dim">
                   Tính năng đang được phát triển
                 </h3>
-                <p style={{ color: '#a3afbd', fontSize: '0.875rem', marginTop: 4 }}>
+                <p className="text-soft text-[0.875rem] mt-1">
                   Vui lòng quay lại sau
                 </p>
               </div>
