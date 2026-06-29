@@ -73,7 +73,7 @@ export default function Login() {
     <div
       className="min-h-screen flex items-start justify-center pt-20 px-4 pb-10"
       style={{
-        background: '#f7faff',
+        background: 'var(--bg)',
       }}
     >
       <motion.div
@@ -84,20 +84,20 @@ export default function Login() {
       >
         {/* Card */}
         <div
-          className="bg-white rounded-xl pt-8 pb-6 px-8"
-          style={{ boxShadow: '-8px 12px 18px 0 rgba(25,42,70,.13)' }}
+          className="bg-surface rounded-xl pt-8 pb-6 px-8 border border-[var(--border)]"
+          style={{ boxShadow: 'var(--shadow-pop)' }}
         >
           {/* Header */}
           <div className="text-center mb-5">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4" style={{ background: 'linear-gradient(135deg,#5a8dee,#3a6bd4)' }}>
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4" style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent))' }}>
               <Zap className="w-7 h-7 text-white" />
             </div>
-            <h3 className="text-xl font-bold" style={{ color: '#222f3e' }}>Đăng nhập</h3>
-            <p className="text-sm mt-1" style={{ color: '#a3afbd' }}>{cfg.subtitle}</p>
+            <h3 className="text-xl font-bold" style={{ color: 'var(--text-1)' }}>Đăng nhập</h3>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-4)' }}>{cfg.subtitle}</p>
           </div>
 
           {/* Tabs: Vận Hành / Kinh Doanh */}
-          <div className="grid grid-cols-2 gap-1 p-1 mb-6 rounded-xl" style={{ background: '#eef2f7' }}>
+          <div className="grid grid-cols-2 gap-1 p-1 mb-6 rounded-xl" style={{ background: 'var(--surface-inset)' }}>
             {(Object.keys(MODE_CONFIG) as LoginMode[]).map(m => {
               const Icon = MODE_CONFIG[m].icon;
               const active = mode === m;
@@ -108,8 +108,8 @@ export default function Login() {
                   onClick={() => { setMode(m); setError(''); }}
                   className="relative flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all"
                   style={{
-                    background: active ? '#fff' : 'transparent',
-                    color: active ? '#3a6bd4' : '#8693a4',
+                    background: active ? 'var(--surface-2)' : 'transparent',
+                    color: active ? 'var(--accent)' : 'var(--text-4)',
                     boxShadow: active ? '0 2px 6px rgba(25,42,70,.12)' : 'none',
                   }}
                 >
@@ -123,12 +123,12 @@ export default function Login() {
           <form onSubmit={handleLogin} className="space-y-4">
             {/* Username */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(35,28,99,.7)' }}>
+              <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>
                 Tên đăng nhập
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                  <User className="w-4 h-4" style={{ color: '#a3afbd' }} />
+                  <User className="w-4 h-4" style={{ color: 'var(--text-4)' }} />
                 </div>
                 <input
                   type="text"
@@ -138,16 +138,16 @@ export default function Login() {
                   placeholder="Nhập tên đăng nhập"
                   className="w-full pl-9 pr-4 py-2.5 rounded-md text-sm outline-none transition-all"
                   style={{
-                    border: '1px solid #dfe3e7',
-                    color: '#555252',
-                    background: '#fff',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-2)',
+                    background: 'var(--surface-1)',
                   }}
                   onFocus={e => {
-                    e.currentTarget.style.borderColor = '#5a8dee';
+                    e.currentTarget.style.borderColor = 'var(--accent)';
                     e.currentTarget.style.boxShadow = '0 3px 8px 0 rgba(0,0,0,.1)';
                   }}
                   onBlur={e => {
-                    e.currentTarget.style.borderColor = '#dfe3e7';
+                    e.currentTarget.style.borderColor = 'var(--border)';
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 />
@@ -156,12 +156,12 @@ export default function Login() {
 
             {/* Password */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(35,28,99,.7)' }}>
+              <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>
                 Mật khẩu
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                  <Lock className="w-4 h-4" style={{ color: '#a3afbd' }} />
+                  <Lock className="w-4 h-4" style={{ color: 'var(--text-4)' }} />
                 </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -171,16 +171,16 @@ export default function Login() {
                   placeholder="Nhập mật khẩu"
                   className="w-full pl-9 pr-10 py-2.5 rounded-md text-sm outline-none transition-all"
                   style={{
-                    border: '1px solid #dfe3e7',
-                    color: '#555252',
-                    background: '#fff',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-2)',
+                    background: 'var(--surface-1)',
                   }}
                   onFocus={e => {
-                    e.currentTarget.style.borderColor = '#5a8dee';
+                    e.currentTarget.style.borderColor = 'var(--accent)';
                     e.currentTarget.style.boxShadow = '0 3px 8px 0 rgba(0,0,0,.1)';
                   }}
                   onBlur={e => {
-                    e.currentTarget.style.borderColor = '#dfe3e7';
+                    e.currentTarget.style.borderColor = 'var(--border)';
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 />
@@ -188,7 +188,7 @@ export default function Login() {
                   type="button"
                   onClick={() => setShowPassword(v => !v)}
                   className="absolute inset-y-0 right-3 flex items-center transition-colors"
-                  style={{ color: '#a3afbd' }}
+                  style={{ color: 'var(--text-4)' }}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -218,7 +218,7 @@ export default function Login() {
               disabled={isLoading}
               className="w-full py-2.5 rounded-md font-semibold text-sm text-white transition-opacity disabled:opacity-60 flex items-center justify-center gap-2 mt-1"
               style={{
-                background: '#5a8dee',
+                background: 'var(--accent)',
                 boxShadow: '0 2px 8px rgba(90,141,238,.4)',
               }}
               onMouseEnter={e => { if (!isLoading) (e.currentTarget as HTMLButtonElement).style.opacity = '0.88'; }}
@@ -242,14 +242,14 @@ export default function Login() {
           {/* Divider */}
           <div className="relative my-5">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full" style={{ borderTop: '1px solid #dfe3e7' }} />
+              <div className="w-full" style={{ borderTop: '1px solid var(--border)' }} />
             </div>
             <div className="relative flex justify-center">
-              <span className="bg-white px-3 text-xs font-medium" style={{ color: '#a3afbd' }}>GETC</span>
+              <span className="bg-surface px-3 text-xs font-medium" style={{ color: 'var(--text-4)' }}>GETC</span>
             </div>
           </div>
 
-          <p className="text-center text-xs" style={{ color: '#a3afbd' }}>
+          <p className="text-center text-xs" style={{ color: 'var(--text-4)' }}>
             {cfg.footer}
           </p>
         </div>
