@@ -6,7 +6,7 @@ on:
   workflow_dispatch:        # chay thu cong / backfill
     inputs:
       target_date:
-        description: "Ngay D can tinh (YYYY-MM-DD). De trong = hom qua. Dau ky = D 00:00, cuoi ky = D+1 00:00."
+        description: "De trong = hom qua | 'YYYY-MM-DD' = dung ngay | so N = lui N ngay (vd 32). Dau ky = D 00:00, cuoi ky = D+1 00:00."
         required: false
         default: ""
 
