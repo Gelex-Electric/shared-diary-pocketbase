@@ -39,18 +39,20 @@ export interface ToastOptions {
   duration?: number;          // ms, mặc định 3500
   autoClose?: boolean;        // mặc định true
   position?: ToastPosition;   // mặc định 'top right'
-  progressBar?: boolean;      // mặc định true
   clickToClose?: boolean;     // bấm vào toast để đóng
+  /** Khoá chống trùng: chỉ giữ một toast cho mỗi key (lần sau thay lần trước). */
+  key?: string;
   confirm?: { text: string; onConfirm?: () => void };
   cancel?: { text: string; onCancel?: () => void };
   onClose?: () => void;
 }
 
-interface ToastData extends Required<Pick<ToastOptions, 'duration' | 'autoClose' | 'position' | 'progressBar' | 'clickToClose'>> {
+interface ToastData extends Required<Pick<ToastOptions, 'duration' | 'autoClose' | 'position' | 'clickToClose'>> {
   id: number;
   type: ToastType;
   title?: string;
   message?: string;
+  key?: string;
   confirm?: ToastOptions['confirm'];
   cancel?: ToastOptions['cancel'];
   onClose?: () => void;
@@ -76,17 +78,19 @@ function dismiss(id: number) {
 
 function push(type: ToastType, title?: string, message?: string, opts: ToastOptions = {}): number {
   const id = ++seq;
+  // Chống trùng: nếu có key, bỏ toast cũ cùng key trước khi thêm mới.
+  const base = opts.key ? toasts.filter(t => t.key !== opts.key) : toasts;
   toasts = [
-    ...toasts,
+    ...base,
     {
       id,
       type,
       title,
       message,
+      key: opts.key,
       duration: opts.duration ?? 3500,
       autoClose: opts.autoClose ?? true,
       position: opts.position ?? 'top right',
-      progressBar: opts.progressBar ?? true,
       clickToClose: opts.clickToClose ?? false,
       confirm: opts.confirm,
       cancel: opts.cancel,
@@ -105,6 +109,8 @@ export const toast = {
   alert:   (title?: string, message?: string, opts?: ToastOptions) => push('alert', title, message, opts),
   show:    (type: ToastType, title?: string, message?: string, opts?: ToastOptions) => push(type, title, message, opts),
   dismiss,
+  /** Đóng toast theo key (nếu có). */
+  dismissKey: (key: string) => { toasts = toasts.filter(t => t.key !== key); emit(); },
   clearAll: () => { toasts = []; emit(); },
 };
 
@@ -151,29 +157,31 @@ function ToastItem({ data }: { data: ToastData }) {
   const solid = SOLID[data.type];
   const off = enterOffset(data.position);
 
-  // Tự đóng + tạm dừng khi rê chuột (đóng băng cả progress bar lẫn timer).
-  const [paused, setPaused] = useState(false);
+  // Tự đóng, tạm dừng khi rê chuột (không có thanh tiến trình hiển thị).
   const remaining = useRef(data.duration);
   const startedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };
+  const start = () => {
     if (!data.autoClose) return;
-    const run = () => {
-      startedAt.current = Date.now();
-      timer.current = setTimeout(() => dismiss(data.id), remaining.current);
-    };
-    if (!paused) run();
-    return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [paused, data.autoClose, data.id]);
+    clear();
+    startedAt.current = Date.now();
+    timer.current = setTimeout(() => dismiss(data.id), remaining.current);
+  };
+
+  useEffect(() => {
+    start();
+    return clear;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onEnter = () => {
     if (!data.autoClose) return;
-    if (timer.current) clearTimeout(timer.current);
+    clear();
     remaining.current -= Date.now() - startedAt.current;
-    setPaused(true);
   };
-  const onLeave = () => { if (data.autoClose) setPaused(false); };
+  const onLeave = () => start();
 
   const hasActions = !!(data.confirm || data.cancel);
 
@@ -182,77 +190,62 @@ function ToastItem({ data }: { data: ToastData }) {
       layout
       initial={{ opacity: 0, scale: 0.96, ...off }}
       animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96, ...off }}
-      transition={{ duration: 0.22, ease: EASE_OUT }}
+      exit={{ opacity: 0, scale: 0.92, ...off }}
+      transition={{ duration: 0.24, ease: EASE_OUT }}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onClick={data.clickToClose ? () => dismiss(data.id) : undefined}
       role={data.type === 'error' || data.type === 'alert' ? 'alert' : 'status'}
-      className={`pointer-events-auto relative w-[360px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg text-white ${
+      className={`pointer-events-auto relative flex w-[360px] max-w-[calc(100vw-32px)] items-start gap-3 rounded-xl px-3.5 py-3 pr-10 text-white ${
         data.clickToClose ? 'cursor-pointer' : ''
       }`}
       style={{ background: solid, boxShadow: 'var(--shadow-pop)' }}
     >
-      <div className="flex items-center gap-3 p-3 pr-10">
-        {/* Icon — ô bo góc viền trắng */}
-        <span className="grid h-9 w-9 shrink-0 place-content-center rounded-lg border-2 border-white/80">
-          <Icon className="h-5 w-5 text-white" strokeWidth={2.4} />
-        </span>
+      {/* Icon — chip tròn mềm */}
+      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-content-center rounded-full bg-white/20">
+        <Icon className="h-[18px] w-[18px] text-white" strokeWidth={2.4} />
+      </span>
 
-        {/* Nội dung */}
-        <div className="min-w-0 flex-1">
-          {data.title && (
-            <p className="text-[13px] font-bold leading-snug text-white">{data.title}</p>
-          )}
-          {data.message && (
-            <p className="mt-0.5 text-[12px] leading-snug text-white/90">{data.message}</p>
-          )}
+      {/* Nội dung */}
+      <div className="min-w-0 flex-1 pt-0.5">
+        {data.title && (
+          <p className="text-[13px] font-bold leading-snug text-white">{data.title}</p>
+        )}
+        {data.message && (
+          <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">{data.message}</p>
+        )}
 
-          {hasActions && (
-            <div className="mt-2.5 flex items-center gap-2">
-              {data.confirm && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); data.confirm?.onConfirm?.(); dismiss(data.id); }}
-                  className="rounded-md bg-white px-2.5 py-1 text-[12px] font-bold transition-opacity hover:opacity-90 active:scale-[0.98]"
-                  style={{ color: solid }}
-                >
-                  {data.confirm.text}
-                </button>
-              )}
-              {data.cancel && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); data.cancel?.onCancel?.(); dismiss(data.id); }}
-                  className="rounded-md px-2.5 py-1 text-[12px] font-semibold text-white/90 underline transition-colors hover:bg-white/15 active:scale-[0.98]"
-                >
-                  {data.cancel.text}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        {hasActions && (
+          <div className="mt-2.5 flex items-center gap-2">
+            {data.confirm && (
+              <button
+                onClick={(e) => { e.stopPropagation(); data.confirm?.onConfirm?.(); dismiss(data.id); }}
+                className="rounded-md bg-white px-2.5 py-1 text-[12px] font-bold transition-opacity hover:opacity-90 active:scale-[0.98]"
+                style={{ color: solid }}
+              >
+                {data.confirm.text}
+              </button>
+            )}
+            {data.cancel && (
+              <button
+                onClick={(e) => { e.stopPropagation(); data.cancel?.onCancel?.(); dismiss(data.id); }}
+                className="rounded-md px-2.5 py-1 text-[12px] font-semibold text-white/90 underline transition-colors hover:bg-white/15 active:scale-[0.98]"
+              >
+                {data.cancel.text}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Close */}
       <button
         onClick={(e) => { e.stopPropagation(); dismiss(data.id); }}
         aria-label="Đóng thông báo"
-        className="absolute right-2 top-2 grid h-6 w-6 place-content-center rounded-md text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+        className="absolute right-2 top-2.5 grid h-6 w-6 place-content-center rounded-md text-white/70 transition-colors hover:bg-white/15 hover:text-white"
       >
         <X className="h-4 w-4" />
       </button>
-
-      {/* Progress bar */}
-      {data.autoClose && data.progressBar && (
-        <div className="absolute inset-x-0 bottom-0 h-[3px] bg-white/25">
-          <div
-            className="h-full origin-left bg-white/70"
-            style={{
-              animation: `toast-progress ${data.duration}ms linear forwards`,
-              animationPlayState: paused ? 'paused' : 'running',
-            }}
-          />
-        </div>
-      )}
     </motion.div>
   );
 }
