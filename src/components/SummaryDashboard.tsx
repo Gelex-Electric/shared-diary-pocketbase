@@ -546,12 +546,14 @@ export default function SummaryDashboard() {
       if (debtToastSig.current !== message) {
         debtToastSig.current = message;
         notify.warning('Cảnh báo công nợ', message, {
+          key: 'debt-warning',
           autoClose: false,
           confirm: { text: 'Xem chi tiết', onConfirm: jumpToDebtList },
         });
       }
     } else {
       clearLocalNotification('debt-warning');
+      notify.dismissKey('debt-warning');
       debtToastSig.current = '';
     }
   }, [overallUnpaidKpis.isAnyUnpaid, overallUnpaidKpis.unpaidCustomers, otherMonthsUnpaidCount]);
