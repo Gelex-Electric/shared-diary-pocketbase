@@ -15,6 +15,8 @@ interface TabsProps<T extends string> {
   value: T;
   onChange: (id: T) => void;
   className?: string;
+  /** Trải đều full-width, mỗi tab chiếm phần bằng nhau (dùng cho form/đăng nhập). */
+  fluid?: boolean;
 }
 
 /**
@@ -22,14 +24,14 @@ interface TabsProps<T extends string> {
  * Chỉ báo (indicator) là một viên nền trượt mượt giữa các tab nhờ
  * `layoutId` của motion. Dùng thống nhất cho mọi trang có tab ngang.
  */
-export function Tabs<T extends string>({ tabs, value, onChange, className = '' }: TabsProps<T>) {
+export function Tabs<T extends string>({ tabs, value, onChange, className = '', fluid = false }: TabsProps<T>) {
   // layoutId riêng cho mỗi instance để các thanh tab khác nhau không "trượt" vào nhau.
   const layoutId = useId();
 
   return (
     <div
       role="tablist"
-      className={`inline-flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-subtle p-1 ${className}`}
+      className={`${fluid ? 'flex w-full' : 'inline-flex flex-wrap'} gap-1 rounded-xl border border-[var(--border)] bg-subtle p-1 ${className}`}
     >
       {tabs.map(t => {
         const Icon = t.icon;
@@ -42,7 +44,9 @@ export function Tabs<T extends string>({ tabs, value, onChange, className = '' }
             aria-selected={active}
             title={t.sub}
             onClick={() => onChange(t.id)}
-            className="group relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+            className={`group relative flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
+              fluid ? 'flex-1' : ''
+            }`}
           >
             {/* Viên nền trượt cho tab đang chọn */}
             {active && (
