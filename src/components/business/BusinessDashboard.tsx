@@ -42,8 +42,8 @@ export default function BusinessDashboard() {
             <Briefcase className="w-5 h-5 text-[var(--on-accent)]" />
           </div>
           <div className="leading-tight">
-            <p className="text-[0.7rem] font-semibold text-faint uppercase tracking-wider">Phần mềm</p>
-            <p className="text-[0.95rem] font-bold text-accent leading-snug">Khối kinh doanh GETC</p>
+            <p className="text-[0.7rem] font-semibold text-faint uppercase tracking-wider">Nhóm Văn Phòng</p>
+            <p className="text-[0.95rem] font-bold text-accent leading-snug">Phần mềm Kỹ thuật - Kinh Doanh</p>
           </div>
         </div>
       </div>
