@@ -17,8 +17,8 @@ interface BookOption { FigureBookId: number; BookName: string; }
 
 type ImportMode = 'direct' | 'manual';
 const IMPORT_TABS: TabItem<ImportMode>[] = [
-  { id: 'direct', label: 'Lấy trực tiếp',     icon: CloudDownload },
-  { id: 'manual', label: 'Tải XML thủ công',  icon: Upload },
+  { id: 'direct', label: 'Lấy trực tiếp từ CCIS', icon: CloudDownload },
+  { id: 'manual', label: 'Tải XML thủ công',      icon: Upload },
 ];
 
 /* ============================================================
@@ -371,7 +371,7 @@ export default function QuickImportManager() {
     }
   };
 
-  const clearAll = () => { setFiles([]); setSelected({}); };
+  const clearAll = () => { setFiles([]); setSelected({}); setInvoicesDone(false); };
 
   const toggleRow = (id: string) =>
     setSelected(prev => ({ ...prev, [id]: !prev[id] }));
@@ -583,6 +583,20 @@ export default function QuickImportManager() {
                 ),
               }}
             />
+
+            {files.length > 0 && (
+              <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
+                <span className="text-xs font-semibold text-faint">
+                  Đã tải {files.length} hóa đơn vào danh sách xem trước.
+                </span>
+                <button
+                  onClick={clearAll}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-bad transition-colors hover:bg-[var(--danger-soft)]"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Xóa dữ liệu đã tải
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -615,8 +629,8 @@ export default function QuickImportManager() {
                     <span className="text-faint">({f.invoice.rows.length})</span>
                   </span>
                 ))}
-                <button onClick={clearAll} className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" /> Xóa hết
+                <button onClick={clearAll} className="inline-flex items-center gap-1.5 text-xs font-bold text-bad hover:bg-[var(--danger-soft)] px-2.5 py-1.5 rounded-lg transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Xóa dữ liệu đã tải
                 </button>
               </div>
             )}
