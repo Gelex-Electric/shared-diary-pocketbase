@@ -7,7 +7,7 @@ interface MeterRow { id: string; MeterNo: string; HSN: string; Line: string; are
 import {
   RefreshCw, Download, Zap, X,
   CheckCircle2, XCircle, AlertCircle, Info,
-  Table as TableIcon, CreditCard, Crown,
+  Table as TableIcon, CreditCard,
 } from 'lucide-react';
 import { DatePicker, TimePicker } from './ui/DateTimePickers';
 import { toast as notify, type ToastType } from '../lib/toast';
@@ -530,13 +530,13 @@ export default function HesManualManager() {
                 <th>Số công tơ</th>
                 <th>Trạm</th>
                 <th className="text-center">Hệ số nhân</th>
-                <th className="text-center text-faint">Thời gian đầu kỳ</th>
-                <th className="text-center text-faint">Thời gian cuối kỳ</th>
-                <th className="text-center text-white bg-accent font-extrabold">Tổng (kWh)</th>
-                <th className="text-center text-accent">Biểu 1 (kWh)</th>
-                <th className="text-center text-orange-500">Biểu 2 (kWh)</th>
-                <th className="text-center text-purple-600">Biểu 3 (kWh)</th>
-                <th className="text-center text-soft">Vô công (kVarh)</th>
+                <th className="text-center">Thời gian đầu kỳ</th>
+                <th className="text-center">Thời gian cuối kỳ</th>
+                <th className="text-center text-ink font-bold border-x border-[var(--border)]">Tổng (kWh)</th>
+                <th className="text-center">Biểu 1 (kWh)</th>
+                <th className="text-center">Biểu 2 (kWh)</th>
+                <th className="text-center">Biểu 3 (kWh)</th>
+                <th className="text-center">Vô công (kVarh)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
@@ -556,13 +556,10 @@ export default function HesManualManager() {
                 meters.map(m => {
                   const isMax = m.id === maxTotalMeterId;
                   return (
-                  <tr key={m.id} className={`transition-colors ${isMax ? 'bg-[var(--warning-soft)] hover:bg-amber-100/70' : 'hover:bg-accent-soft'}`}>
+                  <tr key={m.id} className={`transition-colors ${isMax ? 'bg-[var(--warning-soft)] hover:bg-[var(--warning-soft)]' : 'hover:bg-subtle'}`}>
                     <td>
-                      <span className="inline-flex items-center gap-1.5">
-                        {isMax && <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                        <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">
-                          {m.MeterNo}
-                        </span>
+                      <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">
+                        {m.MeterNo}
                       </span>
                     </td>
                     <td className="text-sm text-soft">{m.Line || '—'}</td>
@@ -573,10 +570,10 @@ export default function HesManualManager() {
                     <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">
                       {fmtRecordTime(sections[1].readings[m.MeterNo]?.recordTime)}
                     </td>
-                    <td className={`text-center text-sm font-extrabold text-[var(--accent)] ${isMax ? 'bg-amber-100/60' : 'bg-accent-soft/60'}`}>{fmt(getConsumption(m.MeterNo, 'pg', m.HSN))}</td>
+                    <td className="text-center text-sm font-extrabold text-ink border-x border-[var(--border)]">{fmt(getConsumption(m.MeterNo, 'pg', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-accent">{fmt(getConsumption(m.MeterNo, 'bt', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-orange-500">{fmt(getConsumption(m.MeterNo, 'cd', m.HSN))}</td>
-                    <td className="text-center text-xs font-bold text-purple-600">{fmt(getConsumption(m.MeterNo, 'td', m.HSN))}</td>
+                    <td className="text-center text-xs font-bold text-purple-500">{fmt(getConsumption(m.MeterNo, 'td', m.HSN))}</td>
                     <td className="text-center text-xs font-bold text-soft">{fmt(getConsumption(m.MeterNo, 'vc', m.HSN))}</td>
                   </tr>
                   );
