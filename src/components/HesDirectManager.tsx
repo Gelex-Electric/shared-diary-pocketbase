@@ -6,7 +6,7 @@ import {
   type HesIndexData, type Consumption,
 } from '../lib/hesIndex';
 import {
-  RefreshCw, Download, Database, Crown, Info, Table as TableIcon,
+  RefreshCw, Download, Database, Info, Table as TableIcon,
 } from 'lucide-react';
 import { DatePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
@@ -192,13 +192,13 @@ export default function HesDirectManager() {
                 <th>Số công tơ</th>
                 <th>Trạm</th>
                 <th className="text-center">Hệ số nhân</th>
-                <th className="text-center text-faint">Thời gian đầu kỳ</th>
-                <th className="text-center text-faint">Thời gian cuối kỳ</th>
-                <th className="text-center text-white bg-accent font-extrabold">Tổng (kWh)</th>
-                <th className="text-center text-accent">Biểu 1 (kWh)</th>
-                <th className="text-center text-orange-500">Biểu 2 (kWh)</th>
-                <th className="text-center text-purple-600">Biểu 3 (kWh)</th>
-                <th className="text-center text-soft">Vô công (kVarh)</th>
+                <th className="text-center">Thời gian đầu kỳ</th>
+                <th className="text-center">Thời gian cuối kỳ</th>
+                <th className="text-center text-ink font-bold border-x border-[var(--border)]">Tổng (kWh)</th>
+                <th className="text-center">Biểu 1 (kWh)</th>
+                <th className="text-center">Biểu 2 (kWh)</th>
+                <th className="text-center">Biểu 3 (kWh)</th>
+                <th className="text-center">Vô công (kVarh)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
@@ -211,21 +211,18 @@ export default function HesDirectManager() {
                   const c = consumptions.get(m.MeterNo);
                   const isMax = m.id === maxTotalMeterId;
                   return (
-                    <tr key={m.id} className={`transition-colors ${isMax ? 'bg-[var(--warning-soft)] hover:bg-amber-100/70' : 'hover:bg-accent-soft'}`}>
+                    <tr key={m.id} className={`transition-colors ${isMax ? 'bg-[var(--warning-soft)] hover:bg-[var(--warning-soft)]' : 'hover:bg-subtle'}`}>
                       <td>
-                        <span className="inline-flex items-center gap-1.5">
-                          {isMax && <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                          <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">{m.MeterNo}</span>
-                        </span>
+                        <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">{m.MeterNo}</span>
                       </td>
                       <td className="text-sm text-soft">{m.Line || '—'}</td>
                       <td className="text-center text-xs font-mono text-soft">{m.HSN || '1'}</td>
                       <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{fmtTime(c?.startTime)}</td>
                       <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{fmtTime(c?.endTime)}</td>
-                      <td className={`text-center text-sm font-extrabold text-[var(--accent)] ${isMax ? 'bg-amber-100/60' : 'bg-accent-soft/60'}`}>{fmt(c?.values.PG ?? null)}</td>
+                      <td className="text-center text-sm font-extrabold text-ink border-x border-[var(--border)]">{fmt(c?.values.PG ?? null)}</td>
                       <td className="text-center text-xs font-bold text-accent">{fmt(c?.values.BT ?? null)}</td>
                       <td className="text-center text-xs font-bold text-orange-500">{fmt(c?.values.CD ?? null)}</td>
-                      <td className="text-center text-xs font-bold text-purple-600">{fmt(c?.values.TD ?? null)}</td>
+                      <td className="text-center text-xs font-bold text-purple-500">{fmt(c?.values.TD ?? null)}</td>
                       <td className="text-center text-xs font-bold text-soft">{fmt(c?.values.VC ?? null)}</td>
                     </tr>
                   );
