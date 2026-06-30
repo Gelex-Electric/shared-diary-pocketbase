@@ -5,6 +5,7 @@ import { parseInvoiceXml, type ParsedInvoice, type MeterPeriodRow, type Bieu } f
 import { fetchFigureBooks, fetchInvoiceXmlForBook, type FetchProgress } from '../../lib/ccisApi';
 import { MonthPicker } from '../ui/DateTimePickers';
 import { Select } from '../ui/Select';
+import { Tabs, type TabItem } from '../ui/Tabs';
 import {
   Upload, FileCode2, Database, CheckCircle2, AlertCircle, Trash2,
   Users, Loader2, FileSpreadsheet, CloudDownload, Check, Layers,
@@ -13,6 +14,12 @@ import {
 
 const FIGUREBOOK_COLLECTION = 'FigureBook';
 interface BookOption { FigureBookId: number; BookName: string; }
+
+type ImportMode = 'direct' | 'manual';
+const IMPORT_TABS: TabItem<ImportMode>[] = [
+  { id: 'direct', label: 'Lấy trực tiếp',     icon: CloudDownload },
+  { id: 'manual', label: 'Tải XML thủ công',  icon: Upload },
+];
 
 /* ============================================================
    Nạp dữ liệu nhanh — tải nhiều XML hóa đơn điện, xem trước,
@@ -510,25 +517,7 @@ export default function QuickImportManager() {
       {/* Card lấy dữ liệu — có tab chuyển chế độ */}
       <div className="vl-card p-6 md:p-8">
         {/* Tab bar */}
-        <div className="inline-flex p-1 bg-subtle rounded-xl mb-6">
-          {([
-            { key: 'direct' as const, icon: CloudDownload, label: 'Lấy trực tiếp' },
-            { key: 'manual' as const, icon: Upload, label: 'Tải XML thủ công' },
-          ]).map(t => {
-            const on = mode === t.key;
-            return (
-              <button
-                key={t.key}
-                onClick={() => setMode(t.key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                  on ? 'bg-surface text-accent shadow-sm' : 'text-soft hover:text-dim'
-                }`}
-              >
-                <t.icon className="w-4 h-4" /> {t.label}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs tabs={IMPORT_TABS} value={mode} onChange={setMode} className="mb-6" />
 
         {mode === 'direct' ? (
           <>
