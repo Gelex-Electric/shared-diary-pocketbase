@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Check, Sparkles, X, ArrowRight, FileText,
   Palette, Zap, Wrench, Tag, Layers, CloudDownload,
-  Moon, Bell,
+  Clock, BarChart3,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from '../lib/toast';
@@ -22,29 +22,44 @@ interface UpdateItem {
 }
 
 // Phiên bản & ngày phát hành hiển thị trên header
-const VERSION      = '1.4';
-const RELEASE_DATE = '29/06/2026';
+const VERSION      = '1.5';
+const RELEASE_DATE = '30/06/2026';
 
 const UPDATES: UpdateItem[] = [
   {
-    title: 'Giao diện "Phòng điều khiển" hoàn toàn mới',
-    desc: 'Toàn bộ ứng dụng được thiết kế lại theo phong cách bảng điều khiển trạm: phân cấp rõ ràng, số liệu dạng đồng hồ đo, đèn trạng thái và bố cục gọn — dễ đọc khi trực ban.',
-    tag: 'Giao diện',
-  },
-  {
-    title: 'Chế độ Sáng / Tối',
-    desc: 'Thêm nút chuyển nền sáng–tối ngay trên thanh công cụ. Lựa chọn được ghi nhớ cho lần sau và tự khớp theo thiết lập hệ điều hành.',
+    title: 'Lấy chỉ số trực tiếp tự động lúc 00h00 hằng ngày',
+    desc: 'Tại "Lấy chỉ số từ HES", bổ sung chế độ đọc chỉ số tự động vào 00h00 mỗi ngày trong suốt một tháng — không cần thao tác thủ công từng ngày.',
     tag: 'Mới',
+    link: { tab: 'hes', label: 'Mở Lấy chỉ số HES' },
   },
   {
-    title: 'Thanh thông báo (toast) phản hồi tức thì',
-    desc: 'Mỗi thao tác lưu, lỗi hay xác nhận nay đều hiện một thanh thông báo nhỏ, tự đóng kèm thanh đếm thời gian và nút thao tác nhanh.',
+    title: 'Dashboard Tổng hợp làm mới — dữ liệu trực tiếp từ hóa đơn',
+    desc: 'Trang Tổng hợp (Vận hành & Kinh doanh) đọc số liệu trực tiếp từ hệ thống hóa đơn thay cho tệp CSV, luôn cập nhật theo thời gian thực và lọc theo khu vực của tài khoản.',
     tag: 'Mới',
+    link: { tab: 'summary', label: 'Xem Tổng hợp' },
   },
   {
-    title: 'Số liệu canh cột, không nhảy layout',
-    desc: 'Các con số (công suất, điện áp, chỉ số) dùng phông canh cột (tabular) nên bảng và biểu đồ không còn bị giật khi giá trị thay đổi.',
+    title: 'Biểu đồ phụ tải, Pmax & cơ cấu biểu giá',
+    desc: 'Thêm biểu đồ phụ tải theo tháng (so sánh 3 năm), công suất cực đại Pmax theo ngày (đánh dấu Thứ 7 / Chủ nhật), cơ cấu biểu giá BT/CĐ/TĐ và biểu đồ sản lượng–công suất theo từng khách hàng.',
+    tag: 'Mới',
+    link: { tab: 'summary', label: 'Xem Tổng hợp' },
+  },
+  {
+    title: 'Bảng sản lượng & doanh thu theo khách hàng',
+    desc: 'Hiển thị ngày đóng điện (chỉ số sớm nhất của công tơ), mức tăng/giảm so với tháng liền trước, và mở rộng xem chi tiết tới từng công tơ của mỗi khách.',
     tag: 'Cải tiến',
+    link: { tab: 'summary', label: 'Xem Tổng hợp' },
+  },
+  {
+    title: 'Bảng sản lượng HES gọn & dễ đọc hơn',
+    desc: 'Bỏ biểu tượng vương miện, cột "Tổng (kWh)" không còn tô nền màu khó nhìn mà làm nổi bằng chữ đậm và đường kẻ cột — đọc nhanh hơn.',
+    tag: 'Cải tiến',
+    link: { tab: 'hes', label: 'Mở Lấy chỉ số HES' },
+  },
+  {
+    title: 'Giao diện "Phòng điều khiển" & chế độ Sáng / Tối',
+    desc: 'Toàn bộ ứng dụng theo phong cách bảng điều khiển trạm (đèn trạng thái, số liệu canh cột) kèm nút chuyển nền sáng–tối được ghi nhớ cho lần sau.',
+    tag: 'Giao diện',
   },
 ];
 
@@ -112,7 +127,7 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 8 }}
         transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-3xl border border-[var(--border)] bg-surface"
+        className="relative z-10 w-full max-w-md overflow-hidden rounded-3xl bg-surface"
         style={{ boxShadow: 'var(--shadow-pop)' }}
       >
         {/* Header */}
@@ -212,12 +227,12 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
         {/* Gợi ý nhanh hai tính năng nổi bật */}
         <div className="mx-6 mb-1 grid grid-cols-2 gap-2">
           <div className="flex items-center gap-2 rounded-xl bg-subtle px-3 py-2">
-            <Moon className="h-4 w-4 text-accent" />
-            <span className="text-[11px] font-semibold text-dim">Nút Sáng/Tối ở góc phải</span>
+            <Clock className="h-4 w-4 text-accent" />
+            <span className="text-[11px] font-semibold text-dim">Tự lấy chỉ số 00h00</span>
           </div>
           <div className="flex items-center gap-2 rounded-xl bg-subtle px-3 py-2">
-            <Bell className="h-4 w-4 text-accent" />
-            <span className="text-[11px] font-semibold text-dim">Thông báo toast tức thì</span>
+            <BarChart3 className="h-4 w-4 text-accent" />
+            <span className="text-[11px] font-semibold text-dim">Dashboard tổng hợp mới</span>
           </div>
         </div>
 
