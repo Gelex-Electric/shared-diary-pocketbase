@@ -282,5 +282,20 @@ export function useInvoices(opts: UseInvoicesOpts = {}) {
     return zoneLock ? all.filter(b => b.zone === zoneLock) : all;
   }, [records, zoneLock]);
 
-  return { bills, loading, error, reload: load, zoneLock };
+  /** SCT (công tơ) → khách hàng, suy từ các bản ghi đã tải (lọc theo khu vực nếu khoá). */
+  const meterIndex = useMemo(() => {
+    const m = new Map<string, { mkh: string; nMua: string; zone: string }>();
+    records.forEach(r => {
+      const sct = (r.SCT || '').trim();
+      const mkh = (r.MKHang || '').trim();
+      if (!sct || !mkh) return;
+      const zone = zoneOf(mkh);
+      if (zoneLock && zone !== zoneLock) return;
+      const prev = m.get(sct);
+      if (!prev || (!prev.nMua && r.NMua)) m.set(sct, { mkh, nMua: r.NMua || prev?.nMua || '', zone });
+    });
+    return m;
+  }, [records, zoneLock]);
+
+  return { bills, records, meterIndex, loading, error, reload: load, zoneLock };
 }
