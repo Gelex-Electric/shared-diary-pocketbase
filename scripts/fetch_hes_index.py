@@ -68,12 +68,24 @@ def get_retry(url, *, attempts=4, **kwargs):
 
 
 def target_day() -> datetime:
-    """Ngay D can tinh (00:00 gio VN). Uu tien TARGET_DATE=YYYY-MM-DD, mac dinh hom qua."""
+    """Ngay D can tinh (00:00 gio VN).
+
+    TARGET_DATE nhan 1 trong 3 dang:
+      - rong          -> hom qua (today - 1)
+      - "YYYY-MM-DD"  -> dung ngay do
+      - so nguyen N   -> lui N ngay so voi hom nay (today - N). N=1 == hom qua.
+    """
+    today = datetime.now(VN_TZ).date()
     override = os.environ.get("TARGET_DATE", "").strip()
-    if override:
-        d = datetime.strptime(override, "%Y-%m-%d").date()
+    if not override:
+        d = today - timedelta(days=1)
+    elif override.lstrip("+-").isdigit():
+        d = today - timedelta(days=int(override))
     else:
-        d = datetime.now(VN_TZ).date() - timedelta(days=1)
+        try:
+            d = datetime.strptime(override, "%Y-%m-%d").date()
+        except ValueError:
+            sys.exit(f"TARGET_DATE khong hop le: {override!r}. Dung 'YYYY-MM-DD' hoac so ngay lui (vd 32).")
     return datetime(d.year, d.month, d.day)  # naive = gio VN local
 
 
