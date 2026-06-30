@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, ComposedChart,
@@ -8,14 +8,17 @@ import {
   ArrowUpRight, ArrowDownRight, Minus, ChevronRight, CalendarCheck, Users,
 } from 'lucide-react';
 import { Select } from './ui/Select';
-import { MonthPicker } from './ui/DateTimePickers';
 import { StatTile, Panel, ChartTooltip, EmptyState, CHART } from './ui/dashboard';
 import {
   useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, fmtDate, ZONE_MAP,
+  fetchEarliestStartDates,
 } from '../lib/invoices';
 import { usePmaxDaily, type PmaxRow } from '../lib/pmax';
 
 const MONTHS = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
+const MONTH_OPTS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `Tháng ${i + 1}` }));
+const WD = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const WD_FULL = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 const YEAR_BARS = ['var(--text-4)', '#22b8c4', 'var(--accent)'];
 const PIE_COLORS = [CHART.bt, CHART.cd, CHART.td];
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -29,10 +32,14 @@ export default function SummaryDashboard() {
   const { rows: pmaxRows, loading: pmaxLoading } = usePmaxDaily();
 
   const [year, setYear] = useState<number>(endYear);
-  const [pmaxMonth, setPmaxMonth] = useState<string>(`${endYear}-${pad2(new Date().getMonth() + 1)}`);
+  const [pmaxMonthIdx, setPmaxMonthIdx] = useState<number>(new Date().getMonth() + 1); // 1..12, theo năm đã chọn
   const [custA, setCustA] = useState('');   // chart 1 (mặc định: kWh lớn nhất)
   const [custB, setCustB] = useState('');   // chart 2 (mặc định: Pmax lớn nhất)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [energizeMap, setEnergizeMap] = useState<Map<string, string>>(new Map()); // SCT → ngày đóng điện (query riêng)
+  const fetchedRef = useRef<Set<string>>(new Set());
+
+  const pmaxMonth = `${year}-${pad2(pmaxMonthIdx)}`;
 
   const years = useMemo(() => {
     const s = new Set<number>();
@@ -88,7 +95,11 @@ export default function SummaryDashboard() {
       m.set(r.date, (m.get(r.date) || 0) + r.pmax);
     });
     return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, pmax]) => ({ date, day: date.slice(8, 10), pmax: Math.round(pmax) }));
+      .map(([date, pmax]) => {
+        const [y, mo, d] = date.split('-').map(Number);
+        const dow = new Date(y, mo - 1, d).getDay(); // 0=CN .. 6=T7
+        return { date, day: date.slice(8, 10), pmax: Math.round(pmax), dow, weekend: dow === 0 || dow === 6, wd: WD[dow], wdFull: WD_FULL[dow] };
+      });
   }, [pmaxRows, pmaxMonth, inZone]);
 
   /* Per-customer daily totals for the selected year → monthly peak + yearly peak */
@@ -161,9 +172,10 @@ export default function SummaryDashboard() {
         if (!mkh) return;
         if (zoneLock && (r.MKHang || '').split('-')[0] !== zoneLock) return;
         const month = dateOnly(r.EndDate).slice(0, 7);
-        if (month !== cur && month !== prev) return;
         const sd = dateOnly(r.StartDate);
         const kwh = num(r.TongSL_HC), vnd = num(r.ThTien_HC) + num(r.ThTien_PK);
+        // Tạo/giữ entry cho MỌI bản ghi (không chỉ cur/prev) để "ngày đóng điện"
+        // = StartDate sớm nhất trên toàn bộ dữ liệu đã tải, không phải kỳ gần đây.
         let c = map.get(mkh);
         if (!c) { c = { mkh, name: r.NMua || mkh, energize: sd || '9999', curKwh: 0, prevKwh: 0, curVnd: 0, meters: new Map() }; map.set(mkh, c); }
         if (r.NMua && (!c.name || c.name === mkh)) c.name = r.NMua;
@@ -172,8 +184,10 @@ export default function SummaryDashboard() {
         let mt = c.meters.get(sct);
         if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), energize: sd || '9999', curKwh: 0, prevKwh: 0, curVnd: 0 }; c.meters.set(sct, mt); }
         if (sd && sd < mt.energize) mt.energize = sd;
+        if (r.DChiNMua && !mt.addr) mt.addr = (r.DChiNMua || '').trim();
+        // Sản lượng/doanh thu chỉ cộng cho 2 tháng đang so sánh.
         if (month === cur) { c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd; }
-        else { c.prevKwh += kwh; mt.prevKwh += kwh; }
+        else if (month === prev) { c.prevKwh += kwh; mt.prevKwh += kwh; }
       });
     }
     const delta = (a: number, b: number) => (b > 0 ? (a - b) / b : null);
@@ -184,11 +198,31 @@ export default function SummaryDashboard() {
         ...c,
         energizeDate: c.energize === '9999' ? '' : c.energize,
         delta: delta(c.curKwh, c.prevKwh),
-        meterList: Array.from(c.meters.values()).sort((a, b) => b.curKwh - a.curKwh)
+        meterList: Array.from(c.meters.values())
+          .filter(m => m.curKwh > 0 || m.prevKwh > 0 || m.curVnd > 0)
+          .sort((a, b) => b.curKwh - a.curKwh)
           .map(m => ({ ...m, energizeDate: m.energize === '9999' ? '' : m.energize, delta: delta(m.curKwh, m.prevKwh) })),
       }));
     return { cur, prev, rows };
   }, [records, bills, zoneLock, meterIndex]);
+
+  /* Cách 2: query riêng StartDate sớm nhất cho các công tơ đang hiển thị (chính xác cả công tơ cũ) */
+  useEffect(() => {
+    const scts = Array.from(new Set(detail.rows.flatMap(r => r.meterList.map(m => m.sct))))
+      .filter(s => s && s !== '—' && !fetchedRef.current.has(s));
+    if (scts.length === 0) return;
+    scts.forEach(s => fetchedRef.current.add(s));
+    fetchEarliestStartDates(scts)
+      .then(m => { if (m.size) setEnergizeMap(prev => { const next = new Map(prev); m.forEach((v, k) => next.set(k, v)); return next; }); })
+      .catch(() => {});
+  }, [detail.rows]);
+
+  /* Ghép ngày đóng điện chính xác (query riêng) đè lên giá trị cục bộ */
+  const rows = useMemo(() => detail.rows.map(r => {
+    const meterList = r.meterList.map(m => ({ ...m, energizeDate: energizeMap.get(m.sct) || m.energizeDate }));
+    const earliest = meterList.map(m => m.energizeDate).filter(Boolean).sort();
+    return { ...r, meterList, energizeDate: earliest[0] || r.energizeDate };
+  }), [detail.rows, energizeMap]);
 
   const fmtMonth = (ym?: string) => (ym ? `${ym.slice(5)}/${ym.slice(0, 4)}` : '—');
   const areaName = zoneLock ? (ZONE_MAP[zoneLock] || zoneLock) : 'Toàn bộ khu công nghiệp';
@@ -201,6 +235,39 @@ export default function SummaryDashboard() {
       <span className={`inline-flex items-center gap-0.5 text-xs font-bold tabular-nums ${up ? 'text-ok' : down ? 'text-bad' : 'text-faint'}`}>
         <Icon className="w-3.5 h-3.5" />{d == null ? '—' : `${Math.abs(d * 100).toFixed(1)}%`}
       </span>
+    );
+  };
+
+  /* Pmax chart: weekday axis tick (Sat/Sun marked), weekend dot, weekday tooltip */
+  const renderPmaxTick = (props: any) => {
+    const { x, y, payload } = props;
+    const pt = pmaxMonthData.find(p => p.day === payload.value);
+    const color = pt?.dow === 0 ? 'var(--danger)' : 'var(--warning)';
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={10} textAnchor="middle" fontSize={9} fontWeight={pt?.weekend ? 700 : 400} fill={pt?.weekend ? color : 'var(--text-4)'}>{payload.value}</text>
+        {pt?.weekend && <text x={0} y={0} dy={20} textAnchor="middle" fontSize={8} fontWeight={700} fill={color}>{pt.wd}</text>}
+      </g>
+    );
+  };
+  const renderPmaxDot = (props: any) => {
+    const { cx, cy, payload } = props;
+    if (cx == null || !payload?.weekend) return <g key={payload?.date} />;
+    const color = payload.dow === 0 ? 'var(--danger)' : 'var(--warning)';
+    return <circle key={payload.date} cx={cx} cy={cy} r={3.2} fill={color} stroke="var(--surface-1)" strokeWidth={1} />;
+  };
+  const renderPmaxTooltip = ({ active, payload }: any) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0].payload;
+    return (
+      <div className="vl-chart-tooltip">
+        <div className="vl-chart-tooltip-title">{d.wdFull} · {d.date.slice(8, 10)}/{d.date.slice(5, 7)}</div>
+        <div className="vl-chart-tooltip-row">
+          <span className="vl-dot" style={{ background: CHART.cd }} />
+          <span className="vl-lbl">Pmax</span>
+          <span className="vl-val">{fmtKw(payload[0].value)}</span>
+        </div>
+      </div>
     );
   };
 
@@ -316,19 +383,23 @@ export default function SummaryDashboard() {
           )}
         </Panel>
 
-        <Panel title="Công suất cực đại (Pmax)" sub={`Theo ngày · tháng ${fmtMonth(pmaxMonth)} (kW)`} icon={Gauge}
-          actions={<MonthPicker value={pmaxMonth} onChange={setPmaxMonth} className="w-[150px]" />}>
-          <div className="h-[252px] px-3 py-4">
+        <Panel title="Công suất cực đại (Pmax)" sub={`Theo ngày · ${pmaxMonthIdx}/${year} (kW)`} icon={Gauge}>
+          <div className="px-4 pt-3 flex items-center gap-3 flex-wrap">
+            <Select value={String(pmaxMonthIdx)} onChange={v => setPmaxMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[120px]" />
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-soft"><span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--warning)' }} />Thứ 7</span>
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-soft"><span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--danger)' }} />Chủ nhật</span>
+          </div>
+          <div className="h-[244px] px-3 pb-4 pt-2">
             {pmaxMonthData.length === 0 ? (
               <EmptyState icon={Gauge} title={pmaxLoading ? 'Đang tải Pmax…' : 'Chưa có dữ liệu Pmax'} hint="Nguồn: pmax_daily.csv" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={pmaxMonthData} margin={{ top: 16, right: 12, left: 8, bottom: 4 }}>
+                <LineChart data={pmaxMonthData} margin={{ top: 16, right: 12, left: 8, bottom: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
-                  <XAxis dataKey="day" tickLine={false} axisLine={false} stroke="var(--text-4)" minTickGap={16} style={{ fontSize: 10 }} />
+                  <XAxis dataKey="day" tickLine={false} axisLine={false} stroke="var(--text-4)" interval={0} height={28} tick={renderPmaxTick} />
                   <YAxis tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--text-4)" width={44} style={{ fontSize: 10 }} />
-                  <Tooltip content={<ChartTooltip fmt={v => fmtKw(v)} />} labelFormatter={(d) => `Ngày ${d}/${pmaxMonth.slice(5)}`} />
-                  <Line type="monotone" dataKey="pmax" name="Pmax" stroke={CHART.cd} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
+                  <Tooltip content={renderPmaxTooltip} />
+                  <Line type="monotone" dataKey="pmax" name="Pmax" stroke={CHART.cd} strokeWidth={2} dot={renderPmaxDot} activeDot={{ r: 4 }} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -359,20 +430,20 @@ export default function SummaryDashboard() {
               <th className="text-right">Doanh thu (đồng)</th>
             </tr></thead>
             <tbody>
-              {detail.rows.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr><td colSpan={5} className="py-10 text-center text-faint text-sm italic">{busy ? 'Đang tải…' : 'Không có dữ liệu'}</td></tr>
-              ) : detail.rows.map(r => {
+              ) : rows.map(r => {
                 const open = !!expanded[r.mkh];
                 return (
                   <Fragment key={r.mkh}>
                     <tr onClick={() => setExpanded(e => ({ ...e, [r.mkh]: !e[r.mkh] }))}
-                      className="hover:bg-subtle transition-colors cursor-pointer">
+                      className={`transition-colors cursor-pointer ${open ? 'bg-accent-soft/50' : 'hover:bg-subtle'}`}>
                       <td>
                         <div className="flex items-start gap-2">
-                          <ChevronRight className={`w-4 h-4 mt-0.5 text-faint shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                          <ChevronRight className={`w-4 h-4 mt-0.5 shrink-0 transition-transform ${open ? 'rotate-90 text-accent' : 'text-faint'}`} />
                           <div className="min-w-0">
-                            <div className="text-sm font-medium text-ink break-words">{r.name}</div>
-                            <div className="text-[11px] text-faint font-mono">{r.mkh} · {r.meters.size} công tơ</div>
+                            <div className="text-sm font-semibold text-ink break-words">{r.name}</div>
+                            <div className="text-[11px] text-faint font-mono">{r.mkh} · {r.meterList.length} công tơ</div>
                           </div>
                         </div>
                       </td>
@@ -381,11 +452,17 @@ export default function SummaryDashboard() {
                       <td className="text-center"><DeltaBadge d={r.delta} /></td>
                       <td className="text-right text-sm text-dim tabular-nums">{fmtInt(r.curVnd)}</td>
                     </tr>
-                    {open && r.meterList.map(m => (
-                      <tr key={r.mkh + '|' + m.sct} className="bg-subtle/40">
-                        <td className="pl-10">
-                          <div className="text-xs font-mono font-medium text-dim">CT {m.sct}</div>
-                          {m.addr && <div className="text-[10px] text-faint truncate max-w-[240px]">{m.addr}</div>}
+                    {open && r.meterList.map((m, mi) => (
+                      <tr key={r.mkh + '|' + m.sct}
+                        className={`bg-subtle/60 ${mi === r.meterList.length - 1 ? 'border-b-2 border-b-[var(--border-strong)]' : ''}`}>
+                        <td className="py-2">
+                          <div className="flex items-stretch gap-2 pl-6">
+                            <span className="w-[3px] rounded-full bg-accent/40 shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-xs font-mono font-semibold text-dim">CT {m.sct}</div>
+                              {m.addr && <div className="text-[10px] text-faint truncate max-w-[240px]">{m.addr}</div>}
+                            </div>
+                          </div>
                         </td>
                         <td className="text-center text-[11px] text-faint whitespace-nowrap">{fmtDate(m.energizeDate)}</td>
                         <td className="text-right text-xs font-semibold text-dim tabular-nums border-l border-[var(--border)]">{fmtInt(m.curKwh)}</td>
