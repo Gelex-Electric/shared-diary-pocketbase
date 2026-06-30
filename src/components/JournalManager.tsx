@@ -1,12 +1,21 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { CalendarDays, Users } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import HandoverManager from './HandoverManager';
 import ElectricShiftManager from './ElectricShiftManager';
+import { Tabs, type TabItem } from './ui/Tabs';
+
+type JournalTab = 'schedule' | 'staff';
+
+const TABS: TabItem<JournalTab>[] = [
+  { id: 'schedule', label: 'Tạo lịch trực',          icon: CalendarDays },
+  { id: 'staff',    label: 'Quản lý nhân sự trực',   icon: Users },
+];
 
 // Gộp "Tạo lịch trực" và "Quản lý nhân sự trực" thành 1 subside "Sổ nhật ký vận hành",
-// chia làm 2 tab (cùng phong cách tab với CustomerManager / Thông tin chung).
+// chia làm 2 tab (dùng chung component Tabs với các trang khác).
 export default function JournalManager() {
-  const [tab, setTab] = useState<'schedule' | 'staff'>('schedule');
+  const [tab, setTab] = useState<JournalTab>('schedule');
 
   return (
     <div className="space-y-8">
@@ -15,29 +24,19 @@ export default function JournalManager() {
         <p className="text-soft text-sm mt-1">Quản lý lịch trực và nhân sự trực vận hành</p>
       </div>
 
-      {/* Tabs */}
-      <div className="vl-nav-tabs flex flex-wrap border-b border-[var(--border)]">
-        <button
-          onClick={() => setTab('schedule')}
-          className={`vl-nav-link px-6 py-3 text-sm font-bold transition-all ${tab === 'schedule' ? 'active' : ''}`}
-        >
-          <div className="flex items-center gap-2">
-            <CalendarDays className="w-4 h-4" />
-            Tạo lịch trực
-          </div>
-        </button>
-        <button
-          onClick={() => setTab('staff')}
-          className={`vl-nav-link px-6 py-3 text-sm font-bold transition-all ${tab === 'staff' ? 'active' : ''}`}
-        >
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            Quản lý nhân sự trực
-          </div>
-        </button>
-      </div>
+      <Tabs tabs={TABS} value={tab} onChange={setTab} />
 
-      {tab === 'schedule' ? <HandoverManager /> : <ElectricShiftManager />}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+        >
+          {tab === 'schedule' ? <HandoverManager /> : <ElectricShiftManager />}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
