@@ -1,17 +1,16 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, ComposedChart,
 } from 'recharts';
 import {
   Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw,
-  ArrowUpRight, ArrowDownRight, Minus, ChevronRight, CalendarCheck, Users,
+  ArrowUpRight, ArrowDownRight, Minus, ChevronRight, Users,
 } from 'lucide-react';
 import { Select } from './ui/Select';
 import { StatTile, Panel, ChartTooltip, EmptyState, CHART } from './ui/dashboard';
 import {
-  useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, fmtDate, ZONE_MAP,
-  fetchEarliestStartDates,
+  useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, ZONE_MAP,
 } from '../lib/invoices';
 import { usePmaxDaily, type PmaxRow } from '../lib/pmax';
 
@@ -33,11 +32,10 @@ export default function SummaryDashboard() {
 
   const [year, setYear] = useState<number>(endYear);
   const [pmaxMonthIdx, setPmaxMonthIdx] = useState<number>(new Date().getMonth() + 1); // 1..12, theo năm đã chọn
+  const [tableMonthIdx, setTableMonthIdx] = useState<number>(new Date().getMonth() + 1); // tháng bảng KH, theo năm đã chọn
   const [custA, setCustA] = useState('');   // chart 1 (mặc định: kWh lớn nhất)
   const [custB, setCustB] = useState('');   // chart 2 (mặc định: Pmax lớn nhất)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [energizeMap, setEnergizeMap] = useState<Map<string, string>>(new Map()); // SCT → ngày đóng điện (query riêng)
-  const fetchedRef = useRef<Set<string>>(new Set());
 
   const pmaxMonth = `${year}-${pad2(pmaxMonthIdx)}`;
 
@@ -159,12 +157,12 @@ export default function SummaryDashboard() {
   const dataA = useMemo(() => (effA ? seriesFor(effA) : []), [effA, yearBills, pmaxByCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
   const dataB = useMemo(() => (effB ? seriesFor(effB) : []), [effB, yearBills, pmaxByCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── Row 5: per-customer MoM table + per-meter pivot ── */
+  /* ── Row 5: per-customer table cho tháng đã chọn, so với tháng liền trước ── */
   const detail = useMemo(() => {
-    const monthsDesc = Array.from(new Set(bills.map(b => b.month))).sort((a, b) => b.localeCompare(a));
-    const cur = monthsDesc[0], prev = monthsDesc[1];
-    interface Meter { sct: string; addr: string; energize: string; curKwh: number; prevKwh: number; curVnd: number; }
-    interface Cust { mkh: string; name: string; energize: string; curKwh: number; prevKwh: number; curVnd: number; meters: Map<string, Meter>; }
+    const cur = `${year}-${pad2(tableMonthIdx)}`;
+    const prev = tableMonthIdx === 1 ? `${year - 1}-12` : `${year}-${pad2(tableMonthIdx - 1)}`;
+    interface Meter { sct: string; addr: string; curKwh: number; prevKwh: number; curVnd: number; }
+    interface Cust { mkh: string; name: string; curKwh: number; prevKwh: number; curVnd: number; meters: Map<string, Meter>; }
     const map = new Map<string, Cust>();
     if (cur) {
       records.forEach(r => {
@@ -172,20 +170,15 @@ export default function SummaryDashboard() {
         if (!mkh) return;
         if (zoneLock && (r.MKHang || '').split('-')[0] !== zoneLock) return;
         const month = dateOnly(r.EndDate).slice(0, 7);
-        const sd = dateOnly(r.StartDate);
+        if (month !== cur && month !== prev) return;
         const kwh = num(r.TongSL_HC), vnd = num(r.ThTien_HC) + num(r.ThTien_PK);
-        // Tạo/giữ entry cho MỌI bản ghi (không chỉ cur/prev) để "ngày đóng điện"
-        // = StartDate sớm nhất trên toàn bộ dữ liệu đã tải, không phải kỳ gần đây.
         let c = map.get(mkh);
-        if (!c) { c = { mkh, name: r.NMua || mkh, energize: sd || '9999', curKwh: 0, prevKwh: 0, curVnd: 0, meters: new Map() }; map.set(mkh, c); }
+        if (!c) { c = { mkh, name: r.NMua || mkh, curKwh: 0, prevKwh: 0, curVnd: 0, meters: new Map() }; map.set(mkh, c); }
         if (r.NMua && (!c.name || c.name === mkh)) c.name = r.NMua;
-        if (sd && sd < c.energize) c.energize = sd;
         const sct = (r.SCT || '—').trim();
         let mt = c.meters.get(sct);
-        if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), energize: sd || '9999', curKwh: 0, prevKwh: 0, curVnd: 0 }; c.meters.set(sct, mt); }
-        if (sd && sd < mt.energize) mt.energize = sd;
+        if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), curKwh: 0, prevKwh: 0, curVnd: 0 }; c.meters.set(sct, mt); }
         if (r.DChiNMua && !mt.addr) mt.addr = (r.DChiNMua || '').trim();
-        // Sản lượng/doanh thu chỉ cộng cho 2 tháng đang so sánh.
         if (month === cur) { c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd; }
         else if (month === prev) { c.prevKwh += kwh; mt.prevKwh += kwh; }
       });
@@ -196,33 +189,14 @@ export default function SummaryDashboard() {
       .sort((a, b) => b.curKwh - a.curKwh)
       .map(c => ({
         ...c,
-        energizeDate: c.energize === '9999' ? '' : c.energize,
         delta: delta(c.curKwh, c.prevKwh),
         meterList: Array.from(c.meters.values())
           .filter(m => m.curKwh > 0 || m.prevKwh > 0 || m.curVnd > 0)
           .sort((a, b) => b.curKwh - a.curKwh)
-          .map(m => ({ ...m, energizeDate: m.energize === '9999' ? '' : m.energize, delta: delta(m.curKwh, m.prevKwh) })),
+          .map(m => ({ ...m, delta: delta(m.curKwh, m.prevKwh) })),
       }));
     return { cur, prev, rows };
-  }, [records, bills, zoneLock, meterIndex]);
-
-  /* Cách 2: query riêng StartDate sớm nhất cho các công tơ đang hiển thị (chính xác cả công tơ cũ) */
-  useEffect(() => {
-    const scts = Array.from(new Set(detail.rows.flatMap(r => r.meterList.map(m => m.sct))))
-      .filter(s => s && s !== '—' && !fetchedRef.current.has(s));
-    if (scts.length === 0) return;
-    scts.forEach(s => fetchedRef.current.add(s));
-    fetchEarliestStartDates(scts)
-      .then(m => { if (m.size) setEnergizeMap(prev => { const next = new Map(prev); m.forEach((v, k) => next.set(k, v)); return next; }); })
-      .catch(() => {});
-  }, [detail.rows]);
-
-  /* Ghép ngày đóng điện chính xác (query riêng) đè lên giá trị cục bộ */
-  const rows = useMemo(() => detail.rows.map(r => {
-    const meterList = r.meterList.map(m => ({ ...m, energizeDate: energizeMap.get(m.sct) || m.energizeDate }));
-    const earliest = meterList.map(m => m.energizeDate).filter(Boolean).sort();
-    return { ...r, meterList, energizeDate: earliest[0] || r.energizeDate };
-  }), [detail.rows, energizeMap]);
+  }, [records, zoneLock, year, tableMonthIdx]);
 
   const fmtMonth = (ym?: string) => (ym ? `${ym.slice(5)}/${ym.slice(0, 4)}` : '—');
   const areaName = zoneLock ? (ZONE_MAP[zoneLock] || zoneLock) : 'Toàn bộ khu công nghiệp';
@@ -383,9 +357,9 @@ export default function SummaryDashboard() {
           )}
         </Panel>
 
-        <Panel title="Công suất cực đại (Pmax)" sub={`Theo ngày · ${pmaxMonthIdx}/${year} (kW)`} icon={Gauge}>
+        <Panel title="Công suất cực đại (Pmax)" sub={`Theo ngày · ${pmaxMonthIdx}/${year} (kW)`} icon={Gauge}
+          actions={<Select value={String(pmaxMonthIdx)} onChange={v => setPmaxMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[130px]" />}>
           <div className="px-4 pt-3 flex items-center gap-3 flex-wrap">
-            <Select value={String(pmaxMonthIdx)} onChange={v => setPmaxMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[120px]" />
             <span className="inline-flex items-center gap-1.5 text-[11px] text-soft"><span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--warning)' }} />Thứ 7</span>
             <span className="inline-flex items-center gap-1.5 text-[11px] text-soft"><span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--danger)' }} />Chủ nhật</span>
           </div>
@@ -419,20 +393,20 @@ export default function SummaryDashboard() {
 
       {/* Row 5 — MoM table with energization date + per-meter pivot */}
       <Panel title="Sản lượng & doanh thu theo khách hàng"
-        sub={`Tháng ${fmtMonth(detail.cur)} so với ${fmtMonth(detail.prev)} · bấm để xem chi tiết công tơ`} icon={TrendingUp}>
+        sub={`Tháng ${fmtMonth(detail.cur)} so với ${fmtMonth(detail.prev)} · bấm để xem chi tiết công tơ`} icon={TrendingUp}
+        actions={<Select value={String(tableMonthIdx)} onChange={v => setTableMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[130px]" />}>
         <div className="overflow-x-auto">
           <table className="vl-table w-full text-left">
             <thead><tr>
               <th>Khách hàng</th>
-              <th className="text-center">Ngày đóng điện</th>
               <th className="text-right text-ink font-bold border-l border-[var(--border)]">Sản lượng (kWh)</th>
               <th className="text-center">Thay đổi</th>
               <th className="text-right">Doanh thu (đồng)</th>
             </tr></thead>
             <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={5} className="py-10 text-center text-faint text-sm italic">{busy ? 'Đang tải…' : 'Không có dữ liệu'}</td></tr>
-              ) : rows.map(r => {
+              {detail.rows.length === 0 ? (
+                <tr><td colSpan={4} className="py-10 text-center text-faint text-sm italic">{busy ? 'Đang tải…' : 'Không có dữ liệu'}</td></tr>
+              ) : detail.rows.map(r => {
                 const open = !!expanded[r.mkh];
                 return (
                   <Fragment key={r.mkh}>
@@ -447,7 +421,6 @@ export default function SummaryDashboard() {
                           </div>
                         </div>
                       </td>
-                      <td className="text-center text-xs text-soft whitespace-nowrap"><CalendarCheck className="w-3.5 h-3.5 inline -mt-0.5 mr-1 text-faint" />{fmtDate(r.energizeDate)}</td>
                       <td className="text-right text-sm font-bold text-ink tabular-nums border-l border-[var(--border)]">{fmtInt(r.curKwh)}</td>
                       <td className="text-center"><DeltaBadge d={r.delta} /></td>
                       <td className="text-right text-sm text-dim tabular-nums">{fmtInt(r.curVnd)}</td>
@@ -464,7 +437,6 @@ export default function SummaryDashboard() {
                             </div>
                           </div>
                         </td>
-                        <td className="text-center text-[11px] text-faint whitespace-nowrap">{fmtDate(m.energizeDate)}</td>
                         <td className="text-right text-xs font-semibold text-dim tabular-nums border-l border-[var(--border)]">{fmtInt(m.curKwh)}</td>
                         <td className="text-center"><DeltaBadge d={m.delta} /></td>
                         <td className="text-right text-xs text-soft tabular-nums">{fmtInt(m.curVnd)}</td>
