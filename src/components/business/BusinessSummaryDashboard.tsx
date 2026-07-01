@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, ComposedChart,
+  BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart,
 } from 'recharts';
 import {
   Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw,
@@ -17,8 +17,6 @@ import { usePmaxDaily } from '../../lib/pmax';
 
 const MONTHS = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
 const MONTH_OPTS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `Tháng ${i + 1}` }));
-const WD = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-const WD_FULL = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 const YEAR_BARS = ['var(--text-4)', '#22b8c4', 'var(--accent)'];
 const PIE_COLORS = [CHART.bt, CHART.cd, CHART.td];
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -32,14 +30,11 @@ export default function BusinessSummaryDashboard() {
   const { rows: pmaxRows, loading: pmaxLoading } = usePmaxDaily();
 
   const [year, setYear] = useState<number>(endYear);
-  const [pmaxMonthIdx, setPmaxMonthIdx] = useState<number>(new Date().getMonth() + 1);
   const [tableMonthIdx, setTableMonthIdx] = useState<number>(new Date().getMonth() + 1);
   const [custA, setCustA] = useState('');
   const [custB, setCustB] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [collapsedZones, setCollapsedZones] = useState<Record<string, boolean>>({});
-
-  const pmaxMonth = `${year}-${pad2(pmaxMonthIdx)}`;
 
   const years = useMemo(() => {
     const s = new Set<number>();
@@ -124,20 +119,26 @@ export default function BusinessSummaryDashboard() {
   }, [yearBills]);
   const tariffTotal = tariff.reduce((s, x) => s + x.value, 0);
 
-  /* Row 3b: daily Pmax for the chosen month (all zones) */
-  const pmaxMonthData = useMemo(() => {
-    const m = new Map<string, number>();
-    pmaxRows.forEach(r => {
-      if (r.date.slice(0, 7) !== pmaxMonth) return;
-      m.set(r.date, (m.get(r.date) || 0) + r.pmax);
+  /* Tần suất sử dụng theo khung giờ (BT/CĐ/TĐ) — so sánh giữa các KCN (100% xếp chồng) */
+  const freqByZone = useMemo(() => {
+    const m = new Map<string, { code: string; bt: number; cd: number; td: number }>();
+    yearBills.forEach(b => {
+      const code = b.zone || 'Khác';
+      let z = m.get(code);
+      if (!z) { z = { code, bt: 0, cd: 0, td: 0 }; m.set(code, z); }
+      z.bt += b.slBT; z.cd += b.slCD; z.td += b.slTD;
     });
-    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, pmax]) => {
-        const [y, mo, d] = date.split('-').map(Number);
-        const dow = new Date(y, mo - 1, d).getDay();
-        return { date, day: date.slice(8, 10), pmax: Math.round(pmax), dow, weekend: dow === 0 || dow === 6, wd: WD[dow], wdFull: WD_FULL[dow] };
+    return Array.from(m.values())
+      .sort((a, b) => (ZONE_ORDER.indexOf(a.code) + 1 || 99) - (ZONE_ORDER.indexOf(b.code) + 1 || 99))
+      .map(z => {
+        const t = z.bt + z.cd + z.td || 1;
+        return {
+          name: z.code,
+          btPct: +(z.bt / t * 100).toFixed(1), cdPct: +(z.cd / t * 100).toFixed(1), tdPct: +(z.td / t * 100).toFixed(1),
+          bt: Math.round(z.bt), cd: Math.round(z.cd), td: Math.round(z.td),
+        };
       });
-  }, [pmaxRows, pmaxMonth]);
+  }, [yearBills]);
 
   /* Per-customer daily totals for the selected year → monthly peak + yearly peak */
   const pmaxByCustomer = useMemo(() => {
@@ -257,39 +258,6 @@ export default function BusinessSummaryDashboard() {
     );
   };
 
-  /* Pmax chart renderers */
-  const renderPmaxTick = (props: any) => {
-    const { x, y, payload } = props;
-    const pt = pmaxMonthData.find(p => p.day === payload.value);
-    const color = pt?.dow === 0 ? 'var(--danger)' : 'var(--warning)';
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} dy={10} textAnchor="middle" fontSize={9} fontWeight={pt?.weekend ? 700 : 400} fill={pt?.weekend ? color : 'var(--text-4)'}>{payload.value}</text>
-        {pt?.weekend && <text x={0} y={0} dy={20} textAnchor="middle" fontSize={8} fontWeight={700} fill={color}>{pt.wd}</text>}
-      </g>
-    );
-  };
-  const renderPmaxDot = (props: any) => {
-    const { cx, cy, payload } = props;
-    if (cx == null || !payload?.weekend) return <g key={payload?.date} />;
-    const color = payload.dow === 0 ? 'var(--danger)' : 'var(--warning)';
-    return <circle key={payload.date} cx={cx} cy={cy} r={3.2} fill={color} stroke="var(--surface-1)" strokeWidth={1} />;
-  };
-  const renderPmaxTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null;
-    const d = payload[0].payload;
-    return (
-      <div className="vl-chart-tooltip">
-        <div className="vl-chart-tooltip-title">{d.wdFull} · {d.date.slice(8, 10)}/{d.date.slice(5, 7)}</div>
-        <div className="vl-chart-tooltip-row">
-          <span className="vl-dot" style={{ background: CHART.cd }} />
-          <span className="vl-lbl">Pmax</span>
-          <span className="vl-val">{fmtKw(payload[0].value)}</span>
-        </div>
-      </div>
-    );
-  };
-
   const renderCustomerChart = (value: string, onChange: (v: string) => void, data: any[]) => (
     <div className="p-4 space-y-3">
       <Select value={value} onChange={onChange} options={custOptions} searchable icon={Users} className="w-full" placeholder="Chọn khách hàng…" />
@@ -344,61 +312,38 @@ export default function BusinessSummaryDashboard() {
           subTone={kpis.collectRate >= 0.8 ? 'ok' : 'warn'} />
       </div>
 
-      {/* Row 2 — monthly load bars, last 3 years */}
-      <Panel title="Biểu đồ phụ tải theo tháng" sub={`So sánh ${load3y.years.length} năm gần nhất · sản lượng (kWh)`} icon={BarChart3}>
-        <div className="h-[320px] px-3 py-4">
-          {bills.length === 0 ? (
-            <EmptyState icon={Activity} title="Chưa có dữ liệu" hint="Không có hóa đơn nào trong khoảng đã tải." />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={load3y.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }} barGap={2} barCategoryGap="18%">
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 11 }} />
-                <YAxis tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--text-4)" width={48} style={{ fontSize: 10 }} />
-                <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                {load3y.years.map((y, i) => (
-                  <Bar key={y} dataKey={String(y)} name={String(y)} fill={YEAR_BARS[i % YEAR_BARS.length]} radius={[3, 3, 0, 0]} maxBarSize={28} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </Panel>
-
-      {/* Stacked: sản lượng theo KCN, 12 tháng gần nhất */}
-      {stackByZone.zones.length > 0 && (
-        <Panel title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · xếp chồng theo KCN (kWh)" icon={Layers}>
-          <div className="h-[300px] px-3 py-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stackByZone.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 10 }} />
-                <YAxis tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--text-4)" width={48} style={{ fontSize: 10 }} />
-                <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                {stackByZone.zones.map((z, i) => (
-                  <Bar key={z} dataKey={z} name={ZONE_MAP[z] || z} stackId="kcn"
-                    fill={ZONE_BARS[i % ZONE_BARS.length]}
-                    radius={i === stackByZone.zones.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} maxBarSize={40} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
+      {/* Row 2 — monthly load bars (3) + tariff donut (1), 3:1 on xl */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+        <Panel className="xl:col-span-3" title="Biểu đồ phụ tải theo tháng" sub={`So sánh ${load3y.years.length} năm gần nhất · sản lượng (kWh)`} icon={BarChart3}>
+          <div className="h-[320px] px-3 py-4">
+            {bills.length === 0 ? (
+              <EmptyState icon={Activity} title="Chưa có dữ liệu" hint="Không có hóa đơn nào trong khoảng đã tải." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={load3y.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }} barGap={2} barCategoryGap="18%">
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--text-4)" width={48} style={{ fontSize: 10 }} />
+                  <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  {load3y.years.map((y, i) => (
+                    <Bar key={y} dataKey={String(y)} name={String(y)} fill={YEAR_BARS[i % YEAR_BARS.length]} radius={[3, 3, 0, 0]} maxBarSize={28} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </Panel>
-      )}
 
-      {/* Row 3 — tariff donut + monthly Pmax line */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Panel title="Cơ cấu phụ tải theo biểu giá" sub={`Năm ${year} · BT / CĐ / TĐ`} icon={Layers}>
+        <Panel className="xl:col-span-1" title="Cơ cấu phụ tải theo biểu giá" sub={`Năm ${year} · BT / CĐ / TĐ`} icon={Layers}>
           {tariffTotal === 0 ? (
             <EmptyState icon={Layers} title="Chưa có dữ liệu biểu giá" />
           ) : (
-            <div className="flex flex-col sm:flex-row items-center gap-6 p-5">
-              <div className="relative w-[190px] h-[190px] shrink-0">
+            <div className="flex flex-col items-center gap-4 p-5">
+              <div className="relative w-[170px] h-[170px] shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={62} outerRadius={88} paddingAngle={3} cornerRadius={8} stroke="none">
+                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={80} paddingAngle={3} cornerRadius={8} stroke="none">
                       {tariff.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                     </Pie>
                     <Tooltip content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
@@ -406,47 +351,69 @@ export default function BusinessSummaryDashboard() {
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-[11px] text-faint">Tổng</span>
-                  <span className="text-lg font-bold text-ink tabular-nums leading-tight">{axisNum(tariffTotal)}</span>
+                  <span className="text-base font-bold text-ink tabular-nums leading-tight">{axisNum(tariffTotal)}</span>
                   <span className="text-[10px] text-faint">kWh</span>
                 </div>
               </div>
-              <div className="flex-1 w-full space-y-3.5">
+              <div className="w-full space-y-2.5">
                 {tariff.map((t, i) => (
-                  <div key={t.name} className="flex items-center gap-3">
-                    <span className="w-3 h-3 rounded-full shrink-0" style={{ background: PIE_COLORS[i] }} />
-                    <span className="text-sm text-dim flex-1 truncate">{t.name}</span>
-                    <span className="text-xs text-faint tabular-nums w-12 text-right">{(t.pct * 100).toFixed(1)}%</span>
-                    <span className="text-sm font-semibold text-accent tabular-nums w-24 text-right">{fmtInt(t.value)}</span>
+                  <div key={t.name} className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i] }} />
+                    <span className="text-xs text-dim flex-1 truncate">{t.name}</span>
+                    <span className="text-[11px] text-faint tabular-nums">{(t.pct * 100).toFixed(1)}%</span>
+                    <span className="text-xs font-semibold text-accent tabular-nums text-right">{fmtInt(t.value)}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
         </Panel>
-
-        <Panel title="Công suất cực đại (Pmax)" sub={`Theo ngày · ${pmaxMonthIdx}/${year} (kW)`} icon={Gauge}
-          actions={<Select value={String(pmaxMonthIdx)} onChange={v => setPmaxMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[130px]" />}>
-          <div className="px-4 pt-3 flex items-center gap-3 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-soft"><span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--warning)' }} />Thứ 7</span>
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-soft"><span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--danger)' }} />Chủ nhật</span>
-          </div>
-          <div className="h-[244px] px-3 pb-4 pt-2">
-            {pmaxMonthData.length === 0 ? (
-              <EmptyState icon={Gauge} title={pmaxLoading ? 'Đang tải Pmax…' : 'Chưa có dữ liệu Pmax'} hint="Nguồn: pmax_daily.csv" />
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={pmaxMonthData} margin={{ top: 16, right: 12, left: 8, bottom: 12 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
-                  <XAxis dataKey="day" tickLine={false} axisLine={false} stroke="var(--text-4)" interval={0} height={28} tick={renderPmaxTick} />
-                  <YAxis tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--text-4)" width={44} style={{ fontSize: 10 }} />
-                  <Tooltip content={renderPmaxTooltip} />
-                  <Line type="monotone" dataKey="pmax" name="Pmax" stroke={CHART.cd} strokeWidth={2} dot={renderPmaxDot} activeDot={{ r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </Panel>
       </div>
+
+      {/* Row 3 — stacked kWh theo KCN (3) + tần suất khung giờ theo KCN (1), 3:1 */}
+      {stackByZone.zones.length > 0 && (
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+          <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · xếp chồng theo KCN (kWh)" icon={Layers}>
+            <div className="h-[300px] px-3 py-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stackByZone.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 10 }} />
+                  <YAxis tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--text-4)" width={48} style={{ fontSize: 10 }} />
+                  <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  {stackByZone.zones.map((z, i) => (
+                    <Bar key={z} dataKey={z} name={ZONE_MAP[z] || z} stackId="kcn"
+                      fill={ZONE_BARS[i % ZONE_BARS.length]}
+                      radius={i === stackByZone.zones.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} maxBarSize={40} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+
+          <Panel className="xl:col-span-1" title="Tần suất khung giờ theo KCN" sub={`Năm ${year} · tỷ trọng BT / CĐ / TĐ`} icon={BarChart3}>
+            <div className="h-[300px] px-3 py-4">
+              {freqByZone.length === 0 ? (
+                <EmptyState icon={BarChart3} title="Chưa có dữ liệu" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart layout="vertical" data={freqByZone} margin={{ top: 8, right: 8, left: 4, bottom: 4 }} stackOffset="expand">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--surface-inset)" />
+                    <XAxis type="number" domain={[0, 1]} tickFormatter={(v: number) => `${Math.round(v * 100)}%`} tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} />
+                    <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} stroke="var(--text-3)" width={52} style={{ fontSize: 10 }} />
+                    <Tooltip content={<ChartTooltip fmt={v => `${v}%`} />} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="btPct" name="BT" stackId="f" fill={PIE_COLORS[0]} maxBarSize={22} />
+                    <Bar dataKey="cdPct" name="CĐ" stackId="f" fill={PIE_COLORS[1]} maxBarSize={22} />
+                    <Bar dataKey="tdPct" name="TĐ" stackId="f" fill={PIE_COLORS[2]} radius={[0, 3, 3, 0]} maxBarSize={22} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </Panel>
+        </div>
+      )}
 
       {/* Row 4 — two customer charts with selectors */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
