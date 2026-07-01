@@ -1,18 +1,17 @@
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart,
 } from 'recharts';
 import {
-  Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw,
-  ArrowUpRight, ArrowDownRight, Minus, ChevronRight, Users,
+  Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw, Users,
 } from 'lucide-react';
 import { Select } from './ui/Select';
-import { StatTile, Panel, ChartTooltip, EmptyState, CHART } from './ui/dashboard';
+import { StatTile, Panel, ChartTooltip, EmptyState, CHART, CustomerZoneCard } from './ui/dashboard';
 import {
   useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, ZONE_MAP,
 } from '../lib/invoices';
-import { usePmaxDaily, type PmaxRow } from '../lib/pmax';
+import { usePmaxDaily } from '../lib/pmax';
 
 const MONTHS = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
 const MONTH_OPTS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `Tháng ${i + 1}` }));
@@ -33,6 +32,7 @@ export default function SummaryDashboard() {
   const [custA, setCustA] = useState('');   // chart 1 (mặc định: kWh lớn nhất)
   const [custB, setCustB] = useState('');   // chart 2 (mặc định: Pmax lớn nhất)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [tableCollapsed, setTableCollapsed] = useState(false);
 
   const years = useMemo(() => {
     const s = new Set<number>();
@@ -182,13 +182,18 @@ export default function SummaryDashboard() {
   const areaName = zoneLock ? (ZONE_MAP[zoneLock] || zoneLock) : 'Toàn bộ khu công nghiệp';
   const busy = loading || pmaxLoading;
 
-  const DeltaBadge = ({ d }: { d: number | null }) => {
-    const up = d != null && d > 0.0005, down = d != null && d < -0.0005;
-    const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
+  /* % hiển thị ngay trong donut */
+  const renderTariffPctLabel = (props: any) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
+    if (percent < 0.03) return null;
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) / 2;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
     return (
-      <span className={`inline-flex items-center gap-0.5 text-xs font-bold tabular-nums ${up ? 'text-ok' : down ? 'text-bad' : 'text-faint'}`}>
-        <Icon className="w-3.5 h-3.5" />{d == null ? '—' : `${Math.abs(d * 100).toFixed(1)}%`}
-      </span>
+      <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>
+        {`${Math.round(percent * 100)}%`}
+      </text>
     );
   };
 
@@ -269,7 +274,7 @@ export default function SummaryDashboard() {
           </div>
         </Panel>
 
-        <Panel className="xl:col-span-1" title="Cơ cấu phụ tải theo biểu giá" sub={`Năm ${year} · BT / CĐ / TĐ`} icon={Layers}>
+        <Panel className="xl:col-span-1" title="Cơ cấu phụ tải theo khung giờ" sub={`Năm ${year} · BT / CĐ / TĐ`} icon={Layers}>
           {tariffTotal === 0 ? (
             <EmptyState icon={Layers} title="Chưa có dữ liệu biểu giá" />
           ) : (
@@ -277,7 +282,8 @@ export default function SummaryDashboard() {
               <div className="relative w-[170px] h-[170px] shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={80} paddingAngle={3} cornerRadius={8} stroke="none">
+                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={80} paddingAngle={3} cornerRadius={8} stroke="none"
+                      label={renderTariffPctLabel} labelLine={false}>
                       {tariff.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                     </Pie>
                     <Tooltip content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
@@ -294,8 +300,7 @@ export default function SummaryDashboard() {
                   <div key={t.name} className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i] }} />
                     <span className="text-xs text-dim flex-1 truncate">{t.name}</span>
-                    <span className="text-[11px] text-faint tabular-nums">{(t.pct * 100).toFixed(1)}%</span>
-                    <span className="text-xs font-semibold text-accent tabular-nums text-right">{fmtInt(t.value)}</span>
+                    <span className="text-xs font-semibold text-accent tabular-nums text-right">{fmtInt(t.value)} <span className="text-faint font-normal">kWh</span></span>
                   </div>
                 ))}
               </div>
@@ -314,64 +319,30 @@ export default function SummaryDashboard() {
         </Panel>
       </div>
 
-      {/* Row 5 — MoM table with energization date + per-meter pivot */}
-      <Panel title="Sản lượng & doanh thu theo khách hàng"
-        sub={`Tháng ${fmtMonth(detail.cur)} so với ${fmtMonth(detail.prev)} · bấm để xem chi tiết công tơ`} icon={TrendingUp}
-        actions={<Select value={String(tableMonthIdx)} onChange={v => setTableMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[130px]" />}>
-        <div className="overflow-x-auto">
-          <table className="vl-table w-full text-left">
-            <thead><tr>
-              <th>Khách hàng</th>
-              <th className="text-right text-ink font-bold border-l border-[var(--border)]">Sản lượng (kWh)</th>
-              <th className="text-center">Thay đổi</th>
-              <th className="text-right">Doanh thu (đồng)</th>
-            </tr></thead>
-            <tbody>
-              {detail.rows.length === 0 ? (
-                <tr><td colSpan={4} className="py-10 text-center text-faint text-sm italic">{busy ? 'Đang tải…' : 'Không có dữ liệu'}</td></tr>
-              ) : detail.rows.map(r => {
-                const open = !!expanded[r.mkh];
-                return (
-                  <Fragment key={r.mkh}>
-                    <tr onClick={() => setExpanded(e => ({ ...e, [r.mkh]: !e[r.mkh] }))}
-                      className={`transition-colors cursor-pointer ${open ? 'bg-accent-soft/50' : 'hover:bg-subtle'}`}>
-                      <td>
-                        <div className="flex items-start gap-2">
-                          <ChevronRight className={`w-4 h-4 mt-0.5 shrink-0 transition-transform ${open ? 'rotate-90 text-accent' : 'text-faint'}`} />
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-ink break-words">{r.name}</div>
-                            <div className="text-[11px] text-faint font-mono">{r.mkh} · {r.meterList.length} công tơ</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="text-right text-sm font-bold text-ink tabular-nums border-l border-[var(--border)]">{fmtInt(r.curKwh)}</td>
-                      <td className="text-center"><DeltaBadge d={r.delta} /></td>
-                      <td className="text-right text-sm text-dim tabular-nums">{fmtInt(r.curVnd)}</td>
-                    </tr>
-                    {open && r.meterList.map((m, mi) => (
-                      <tr key={r.mkh + '|' + m.sct}
-                        className={`bg-subtle/60 ${mi === r.meterList.length - 1 ? 'border-b-2 border-b-[var(--border-strong)]' : ''}`}>
-                        <td className="py-2">
-                          <div className="flex items-stretch gap-2 pl-6">
-                            <span className="w-[3px] rounded-full bg-accent/40 shrink-0" />
-                            <div className="min-w-0">
-                              <div className="text-xs font-mono font-semibold text-dim">CT {m.sct}</div>
-                              {m.addr && <div className="text-[10px] text-faint truncate max-w-[240px]">{m.addr}</div>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="text-right text-xs font-semibold text-dim tabular-nums border-l border-[var(--border)]">{fmtInt(m.curKwh)}</td>
-                        <td className="text-center"><DeltaBadge d={m.delta} /></td>
-                        <td className="text-right text-xs text-soft tabular-nums">{fmtInt(m.curVnd)}</td>
-                      </tr>
-                    ))}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+      {/* Row 5 — bảng khách hàng theo tháng, kiểu thẻ gradient thu gọn được */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-bold text-ink flex items-center gap-2"><TrendingUp className="w-4 h-4 text-accent" /> Sản lượng & doanh thu theo khách hàng</h3>
+            <p className="text-[11px] text-faint mt-0.5">Tháng {fmtMonth(detail.cur)} so với {fmtMonth(detail.prev)} · bấm KH để xem chi tiết công tơ</p>
+          </div>
+          <Select value={String(tableMonthIdx)} onChange={v => setTableMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[130px]" />
         </div>
-      </Panel>
+
+        <CustomerZoneCard
+          icon={Building2}
+          title={areaName}
+          subtitle={`${detail.rows.length} khách hàng`}
+          kwh={detail.rows.reduce((s, r) => s + r.curKwh, 0)}
+          vnd={detail.rows.reduce((s, r) => s + r.curVnd, 0)}
+          rows={detail.rows}
+          collapsed={tableCollapsed}
+          onToggleCollapse={() => setTableCollapsed(v => !v)}
+          expandedRows={expanded}
+          onToggleRow={mkh => setExpanded(e => ({ ...e, [mkh]: !e[mkh] }))}
+          emptyLabel={busy ? 'Đang tải…' : 'Không có dữ liệu'}
+        />
+      </div>
     </div>
   );
 }
