@@ -114,19 +114,22 @@ export default function BusinessSummaryDashboard() {
     return { data: rows, zones: zonesPresent };
   }, [activeBills, zoneCatalog, hiddenZones]);
 
-  /* ── Row 3a: tariff donut ── */
+  /* Hoá đơn của năm đang chọn, chỉ KCN đang bật — dùng cho donut (liên kết cùng bộ bật/tắt) */
+  const activeYearBills = useMemo(() => yearBills.filter(b => !hiddenZones[b.zone]), [yearBills, hiddenZones]);
+
+  /* ── Row 3a: tariff donut — liên kết bộ bật/tắt KCN ── */
   const tariff = useMemo(() => {
-    const t = tariffSplit(yearBills);
+    const t = tariffSplit(activeYearBills);
     const total = t.bt + t.cd + t.td || 1;
     return [
       { name: 'Bình thường', value: Math.round(t.bt), pct: t.bt / total },
       { name: 'Cao điểm',    value: Math.round(t.cd), pct: t.cd / total },
       { name: 'Thấp điểm',   value: Math.round(t.td), pct: t.td / total },
     ];
-  }, [yearBills]);
+  }, [activeYearBills]);
   const tariffTotal = tariff.reduce((s, x) => s + x.value, 0);
 
-  /* Tần suất sử dụng theo khung giờ (BT/CĐ/TĐ) — so sánh giữa các KCN (100% xếp chồng) */
+  /* Tần suất sử dụng theo khung giờ (BT/CĐ/TĐ) — mọi KCN (kể cả đang tắt, sẽ tô xám khi vẽ) */
   const freqByZone = useMemo(() => {
     const m = new Map<string, { code: string; bt: number; cd: number; td: number }>();
     yearBills.forEach(b => {
@@ -140,7 +143,8 @@ export default function BusinessSummaryDashboard() {
       .map(z => {
         const t = z.bt + z.cd + z.td || 1;
         return {
-          name: z.code,
+          code: z.code,
+          name: ZONE_MAP[z.code] || z.code,
           btPct: +(z.bt / t * 100).toFixed(1), cdPct: +(z.cd / t * 100).toFixed(1), tdPct: +(z.td / t * 100).toFixed(1),
           bt: Math.round(z.bt), cd: Math.round(z.cd), td: Math.round(z.td),
         };
@@ -351,13 +355,6 @@ export default function BusinessSummaryDashboard() {
             <Building2 className="w-3.5 h-3.5" /> Toàn bộ khu công nghiệp · sản lượng & doanh thu
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={String(year)} onChange={v => setYear(Number(v))}
-            options={years.map(y => ({ value: String(y), label: `Năm ${y}` }))} className="min-w-[130px]" />
-          <button onClick={reload} disabled={busy} className="vl-btn vl-btn-secondary vl-btn-sm gap-1.5 disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} /> Tải lại
-          </button>
-        </div>
       </div>
 
       {error && <div className="vl-alert vl-alert-light-danger text-sm">{error}</div>}
@@ -399,6 +396,39 @@ export default function BusinessSummaryDashboard() {
         </div>
       </div>
 
+      {/* Row 1.5 — bộ lọc KCN (checkbox) + năm + tải lại. Liên kết chung cho
+          "Biểu đồ phụ tải theo tháng", "Cơ cấu phụ tải theo khung giờ" và "Sản lượng theo khu công nghiệp". */}
+      <div className="bg-surface border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 flex flex-col md:flex-row md:items-center gap-3" style={{ boxShadow: 'var(--shadow-card)' }}>
+        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap flex-1 min-w-0">
+          <span className="text-[11px] font-semibold text-faint uppercase tracking-wide shrink-0">Khu công nghiệp</span>
+          {zoneCatalog.length === 0 ? (
+            <span className="text-xs text-faint italic">Chưa có dữ liệu</span>
+          ) : zoneCatalog.map(z => {
+            const on = !hiddenZones[z];
+            const color = zoneColor.get(z)!;
+            return (
+              <label key={z} className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => toggleZoneVisible(z)}
+                  className="w-3.5 h-3.5 rounded border-[var(--border-strong)] cursor-pointer"
+                  style={{ accentColor: color }}
+                />
+                <span className={`text-xs font-medium ${on ? 'text-ink' : 'text-faint'}`}>{ZONE_MAP[z] || z}</span>
+              </label>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Select value={String(year)} onChange={v => setYear(Number(v))}
+            options={years.map(y => ({ value: String(y), label: `Năm ${y}` }))} className="min-w-[130px]" />
+          <button onClick={reload} disabled={busy} className="vl-btn vl-btn-secondary vl-btn-sm gap-1.5 disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} /> Tải lại
+          </button>
+        </div>
+      </div>
+
       {/* Row 2 — monthly load bars (3) + tariff donut (1), 3:1 on xl */}
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
         <Panel className="xl:col-span-3" title="Biểu đồ phụ tải theo tháng" sub={`So sánh ${load3y.years.length} năm gần nhất · sản lượng (kWh)`} icon={BarChart3}>
@@ -427,7 +457,7 @@ export default function BusinessSummaryDashboard() {
           </div>
         </Panel>
 
-        <Panel className="xl:col-span-1" title="Cơ cấu phụ tải theo khung giờ" sub={`Năm ${year} · BT / CĐ / TĐ`} icon={Layers}>
+        <Panel className="xl:col-span-1" title="Cơ cấu phụ tải theo khung giờ" sub={`Năm ${year} · lọc theo KCN đang bật`} icon={Layers}>
           {tariffTotal === 0 ? (
             <EmptyState icon={Layers} title="Chưa có dữ liệu biểu giá" />
           ) : (
@@ -465,25 +495,8 @@ export default function BusinessSummaryDashboard() {
       {/* Row 3 — stacked kWh theo KCN (3) + tần suất khung giờ theo KCN (1), 3:1 */}
       {zoneCatalog.length > 0 && (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-          <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · bật/tắt để lọc luôn cả biểu đồ phụ tải theo tháng" icon={Layers}>
-            <div className="px-4 pt-3 flex items-center gap-2 flex-wrap">
-              {zoneCatalog.map(z => {
-                const on = !hiddenZones[z];
-                const color = zoneColor.get(z)!;
-                return (
-                  <button
-                    key={z}
-                    onClick={() => toggleZoneVisible(z)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${on ? 'text-ink' : 'text-faint opacity-60'}`}
-                    style={{ borderColor: on ? color : 'var(--border)', background: on ? `${color}1a` : 'transparent' }}
-                  >
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: on ? color : 'var(--text-4)' }} />
-                    {ZONE_MAP[z] || z}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="h-[300px] xl:h-[380px] px-3 pb-4 pt-2">
+          <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · lọc theo bộ chọn KCN ở trên" icon={Layers}>
+            <div className="h-[300px] xl:h-[380px] px-3 py-4">
               {stackByZone.zones.length === 0 ? (
                 <EmptyState icon={Layers} title="Đã tắt hết KCN" hint="Bật lại ít nhất một khu để xem biểu đồ." />
               ) : (
@@ -519,16 +532,25 @@ export default function BusinessSummaryDashboard() {
                   <BarChart layout="vertical" data={freqByZone} margin={{ top: 8, right: 8, left: 4, bottom: 4 }} stackOffset="expand">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--surface-inset)" />
                     <XAxis type="number" domain={[0, 1]} tickFormatter={(v: number) => `${Math.round(v * 100)}%`} tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} />
-                    <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} stroke="var(--text-3)" width={52} style={{ fontSize: 10 }} />
+                    <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} stroke="var(--text-3)" width={92} style={{ fontSize: 10 }} />
                     <Tooltip content={<ChartTooltip fmt={v => `${v}%`} />} />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
-                    <Bar dataKey="btPct" name="Bình thường" stackId="f" fill={PIE_COLORS[0]} maxBarSize={22}>
+                    <Bar dataKey="btPct" name="Bình thường" stackId="f" maxBarSize={22}>
+                      {freqByZone.map((f, i) => (
+                        <Cell key={i} fill={hiddenZones[f.code] ? 'var(--text-4)' : PIE_COLORS[0]} fillOpacity={hiddenZones[f.code] ? 0.4 : 1} />
+                      ))}
                       <LabelList dataKey="btPct" content={renderFreqPctLabel} />
                     </Bar>
-                    <Bar dataKey="cdPct" name="Cao điểm" stackId="f" fill={PIE_COLORS[1]} maxBarSize={22}>
+                    <Bar dataKey="cdPct" name="Cao điểm" stackId="f" maxBarSize={22}>
+                      {freqByZone.map((f, i) => (
+                        <Cell key={i} fill={hiddenZones[f.code] ? 'var(--text-4)' : PIE_COLORS[1]} fillOpacity={hiddenZones[f.code] ? 0.4 : 1} />
+                      ))}
                       <LabelList dataKey="cdPct" content={renderFreqPctLabel} />
                     </Bar>
-                    <Bar dataKey="tdPct" name="Thấp điểm" stackId="f" fill={PIE_COLORS[2]} radius={[0, 3, 3, 0]} maxBarSize={22}>
+                    <Bar dataKey="tdPct" name="Thấp điểm" stackId="f" radius={[0, 3, 3, 0]} maxBarSize={22}>
+                      {freqByZone.map((f, i) => (
+                        <Cell key={i} fill={hiddenZones[f.code] ? 'var(--text-4)' : PIE_COLORS[2]} fillOpacity={hiddenZones[f.code] ? 0.4 : 1} />
+                      ))}
                       <LabelList dataKey="tdPct" content={renderFreqPctLabel} />
                     </Bar>
                   </BarChart>
