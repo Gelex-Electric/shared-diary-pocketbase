@@ -1,0 +1,62 @@
+name: Fix Meter Range (sua du lieu sai, chay tay)
+
+on:
+  workflow_dispatch:
+    inputs:
+      meters:
+        description: "So cong to bi sai, cach nhau boi dau phay. Vd: 2510203126"
+        required: true
+      start_date:
+        description: "Ngay dau cua khoang bi sai (YYYY-MM-DD)"
+        required: true
+      end_date:
+        description: "Ngay cuoi (YYYY-MM-DD). De trong = hom qua."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-meter-range
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Ho_Chi_Minh
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet requests
+
+      - name: Fix Pmax + meter data for range
+        env:
+          API_USER: ${{ secrets.API_USER }}
+          API_PASS: ${{ secrets.API_PASS }}
+          METERS: ${{ inputs.meters }}
+          START_DATE: ${{ inputs.start_date }}
+          END_DATE: ${{ inputs.end_date }}
+        run: python scripts/fix_meter_range.py
+
+      - name: Commit & push CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/pmax_daily.csv public/datametter.csv
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "fix: recompute meter data + Pmax for ${{ inputs.meters }} (${{ inputs.start_date }} -> ${{ inputs.end_date || 'hom qua' }})"
+            git pull --rebase origin ${{ github.ref_name }}
+            git push
+          fi
