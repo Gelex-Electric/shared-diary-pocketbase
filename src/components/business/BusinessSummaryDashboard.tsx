@@ -4,7 +4,7 @@ import {
   BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart, LabelList,
 } from 'recharts';
 import {
-  Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw, Users,
+  Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw, Users, AlertTriangle, Wallet,
 } from 'lucide-react';
 import { Select } from '../ui/Select';
 import { StatTile, Panel, ChartTooltip, EmptyState, CHART, ZONE_BARS, CustomerZoneCard } from '../ui/dashboard';
@@ -34,6 +34,8 @@ export default function BusinessSummaryDashboard() {
   const [custB, setCustB] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [collapsedZones, setCollapsedZones] = useState<Record<string, boolean>>({});
+  /* KCN bị ẩn khỏi "Sản lượng theo khu công nghiệp" — liên kết luôn với "Biểu đồ phụ tải theo tháng" */
+  const [hiddenZones, setHiddenZones] = useState<Record<string, boolean>>({});
 
   const years = useMemo(() => {
     const s = new Set<number>();
@@ -61,11 +63,17 @@ export default function BusinessSummaryDashboard() {
     }
   }, [kpis.unpaid, kpis.vndDebt, year, loading]);
 
-  /* ── Row 2: monthly load (grouped bars), 3 most-recent years ── */
+  /* Toàn bộ KCN có dữ liệu (không đổi theo bật/tắt) — dùng để vẽ chip chọn */
+  const zoneCatalog = useMemo(() => ZONE_ORDER.filter(z => bills.some(b => b.zone === z)), [bills]);
+  /* Hoá đơn thuộc KCN đang BẬT — dùng chung cho "phụ tải theo tháng" + "sản lượng theo KCN" */
+  const activeBills = useMemo(() => bills.filter(b => !hiddenZones[b.zone]), [bills, hiddenZones]);
+  const toggleZoneVisible = (z: string) => setHiddenZones(h => ({ ...h, [z]: !h[z] }));
+
+  /* ── Row 2: monthly load (grouped bars), 3 most-recent years — chỉ tính KCN đang bật ── */
   const load3y = useMemo(() => {
     const last3 = [...years].sort((a, b) => a - b).slice(-3);
     const byYear = new Map<number, number[]>(last3.map(y => [y, Array(12).fill(0)]));
-    bills.forEach(b => {
+    activeBills.forEach(b => {
       const arr = byYear.get(b.year);
       if (!arr) return;
       const mi = Number(b.month.slice(5, 7)) - 1;
@@ -79,11 +87,11 @@ export default function BusinessSummaryDashboard() {
         return row;
       }),
     };
-  }, [bills, years]);
+  }, [activeBills, years]);
 
-  /* ── Stacked: sản lượng tổng theo KCN, 12 tháng lùi từ tháng mới nhất ── */
+  /* ── Stacked: sản lượng tổng theo KCN, 12 tháng lùi từ tháng mới nhất — chỉ KCN đang bật ── */
   const stackByZone = useMemo(() => {
-    const months = bills.map(b => b.month).filter(Boolean);
+    const months = activeBills.map(b => b.month).filter(Boolean);
     if (!months.length) return { data: [] as any[], zones: [] as string[] };
     const sorted = months.slice().sort();
     const newest = sorted[sorted.length - 1];
@@ -91,20 +99,20 @@ export default function BusinessSummaryDashboard() {
     const buckets: string[] = [];
     for (let i = 11; i >= 0; i--) { let m = nm - i, y = ny; while (m <= 0) { m += 12; y--; } buckets.push(`${y}-${pad2(m)}`); }
     const idx = new Map(buckets.map((mk, i) => [mk, i]));
-    const zonesPresent = ZONE_ORDER.filter(z => bills.some(b => b.zone === z));
+    const zonesPresent = zoneCatalog.filter(z => !hiddenZones[z]);
     const rows = buckets.map(mk => {
       const row: Record<string, any> = { label: `${Number(mk.slice(5))}/${mk.slice(2, 4)}` };
       zonesPresent.forEach(z => { row[z] = 0; });
       return row;
     });
-    bills.forEach(b => {
+    activeBills.forEach(b => {
       const i = idx.get(b.month);
       if (i == null || !b.zone) return;
       if (rows[i][b.zone] != null) rows[i][b.zone] += b.slHC;
     });
     rows.forEach(r => zonesPresent.forEach(z => { r[z] = Math.round(r[z]); }));
     return { data: rows, zones: zonesPresent };
-  }, [bills]);
+  }, [activeBills, zoneCatalog, hiddenZones]);
 
   /* ── Row 3a: tariff donut ── */
   const tariff = useMemo(() => {
@@ -247,6 +255,13 @@ export default function BusinessSummaryDashboard() {
   const fmtMonth = (ym?: string) => (ym ? `${ym.slice(5)}/${ym.slice(0, 4)}` : '—');
   const busy = loading || pmaxLoading;
   const thousand = (v: number) => fmtInt(Math.round(v / 1000));
+  const collectPct = Math.round(kpis.collectRate * 100);
+
+  /* Màu cố định theo KCN (không đổi khi bật/tắt, để chip + cột luôn khớp màu) */
+  const zoneColor = useMemo(
+    () => new Map(zoneCatalog.map((z, i) => [z, ZONE_BARS[i % ZONE_BARS.length]])),
+    [zoneCatalog],
+  );
 
   /* Số trên đỉnh mỗi cột năm — ẩn nếu < 10% giá trị năm cao nhất trong cùng tháng */
   const renderYearBarLabel = (props: any) => {
@@ -272,6 +287,17 @@ export default function BusinessSummaryDashboard() {
     return (
       <text x={x + width / 2} y={py + height / 2} textAnchor="middle" dominantBaseline="central" fontSize={9} fontWeight={700} fill="#fff">
         {axisNum(value)}
+      </text>
+    );
+  };
+
+  /* % hiển thị ngay trong mỗi đoạn cột tần suất khung giờ */
+  const renderFreqPctLabel = (props: any) => {
+    const { x, y: py, width, height, value } = props;
+    if (!value || width < 20) return null;
+    return (
+      <text x={x + width / 2} y={py + height / 2} textAnchor="middle" dominantBaseline="central" fontSize={9} fontWeight={700} fill="#fff">
+        {`${Math.round(value)}%`}
       </text>
     );
   };
@@ -336,13 +362,41 @@ export default function BusinessSummaryDashboard() {
 
       {error && <div className="vl-alert vl-alert-light-danger text-sm">{error}</div>}
 
-      {/* Row 1 — two KPI cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Row 1 — sản lượng · doanh thu · công nợ (biểu đồ tiến trình) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatTile label="Sản lượng hữu công" value={fmtInt(kpis.kwh)} unit="kWh" icon={Zap} tone="accent" loading={loading}
           sub={`${fmtInt(kpis.bills)} hóa đơn · ${fmtInt(kpis.customers)} khách hàng`} subTone="neutral" />
         <StatTile label="Doanh thu" value={fmtInt(kpis.vnd)} unit="đồng" icon={TrendingUp} tone="neutral" loading={loading}
-          sub={`Đã thu ${Math.round(kpis.collectRate * 100)}% · công nợ ${fmtVNDShort(kpis.vndDebt)} ₫`}
-          subTone={kpis.collectRate >= 0.8 ? 'ok' : 'warn'} />
+          sub={`TB ${fmtInt(kpis.bills > 0 ? Math.round(kpis.vnd / kpis.bills) : 0)} đồng/hóa đơn`} subTone="neutral" />
+
+        {/* Công nợ — thẻ riêng có thanh tiến trình tỷ lệ đã thu */}
+        <div
+          className="bg-surface border border-[var(--border)] rounded-[var(--radius)] p-4 flex flex-col gap-2.5"
+          style={{ borderLeft: `3px solid ${kpis.vndDebt > 0 ? 'var(--danger)' : 'var(--success)'}`, boxShadow: 'var(--shadow-card)' }}
+        >
+          <div className="flex items-center gap-2">
+            <span className={`vl-lamp ${kpis.vndDebt > 0 ? 'trip' : 'on'}`} />
+            <span className="text-[10px] font-semibold tracking-[0.1em] uppercase text-soft flex-1 min-w-0 truncate">Công nợ</span>
+            <AlertTriangle className="w-4 h-4 text-faint shrink-0" />
+          </div>
+          {loading ? (
+            <div className="h-8 w-2/3 rounded bg-subtle animate-pulse" />
+          ) : (
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[1.75rem] leading-none font-semibold text-ink tabular-nums tracking-tight">{fmtInt(kpis.vndDebt)}</span>
+              <span className="text-sm text-soft font-medium">đồng</span>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <div className="h-1.5 rounded-full bg-subtle overflow-hidden">
+              <div className="h-full rounded-full bg-ok transition-all" style={{ width: `${collectPct}%` }} />
+            </div>
+            <div className="flex items-center justify-between text-[11px] font-semibold tabular-nums">
+              <span className="text-ok flex items-center gap-1"><Wallet className="w-3 h-3" /> {collectPct}% đã thu</span>
+              <span className="text-bad">{fmtInt(kpis.unpaid)} hóa đơn nợ</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Row 2 — monthly load bars (3) + tariff donut (1), 3:1 on xl */}
@@ -409,33 +463,54 @@ export default function BusinessSummaryDashboard() {
       </div>
 
       {/* Row 3 — stacked kWh theo KCN (3) + tần suất khung giờ theo KCN (1), 3:1 */}
-      {stackByZone.zones.length > 0 && (
+      {zoneCatalog.length > 0 && (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-          <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · xếp chồng theo KCN (kWh)" icon={Layers}>
-            <div className="h-[300px] xl:h-[380px] px-3 py-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stackByZone.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 10 }} />
-                  <YAxis
-                    tickFormatter={thousand} tickLine={false} axisLine={false} stroke="var(--text-4)" width={58} style={{ fontSize: 10 }}
-                    label={{ value: 'Sản lượng (nghìn kWh)', angle: -90, position: 'insideLeft', offset: 8, style: { fill: 'var(--text-4)', fontSize: 10, textAnchor: 'middle' } }}
-                  />
-                  <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {stackByZone.zones.map((z, i) => (
-                    <Bar key={z} dataKey={z} name={ZONE_MAP[z] || z} stackId="kcn"
-                      fill={ZONE_BARS[i % ZONE_BARS.length]}
-                      radius={i === stackByZone.zones.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} maxBarSize={40}>
-                      <LabelList dataKey={z} content={renderZoneStackLabel(z)} />
-                    </Bar>
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+          <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · bật/tắt để lọc luôn cả biểu đồ phụ tải theo tháng" icon={Layers}>
+            <div className="px-4 pt-3 flex items-center gap-2 flex-wrap">
+              {zoneCatalog.map(z => {
+                const on = !hiddenZones[z];
+                const color = zoneColor.get(z)!;
+                return (
+                  <button
+                    key={z}
+                    onClick={() => toggleZoneVisible(z)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${on ? 'text-ink' : 'text-faint opacity-60'}`}
+                    style={{ borderColor: on ? color : 'var(--border)', background: on ? `${color}1a` : 'transparent' }}
+                  >
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: on ? color : 'var(--text-4)' }} />
+                    {ZONE_MAP[z] || z}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="h-[300px] xl:h-[380px] px-3 pb-4 pt-2">
+              {stackByZone.zones.length === 0 ? (
+                <EmptyState icon={Layers} title="Đã tắt hết KCN" hint="Bật lại ít nhất một khu để xem biểu đồ." />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stackByZone.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 10 }} />
+                    <YAxis
+                      tickFormatter={thousand} tickLine={false} axisLine={false} stroke="var(--text-4)" width={58} style={{ fontSize: 10 }}
+                      label={{ value: 'Sản lượng (nghìn kWh)', angle: -90, position: 'insideLeft', offset: 8, style: { fill: 'var(--text-4)', fontSize: 10, textAnchor: 'middle' } }}
+                    />
+                    <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    {stackByZone.zones.map((z, i) => (
+                      <Bar key={z} dataKey={z} name={ZONE_MAP[z] || z} stackId="kcn"
+                        fill={zoneColor.get(z)!}
+                        radius={i === stackByZone.zones.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} maxBarSize={40}>
+                        <LabelList dataKey={z} content={renderZoneStackLabel(z)} />
+                      </Bar>
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </Panel>
 
-          <Panel className="xl:col-span-1" title="Tần suất khung giờ theo KCN" sub={`Năm ${year} · tỷ trọng BT / CĐ / TĐ`} icon={BarChart3}>
+          <Panel className="xl:col-span-1" title="Tần suất khung giờ theo KCN" sub={`Năm ${year} · tỷ trọng Bình thường / Cao điểm / Thấp điểm`} icon={BarChart3}>
             <div className="h-[300px] px-3 py-4">
               {freqByZone.length === 0 ? (
                 <EmptyState icon={BarChart3} title="Chưa có dữ liệu" />
@@ -446,10 +521,16 @@ export default function BusinessSummaryDashboard() {
                     <XAxis type="number" domain={[0, 1]} tickFormatter={(v: number) => `${Math.round(v * 100)}%`} tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} />
                     <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} stroke="var(--text-3)" width={52} style={{ fontSize: 10 }} />
                     <Tooltip content={<ChartTooltip fmt={v => `${v}%`} />} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="btPct" name="BT" stackId="f" fill={PIE_COLORS[0]} maxBarSize={22} />
-                    <Bar dataKey="cdPct" name="CĐ" stackId="f" fill={PIE_COLORS[1]} maxBarSize={22} />
-                    <Bar dataKey="tdPct" name="TĐ" stackId="f" fill={PIE_COLORS[2]} radius={[0, 3, 3, 0]} maxBarSize={22} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <Bar dataKey="btPct" name="Bình thường" stackId="f" fill={PIE_COLORS[0]} maxBarSize={22}>
+                      <LabelList dataKey="btPct" content={renderFreqPctLabel} />
+                    </Bar>
+                    <Bar dataKey="cdPct" name="Cao điểm" stackId="f" fill={PIE_COLORS[1]} maxBarSize={22}>
+                      <LabelList dataKey="cdPct" content={renderFreqPctLabel} />
+                    </Bar>
+                    <Bar dataKey="tdPct" name="Thấp điểm" stackId="f" fill={PIE_COLORS[2]} radius={[0, 3, 3, 0]} maxBarSize={22}>
+                      <LabelList dataKey="tdPct" content={renderFreqPctLabel} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
