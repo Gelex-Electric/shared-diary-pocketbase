@@ -2,8 +2,12 @@
  * Select — dropdown tùy biến đồng bộ design system (thay cho <select> native).
  * Cùng "ngôn ngữ" với DatePicker: panel bo tròn, accent var(--accent), outside-click,
  * shadow mềm. Hỗ trợ biến thể 'bare' (nhúng vào container có sẵn) và tìm kiếm.
+ *
+ * Menu render qua PORTAL (position: fixed) để không bị cắt bởi `overflow-hidden`
+ * của card cha — luôn nổi trên cùng dù card nhỏ.
  */
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check, Search } from 'lucide-react';
 
 export interface SelectOption {
@@ -27,6 +31,8 @@ interface SelectProps {
   icon?: React.ElementType;
 }
 
+interface MenuPos { top: number; left: number; width: number; }
+
 export function Select({
   value,
   onChange,
@@ -41,28 +47,45 @@ export function Select({
 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<MenuPos | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const panelRef   = useRef<HTMLDivElement>(null);
   const searchRef  = useRef<HTMLInputElement>(null);
 
   const selected = options.find(o => o.value === value);
 
-  /* Đóng khi click ngoài */
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  /* Tính vị trí menu từ trigger — clamp trong viewport để không tràn phải/dưới */
+  const place = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const width = Math.max(r.width, 200);
+    const left = Math.min(Math.max(8, r.left), window.innerWidth - width - 8);
+    setPos({ top: r.bottom + 6, left, width });
+  }, []);
 
-  /* Đóng bằng Escape */
+  useLayoutEffect(() => { if (open) place(); }, [open, place]);
+
+  /* Đóng khi click ngoài (cả trigger lẫn panel) */
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open]);
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!triggerRef.current?.contains(t) && !panelRef.current?.contains(t)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onReflow = () => place();
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onReflow);
+    window.addEventListener('scroll', onReflow, true); // capture: theo mọi khung cuộn
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onReflow);
+      window.removeEventListener('scroll', onReflow, true);
+    };
+  }, [open, place]);
 
   /* Focus ô tìm kiếm + reset query khi mở */
   useEffect(() => {
@@ -86,15 +109,16 @@ export function Select({
       }`;
 
   return (
-    <div ref={wrapperRef} className={`relative ${variant === 'bare' ? '' : 'space-y-1'} ${className}`}>
+    <div className={`relative ${variant === 'bare' ? '' : 'space-y-1'} ${className}`}>
       {label && (
-        <label className="text-[10px] font-bold text-faint uppercase select-none pointer-events-none">
+        <label className="text-[10px] font-bold text-faint uppercase select-none pointer-events-none block">
           {label}
         </label>
       )}
 
       {/* Trigger */}
       <div
+        ref={triggerRef}
         onClick={() => !disabled && setOpen(o => !o)}
         className={`${triggerBase} ${triggerSkin} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
@@ -107,11 +131,12 @@ export function Select({
         />
       </div>
 
-      {/* Panel */}
-      {open && (
+      {/* Panel — portal ra body, position fixed, nổi trên card */}
+      {open && pos && createPortal(
         <div
-          className="absolute top-full mt-1.5 left-0 right-0 z-[200] bg-raised rounded-xl overflow-hidden border border-[var(--border)] animate-in fade-in slide-in-from-top-2 duration-150"
-          style={{ boxShadow: 'var(--shadow-pop)', minWidth: 200 }}
+          ref={panelRef}
+          className="fixed z-[9999] bg-raised rounded-xl overflow-hidden border border-[var(--border)] animate-in fade-in slide-in-from-top-2 duration-150"
+          style={{ top: pos.top, left: pos.left, width: pos.width, boxShadow: 'var(--shadow-pop)' }}
           onClick={e => e.stopPropagation()}
         >
           {searchable && (
@@ -150,7 +175,8 @@ export function Select({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
