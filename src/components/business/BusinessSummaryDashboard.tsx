@@ -285,7 +285,7 @@ export default function BusinessSummaryDashboard() {
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
     return (
-      <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>
+      <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={13} fontWeight={700}>
         {`${Math.round(percent * 100)}%`}
       </text>
     );
@@ -378,10 +378,10 @@ export default function BusinessSummaryDashboard() {
             <EmptyState icon={Layers} title="Chưa có dữ liệu biểu giá" />
           ) : (
             <div className="flex flex-col items-center gap-4 p-5">
-              <div className="relative w-[170px] h-[170px] shrink-0">
+              <div className="relative w-[210px] h-[210px] shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={80} paddingAngle={3} cornerRadius={8} stroke="none"
+                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={68} outerRadius={98} paddingAngle={3} cornerRadius={8} stroke="none"
                       label={renderTariffPctLabel} labelLine={false}>
                       {tariff.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                     </Pie>
@@ -389,9 +389,9 @@ export default function BusinessSummaryDashboard() {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-[11px] text-faint">Tổng</span>
-                  <span className="text-base font-bold text-ink tabular-nums leading-tight">{axisNum(tariffTotal)}</span>
-                  <span className="text-[10px] text-faint">kWh</span>
+                  <span className="text-xs text-faint">Tổng</span>
+                  <span className="text-lg font-bold text-ink tabular-nums leading-tight">{axisNum(tariffTotal)}</span>
+                  <span className="text-[11px] text-faint">kWh</span>
                 </div>
               </div>
               <div className="w-full space-y-2.5">
