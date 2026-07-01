@@ -150,32 +150,6 @@ export function mergeBills(records: InvoiceRecord[]): Bill[] {
   return Array.from(map.values());
 }
 
-/* ── Ngày đóng điện: StartDate sớm nhất của từng công tơ ──
-   Truy vấn riêng (không phụ thuộc cửa sổ đã tải) để chính xác cả công tơ cũ.
-   Gom theo lô để giảm số request; mỗi lô sort tăng dần → bản ghi đầu của mỗi
-   SCT chính là StartDate sớm nhất. */
-export async function fetchEarliestStartDates(scts: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  const clean = Array.from(new Set(scts.map(s => (s || '').trim())))
-    .filter(s => /^[\p{L}0-9_-]+$/u.test(s)); // chỉ mã an toàn để nội suy vào filter
-  const CHUNK = 40;
-  for (let i = 0; i < clean.length; i += CHUNK) {
-    const chunk = clean.slice(i, i + CHUNK);
-    const filter = chunk.map(s => `SCT="${s}"`).join(' || ');
-    try {
-      const rows = await pb.collection('invoice').getFullList<{ SCT: string; StartDate: string }>({
-        filter, sort: '+StartDate', fields: 'SCT,StartDate', requestKey: null,
-      });
-      for (const r of rows) {
-        const sct = (r.SCT || '').trim();
-        const d = dateOnly(r.StartDate);
-        if (sct && d && !out.has(sct)) out.set(sct, d);
-      }
-    } catch { /* bỏ qua lô lỗi, dùng fallback cục bộ */ }
-  }
-  return out;
-}
-
 /* ── Aggregations ──────────────────────────────────────── */
 export interface MonthPoint { month: string; label: string; kwh: number; vnd: number; bills: number; }
 
