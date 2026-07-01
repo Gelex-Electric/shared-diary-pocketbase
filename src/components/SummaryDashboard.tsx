@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart,
+  BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart, LabelList,
 } from 'recharts';
 import {
   Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw, Users,
@@ -181,6 +181,21 @@ export default function SummaryDashboard() {
   const fmtMonth = (ym?: string) => (ym ? `${ym.slice(5)}/${ym.slice(0, 4)}` : '—');
   const areaName = zoneLock ? (ZONE_MAP[zoneLock] || zoneLock) : 'Toàn bộ khu công nghiệp';
   const busy = loading || pmaxLoading;
+  const thousand = (v: number) => fmtInt(Math.round(v / 1000));
+
+  /* Số trên đỉnh mỗi cột năm — ẩn nếu < 10% giá trị năm cao nhất trong cùng tháng */
+  const renderYearBarLabel = (props: any) => {
+    const { x, y: py, width, value, index } = props;
+    if (value == null || width == null) return null;
+    const row = load3y.data[index];
+    const max = Math.max(0, ...load3y.years.map(yr => row[String(yr)] || 0));
+    if (max <= 0 || value < max * 0.1) return null;
+    return (
+      <text x={x + width / 2} y={py - 4} textAnchor="middle" fontSize={9} fontWeight={600} fill="var(--text-3)">
+        {axisNum(value)}
+      </text>
+    );
+  };
 
   /* % hiển thị ngay trong donut */
   const renderTariffPctLabel = (props: any) => {
@@ -191,7 +206,7 @@ export default function SummaryDashboard() {
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
     return (
-      <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>
+      <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={13} fontWeight={700}>
         {`${Math.round(percent * 100)}%`}
       </text>
     );
@@ -262,11 +277,16 @@ export default function SummaryDashboard() {
                 <BarChart data={load3y.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }} barGap={2} barCategoryGap="18%">
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--text-4)" width={48} style={{ fontSize: 10 }} />
+                  <YAxis
+                    tickFormatter={thousand} tickLine={false} axisLine={false} stroke="var(--text-4)" width={58} style={{ fontSize: 10 }}
+                    label={{ value: 'Sản lượng (nghìn kWh)', angle: -90, position: 'insideLeft', offset: 8, style: { fill: 'var(--text-4)', fontSize: 10, textAnchor: 'middle' } }}
+                  />
                   <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   {load3y.years.map((y, i) => (
-                    <Bar key={y} dataKey={String(y)} name={String(y)} fill={YEAR_BARS[i % YEAR_BARS.length]} radius={[3, 3, 0, 0]} maxBarSize={28} />
+                    <Bar key={y} dataKey={String(y)} name={String(y)} fill={YEAR_BARS[i % YEAR_BARS.length]} radius={[3, 3, 0, 0]} maxBarSize={28}>
+                      <LabelList dataKey={String(y)} content={renderYearBarLabel} />
+                    </Bar>
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -279,10 +299,10 @@ export default function SummaryDashboard() {
             <EmptyState icon={Layers} title="Chưa có dữ liệu biểu giá" />
           ) : (
             <div className="flex flex-col items-center gap-4 p-5">
-              <div className="relative w-[170px] h-[170px] shrink-0">
+              <div className="relative w-[210px] h-[210px] shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={80} paddingAngle={3} cornerRadius={8} stroke="none"
+                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={68} outerRadius={98} paddingAngle={3} cornerRadius={8} stroke="none"
                       label={renderTariffPctLabel} labelLine={false}>
                       {tariff.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                     </Pie>
@@ -290,9 +310,9 @@ export default function SummaryDashboard() {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-[11px] text-faint">Tổng</span>
-                  <span className="text-base font-bold text-ink tabular-nums leading-tight">{axisNum(tariffTotal)}</span>
-                  <span className="text-[10px] text-faint">kWh</span>
+                  <span className="text-xs text-faint">Tổng</span>
+                  <span className="text-lg font-bold text-ink tabular-nums leading-tight">{axisNum(tariffTotal)}</span>
+                  <span className="text-[11px] text-faint">kWh</span>
                 </div>
               </div>
               <div className="w-full space-y-2.5">
