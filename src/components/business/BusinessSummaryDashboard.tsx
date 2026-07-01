@@ -5,17 +5,20 @@ import {
 } from 'recharts';
 import {
   DollarSign, Wallet, AlertTriangle, Zap, BarChart3, PieChart as PieIcon,
-  Building2, RefreshCw, UserX,
+  Building2, RefreshCw, UserX, Layers, TrendingUp, ChevronRight,
+  ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react';
 import { Select } from '../ui/Select';
 import { StatTile, Panel, ChartTooltip, EmptyState, CHART, ZONE_BARS } from '../ui/dashboard';
 import { setLocalNotification, clearLocalNotification } from '../ui/NotificationBell';
 import {
   useInvoices, rollupByCustomer, rollupByZone, computeKpis,
-  fmtInt, fmtKWhShort, fmtVNDShort,
+  fmtInt, fmtKWhShort, fmtVNDShort, ZONE_MAP, ZONE_ORDER,
 } from '../../lib/invoices';
 
 const MONTHS = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
+const MONTH_OPTS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `Tháng ${i + 1}` }));
+const pad2 = (n: number) => String(n).padStart(2, '0');
 
 export default function BusinessSummaryDashboard() {
   const endYear = new Date().getFullYear();
@@ -50,6 +53,65 @@ export default function BusinessSummaryDashboard() {
     [yearBills],
   );
 
+  /* Stacked: sản lượng tổng theo KCN, 12 tháng lùi từ tháng mới nhất trong invoices */
+  const [tableMonthIdx, setTableMonthIdx] = useState<number>(new Date().getMonth() + 1);
+  const [collapsedZones, setCollapsedZones] = useState<Record<string, boolean>>({});
+
+  const stackByZone = useMemo(() => {
+    const months = bills.map(b => b.month).filter(Boolean);
+    if (!months.length) return { data: [] as any[], zones: [] as string[] };
+    const sorted = months.slice().sort();
+    const newest = sorted[sorted.length - 1];           // 'YYYY-MM'
+    const [ny, nm] = newest.split('-').map(Number);
+    const buckets: string[] = [];
+    for (let i = 11; i >= 0; i--) { let m = nm - i, y = ny; while (m <= 0) { m += 12; y--; } buckets.push(`${y}-${pad2(m)}`); }
+    const idx = new Map(buckets.map((mk, i) => [mk, i]));
+    const zonesPresent = ZONE_ORDER.filter(z => bills.some(b => b.zone === z));
+    const rows = buckets.map(mk => {
+      const row: Record<string, any> = { label: `${Number(mk.slice(5))}/${mk.slice(2, 4)}` };
+      zonesPresent.forEach(z => { row[z] = 0; });
+      return row;
+    });
+    bills.forEach(b => {
+      const i = idx.get(b.month);
+      if (i == null || !b.zone) return;
+      if (rows[i][b.zone] != null) rows[i][b.zone] += b.slHC;
+    });
+    rows.forEach(r => zonesPresent.forEach(z => { r[z] = Math.round(r[z]); }));
+    return { data: rows, zones: zonesPresent };
+  }, [bills]);
+
+  /* Bảng sản lượng & doanh thu khách hàng theo tháng đã chọn, gộp theo KCN */
+  const zoneTables = useMemo(() => {
+    const cur = `${year}-${pad2(tableMonthIdx)}`;
+    const prev = tableMonthIdx === 1 ? `${year - 1}-12` : `${year}-${pad2(tableMonthIdx - 1)}`;
+    const cust = new Map<string, { mkh: string; name: string; zone: string; kwh: number; vnd: number; prevKwh: number }>();
+    bills.forEach(b => {
+      if (b.month !== cur && b.month !== prev) return;
+      let c = cust.get(b.mkh);
+      if (!c) { c = { mkh: b.mkh, name: b.nMua || b.mkh, zone: b.zone, kwh: 0, vnd: 0, prevKwh: 0 }; cust.set(b.mkh, c); }
+      if (b.month === cur) { c.kwh += b.slHC; c.vnd += b.dtHC + b.dtVC; } else { c.prevKwh += b.slHC; }
+    });
+    const delta = (a: number, p: number) => (p > 0 ? (a - p) / p : null);
+    const byZone = new Map<string, { code: string; name: string; kwh: number; vnd: number; rows: any[] }>();
+    cust.forEach(c => {
+      if (c.kwh <= 0 && c.vnd <= 0) return;
+      const code = c.zone || 'Khác';
+      let z = byZone.get(code);
+      if (!z) { z = { code, name: ZONE_MAP[code] || code, kwh: 0, vnd: 0, rows: [] }; byZone.set(code, z); }
+      z.kwh += c.kwh; z.vnd += c.vnd;
+      z.rows.push({ ...c, kwh: Math.round(c.kwh), vnd: Math.round(c.vnd), delta: delta(c.kwh, c.prevKwh) });
+    });
+    const ordered = Array.from(byZone.values()).sort((a, b) => {
+      const ia = ZONE_ORDER.indexOf(a.code), ib = ZONE_ORDER.indexOf(b.code);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    ordered.forEach(z => z.rows.sort((a, b) => b.kwh - a.kwh));
+    return { cur, prev, zones: ordered };
+  }, [bills, year, tableMonthIdx]);
+
+  const fmtMonth = (ym: string) => `${ym.slice(5)}/${ym.slice(0, 4)}`;
+
   /* Debt reminder on the notification bell */
   useEffect(() => {
     if (loading) return;
@@ -66,6 +128,16 @@ export default function BusinessSummaryDashboard() {
   }, [kpis.unpaid, kpis.vndDebt, year, loading]);
 
   const collectPct = Math.round(kpis.collectRate * 100);
+
+  const DeltaBadge = ({ d }: { d: number | null }) => {
+    const up = d != null && d > 0.0005, down = d != null && d < -0.0005;
+    const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
+    return (
+      <span className={`inline-flex items-center gap-0.5 text-xs font-bold tabular-nums ${up ? 'text-ok' : down ? 'text-bad' : 'text-faint'}`}>
+        <Icon className="w-3.5 h-3.5" />{d == null ? '—' : `${Math.abs(d * 100).toFixed(1)}%`}
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -173,6 +245,88 @@ export default function BusinessSummaryDashboard() {
           </div>
         </Panel>
       )}
+
+      {/* Stacked: sản lượng tổng theo KCN — 12 tháng gần nhất */}
+      {stackByZone.zones.length > 0 && (
+        <Panel title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · xếp chồng theo KCN (kWh)" icon={Layers}>
+          <div className="h-[300px] px-3 py-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stackByZone.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 10 }} />
+                <YAxis tickFormatter={fmtKWhShort} tickLine={false} axisLine={false} stroke="var(--text-4)" width={48} style={{ fontSize: 10 }} />
+                <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {stackByZone.zones.map((z, i) => (
+                  <Bar key={z} dataKey={z} name={ZONE_MAP[z] || z} stackId="kcn"
+                    fill={ZONE_BARS[i % ZONE_BARS.length]}
+                    radius={i === stackByZone.zones.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} maxBarSize={40} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+      )}
+
+      {/* Bảng sản lượng & doanh thu khách hàng — tách theo KCN, thu gọn được */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-bold text-ink flex items-center gap-2"><TrendingUp className="w-4 h-4 text-accent" /> Sản lượng & doanh thu theo khách hàng</h3>
+            <p className="text-[11px] text-faint mt-0.5">Tháng {fmtMonth(zoneTables.cur)} so với {fmtMonth(zoneTables.prev)} · theo khu công nghiệp</p>
+          </div>
+          <Select value={String(tableMonthIdx)} onChange={v => setTableMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[130px]" />
+        </div>
+
+        {zoneTables.zones.length === 0 ? (
+          <div className="vl-card"><EmptyState icon={TrendingUp} title={loading ? 'Đang tải…' : 'Không có dữ liệu tháng này'} /></div>
+        ) : (
+          <div className="vl-accordion">
+            {zoneTables.zones.map(z => {
+              const open = !collapsedZones[z.code];
+              return (
+                <div key={z.code} className={`vl-accordion-item ${open ? 'is-open' : ''}`}>
+                  <button className="vl-accordion-header" onClick={() => setCollapsedZones(c => ({ ...c, [z.code]: !c[z.code] }))}>
+                    <Building2 className="w-4 h-4 shrink-0" />
+                    <span className="font-bold">{z.name}</span>
+                    <span className="text-[11px] font-medium text-faint">({z.rows.length} KH)</span>
+                    <span className="ml-auto flex items-center gap-4 mr-2">
+                      <span className="text-xs tabular-nums text-dim">{fmtInt(z.kwh)} <span className="text-faint">kWh</span></span>
+                      <span className="text-xs font-bold tabular-nums text-accent">{fmtInt(z.vnd)} <span className="text-faint font-normal">đ</span></span>
+                    </span>
+                    <ChevronRight className="vl-accordion-chevron w-4 h-4" />
+                  </button>
+                  {open && (
+                    <div className="vl-accordion-body overflow-x-auto">
+                      <table className="vl-table w-full text-left">
+                        <thead><tr>
+                          <th>Khách hàng</th>
+                          <th className="text-right text-ink font-bold border-l border-[var(--border)]">Sản lượng (kWh)</th>
+                          <th className="text-center">Thay đổi</th>
+                          <th className="text-right">Doanh thu (đồng)</th>
+                        </tr></thead>
+                        <tbody>
+                          {z.rows.map((r: any) => (
+                            <tr key={r.mkh} className="hover:bg-subtle transition-colors">
+                              <td>
+                                <div className="text-sm font-medium text-ink break-words">{r.name}</div>
+                                <div className="text-[11px] text-faint font-mono">{r.mkh}</div>
+                              </td>
+                              <td className="text-right text-sm font-bold text-ink tabular-nums border-l border-[var(--border)]">{fmtInt(r.kwh)}</td>
+                              <td className="text-center"><DeltaBadge d={r.delta} /></td>
+                              <td className="text-right text-sm text-dim tabular-nums">{fmtInt(r.vnd)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Top debtors */}
       <Panel title="Khách hàng công nợ lớn nhất" sub={`Hóa đơn chưa thanh toán · ${year}`} icon={UserX}>
