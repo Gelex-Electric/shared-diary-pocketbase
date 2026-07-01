@@ -1,14 +1,13 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart,
+  BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart, LabelList,
 } from 'recharts';
 import {
-  Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw,
-  ArrowUpRight, ArrowDownRight, Minus, ChevronRight, Users,
+  Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw, Users,
 } from 'lucide-react';
 import { Select } from '../ui/Select';
-import { StatTile, Panel, ChartTooltip, EmptyState, CHART, ZONE_BARS } from '../ui/dashboard';
+import { StatTile, Panel, ChartTooltip, EmptyState, CHART, ZONE_BARS, CustomerZoneCard } from '../ui/dashboard';
 import { setLocalNotification, clearLocalNotification } from '../ui/NotificationBell';
 import {
   useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, fmtVNDShort, num, ZONE_MAP, ZONE_ORDER,
@@ -247,14 +246,48 @@ export default function BusinessSummaryDashboard() {
 
   const fmtMonth = (ym?: string) => (ym ? `${ym.slice(5)}/${ym.slice(0, 4)}` : '—');
   const busy = loading || pmaxLoading;
+  const thousand = (v: number) => fmtInt(Math.round(v / 1000));
 
-  const DeltaBadge = ({ d }: { d: number | null }) => {
-    const up = d != null && d > 0.0005, down = d != null && d < -0.0005;
-    const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
+  /* Số trên đỉnh mỗi cột năm — ẩn nếu < 10% giá trị năm cao nhất trong cùng tháng */
+  const renderYearBarLabel = (props: any) => {
+    const { x, y: py, width, value, index } = props;
+    if (value == null || width == null) return null;
+    const row = load3y.data[index];
+    const max = Math.max(0, ...load3y.years.map(yr => row[String(yr)] || 0));
+    if (max <= 0 || value < max * 0.1) return null;
     return (
-      <span className={`inline-flex items-center gap-0.5 text-xs font-bold tabular-nums ${up ? 'text-ok' : down ? 'text-bad' : 'text-faint'}`}>
-        <Icon className="w-3.5 h-3.5" />{d == null ? '—' : `${Math.abs(d * 100).toFixed(1)}%`}
-      </span>
+      <text x={x + width / 2} y={py - 4} textAnchor="middle" fontSize={9} fontWeight={600} fill="var(--text-3)">
+        {axisNum(value)}
+      </text>
+    );
+  };
+
+  /* Số bên trong mỗi đoạn cột xếp chồng theo KCN — ẩn nếu < 10% tổng tháng đó */
+  const renderZoneStackLabel = (zoneCode: string) => (props: any) => {
+    const { x, y: py, width, height, value, index } = props;
+    if (!value || width == null || height < 14) return null;
+    const row = stackByZone.data[index];
+    const total = stackByZone.zones.reduce((s, z) => s + (row[z] || 0), 0) || 1;
+    if (value / total < 0.1) return null;
+    return (
+      <text x={x + width / 2} y={py + height / 2} textAnchor="middle" dominantBaseline="central" fontSize={9} fontWeight={700} fill="#fff">
+        {axisNum(value)}
+      </text>
+    );
+  };
+
+  /* % hiển thị ngay trong donut */
+  const renderTariffPctLabel = (props: any) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
+    if (percent < 0.03) return null;
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) / 2;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return (
+      <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>
+        {`${Math.round(percent * 100)}%`}
+      </text>
     );
   };
 
@@ -323,11 +356,16 @@ export default function BusinessSummaryDashboard() {
                 <BarChart data={load3y.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }} barGap={2} barCategoryGap="18%">
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--text-4)" width={48} style={{ fontSize: 10 }} />
+                  <YAxis
+                    tickFormatter={thousand} tickLine={false} axisLine={false} stroke="var(--text-4)" width={58} style={{ fontSize: 10 }}
+                    label={{ value: 'Sản lượng (nghìn kWh)', angle: -90, position: 'insideLeft', offset: 8, style: { fill: 'var(--text-4)', fontSize: 10, textAnchor: 'middle' } }}
+                  />
                   <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   {load3y.years.map((y, i) => (
-                    <Bar key={y} dataKey={String(y)} name={String(y)} fill={YEAR_BARS[i % YEAR_BARS.length]} radius={[3, 3, 0, 0]} maxBarSize={28} />
+                    <Bar key={y} dataKey={String(y)} name={String(y)} fill={YEAR_BARS[i % YEAR_BARS.length]} radius={[3, 3, 0, 0]} maxBarSize={28}>
+                      <LabelList dataKey={String(y)} content={renderYearBarLabel} />
+                    </Bar>
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -335,7 +373,7 @@ export default function BusinessSummaryDashboard() {
           </div>
         </Panel>
 
-        <Panel className="xl:col-span-1" title="Cơ cấu phụ tải theo biểu giá" sub={`Năm ${year} · BT / CĐ / TĐ`} icon={Layers}>
+        <Panel className="xl:col-span-1" title="Cơ cấu phụ tải theo khung giờ" sub={`Năm ${year} · BT / CĐ / TĐ`} icon={Layers}>
           {tariffTotal === 0 ? (
             <EmptyState icon={Layers} title="Chưa có dữ liệu biểu giá" />
           ) : (
@@ -343,7 +381,8 @@ export default function BusinessSummaryDashboard() {
               <div className="relative w-[170px] h-[170px] shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={80} paddingAngle={3} cornerRadius={8} stroke="none">
+                    <Pie data={tariff} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={80} paddingAngle={3} cornerRadius={8} stroke="none"
+                      label={renderTariffPctLabel} labelLine={false}>
                       {tariff.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                     </Pie>
                     <Tooltip content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
@@ -360,8 +399,7 @@ export default function BusinessSummaryDashboard() {
                   <div key={t.name} className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i] }} />
                     <span className="text-xs text-dim flex-1 truncate">{t.name}</span>
-                    <span className="text-[11px] text-faint tabular-nums">{(t.pct * 100).toFixed(1)}%</span>
-                    <span className="text-xs font-semibold text-accent tabular-nums text-right">{fmtInt(t.value)}</span>
+                    <span className="text-xs font-semibold text-accent tabular-nums text-right">{fmtInt(t.value)} <span className="text-faint font-normal">kWh</span></span>
                   </div>
                 ))}
               </div>
@@ -374,18 +412,23 @@ export default function BusinessSummaryDashboard() {
       {stackByZone.zones.length > 0 && (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
           <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · xếp chồng theo KCN (kWh)" icon={Layers}>
-            <div className="h-[300px] px-3 py-4">
+            <div className="h-[300px] xl:h-[380px] px-3 py-4">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={stackByZone.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 10 }} />
-                  <YAxis tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--text-4)" width={48} style={{ fontSize: 10 }} />
+                  <YAxis
+                    tickFormatter={thousand} tickLine={false} axisLine={false} stroke="var(--text-4)" width={58} style={{ fontSize: 10 }}
+                    label={{ value: 'Sản lượng (nghìn kWh)', angle: -90, position: 'insideLeft', offset: 8, style: { fill: 'var(--text-4)', fontSize: 10, textAnchor: 'middle' } }}
+                  />
                   <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   {stackByZone.zones.map((z, i) => (
                     <Bar key={z} dataKey={z} name={ZONE_MAP[z] || z} stackId="kcn"
                       fill={ZONE_BARS[i % ZONE_BARS.length]}
-                      radius={i === stackByZone.zones.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} maxBarSize={40} />
+                      radius={i === stackByZone.zones.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} maxBarSize={40}>
+                      <LabelList dataKey={z} content={renderZoneStackLabel(z)} />
+                    </Bar>
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -425,7 +468,7 @@ export default function BusinessSummaryDashboard() {
         </Panel>
       </div>
 
-      {/* Row 5 — per-KCN accordion tables */}
+      {/* Row 5 — bảng khách hàng theo từng KCN (thẻ gradient thu gọn được) */}
       <div className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <div className="flex-1 min-w-0">
@@ -438,77 +481,22 @@ export default function BusinessSummaryDashboard() {
         {detail.zones.length === 0 ? (
           <div className="vl-card"><EmptyState icon={TrendingUp} title={busy ? 'Đang tải…' : 'Không có dữ liệu tháng này'} /></div>
         ) : (
-          <div className="vl-accordion">
-            {detail.zones.map(z => {
-              const open = !collapsedZones[z.code];
-              return (
-                <div key={z.code} className={`vl-accordion-item ${open ? 'is-open' : ''}`}>
-                  <button className="vl-accordion-header" onClick={() => setCollapsedZones(c => ({ ...c, [z.code]: !c[z.code] }))}>
-                    <Building2 className="w-4 h-4 shrink-0" />
-                    <span className="font-bold">{z.name}</span>
-                    <span className="text-[11px] font-medium text-faint">({z.rows.length} KH)</span>
-                    <span className="ml-auto flex items-center gap-4 mr-2">
-                      <span className="text-xs tabular-nums text-dim">{fmtInt(z.kwh)} <span className="text-faint">kWh</span></span>
-                      <span className="text-xs font-bold tabular-nums text-accent">{fmtInt(z.vnd)} <span className="text-faint font-normal">đ</span></span>
-                    </span>
-                    <ChevronRight className="vl-accordion-chevron w-4 h-4" />
-                  </button>
-                  {open && (
-                    <div className="vl-accordion-body overflow-x-auto">
-                      <table className="vl-table w-full text-left">
-                        <thead><tr>
-                          <th>Khách hàng</th>
-                          <th className="text-right text-ink font-bold border-l border-[var(--border)]">Sản lượng (kWh)</th>
-                          <th className="text-center">Thay đổi</th>
-                          <th className="text-right">Doanh thu (đồng)</th>
-                        </tr></thead>
-                        <tbody>
-                          {z.rows.map(r => {
-                            const cOpen = !!expanded[r.mkh];
-                            return (
-                              <Fragment key={r.mkh}>
-                                <tr onClick={() => setExpanded(e => ({ ...e, [r.mkh]: !e[r.mkh] }))}
-                                  className={`transition-colors cursor-pointer ${cOpen ? 'bg-accent-soft/50' : 'hover:bg-subtle'}`}>
-                                  <td>
-                                    <div className="flex items-start gap-2">
-                                      <ChevronRight className={`w-4 h-4 mt-0.5 shrink-0 transition-transform ${cOpen ? 'rotate-90 text-accent' : 'text-faint'}`} />
-                                      <div className="min-w-0">
-                                        <div className="text-sm font-semibold text-ink break-words">{r.name}</div>
-                                        <div className="text-[11px] text-faint font-mono">{r.mkh} · {r.meterList.length} công tơ</div>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="text-right text-sm font-bold text-ink tabular-nums border-l border-[var(--border)]">{fmtInt(r.curKwh)}</td>
-                                  <td className="text-center"><DeltaBadge d={r.delta} /></td>
-                                  <td className="text-right text-sm text-dim tabular-nums">{fmtInt(r.curVnd)}</td>
-                                </tr>
-                                {cOpen && r.meterList.map((m, mi) => (
-                                  <tr key={r.mkh + '|' + m.sct}
-                                    className={`bg-subtle/60 ${mi === r.meterList.length - 1 ? 'border-b-2 border-b-[var(--border-strong)]' : ''}`}>
-                                    <td className="py-2">
-                                      <div className="flex items-stretch gap-2 pl-6">
-                                        <span className="w-[3px] rounded-full bg-accent/40 shrink-0" />
-                                        <div className="min-w-0">
-                                          <div className="text-xs font-mono font-semibold text-dim">CT {m.sct}</div>
-                                          {m.addr && <div className="text-[10px] text-faint truncate max-w-[240px]">{m.addr}</div>}
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td className="text-right text-xs font-semibold text-dim tabular-nums border-l border-[var(--border)]">{fmtInt(m.curKwh)}</td>
-                                    <td className="text-center"><DeltaBadge d={m.delta} /></td>
-                                    <td className="text-right text-xs text-soft tabular-nums">{fmtInt(m.curVnd)}</td>
-                                  </tr>
-                                ))}
-                              </Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className="space-y-4">
+            {detail.zones.map(z => (
+              <CustomerZoneCard
+                key={z.code}
+                icon={Building2}
+                title={z.name}
+                subtitle={`${z.rows.length} khách hàng`}
+                kwh={z.kwh}
+                vnd={z.vnd}
+                rows={z.rows}
+                collapsed={!!collapsedZones[z.code]}
+                onToggleCollapse={() => setCollapsedZones(c => ({ ...c, [z.code]: !c[z.code] }))}
+                expandedRows={expanded}
+                onToggleRow={mkh => setExpanded(e => ({ ...e, [mkh]: !e[mkh] }))}
+              />
+            ))}
           </div>
         )}
       </div>
