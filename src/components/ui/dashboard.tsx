@@ -1,7 +1,12 @@
 /* Shared dashboard primitives — control-room instrument tiles, panels,
    and a theme-aware recharts tooltip. Used by both summary dashboards. */
-import React from 'react';
-import type { LucideIcon } from 'lucide-react';
+import React, { Fragment } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  type LucideIcon, ChevronDown, ChevronRight, Building2,
+  ArrowUpRight, ArrowDownRight, Minus,
+} from 'lucide-react';
+import { fmtInt } from '../../lib/invoices';
 
 /* Chart palette — bound to design tokens so it adapts light/dark.
    Categorical hues for tariffs stay literal (distinct + readable both modes). */
@@ -125,6 +130,173 @@ export function EmptyState({ icon: Icon, title, hint }: { icon: LucideIcon; titl
       <Icon className="w-10 h-10 text-faint" />
       <p className="text-sm font-semibold text-dim">{title}</p>
       {hint && <p className="text-xs text-faint max-w-xs">{hint}</p>}
+    </div>
+  );
+}
+
+/* Mũi tên tăng/giảm % — dùng cho mọi cột "Thay đổi" trong bảng. */
+export function DeltaBadge({ d }: { d: number | null }) {
+  const up = d != null && d > 0.0005, down = d != null && d < -0.0005;
+  const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs font-bold tabular-nums ${up ? 'text-ok' : down ? 'text-bad' : 'text-faint'}`}>
+      <Icon className="w-3.5 h-3.5" />{d == null ? '—' : `${Math.abs(d * 100).toFixed(1)}%`}
+    </span>
+  );
+}
+
+export interface ZoneMeterRow {
+  sct: string;
+  addr: string;
+  curKwh: number;
+  curVnd: number;
+  delta: number | null;
+}
+export interface ZoneCustomerRow {
+  mkh: string;
+  name: string;
+  curKwh: number;
+  curVnd: number;
+  delta: number | null;
+  meterList: ZoneMeterRow[];
+}
+
+/**
+ * CustomerZoneCard — thẻ khách hàng theo khu vực (gradient header thu gọn được +
+ * bảng có dòng con chi tiết công tơ + dòng tổng cộng).
+ *
+ * Đây là UI pattern chuẩn cho MỌI accordion nhóm-khách-hàng trong app — nhân bản
+ * từ CustomerDebtManager.tsx. Xem tài liệu: .interface-design/pattern-zone-customer-card.md
+ */
+export function CustomerZoneCard({
+  icon: Icon = Building2,
+  title,
+  subtitle,
+  kwh,
+  vnd,
+  rows,
+  collapsed,
+  onToggleCollapse,
+  expandedRows,
+  onToggleRow,
+  emptyLabel = 'Không có dữ liệu',
+}: {
+  icon?: LucideIcon;
+  title: string;
+  subtitle?: string;
+  kwh: number;
+  vnd: number;
+  rows: ZoneCustomerRow[];
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  expandedRows: Record<string, boolean>;
+  onToggleRow: (mkh: string) => void;
+  emptyLabel?: string;
+}) {
+  return (
+    <div className="vl-card overflow-hidden">
+      {/* Header — gradient accent, bấm để thu gọn/mở */}
+      <div
+        onClick={onToggleCollapse}
+        className="bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] px-5 md:px-7 py-4 flex items-center justify-between gap-3 cursor-pointer select-none"
+      >
+        <div className="flex items-center gap-3 text-white min-w-0">
+          <div className="p-2 bg-white/20 rounded-xl shrink-0">
+            <Icon className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-base font-black tracking-tight leading-tight truncate">{title}</h3>
+            {subtitle && <p className="text-[11px] font-semibold text-white/80">{subtitle}</p>}
+          </div>
+        </div>
+        <div className="flex items-center gap-4 shrink-0">
+          <div className="text-right hidden sm:block leading-tight">
+            <div className="text-xs font-bold text-white tabular-nums">{fmtInt(kwh)} <span className="font-normal text-white/70">kWh</span></div>
+            <div className="text-xs font-bold text-white tabular-nums">{fmtInt(vnd)} <span className="font-normal text-white/70">đ</span></div>
+          </div>
+          <ChevronDown className={`w-5 h-5 text-white transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`} />
+        </div>
+      </div>
+
+      {/* Body — đóng/mở có animation chiều cao */}
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="overflow-x-auto">
+              <table className="vl-table w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
+                    <th className="py-3.5 px-4">Khách hàng</th>
+                    <th className="py-3.5 px-4 text-right border-l border-[var(--border)] text-ink">Sản lượng (kWh)</th>
+                    <th className="py-3.5 px-4 text-center">Thay đổi</th>
+                    <th className="py-3.5 px-4 text-right">Doanh thu (đồng)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {rows.length === 0 ? (
+                    <tr><td colSpan={4} className="py-10 text-center text-faint text-sm italic">{emptyLabel}</td></tr>
+                  ) : rows.map(r => {
+                    const open = !!expandedRows[r.mkh];
+                    return (
+                      <Fragment key={r.mkh}>
+                        <tr
+                          onClick={() => onToggleRow(r.mkh)}
+                          className={`transition-colors cursor-pointer ${open ? 'bg-accent-soft/50' : 'hover:bg-subtle'}`}
+                        >
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-start gap-2">
+                              <ChevronRight className={`w-4 h-4 mt-0.5 shrink-0 transition-transform ${open ? 'rotate-90 text-accent' : 'text-faint'}`} />
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-ink break-words">{r.name}</div>
+                                <div className="text-[11px] text-faint font-mono">{r.mkh} · {r.meterList.length} công tơ</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 text-right text-sm font-bold text-ink tabular-nums border-l border-[var(--border)]">{fmtInt(r.curKwh)}</td>
+                          <td className="py-3.5 px-4 text-center"><DeltaBadge d={r.delta} /></td>
+                          <td className="py-3.5 px-4 text-right text-sm text-dim tabular-nums">{fmtInt(r.curVnd)}</td>
+                        </tr>
+                        {open && r.meterList.map((m, mi) => (
+                          <tr
+                            key={r.mkh + '|' + m.sct}
+                            className={`text-xs border-l-[3px] border-l-accent/40 bg-accent-soft/10 hover:bg-accent-soft/20 transition-colors ${mi === r.meterList.length - 1 ? 'border-b-2 border-b-[var(--border-strong)]' : ''}`}
+                          >
+                            <td className="py-3 px-4 pl-9">
+                              <div className="flex flex-col">
+                                <span className="font-mono font-semibold text-dim">CT {m.sct}</span>
+                                {m.addr && <span className="text-[10px] text-faint truncate max-w-[240px]">{m.addr}</span>}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-dim tabular-nums border-l border-[var(--border)]">{fmtInt(m.curKwh)}</td>
+                            <td className="py-3 px-4 text-center"><DeltaBadge d={m.delta} /></td>
+                            <td className="py-3 px-4 text-right text-soft tabular-nums">{fmtInt(m.curVnd)}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+                {rows.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-surface border-t-2 border-[var(--border-strong)] text-sm font-black text-ink">
+                      <td className="py-3.5 px-4 text-right uppercase text-xs tracking-wider text-dim">Tổng cộng</td>
+                      <td className="py-3.5 px-4 text-right tabular-nums border-l border-[var(--border)]">{fmtInt(kwh)}</td>
+                      <td className="py-3.5 px-4" />
+                      <td className="py-3.5 px-4 text-right tabular-nums text-accent">{fmtInt(vnd)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
