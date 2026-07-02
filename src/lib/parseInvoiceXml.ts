@@ -152,6 +152,7 @@ export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
       moi: toNum(m['NewValue']),
       phuTru: toNum(m['MinusIndex']),
       dgia: 0,
+      sluong: 0, // điền ở vòng 2 từ dòng tính tiền (TChat=1)
     };
     if (mhh) {
       readingIndex.set(mhh, { key, bieu: tou });
