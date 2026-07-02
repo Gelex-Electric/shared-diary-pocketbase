@@ -176,13 +176,6 @@ export default function BusinessSummaryDashboard() {
 
   /* ── Customers: list + default representatives ── */
   const custByKwh = useMemo(() => rollupByCustomer(yearBills).sort((a, b) => b.kwh - a.kwh), [yearBills]);
-  const nameOf = useMemo(() => {
-    const m = new Map<string, string>();
-    custByKwh.forEach(c => m.set(c.mkh, c.nMua || c.mkh));
-    meterIndex.forEach(v => { if (!m.get(v.mkh)) m.set(v.mkh, v.nMua || v.mkh); });
-    return (mkh: string) => m.get(mkh) || mkh;
-  }, [custByKwh, meterIndex]);
-
   const custOptions = useMemo(
     () => custByKwh.map(c => ({ value: c.mkh, label: `${c.nMua || c.mkh} · ${c.mkh}` })),
     [custByKwh],
