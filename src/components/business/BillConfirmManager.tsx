@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { pb } from '../../lib/pocketbase';
 import { DatePicker, TimePicker, MonthPicker } from '../ui/DateTimePickers';
@@ -8,7 +8,7 @@ import { AccountHes, DataMetter } from '../../types';
 import PizZip from 'pizzip';
 import {
   FileCheck2, Save, Gauge, Building2, Users,
-  CheckCircle2, AlertCircle, RotateCcw, Plus, X, ChevronRight,
+  RotateCcw, Plus, X, ChevronRight,
   Pencil, Trash2, FileDown, Search, FileSpreadsheet,
   CreditCard, RefreshCw, Zap, CheckSquare, Square, Archive,
 } from 'lucide-react';
