@@ -7,7 +7,7 @@ import { MonthPicker } from '../ui/DateTimePickers';
 import { Select } from '../ui/Select';
 import { Tabs, type TabItem } from '../ui/Tabs';
 import {
-  Upload, FileCode2, Database, CheckCircle2, AlertCircle, Trash2,
+  Upload, FileCode2, Database, Trash2,
   Users, Loader2, FileSpreadsheet, CloudDownload, Check, Layers,
   BookOpen, ListChecks,
 } from 'lucide-react';
@@ -41,8 +41,6 @@ const BIEU_LABEL: Record<Bieu, string> = { BT: 'BT', CD: 'CĐ', TD: 'TĐ', VC: '
 
 const fmt = (n: number, d = 0) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: d }).format(n);
-const fmt2 = (n: number) =>
-  new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(n);
 const fmtDate = (s: string) => {
   const [y, m, d] = (s || '').split('-');
   return d && m && y ? `${d}/${m}/${y}` : s || '—';
@@ -517,7 +515,7 @@ export default function QuickImportManager() {
       {/* Card lấy dữ liệu — có tab chuyển chế độ */}
       <div className="vl-card p-6 md:p-8">
         {/* Tab bar */}
-        <Tabs tabs={IMPORT_TABS} value={mode} onChange={setMode} className="mb-6" />
+        <Tabs tabs={IMPORT_TABS} value={mode} onChange={m => setMode(m)} className="mb-6" />
 
         {mode === 'direct' ? (
           <>
