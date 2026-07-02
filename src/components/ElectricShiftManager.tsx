@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { pb, AREAS, AREA_TO_CLASS, ID_TO_AREA } from '../lib/pocketbase';
+import { pb, AREAS } from '../lib/pocketbase';
 import { ElectricShift } from '../types';
 import { toast as notify } from '../lib/toast';
-import { Plus, Trash2, Edit2, X, Check, Search, Filter } from 'lucide-react';
+import { Plus, Trash2, Edit2, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
 import { useConfirm } from './ui/ConfirmDialog';
