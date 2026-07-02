@@ -104,7 +104,6 @@ export const fmtDate = (s?: string) => {
   const [y, m, dd] = d.split('-');
   return dd && m && y ? `${dd}/${m}/${y}` : d;
 };
-const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /* ── Merge price-change splits into bills ──────────────── */
 export function mergeBills(records: InvoiceRecord[]): Bill[] {
