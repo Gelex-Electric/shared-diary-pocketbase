@@ -4,7 +4,7 @@ import { pb } from '../../lib/pocketbase';
 import { DatePicker, MonthPicker } from '../ui/DateTimePickers';
 import { createNotification } from '../ui/NotificationBell';
 import {
-  Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle, AlertCircle,
+  Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
   RefreshCw, X, Loader2, Save,
 } from 'lucide-react';
