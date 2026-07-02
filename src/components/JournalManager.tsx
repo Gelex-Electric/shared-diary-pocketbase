@@ -24,7 +24,7 @@ export default function JournalManager() {
         <p className="text-soft text-sm mt-1">Quản lý lịch trực và nhân sự trực vận hành</p>
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} />
+      <Tabs tabs={TABS} value={tab} onChange={t => setTab(t)} />
 
       <AnimatePresence mode="wait">
         <motion.div
