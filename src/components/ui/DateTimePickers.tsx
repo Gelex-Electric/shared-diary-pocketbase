@@ -338,19 +338,21 @@ const MONTHS_SHORT = [
 ];
 
 interface MonthPickerProps {
-  value: string;                 // "YYYY-MM"
+  value: string;                 // "YYYY-MM" | "all" (khi allowAll)
   onChange: (val: string) => void;
   label?: string;
   className?: string;
+  /** Cho phép chọn "Tất cả" — onChange nhận giá trị 'all' */
+  allowAll?: boolean;
 }
 
 export function MonthPicker({
-  value, onChange, label, className = '',
+  value, onChange, label, className = '', allowAll = false,
 }: MonthPickerProps) {
   const today = new Date();
 
   const parse = (v: string) => {
-    if (!v) return null;
+    if (!v || v === 'all') return null;
     const [y, mo] = v.split('-').map(Number);
     return { y, mo: mo - 1 };
   };
@@ -393,7 +395,14 @@ export function MonthPicker({
   const isSel = (mo: number) => parsed && parsed.y === viewYear && parsed.mo === mo;
   const isCur = (mo: number) => today.getFullYear() === viewYear && today.getMonth() === mo;
 
-  const displayVal = parsed ? `Tháng ${p2(parsed.mo + 1)}/${parsed.y}` : '';
+  const selectAll = () => {
+    onChange('all');
+    setOpen(false);
+  };
+
+  const displayVal = value === 'all'
+    ? 'Tất cả'
+    : parsed ? `Tháng ${p2(parsed.mo + 1)}/${parsed.y}` : '';
 
   return (
     <div ref={wrapperRef} className={`space-y-1 relative ${className}`}>
@@ -467,10 +476,22 @@ export function MonthPicker({
           </div>
 
           {/* ── Footer ── */}
-          <div className="px-3 pb-3 pt-1">
+          <div className="px-3 pb-3 pt-1 flex gap-1.5">
+            {allowAll && (
+              <button
+                onClick={selectAll}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg active:scale-[0.98] transition-all ${
+                  value === 'all'
+                    ? 'bg-accent text-white'
+                    : 'border border-[var(--border)] text-dim hover:bg-accent-soft hover:text-accent'
+                }`}
+              >
+                Tất cả
+              </button>
+            )}
             <button
               onClick={goThisMonth}
-              className="w-full py-1.5 bg-accent text-white text-xs font-bold rounded-lg
+              className="flex-1 py-1.5 bg-accent text-white text-xs font-bold rounded-lg
                          hover:bg-[var(--accent-hover)] active:scale-[0.98] transition-all"
             >
               Tháng này
