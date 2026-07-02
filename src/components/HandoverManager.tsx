@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { pb, AREAS, AREA_TO_CLASS, ID_TO_AREA } from '../lib/pocketbase';
+import { pb, AREAS, ID_TO_AREA } from '../lib/pocketbase';
 import { Handover, Situation, ElectricShift } from '../types';
 import {
-  Plus, Trash2, Edit2, X, CheckCircle2, Search,
-  Calendar, Clock, User, Users, Zap, Download, ChevronDown,
-  ChevronRight, RefreshCw, ClipboardList, Package,
-  MessageSquare, FileText, Activity, CheckSquare, Square,
+  Plus, Trash2, Edit2, X,
+  Calendar, Clock, Users, Zap, Download, ChevronDown,
+  ChevronRight, RefreshCw, ClipboardList,
+  FileText, Activity, CheckSquare, Square,
   AlertTriangle, ZapOff, ClipboardCheck, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
