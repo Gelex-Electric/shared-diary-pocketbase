@@ -20,13 +20,6 @@ const fmtMoment = (dt: string) => {
   return `${p2(d.getUTCHours())}h${p2(d.getUTCMinutes())} ngày ${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
 };
 
-/** "09/02/2026" */
-const fmtShort = (dt: string) => {
-  const d = toUTC(dt);
-  if (isNaN(d.getTime())) return '';
-  return `${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
-};
-
 export async function generateOutageDocx(n: PowerOutage): Promise<Blob> {
   const filename = AREA_TEMPLATE[n.area] || 'PO.KCN-TH.docx';
   const response = await fetch(`/TBCD-template/${filename}`);
