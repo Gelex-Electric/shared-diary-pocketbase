@@ -30,11 +30,6 @@ export type ToastPosition =
   | 'top left' | 'top right' | 'top center'
   | 'bottom left' | 'bottom right' | 'bottom center';
 
-interface ToastAction {
-  text: string;
-  onClick?: () => void;
-}
-
 export interface ToastOptions {
   duration?: number;          // ms, mặc định 3500
   autoClose?: boolean;        // mặc định true
