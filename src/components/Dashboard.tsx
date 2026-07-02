@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { pb } from '../lib/pocketbase';
 import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity, FileText, ExternalLink, Mail, LayoutDashboard, ZapOff,
+  Activity, FileText, LayoutDashboard,
 } from 'lucide-react';
 import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import SummaryDashboard from './SummaryDashboard';
 import CustomerManager from './CustomerManager';
-import HesReadingManager from './HesReadingManager';
+import HesReadingManager from './hes/HesReadingManager';
 import VoltagePowerDashboard from './VoltagePowerDashboard';
 import JournalManager from './JournalManager';
 import PowerOutageManager from './PowerOutageManager';
