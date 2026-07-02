@@ -3,7 +3,7 @@ import { pb, AREAS, ID_TO_AREA } from '../lib/pocketbase';
 import { fetchMeterInfo } from '../lib/meterInfo';
 import { PowerOutage, OutageCustomer, OutageSlot, OutageAppendix } from '../types';
 import {
-  Plus, Trash2, Edit2, X, CheckCircle2, XCircle, AlertCircle, Info,
+  Plus, Trash2, Edit2, X,
   Search, Download, RefreshCw, ZapOff, AlertTriangle,
   CalendarClock, Users, MapPin, CheckSquare, Square, BookOpen, UserPlus,
 } from 'lucide-react';
