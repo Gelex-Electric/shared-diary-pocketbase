@@ -50,6 +50,10 @@ jobs:
           API_PASS: ${{ secrets.API_PASS }}
           TARGET_DATE: ${{ inputs.target_date }}
           USER_ID: ${{ inputs.user_id || '2' }}
+          # Gui canh bao HSN bat thuong vao collection `notifications`
+          PB_URL: ${{ secrets.PB_URL }}
+          PB_EMAIL: ${{ secrets.PB_EMAIL }}
+          PB_PASS: ${{ secrets.PB_PASS }}
         run: python scripts/fetch_meter_info.py
 
       - name: Commit & push CSV
