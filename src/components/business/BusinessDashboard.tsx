@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { pb } from '../../lib/pocketbase';
 import {
-  RefreshCw, LogOut, X, Menu, ChevronDown,
+  LogOut, X, Menu, ChevronDown,
   FileText, LayoutDashboard, Briefcase,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
