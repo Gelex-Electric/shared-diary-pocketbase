@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { pb } from '../../lib/pocketbase';
-import { Bell, CheckCheck, X, Wallet, Info } from 'lucide-react';
+import { Bell, CheckCheck, Wallet, Info } from 'lucide-react';
 
 /* ============================================================
    NotificationBell — chuông thông báo dùng chung cho cả khối
