@@ -4,7 +4,7 @@ import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import {
   MapPin, RefreshCw, ChevronRight,
   CheckCircle2, XCircle, Search, Gauge,
-  Users, AlertCircle, Info, X,
+  Users,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
