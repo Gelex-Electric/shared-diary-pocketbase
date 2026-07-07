@@ -2,7 +2,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm install          # ← quan trọng: npm install thay vì npm ci
+RUN npm ci
 COPY . .
 RUN npm run build
 
@@ -23,7 +23,8 @@ COPY server.ts ./
 COPY package*.json ./
 COPY start.sh ./
 
-RUN npm install --production && npm install tsx
+# tsx đã có sẵn trong dependencies, không cần cài riêng
+RUN npm ci --omit=dev
 RUN chmod +x start.sh
 
 EXPOSE 3000

@@ -85,7 +85,10 @@ async function startServer() {
 
     // SPA fallback
     app.get('*', (req, res) => {
-      if (req.path.startsWith('/pb') || req.path === '/_' || req.path.startsWith('/hes') || req.path.startsWith('/ccis')) return;
+      if (req.path.startsWith('/pb') || req.path === '/_' || req.path.startsWith('/hes') || req.path.startsWith('/ccis')) {
+        res.status(404).end();
+        return;
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
 
