@@ -47,6 +47,10 @@ export async function generateBbxnDocx(r: BbxnRecordLike): Promise<Blob> {
   const response = await fetch('/BBXN-template/BBXN.docx');
   if (!response.ok) throw new Error('Không tìm thấy template BBXN.docx');
   const buf = await response.arrayBuffer();
+  // File .docx là zip, luôn bắt đầu bằng "PK" — chặn trường hợp SPA fallback trả HTML
+  const sig = new Uint8Array(buf.slice(0, 2));
+  if (sig[0] !== 0x50 || sig[1] !== 0x4b)
+    throw new Error('Server không trả về file .docx hợp lệ cho template BBXN.docx');
   const zip = new PizZip(buf);
   Object.keys(zip.files).forEach(name => {
     if (!name.endsWith('.xml')) return;
