@@ -25,6 +25,7 @@ from fetch_meter_data import BASE_URL, VN_TZ, get_retry, login_data
 
 CSV_PATH = "public/metterinfo.csv"
 DATAMETTER_PATH = "public/datametter.csv"
+LINE_INFO_PATH = "public/line_info.csv"
 
 # ==================== CANH BAO HSN BAT THUONG ====================
 # HSN (cot METER_NAME) coi la SAI khi > nguong hoac trung so cong to
@@ -195,7 +196,7 @@ def notify_bad_hsn(bad: list):
 
 
 def fetch_line_list(user_id: str, token: str) -> dict:
-    """GetLineList -> {LINE_ID: {"LINE_NAME":..., "CODE":...}}."""
+    """GetLineList -> {LINE_ID: {"LINE_NAME":..., "ADDRESS":..., "CODE":...}}."""
     r = get_retry(
         f"{BASE_URL}/GetLineList",
         params={"UserID": user_id, "Token": token},
@@ -212,13 +213,14 @@ def fetch_line_list(user_id: str, token: str) -> dict:
             continue
         lines[lid] = {
             "LINE_NAME": (rec.get("LINE_NAME") or "").strip(),
+            "ADDRESS": (rec.get("ADDRESS") or "").strip(),
             "CODE": (rec.get("CODE") or "").strip(),
         }
     return lines
 
 
-def fetch_meter_line_id(meter_no: str, token: str) -> str:
-    """GetMeter(No) -> LINE_ID cua cong to (rong neu loi/khong co)."""
+def fetch_meter_line(meter_no: str, token: str):
+    """GetMeter(No) -> (LINE_ID, LINE_NAME) cua cong to (rong neu loi/khong co)."""
     try:
         r = get_retry(
             f"{BASE_URL}/GetMeter",
@@ -229,27 +231,39 @@ def fetch_meter_line_id(meter_no: str, token: str) -> str:
         data = r.json()
     except Exception as e:  # noqa: BLE001
         print(f"[WARN] GetMeter {meter_no}: {e}")
-        return ""
+        return "", ""
     if isinstance(data, list):
         data = data[0] if data else {}
     if isinstance(data, dict):
-        return str(data.get("LINE_ID") or "").strip()
-    return ""
+        return str(data.get("LINE_ID") or "").strip(), str(data.get("LINE_NAME") or "").strip()
+    return "", ""
 
 
-def enrich_stations(meters: dict, user_id: str, token: str) -> list:
-    """Gan LINE_ID/CODE/ROLE cho tung cong to; tra ve danh sach tram bat thuong
-    (CODE != rong nhung KHONG phai tien to cua LINE_NAME) de gui canh bao."""
-    lines = fetch_line_list(user_id, token)
-    print(f"GetLineList: {len(lines)} tram.")
+def write_line_info(lines: dict):
+    """Ghi public/line_info.csv (nguon GetLineList): LINE_ID, LINE_NAME, ADDRESS, CODE."""
+    fields = ["LINE_ID", "LINE_NAME", "ADDRESS", "CODE"]
+    rows = [{"LINE_ID": lid, **{k: v.get(k, "") for k in ("LINE_NAME", "ADDRESS", "CODE")}}
+            for lid, v in sorted(lines.items(), key=lambda kv: kv[0])]
+    os.makedirs(os.path.dirname(LINE_INFO_PATH), exist_ok=True)
+    with open(LINE_INFO_PATH, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(rows)
+    print(f"line_info.csv: {len(rows)} tram -> {LINE_INFO_PATH}")
 
+
+def enrich_stations(meters: dict, token: str, lines: dict) -> list:
+    """Gan LINE_ID/LINE_NAME (tu GetMeter) + CODE/ROLE (tu GetLineList) cho tung cong to.
+    Tra ve danh sach tram bat thuong (CODE != rong nhung KHONG phai tien to LINE_NAME)."""
     bad_stations = []          # tram co CODE nhung LINE_NAME khong bat dau bang CODE
     seen_bad = set()
     for no, m in meters.items():
-        lid = fetch_meter_line_id(no, token)
+        lid, lname = fetch_meter_line(no, token)   # GetMeter: LINE_ID + LINE_NAME
         line = lines.get(lid, {})
         code = line.get("CODE", "")
-        line_name = line.get("LINE_NAME") or m.get("LINE_NAME") or ""
+        if lname:
+            m["LINE_NAME"] = lname                 # uu tien ten tram tu GetMeter
+        line_name = m.get("LINE_NAME") or line.get("LINE_NAME") or ""
         m["LINE_ID"] = lid
         m["CODE"] = code
         if code:
@@ -327,8 +341,11 @@ def main():
             meters[no][k] = rec.get(k) if rec.get(k) is not None else ""
         meters[no]["METER_NO"] = no
 
-    # Anh xa cong to -> tram (LINE_ID/CODE/ROLE) qua GetLineList + GetMeter
-    bad_stations = enrich_stations(meters, USER_ID, token)
+    # Anh xa cong to -> tram (LINE_ID/LINE_NAME tu GetMeter; CODE/ROLE tu GetLineList)
+    lines = fetch_line_list(USER_ID, token)
+    print(f"GetLineList: {len(lines)} tram.")
+    write_line_info(lines)                       # public/line_info.csv
+    bad_stations = enrich_stations(meters, token, lines)
     n_chinh = sum(1 for m in meters.values() if m.get("ROLE") == "chinh")
     print(f"Phan loai diem do: {n_chinh} chinh / {len(meters) - n_chinh} phu.")
 
