@@ -17,8 +17,19 @@ const fmt = (v: number, d = 1) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: d }).format(v);
 const pct = (v: number) => `${fmt(v, 1)}%`;
 const dateVN = (k: string) => { const [y, m, d] = k.split('-'); return d ? `${d}/${m}/${y}` : k; };
-const yesterdayKey = () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); };
-const prevDay = (k: string) => { const d = new Date(k + 'T00:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); };
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const yesterdayKey = () => {
+  const n = new Date();
+  const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+const prevDay = (k: string) => {
+  const [y, m, d] = (k || '').split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+};
 
 /** Màu theo mức đầy tải: đỏ ≤10% hoặc ≥90%; vàng 10–30% & 80–90%; xanh 30–80%. */
 function loadColor(p: number): string {
@@ -123,6 +134,8 @@ export default function TransformerLossManager() {
 
   /* Gom theo trạm cho ngày chọn + Δ so với hôm trước */
   const { zones, kpi, stationsSorted } = useMemo(() => {
+    const empty = { zones: [] as ZoneAgg[], kpi: { loss: 0, output: 0, pct: 0, n: 0 }, stationsSorted: [] as StationAgg[] };
+    if (!selDate) return empty;
     const cur = dailyByStation(rows, selDate);
     const prev = dailyByStation(rows, prevDay(selDate));
     const stations: StationAgg[] = [];
