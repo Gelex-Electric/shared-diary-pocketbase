@@ -72,7 +72,7 @@ function dailyByStation(rows: Loss30minRow[], date: string) {
     if (r.date !== date) continue;
     let s = m.get(r.code);
     if (!s) { s = { output: 0, loss: 0, maxLoad: 0, name: r.lineName || r.code, slots: [] }; m.set(r.code, s); }
-    s.output += r.p * 0.5;
+    s.output += r.outputKwh;
     s.loss += r.lossKwh;
     if (r.loadPct > s.maxLoad) s.maxLoad = r.loadPct;
     s.slots.push({ time: r.time, loss: r.lossKwh, load: r.loadPct, p: r.p });

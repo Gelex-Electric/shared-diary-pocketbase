@@ -16,7 +16,7 @@ import sys
 SRC_PATH = os.environ.get("LOSS30_PATH", "public/transformer_loss_30min.csv")
 OUT_PATH = "public/transformer_loss_monthly.csv"
 
-OUT_FIELDS = ["CODE", "LINE_NAME", "MONTH", "N_INTERVALS",
+OUT_FIELDS = ["CODE", "LINE_NAME", "MONTH", "N_INTERVALS", "OUTPUT_KWH",
               "LOSS_NOLOAD_KWH", "LOSS_LOAD_KWH", "LOSS_TOTAL_KWH"]
 
 
@@ -43,9 +43,10 @@ def aggregate() -> dict:
             key = (code, month)
             slot = agg.setdefault(key, {
                 "LINE_NAME": (row.get("LINE_NAME") or "").strip(),
-                "n": 0, "noload": 0.0, "load": 0.0, "total": 0.0,
+                "n": 0, "output": 0.0, "noload": 0.0, "load": 0.0, "total": 0.0,
             })
             slot["n"] += 1
+            slot["output"] += _to_float(row.get("OUTPUT_KWH"))
             slot["noload"] += _to_float(row.get("LOSS_NOLOAD_KWH"))
             slot["load"] += _to_float(row.get("LOSS_LOAD_KWH"))
             slot["total"] += _to_float(row.get("LOSS_KWH"))
@@ -72,6 +73,7 @@ def main():
             "LINE_NAME": s["LINE_NAME"],
             "MONTH": month,
             "N_INTERVALS": s["n"],
+            "OUTPUT_KWH": f"{s['output']:g}",
             "LOSS_NOLOAD_KWH": f"{s['noload']:g}",
             "LOSS_LOAD_KWH": f"{s['load']:g}",
             "LOSS_TOTAL_KWH": f"{s['total']:g}",

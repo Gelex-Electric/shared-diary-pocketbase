@@ -3,10 +3,16 @@
 hom qua, luu vao public/transformer_loss_30min.csv.
 
 Mo hinh:
-  - 1 tram (CODE) = 1 MBA. Tram gom cac cong to CHINH (ROLE=chinh trong
-    metterinfo.csv) -> cong P, Q cua chung tai tung moc 30 phut = phu tai MBA.
+  - 1 tram (CODE) = 1 MBA. Tram gom cac cong to CHINH (ROLE=chinh).
+  - Timeline HOP NHAT theo tram: gop moc thoi gian cua MOI cong to chinh, forward-fill
+    gia tri (P,Q) cua tung cong to -> cong lai = phu tai MBA tai tung moc.
+  - Khoang thoi gian dt = HIEU DATE_TIME giua 2 moc lien tiep (khong co dinh 0.5h),
+    chan tren DT_MAX_H de tranh khoang trong lon; moc cuoi dung DT_NOMINAL_H.
+  - CHI tinh khi con dien: cong to co dien ap pha U>0. U=0 (mat dien) -> bo qua.
+    Neu ca tram khong con cong to nao U>0 tai moc do -> khong tinh ton that (0).
   - Cong thuc: S = sqrt(P^2 + Q^2); tai = S/Sdm; dP = P0 + Pk*(S/Sdm)^2 (kW).
-    LOSS_NOLOAD = P0*0.5 kWh; LOSS_LOAD = Pk*tai^2*0.5 kWh; LOSS = dP*0.5 kWh.
+    OUTPUT = P*dt; LOSS_NOLOAD = P0*dt; LOSS_LOAD = Pk*tai^2*dt; LOSS = dP*dt.
+  - Tram nhieu cong to lech gio: van cong san luong; thoi gian trai tu min->max moc.
 
 Nguon du lieu:
   - metterinfo.csv : CODE, ROLE, STATUS cho tung cong to (do fetch_meter_info.py sinh).
@@ -17,6 +23,7 @@ Nguon du lieu:
 Khu trung theo khoa (CODE, DATE_TIME) nen chay lai an toan. Prune giu KEEP_DAYS ngay
 gan nhat. KHONG tu commit (daily-pipeline.yml commit chung).
 """
+import bisect
 import csv
 import io
 import math
@@ -26,6 +33,9 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 VN_TZ = timezone(timedelta(hours=7))
+REC_FMT = "%Y-%m-%d %H:%M:%S"
+DT_MAX_H = float(os.environ.get("DT_MAX_H", "1.0"))       # chan tren dt (gio) khi co khoang trong
+DT_NOMINAL_H = float(os.environ.get("DT_NOMINAL_H", "0.5"))  # dt cho moc ghi cuoi cung
 
 METTERINFO_PATH = os.environ.get("METTERINFO_PATH", "public/metterinfo.csv")
 MBA_PATH = os.environ.get("MBA_PATH", "public/mba_info.csv")
@@ -34,8 +44,8 @@ OUT_PATH = "public/transformer_loss_30min.csv"
 
 KEEP_DAYS = int(os.environ.get("KEEP_DAYS", "40"))  # giu 40 ngay gan nhat/tram
 
-OUT_FIELDS = ["CODE", "LINE_NAME", "DATE_TIME", "N_METERS", "P_KW", "Q_KVAR",
-              "S_KVA", "LOAD_PCT", "DELTA_P_KW", "LOSS_NOLOAD_KWH",
+OUT_FIELDS = ["CODE", "LINE_NAME", "DATE_TIME", "DUR_H", "N_METERS", "P_KW", "Q_KVAR",
+              "S_KVA", "LOAD_PCT", "DELTA_P_KW", "OUTPUT_KWH", "LOSS_NOLOAD_KWH",
               "LOSS_LOAD_KWH", "LOSS_KWH"]
 
 
@@ -171,54 +181,101 @@ def resolve_params(code: str, mba: dict):
     return None
 
 
-def accumulate(day: str, meter2code: dict, valid_codes: set) -> dict:
-    """Doc datametter.csv, cong P/Q cac cong to chinh theo (CODE, DATE_TIME).
-    Tra ve {(code, dt): {"P":.., "Q":.., "n":..}}."""
+def _parse_dt(s: str):
+    try:
+        return datetime.strptime(str(s or "").strip(), REC_FMT)
+    except (TypeError, ValueError):
+        return None
+
+
+def read_station_records(day: str, meter2code: dict, valid_codes: set) -> dict:
+    """Doc datametter.csv -> {code: {meter: [(t, P, Q, on) da sap xep theo t]}}.
+    `on` = con dien (max U pha > 0). Chi lay cong to chinh thuoc valid_codes."""
     if not os.path.isfile(DATAMETTER_PATH):
         sys.exit(f"Khong tim thay {DATAMETTER_PATH}.")
-    agg = {}
+    by_code = {}
     with open(DATAMETTER_PATH, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            dt = str(row.get("DATE_TIME") or "").strip()
-            if dt[:10] != day:
+            dts = str(row.get("DATE_TIME") or "").strip()
+            if dts[:10] != day:
                 continue
             no = str(row.get("METER_NO") or "").strip()
             code = meter2code.get(no)
             if not code or code not in valid_codes:
                 continue
-            key = (code, dt)
-            slot = agg.setdefault(key, {"P": 0.0, "Q": 0.0, "n": 0})
-            slot["P"] += _to_float(row.get("TOTAL_KW"))
-            slot["Q"] += _to_float(row.get("TOTAL_KVAR"))
-            slot["n"] += 1
-    return agg
+            t = _parse_dt(dts)
+            if t is None:
+                continue
+            u = max(_to_float(row.get("PHASE_A_VOLTS")),
+                    _to_float(row.get("PHASE_B_VOLTS")),
+                    _to_float(row.get("PHASE_C_VOLTS")))
+            by_code.setdefault(code, {}).setdefault(no, []).append(
+                (t, _to_float(row.get("TOTAL_KW")), _to_float(row.get("TOTAL_KVAR")), u > 0))
+    for meters in by_code.values():
+        for lst in meters.values():
+            lst.sort(key=lambda r: r[0])
+    return by_code
 
 
-def build_rows(agg: dict, params_by_code: dict, code2line: dict) -> list:
+def station_intervals(recs_by_meter: dict):
+    """Sinh (t0, dt_h, P, Q, n) tren timeline HOP NHAT cua cac cong to trong tram.
+    dt = hieu DATE_TIME hai moc lien tiep (chan tren DT_MAX_H); moc cuoi = DT_NOMINAL_H.
+    Tai moc t0: forward-fill gia tri gan nhat <= t0 cua tung cong to, chi cong khi con
+    dien (on) va con moi (khong qua han DT_MAX_H). n=0 (mat dien ca tram) -> bo qua."""
+    times = sorted({r[0] for lst in recs_by_meter.values() for r in lst})
+    if not times:
+        return
+    meter_times = {m: [r[0] for r in lst] for m, lst in recs_by_meter.items()}
+    for k, t0 in enumerate(times):
+        dt = (times[k + 1] - t0).total_seconds() / 3600.0 if k + 1 < len(times) else DT_NOMINAL_H
+        if dt <= 0:
+            continue
+        dt = min(dt, DT_MAX_H)
+        p = q = 0.0
+        n = 0
+        for m, lst in recs_by_meter.items():
+            i = bisect.bisect_right(meter_times[m], t0) - 1
+            if i < 0:
+                continue
+            rt, rp, rq, on = lst[i]
+            if not on:
+                continue
+            if (t0 - rt).total_seconds() / 3600.0 > DT_MAX_H:  # qua han -> coi nhu chua co du lieu
+                continue
+            p += rp
+            q += rq
+            n += 1
+        if n == 0:   # ca tram mat dien tai moc nay
+            continue
+        yield t0, dt, p, q, n
+
+
+def build_rows(day: str, by_code: dict, params_by_code: dict, code2line: dict) -> list:
     rows = []
-    for (code, dt), slot in agg.items():
+    for code, recs_by_meter in by_code.items():
         m = params_by_code[code]
         sdm, p0, pk = m["SDM_KVA"], m["P0_KW"], m["PK_KW"]
-        p, q = slot["P"], slot["Q"]
-        s = math.sqrt(p * p + q * q)
-        load = s / sdm if sdm else 0.0
-        loss_noload = p0 * 0.5
-        loss_load = pk * load * load * 0.5
-        delta_p = p0 + pk * load * load
-        rows.append({
-            "CODE": code,
-            "LINE_NAME": code2line.get(code, m.get("RAW_CODE", code)),
-            "DATE_TIME": dt,
-            "N_METERS": slot["n"],
-            "P_KW": f"{p:g}",
-            "Q_KVAR": f"{q:g}",
-            "S_KVA": f"{s:g}",
-            "LOAD_PCT": f"{load * 100:g}",
-            "DELTA_P_KW": f"{delta_p:g}",
-            "LOSS_NOLOAD_KWH": f"{loss_noload:g}",
-            "LOSS_LOAD_KWH": f"{loss_load:g}",
-            "LOSS_KWH": f"{loss_noload + loss_load:g}",
-        })
+        for t0, dt, p, q, n in station_intervals(recs_by_meter):
+            s = math.sqrt(p * p + q * q)
+            load = s / sdm if sdm else 0.0
+            loss_noload = p0 * dt
+            loss_load = pk * load * load * dt
+            rows.append({
+                "CODE": code,
+                "LINE_NAME": code2line.get(code, m.get("RAW_CODE", code)),
+                "DATE_TIME": t0.strftime(REC_FMT),
+                "DUR_H": f"{dt:g}",
+                "N_METERS": n,
+                "P_KW": f"{p:g}",
+                "Q_KVAR": f"{q:g}",
+                "S_KVA": f"{s:g}",
+                "LOAD_PCT": f"{load * 100:g}",
+                "DELTA_P_KW": f"{p0 + pk * load * load:g}",
+                "OUTPUT_KWH": f"{p * dt:g}",
+                "LOSS_NOLOAD_KWH": f"{loss_noload:g}",
+                "LOSS_LOAD_KWH": f"{loss_load:g}",
+                "LOSS_KWH": f"{loss_noload + loss_load:g}",
+            })
     return rows
 
 
@@ -262,11 +319,11 @@ def main():
         print("Khong co tram nao du dieu kien (can ca cong to chinh lan thong so MBA). Bo qua.")
         return
 
-    agg = accumulate(day, meter2code, codes)
-    if not agg:
+    by_code = read_station_records(day, meter2code, codes)
+    if not by_code:
         print(f"Khong co du lieu datametter cho ngay {day}. Bo qua.")
         return
-    new_rows = build_rows(agg, params_by_code, code2line)
+    new_rows = build_rows(day, by_code, params_by_code, code2line)
     total = write_out(new_rows)
     print(f"Ghi {len(new_rows)} moc 30 phut (ngay {day}). Tong file: {total} dong -> {OUT_PATH}")
 

@@ -13,6 +13,7 @@ export interface LossMonthlyRow {
   lineName: string;
   month: string;          // YYYY-MM
   nIntervals: number;
+  outputKwh: number;
   noloadKwh: number;
   loadKwh: number;
   totalKwh: number;
@@ -24,12 +25,14 @@ export interface Loss30minRow {
   dateTime: string;       // "YYYY-MM-DD HH:mm:ss"
   date: string;           // "YYYY-MM-DD"
   time: string;           // "HH:mm"
+  durH: number;           // độ dài khoảng (giờ)
   nMeters: number;
   p: number;              // kW
   q: number;              // kvar
   s: number;              // kVA
   loadPct: number;        // %
   deltaP: number;         // kW
+  outputKwh: number;      // sản lượng khoảng = P·dt
   noloadKwh: number;
   loadKwh: number;
   lossKwh: number;
@@ -78,6 +81,7 @@ export async function fetchLossMonthly(): Promise<LossMonthlyRow[]> {
       lineName: (c[h['LINE_NAME']] ?? '').trim(),
       month: (c[h['MONTH']] ?? '').trim(),
       nIntervals: num(c[h['N_INTERVALS']]),
+      outputKwh: num(c[h['OUTPUT_KWH']]),
       noloadKwh: num(c[h['LOSS_NOLOAD_KWH']]),
       loadKwh: num(c[h['LOSS_LOAD_KWH']]),
       totalKwh: num(c[h['LOSS_TOTAL_KWH']]),
@@ -104,12 +108,14 @@ export async function fetchLoss30min(): Promise<Loss30minRow[]> {
       dateTime: dt,
       date: dt.slice(0, 10),
       time: dt.slice(11, 16),
+      durH: num(c[h['DUR_H']]),
       nMeters: num(c[h['N_METERS']]),
       p: num(c[h['P_KW']]),
       q: num(c[h['Q_KVAR']]),
       s: num(c[h['S_KVA']]),
       loadPct: num(c[h['LOAD_PCT']]),
       deltaP: num(c[h['DELTA_P_KW']]),
+      outputKwh: num(c[h['OUTPUT_KWH']]),
       noloadKwh: num(c[h['LOSS_NOLOAD_KWH']]),
       loadKwh: num(c[h['LOSS_LOAD_KWH']]),
       lossKwh: num(c[h['LOSS_KWH']]),
