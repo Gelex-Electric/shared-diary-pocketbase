@@ -69,7 +69,14 @@ def load_meter_list():
 
 
 def login_data() -> dict:
-    """Dang nhap API dien, tra ve toan bo object (gom USER_ID, TOKEN)."""
+    """Tra ve object dang nhap (gom USER_ID, TOKEN).
+
+    Neu co API_TOKEN (token da lay san) thi dung luon, KHONG goi Login — theo luu y
+    trong API_HES.md: chi login khi cac ham khac loi. USER_ID mac dinh '2' (GETC).
+    """
+    token = os.environ.get("API_TOKEN", "").strip()
+    if token:
+        return {"CODE": "1", "TOKEN": token, "USER_ID": os.environ.get("USER_ID", "2")}
     if not (USER_ACCOUNT and PASSWORD):
         sys.exit("Thieu API_USER/API_PASS. Hay them vao GitHub Secrets.")
     r = get_retry(
