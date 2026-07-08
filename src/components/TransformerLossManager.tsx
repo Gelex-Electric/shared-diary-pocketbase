@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useState, Fragment } from 'react';
+import { useEffect, useMemo, useState, ReactNode } from 'react';
 import {
   ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Bar, Line, Cell,
 } from 'recharts';
 import {
-  TrendingDown, Info, CalendarDays, BarChart3, Building2, Zap, Gauge,
-  ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, TrendingUp,
+  TrendingDown, Info, CalendarDays, CalendarRange, BarChart3, Building2, Zap, Gauge,
+  ChevronDown, ArrowUpRight, ArrowDownRight, Minus, TrendingUp,
 } from 'lucide-react';
 import { toast as notify } from '../lib/toast';
 import { StatTile, Panel, EmptyState, ChartTooltip, CHART } from './ui/dashboard';
+import { Tabs, TabItem } from './ui/Tabs';
+import { Select } from './ui/Select';
 import { DatePicker } from './ui/DateTimePickers';
-import { fetchLoss30min, Loss30minRow } from '../lib/transformerLoss';
+import { fetchLoss30min, fetchLossMonthly, Loss30minRow, LossMonthlyRow } from '../lib/transformerLoss';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 
 /* ================= helpers ================= */
@@ -17,6 +19,9 @@ const fmt = (v: number, d = 1) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: d }).format(v);
 const pct = (v: number) => `${fmt(v, 1)}%`;
 const dateVN = (k: string) => { const [y, m, d] = k.split('-'); return d ? `${d}/${m}/${y}` : k; };
+const monthVN = (m: string) => { const [y, mm] = m.split('-'); return mm ? `Tháng ${mm}/${y}` : m; };
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'vi');
+const byKcn = (a: { kcn: string }, b: { kcn: string }) => a.kcn.localeCompare(b.kcn, 'vi');
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const yesterdayKey = () => {
   const n = new Date();
@@ -37,8 +42,8 @@ function loadColor(p: number): string {
   if (p < 30 || p > 80) return 'var(--warning)';
   return 'var(--success)';
 }
+const lossPctColor = (p: number) => (p >= 5 ? 'var(--danger)' : p >= 2 ? 'var(--warning)' : 'var(--success)');
 
-/* Thanh mức đầy tải với 3 mốc màu. */
 function LoadBar({ value }: { value: number }) {
   const w = Math.max(0, Math.min(100, value));
   const color = loadColor(value);
@@ -63,20 +68,45 @@ function LossDelta({ d }: { d: number | null }) {
   );
 }
 
+/* Thẻ KCN thu gọn được — vỏ chung cho bảng ngày & bảng tháng. */
+function ZoneCard({ kcn, count, loss, lossPct, collapsed, onToggle, children }: {
+  kcn: string; count: number; loss: number; lossPct: number;
+  collapsed: boolean; onToggle: () => void; children: ReactNode;
+}) {
+  return (
+    <div className="vl-card overflow-hidden">
+      <div onClick={onToggle}
+        className="bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] px-5 md:px-7 py-4 flex items-center justify-between gap-3 cursor-pointer select-none">
+        <div className="flex items-center gap-3 text-white min-w-0">
+          <div className="p-2 bg-white/20 rounded-xl shrink-0"><Building2 className="w-5 h-5" /></div>
+          <div className="min-w-0">
+            <h3 className="text-base font-black tracking-tight leading-tight truncate">{kcn}</h3>
+            <p className="text-[11px] font-semibold text-white/80">{count} trạm</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 shrink-0">
+          <div className="text-right hidden sm:block leading-tight">
+            <div className="text-xs font-bold text-white tabular-nums">{fmt(loss)} <span className="font-normal text-white/70">kWh</span></div>
+            <div className="text-xs font-bold text-white tabular-nums">{pct(lossPct)} <span className="font-normal text-white/70">tổn thất</span></div>
+          </div>
+          <ChevronDown className={`w-5 h-5 text-white transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`} />
+        </div>
+      </div>
+      {!collapsed && <div className="overflow-x-auto">{children}</div>}
+    </div>
+  );
+}
+
 /* ================= types ================= */
 interface Slot { time: string; loss: number; load: number; p: number; }
-interface StationAgg {
+interface StationDay {
   code: string; name: string; kcn: string;
-  output: number;      // sản lượng kWh (Σ P·0.5)
-  loss: number;        // tổn thất kWh
-  lossPct: number;     // % tổn thất = loss/output
-  maxLoad: number;     // mức đầy tải đỉnh (%)
-  delta: number | null; // Δ tổn thất so với hôm qua
-  slots: Slot[];
+  output: number; loss: number; lossPct: number; maxLoad: number; delta: number | null; slots: Slot[];
 }
-interface ZoneAgg { kcn: string; output: number; loss: number; lossPct: number; stations: StationAgg[]; }
+interface ZoneDay { kcn: string; output: number; loss: number; lossPct: number; stations: StationDay[]; }
+interface StationMonth { code: string; name: string; kcn: string; output: number; loss: number; noload: number; load: number; lossPct: number; }
+interface ZoneMonth { kcn: string; output: number; loss: number; lossPct: number; stations: StationMonth[]; }
 
-/** Gom {code -> {output, loss, maxLoad, slots}} cho 1 ngày. */
 function dailyByStation(rows: Loss30minRow[], date: string) {
   const m = new Map<string, { output: number; loss: number; maxLoad: number; name: string; slots: Slot[] }>();
   for (const r of rows) {
@@ -93,28 +123,33 @@ function dailyByStation(rows: Loss30minRow[], date: string) {
 }
 
 /* ================= component ================= */
-type View = 'table' | 'chart';
+type View = 'table' | 'monthly' | 'chart';
+const TABS: TabItem<View>[] = [
+  { id: 'table', label: 'Theo trạm (ngày)', icon: CalendarDays },
+  { id: 'monthly', label: 'Theo tháng', icon: CalendarRange },
+  { id: 'chart', label: 'Biểu đồ', icon: BarChart3 },
+];
 
 export default function TransformerLossManager() {
   const [rows, setRows] = useState<Loss30minRow[]>([]);
+  const [monthly, setMonthly] = useState<LossMonthlyRow[]>([]);
   const [meters, setMeters] = useState<MeterInfoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('table');
   const [selDate, setSelDate] = useState('');
+  const [selMonth, setSelMonth] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let ok = true;
     setLoading(true);
-    Promise.all([fetchLoss30min(), fetchMeterInfo().catch(() => [] as MeterInfoRow[])])
-      .then(([r, mi]) => { if (ok) { setRows(r); setMeters(mi); } })
+    Promise.all([fetchLoss30min(), fetchLossMonthly(), fetchMeterInfo().catch(() => [] as MeterInfoRow[])])
+      .then(([r, mo, mi]) => { if (ok) { setRows(r); setMonthly(mo); setMeters(mi); } })
       .catch(e => { console.error(e); notify.error('Lỗi dữ liệu', e?.message || 'Không tải được tổn thất MBA.'); })
       .finally(() => { if (ok) setLoading(false); });
     return () => { ok = false; };
   }, []);
 
-  /* code -> KCN (ADDRESS của công tơ chính) */
   const codeToKcn = useMemo(() => {
     const map = new Map<string, string>();
     for (const m of meters) {
@@ -127,60 +162,80 @@ export default function TransformerLossManager() {
 
   const dates = useMemo(() => [...new Set(rows.map(r => r.date))].sort().reverse(), [rows]);
   useEffect(() => {
-    if (!dates.length) return;
-    const y = yesterdayKey();
-    setSelDate(prev => prev || (dates.includes(y) ? y : dates[0]));
+    if (dates.length) setSelDate(p => p || (dates.includes(yesterdayKey()) ? yesterdayKey() : dates[0]));
   }, [dates]);
+  const months = useMemo(() => [...new Set(monthly.map(r => r.month))].sort().reverse(), [monthly]);
+  useEffect(() => { if (months.length) setSelMonth(p => p || months[0]); }, [months]);
 
-  /* Gom theo trạm cho ngày chọn + Δ so với hôm trước */
+  /* ---- Gom theo NGÀY (bảng ngày + biểu đồ) — sắp theo TÊN TRẠM ---- */
   const { zones, kpi, stationsSorted } = useMemo(() => {
-    const empty = { zones: [] as ZoneAgg[], kpi: { loss: 0, output: 0, pct: 0, n: 0 }, stationsSorted: [] as StationAgg[] };
+    const empty = { zones: [] as ZoneDay[], kpi: { loss: 0, output: 0, pct: 0, n: 0 }, stationsSorted: [] as StationDay[] };
     if (!selDate) return empty;
     const cur = dailyByStation(rows, selDate);
     const prev = dailyByStation(rows, prevDay(selDate));
-    const stations: StationAgg[] = [];
+    const stations: StationDay[] = [];
     cur.forEach((s, code) => {
       const prevLoss = prev.get(code)?.loss;
-      const lossPct = s.output > 0 ? (s.loss / s.output) * 100 : 0;
       stations.push({
         code, name: s.name, kcn: codeToKcn.get(code) || 'Khác',
-        output: s.output, loss: s.loss, lossPct, maxLoad: s.maxLoad,
-        delta: prevLoss != null && prevLoss > 0 ? (s.loss - prevLoss) / prevLoss : null,
+        output: s.output, loss: s.loss, lossPct: s.output > 0 ? (s.loss / s.output) * 100 : 0,
+        maxLoad: s.maxLoad, delta: prevLoss != null && prevLoss > 0 ? (s.loss - prevLoss) / prevLoss : null,
         slots: s.slots,
       });
     });
-    // gom theo KCN
-    const zmap = new Map<string, ZoneAgg>();
+    const zmap = new Map<string, ZoneDay>();
     for (const st of stations) {
       let z = zmap.get(st.kcn);
       if (!z) { z = { kcn: st.kcn, output: 0, loss: 0, lossPct: 0, stations: [] }; zmap.set(st.kcn, z); }
       z.output += st.output; z.loss += st.loss; z.stations.push(st);
     }
     const zones = [...zmap.values()].map(z => ({
-      ...z, lossPct: z.output > 0 ? (z.loss / z.output) * 100 : 0,
-      stations: z.stations.sort((a, b) => b.loss - a.loss),
-    })).sort((a, b) => b.loss - a.loss);
-    const totLoss = stations.reduce((s, x) => s + x.loss, 0);
-    const totOut = stations.reduce((s, x) => s + x.output, 0);
+      ...z, lossPct: z.output > 0 ? (z.loss / z.output) * 100 : 0, stations: z.stations.sort(byName),
+    })).sort(byKcn);
+    const loss = stations.reduce((s, x) => s + x.loss, 0);
+    const output = stations.reduce((s, x) => s + x.output, 0);
     return {
-      zones,
-      kpi: { loss: totLoss, output: totOut, pct: totOut > 0 ? (totLoss / totOut) * 100 : 0, n: stations.length },
+      zones, kpi: { loss, output, pct: output > 0 ? (loss / output) * 100 : 0, n: stations.length },
       stationsSorted: [...stations].filter(s => s.output > 0).sort((a, b) => a.lossPct - b.lossPct),
     };
   }, [rows, selDate, codeToKcn]);
 
-  /* 6 biểu đồ: 3 trạm %TT thấp nhất + 3 cao nhất */
+  /* ---- Gom theo THÁNG — sắp theo TÊN TRẠM ---- */
+  const { mZones, mKpi } = useMemo(() => {
+    const rowsM = monthly.filter(r => r.month === selMonth);
+    const zmap = new Map<string, ZoneMonth>();
+    for (const r of rowsM) {
+      const kcn = codeToKcn.get(r.code) || 'Khác';
+      let z = zmap.get(kcn);
+      if (!z) { z = { kcn, output: 0, loss: 0, lossPct: 0, stations: [] }; zmap.set(kcn, z); }
+      z.output += r.outputKwh; z.loss += r.totalKwh;
+      z.stations.push({
+        code: r.code, name: r.lineName || r.code, kcn,
+        output: r.outputKwh, loss: r.totalKwh, noload: r.noloadKwh, load: r.loadKwh,
+        lossPct: r.outputKwh > 0 ? (r.totalKwh / r.outputKwh) * 100 : 0,
+      });
+    }
+    const mZones = [...zmap.values()].map(z => ({
+      ...z, lossPct: z.output > 0 ? (z.loss / z.output) * 100 : 0, stations: z.stations.sort(byName),
+    })).sort(byKcn);
+    const loss = rowsM.reduce((s, r) => s + r.totalKwh, 0);
+    const output = rowsM.reduce((s, r) => s + r.outputKwh, 0);
+    return { mZones, mKpi: { loss, output, pct: output > 0 ? (loss / output) * 100 : 0, n: rowsM.length } };
+  }, [monthly, selMonth, codeToKcn]);
+
+  /* ---- 6 biểu đồ: 3 %TT thấp + 3 cao ---- */
   const chartStations = useMemo(() => {
     const lo = stationsSorted.slice(0, 3);
     const hi = stationsSorted.slice(-3).reverse();
     const seen = new Set<string>();
-    const pick: { st: StationAgg; kind: 'low' | 'high' }[] = [];
-    lo.forEach(st => { if (!seen.has(st.code)) { seen.add(st.code); pick.push({ st, kind: 'low' }); } });
-    hi.forEach(st => { if (!seen.has(st.code)) { seen.add(st.code); pick.push({ st, kind: 'high' }); } });
+    const pick: { st: StationDay; kind: 'low' | 'high' }[] = [];
+    [...lo.map(st => ['low', st] as const), ...hi.map(st => ['high', st] as const)]
+      .forEach(([kind, st]) => { if (!seen.has(st.code)) { seen.add(st.code); pick.push({ st, kind }); } });
     return pick;
   }, [stationsSorted]);
 
-  const hasData = rows.length > 0;
+  const hasData = rows.length > 0 || monthly.length > 0;
+  const toggleZone = (k: string) => setCollapsed(c => ({ ...c, [k]: !c[k] }));
 
   return (
     <div className="space-y-6 pb-12 animate-fade-in">
@@ -196,17 +251,16 @@ export default function TransformerLossManager() {
         </p>
       </div>
 
-      {/* Tab ngang + datepicker */}
-      <div className="flex flex-wrap items-center gap-2">
-        {([['table', 'Bảng theo trạm', CalendarDays], ['chart', 'Biểu đồ', BarChart3]] as const).map(([v, label, Icon]) => (
-          <button key={v} onClick={() => setView(v)}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              view === v ? 'bg-accent text-[var(--on-accent)]' : 'bg-subtle text-dim hover:bg-[var(--surface-inset)]'}`}>
-            <Icon className="w-4 h-4" /> {label}
-          </button>
-        ))}
+      {/* Thanh tab đồng bộ + bộ chọn theo ngữ cảnh */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Tabs<View> tabs={TABS} value={view} onChange={setView} />
         <div className="ml-auto">
-          <DatePicker value={selDate} onChange={setSelDate} label="Ngày" className="w-[190px]" />
+          {view === 'monthly' ? (
+            <Select value={selMonth} onChange={setSelMonth} className="min-w-[170px]"
+              options={months.map(m => ({ value: m, label: monthVN(m) }))} />
+          ) : (
+            <DatePicker value={selDate} onChange={setSelDate} label="Ngày" className="w-[190px]" />
+          )}
         </div>
       </div>
 
@@ -215,156 +269,159 @@ export default function TransformerLossManager() {
       ) : !hasData ? (
         <div className="vl-card"><EmptyState icon={Zap} title="Chưa có dữ liệu tổn thất"
           hint="Cần nhập thông số MBA vào public/mba_info.csv và chờ pipeline chạy (00:00 hằng ngày)." /></div>
-      ) : (
+      ) : view === 'chart' ? (
+        /* ---------- BIỂU ĐỒ ---------- */
         <>
-          {/* KPI */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <StatTile label="Tổng tổn thất" value={fmt(kpi.loss)} unit="kWh" icon={TrendingDown} tone="bad"
-              sub={`${kpi.n} trạm · ngày ${dateVN(selDate)}`} />
-            <StatTile label="Tổng sản lượng" value={fmt(kpi.output)} unit="kWh" icon={Zap} tone="accent" />
-            <StatTile label="% tổn thất tổng" value={pct(kpi.pct)} icon={Gauge}
-              tone={kpi.pct >= 5 ? 'bad' : kpi.pct >= 2 ? 'warn' : 'ok'} />
-          </div>
-
-          {view === 'table' ? (
-            zones.length === 0 ? (
-              <div className="vl-card"><EmptyState icon={TrendingDown} title="Không có dữ liệu ngày này" /></div>
-            ) : (
-              <div className="space-y-4">
-                {zones.map(z => {
-                  const isCollapsed = !!collapsed[z.kcn];
-                  return (
-                    <div key={z.kcn} className="vl-card overflow-hidden">
-                      {/* Header KCN */}
-                      <div onClick={() => setCollapsed(c => ({ ...c, [z.kcn]: !c[z.kcn] }))}
-                        className="bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] px-5 md:px-7 py-4 flex items-center justify-between gap-3 cursor-pointer select-none">
-                        <div className="flex items-center gap-3 text-white min-w-0">
-                          <div className="p-2 bg-white/20 rounded-xl shrink-0"><Building2 className="w-5 h-5" /></div>
-                          <div className="min-w-0">
-                            <h3 className="text-base font-black tracking-tight leading-tight truncate">{z.kcn}</h3>
-                            <p className="text-[11px] font-semibold text-white/80">{z.stations.length} trạm</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4 shrink-0">
-                          <div className="text-right hidden sm:block leading-tight">
-                            <div className="text-xs font-bold text-white tabular-nums">{fmt(z.loss)} <span className="font-normal text-white/70">kWh</span></div>
-                            <div className="text-xs font-bold text-white tabular-nums">{pct(z.lossPct)} <span className="font-normal text-white/70">tổn thất</span></div>
-                          </div>
-                          <ChevronDown className={`w-5 h-5 text-white transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
-                        </div>
-                      </div>
-
-                      {!isCollapsed && (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse min-w-[820px]">
-                            <thead>
-                              <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
-                                <th className="py-3 px-4">Trạm</th>
-                                <th className="py-3 px-4 text-right">Sản lượng (kWh)</th>
-                                <th className="py-3 px-4 text-right">Tổn thất (kWh)</th>
-                                <th className="py-3 px-4 text-right">% TT</th>
-                                <th className="py-3 px-4 text-center">Δ hôm qua</th>
-                                <th className="py-3 px-4">Mức đầy tải (đỉnh)</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[var(--border)]">
-                              {z.stations.map(st => {
-                                const open = !!openRows[st.code];
-                                return (
-                                  <Fragment key={st.code}>
-                                    <tr onClick={() => setOpenRows(o => ({ ...o, [st.code]: !o[st.code] }))}
-                                      className={`cursor-pointer transition-colors ${open ? 'bg-accent-soft/50' : 'hover:bg-subtle'}`}>
-                                      <td className="py-3 px-4">
-                                        <div className="flex items-start gap-2">
-                                          <ChevronRight className={`w-4 h-4 mt-0.5 shrink-0 transition-transform ${open ? 'rotate-90 text-accent' : 'text-faint'}`} />
-                                          <div className="min-w-0">
-                                            <div className="text-sm font-semibold text-ink break-words">{st.name}</div>
-                                            <div className="text-[11px] text-faint font-mono">{st.code}</div>
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td className="py-3 px-4 text-right text-sm text-dim tabular-nums">{fmt(st.output)}</td>
-                                      <td className="py-3 px-4 text-right text-sm font-bold text-ink tabular-nums">{fmt(st.loss)}</td>
-                                      <td className="py-3 px-4 text-right text-sm font-semibold tabular-nums" style={{ color: st.lossPct >= 5 ? 'var(--danger)' : st.lossPct >= 2 ? 'var(--warning)' : 'var(--success)' }}>{pct(st.lossPct)}</td>
-                                      <td className="py-3 px-4 text-center"><LossDelta d={st.delta} /></td>
-                                      <td className="py-3 px-4"><LoadBar value={st.maxLoad} /></td>
-                                    </tr>
-                                    {open && (
-                                      <tr className="bg-accent-soft/10 border-l-[3px] border-l-accent/40">
-                                        <td colSpan={6} className="py-3 px-4">
-                                          <div className="text-[11px] font-bold text-faint uppercase tracking-wider mb-2">Chi tiết tổn thất theo khung giờ (kWh)</div>
-                                          <div className="flex flex-wrap gap-1.5">
-                                            {st.slots.map(sl => (
-                                              <span key={sl.time} title={`Tải ${fmt(sl.load, 0)}%`}
-                                                className="inline-flex flex-col items-center rounded-md bg-surface border border-[var(--border)] px-1.5 py-1 min-w-[56px]">
-                                                <span className="text-[10px] text-faint font-mono">{sl.time}</span>
-                                                <span className="text-[11px] font-bold text-accent tabular-nums">{fmt(sl.loss, 2)}</span>
-                                              </span>
-                                            ))}
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    )}
-                                  </Fragment>
-                                );
-                              })}
-                            </tbody>
-                            <tfoot>
-                              <tr className="bg-surface border-t-2 border-[var(--border-strong)] text-sm font-black text-ink">
-                                <td className="py-3 px-4 text-right uppercase text-xs tracking-wider text-dim">Tổng cộng</td>
-                                <td className="py-3 px-4 text-right tabular-nums">{fmt(z.output)}</td>
-                                <td className="py-3 px-4 text-right tabular-nums text-accent">{fmt(z.loss)}</td>
-                                <td className="py-3 px-4 text-right tabular-nums">{pct(z.lossPct)}</td>
-                                <td colSpan={2} />
-                              </tr>
-                            </tfoot>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )
+          <KpiRow kpi={kpi} label={`ngày ${dateVN(selDate)}`} />
+          {chartStations.length === 0 ? (
+            <div className="vl-card"><EmptyState icon={BarChart3} title="Không đủ dữ liệu vẽ biểu đồ" /></div>
           ) : (
-            /* ---------- TAB BIỂU ĐỒ ---------- */
-            chartStations.length === 0 ? (
-              <div className="vl-card"><EmptyState icon={BarChart3} title="Không đủ dữ liệu vẽ biểu đồ" /></div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {chartStations.map(({ st, kind }) => (
-                  <Panel key={st.code}
-                    title={st.name}
-                    sub={`${st.code} · % TT ${pct(st.lossPct)}`}
-                    icon={kind === 'high' ? TrendingUp : TrendingDown}>
-                    <div className="px-3 py-3">
-                      <div className="flex items-center gap-2 mb-2 text-[11px] font-bold uppercase tracking-wide"
-                        style={{ color: kind === 'high' ? 'var(--danger)' : 'var(--success)' }}>
-                        {kind === 'high' ? 'Tỷ lệ tổn thất CAO' : 'Tỷ lệ tổn thất THẤP'}
-                      </div>
-                      <div className="h-[240px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={st.slots} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
-                            <XAxis dataKey="time" tickLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={22} />
-                            <YAxis yAxisId="l" hide />
-                            <YAxis yAxisId="load" orientation="right" hide domain={[0, 100]} />
-                            <Tooltip content={<ChartTooltip fmt={(v, n) => (n === 'Tải %' ? `${fmt(v, 0)}%` : `${fmt(v, 3)} kWh`)} />} />
-                            <Bar yAxisId="l" dataKey="loss" name="Tổn thất" radius={[2, 2, 0, 0]} maxBarSize={10}>
-                              {st.slots.map((s, i) => <Cell key={i} fill={loadColor(s.load)} />)}
-                            </Bar>
-                            <Line yAxisId="load" type="monotone" dataKey="load" name="Tải %" stroke={CHART.cd} strokeWidth={2} dot={false} />
-                          </ComposedChart>
-                        </ResponsiveContainer>
-                      </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {chartStations.map(({ st, kind }) => (
+                <Panel key={st.code} title={st.name} sub={`${st.code} · % TT ${pct(st.lossPct)}`}
+                  icon={kind === 'high' ? TrendingUp : TrendingDown}>
+                  <div className="px-3 py-3">
+                    <div className="mb-2 text-[11px] font-bold uppercase tracking-wide"
+                      style={{ color: kind === 'high' ? 'var(--danger)' : 'var(--success)' }}>
+                      {kind === 'high' ? 'Tỷ lệ tổn thất CAO' : 'Tỷ lệ tổn thất THẤP'}
                     </div>
-                  </Panel>
-                ))}
-              </div>
-            )
+                    <div className="h-[240px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={st.slots} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
+                          <XAxis dataKey="time" tickLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={22} />
+                          <YAxis yAxisId="l" hide />
+                          <YAxis yAxisId="load" orientation="right" hide domain={[0, 100]} />
+                          <Tooltip content={<ChartTooltip fmt={(v, n) => (n === 'Tải %' ? `${fmt(v, 0)}%` : `${fmt(v, 3)} kWh`)} />} />
+                          <Bar yAxisId="l" dataKey="loss" name="Tổn thất" radius={[2, 2, 0, 0]} maxBarSize={10}>
+                            {st.slots.map((s, i) => <Cell key={i} fill={loadColor(s.load)} />)}
+                          </Bar>
+                          <Line yAxisId="load" type="monotone" dataKey="load" name="Tải %" stroke={CHART.cd} strokeWidth={2} dot={false} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </Panel>
+              ))}
+            </div>
+          )}
+        </>
+      ) : view === 'monthly' ? (
+        /* ---------- THEO THÁNG ---------- */
+        <>
+          <KpiRow kpi={mKpi} label={monthVN(selMonth)} />
+          {mZones.length === 0 ? (
+            <div className="vl-card"><EmptyState icon={CalendarRange} title="Không có dữ liệu tháng này" /></div>
+          ) : (
+            <div className="space-y-4">
+              {mZones.map(z => (
+                <ZoneCard key={z.kcn} kcn={z.kcn} count={z.stations.length} loss={z.loss} lossPct={z.lossPct}
+                  collapsed={!!collapsed['m:' + z.kcn]} onToggle={() => toggleZone('m:' + z.kcn)}>
+                  <table className="w-full text-left border-collapse min-w-[720px]">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
+                        <th className="py-3 px-4">Trạm</th>
+                        <th className="py-3 px-4 text-right">Sản lượng (kWh)</th>
+                        <th className="py-3 px-4 text-right">Tổn thất (kWh)</th>
+                        <th className="py-3 px-4 text-right">% TT</th>
+                        <th className="py-3 px-4 text-right">Không tải</th>
+                        <th className="py-3 px-4 text-right">Có tải</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {z.stations.map(st => (
+                        <tr key={st.code} className="hover:bg-subtle transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="text-sm font-semibold text-ink break-words">{st.name}</div>
+                            <div className="text-[11px] text-faint font-mono">{st.code}</div>
+                          </td>
+                          <td className="py-3 px-4 text-right text-sm text-dim tabular-nums">{fmt(st.output)}</td>
+                          <td className="py-3 px-4 text-right text-sm font-bold text-ink tabular-nums">{fmt(st.loss)}</td>
+                          <td className="py-3 px-4 text-right text-sm font-semibold tabular-nums" style={{ color: lossPctColor(st.lossPct) }}>{pct(st.lossPct)}</td>
+                          <td className="py-3 px-4 text-right text-sm text-soft tabular-nums">{fmt(st.noload)}</td>
+                          <td className="py-3 px-4 text-right text-sm text-soft tabular-nums">{fmt(st.load)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-surface border-t-2 border-[var(--border-strong)] text-sm font-black text-ink">
+                        <td className="py-3 px-4 text-right uppercase text-xs tracking-wider text-dim">Tổng cộng</td>
+                        <td className="py-3 px-4 text-right tabular-nums">{fmt(z.output)}</td>
+                        <td className="py-3 px-4 text-right tabular-nums text-accent">{fmt(z.loss)}</td>
+                        <td className="py-3 px-4 text-right tabular-nums">{pct(z.lossPct)}</td>
+                        <td colSpan={2} />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </ZoneCard>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        /* ---------- THEO TRẠM (NGÀY) ---------- */
+        <>
+          <KpiRow kpi={kpi} label={`ngày ${dateVN(selDate)}`} />
+          {zones.length === 0 ? (
+            <div className="vl-card"><EmptyState icon={TrendingDown} title="Không có dữ liệu ngày này" /></div>
+          ) : (
+            <div className="space-y-4">
+              {zones.map(z => (
+                <ZoneCard key={z.kcn} kcn={z.kcn} count={z.stations.length} loss={z.loss} lossPct={z.lossPct}
+                  collapsed={!!collapsed['d:' + z.kcn]} onToggle={() => toggleZone('d:' + z.kcn)}>
+                  <table className="w-full text-left border-collapse min-w-[820px]">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
+                        <th className="py-3 px-4">Trạm</th>
+                        <th className="py-3 px-4 text-right">Sản lượng (kWh)</th>
+                        <th className="py-3 px-4 text-right">Tổn thất (kWh)</th>
+                        <th className="py-3 px-4 text-right">% TT</th>
+                        <th className="py-3 px-4 text-center">Δ hôm qua</th>
+                        <th className="py-3 px-4">Mức đầy tải (đỉnh)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {z.stations.map(st => (
+                        <tr key={st.code} className="hover:bg-subtle transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="text-sm font-semibold text-ink break-words">{st.name}</div>
+                            <div className="text-[11px] text-faint font-mono">{st.code}</div>
+                          </td>
+                          <td className="py-3 px-4 text-right text-sm text-dim tabular-nums">{fmt(st.output)}</td>
+                          <td className="py-3 px-4 text-right text-sm font-bold text-ink tabular-nums">{fmt(st.loss)}</td>
+                          <td className="py-3 px-4 text-right text-sm font-semibold tabular-nums" style={{ color: lossPctColor(st.lossPct) }}>{pct(st.lossPct)}</td>
+                          <td className="py-3 px-4 text-center"><LossDelta d={st.delta} /></td>
+                          <td className="py-3 px-4"><LoadBar value={st.maxLoad} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-surface border-t-2 border-[var(--border-strong)] text-sm font-black text-ink">
+                        <td className="py-3 px-4 text-right uppercase text-xs tracking-wider text-dim">Tổng cộng</td>
+                        <td className="py-3 px-4 text-right tabular-nums">{fmt(z.output)}</td>
+                        <td className="py-3 px-4 text-right tabular-nums text-accent">{fmt(z.loss)}</td>
+                        <td className="py-3 px-4 text-right tabular-nums">{pct(z.lossPct)}</td>
+                        <td colSpan={2} />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </ZoneCard>
+              ))}
+            </div>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/* KPI 3 ô dùng chung cho các tab. */
+function KpiRow({ kpi, label }: { kpi: { loss: number; output: number; pct: number; n: number }; label: string }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <StatTile label="Tổng tổn thất" value={fmt(kpi.loss)} unit="kWh" icon={TrendingDown} tone="bad" sub={`${kpi.n} trạm · ${label}`} />
+      <StatTile label="Tổng sản lượng" value={fmt(kpi.output)} unit="kWh" icon={Zap} tone="accent" />
+      <StatTile label="% tổn thất tổng" value={pct(kpi.pct)} icon={Gauge} tone={kpi.pct >= 5 ? 'bad' : kpi.pct >= 2 ? 'warn' : 'ok'} />
     </div>
   );
 }
