@@ -296,6 +296,12 @@ export default function TransformerLossManager() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {chartPicks.map((code, i) => {
                 const st = stationByCode.get(code);
+                // Trục % tự co giãn quanh khoảng dữ liệu (để 0,3–0,4% vẫn nhìn rõ)
+                const pv = st ? st.slots.map(s => s.lossPct) : [];
+                const lo = pv.length ? Math.min(...pv) : 0;
+                const hi = pv.length ? Math.max(...pv) : 1;
+                const pad = (hi - lo) * 0.25 || Math.max(hi * 0.1, 0.05);
+                const pctDomain: [number, number] = [Math.max(0, lo - pad), hi + pad];
                 return (
                   <div key={i} className="vl-card p-4 flex flex-col gap-3 min-h-[340px]">
                     <Select value={code} onChange={v => setChartPicks(p => p.map((x, idx) => (idx === i ? v : x)))}
@@ -311,12 +317,14 @@ export default function TransformerLossManager() {
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
                               <XAxis dataKey="time" tickLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={22} />
                               <YAxis yAxisId="l" hide />
-                              <YAxis yAxisId="pct" orientation="right" hide domain={[0, 100]} />
-                              <Tooltip content={<ChartTooltip fmt={(v, n) => (n === '% tổn thất' ? `${fmt(v, 1)}%` : `${fmt(v, 3)} kWh`)} />} />
-                              <Bar yAxisId="l" dataKey="loss" name="Tổn thất" radius={[2, 2, 0, 0]} maxBarSize={10}>
+                              <YAxis yAxisId="pct" orientation="right" domain={pctDomain} width={44}
+                                tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }}
+                                tickFormatter={(v: number) => `${fmt(v, 2)}%`} />
+                              <Tooltip content={<ChartTooltip fmt={(v, n) => (n === '% tổn thất' ? `${fmt(v, 2)}%` : `${fmt(v, 3)} kWh`)} />} />
+                              <Bar yAxisId="l" dataKey="loss" name="Tổn thất" radius={[2, 2, 0, 0]} maxBarSize={10} fillOpacity={0.32}>
                                 {st.slots.map((s, idx) => <Cell key={idx} fill={loadColor(s.load)} />)}
                               </Bar>
-                              <Line yAxisId="pct" type="monotone" dataKey="lossPct" name="% tổn thất" stroke={CHART.vc} strokeWidth={2} dot={false} />
+                              <Line yAxisId="pct" type="monotone" dataKey="lossPct" name="% tổn thất" stroke={CHART.vc} strokeWidth={2.4} dot={false} />
                             </ComposedChart>
                           </ResponsiveContainer>
                         </div>
