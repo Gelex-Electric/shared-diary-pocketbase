@@ -430,13 +430,13 @@ export default function HandoverManager() {
       { text: 'NHÂN VIÊN VẬN HÀNH CÁC ĐƠN VỊ (ghi rõ họ tên)', style: 'subheader', margin: [0, 0, 0, 6] },
       {
         table: { headerRows: 1, widths: ['25%', '37.5%', '37.5%'], body: [
-          [{ text: '', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
-           { text: 'Trực đội QLVH', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
-           { text: 'Trực điều độ điện lực', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' }],
+          [{ text: '', fillColor: '#f2f2f2', bold: true, alignment: 'center' },
+           { text: 'Trực đội QLVH', fillColor: '#f2f2f2', bold: true, alignment: 'center' },
+           { text: 'Trực điều độ điện lực', fillColor: '#f2f2f2', bold: true, alignment: 'center' }],
           ['Trực chính', log.main_duty || '', log.main_power || ''],
           ['Trực phụ', log.sub_duty || '', log.sub_power || '']
         ]},
-        layout: { hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'var(--text-4)', vLineColor:()=>'var(--text-4)', padding: [8,8,8,8] }
+        layout: { hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
       },
       { text: 'I. TÌNH HÌNH VẬN HÀNH TRONG CA', style: 'subheader', margin: [0, 8, 0, 5] },
       {
@@ -445,13 +445,13 @@ export default function HandoverManager() {
           widths: ['13%', '*'],
           heights: [22, 28, 28, 28, 28, 28, 28],
           body: [
-            [{ text: 'Thời gian', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
-             { text: 'Nội dung', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' }],
+            [{ text: 'Thời gian', fillColor: '#f2f2f2', bold: true, alignment: 'center' },
+             { text: 'Nội dung', fillColor: '#f2f2f2', bold: true, alignment: 'center' }],
             ...displaySituations,
             ...padRows
           ]
         },
-        layout: { hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'var(--text-4)', vLineColor:()=>'var(--text-4)', padding: [8,8,8,8] }
+        layout: { hLineWidth:()=>1, vLineWidth:()=>1, hLineColor:()=>'#9ca3af', vLineColor:()=>'#9ca3af', padding: [8,8,8,8] }
       },
       { text: 'II. PHẦN GIAO NHẬN CA', style: 'subheader', margin: [0, 8, 0, 5] },
       { text: '1. Những lưu ý và tồn tại ca sau cần giải quyết:', style: 'boldSection', margin: [0, 4, 0, 3] },
@@ -465,9 +465,9 @@ export default function HandoverManager() {
           heights: [22, 30, 30],
           body: [
             [
-              { text: 'Giờ giao ca', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
-              { text: 'Người nhận ca ký', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' },
-              { text: 'Người giao ca ký', fillColor: 'var(--surface-inset)', bold: true, alignment: 'center' }
+              { text: 'Giờ giao ca', fillColor: '#f2f2f2', bold: true, alignment: 'center' },
+              { text: 'Người nhận ca ký', fillColor: '#f2f2f2', bold: true, alignment: 'center' },
+              { text: 'Người giao ca ký', fillColor: '#f2f2f2', bold: true, alignment: 'center' }
             ],
             [
               { text: giaoCaStr, rowSpan: 2, alignment: 'center', bold: true },
@@ -477,7 +477,7 @@ export default function HandoverManager() {
             ['', { text: ' ', alignment: 'center' }, { text: ' ', alignment: 'center' }]
           ]
         },
-        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => 'var(--text-4)', vLineColor: () => 'var(--text-4)', padding: [8, 8, 8, 8] }
+        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => '#9ca3af', vLineColor: () => '#9ca3af', padding: [8, 8, 8, 8] }
       },
       { text: '3. Ý kiến lãnh đạo đơn vị:', style: 'boldSection', margin: [0, 8, 0, 3] },
       { text: log.opinions || 'Không có', margin: [0, 0, 0, 0] }

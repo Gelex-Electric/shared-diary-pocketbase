@@ -5,7 +5,7 @@ import { PowerOutage } from '../types';
 const AREA_TEMPLATE: Record<string, string> = {
   'KCN Tiền Hải':      'PO.KCN-TH.docx',
   'KCN Phong Điền':    'PO.KCN-PĐ.docx',
-  'KCN Thuận Thành I': 'PO.KCN-TT.docx',
+  'KCN Thuận Thành I': 'PO.KCN-TTI.docx',
   'KCN Yên Mỹ':        'PO.KCN-YM.docx',
   'KCN Số 3':          'PO.KCN-03.docx',
 };
@@ -22,9 +22,14 @@ const fmtMoment = (dt: string) => {
 
 export async function generateOutageDocx(n: PowerOutage): Promise<Blob> {
   const filename = AREA_TEMPLATE[n.area] || 'PO.KCN-TH.docx';
-  const response = await fetch(`/TBCD-template/${filename}`);
+  const response = await fetch(`/TBCD-template/${encodeURIComponent(filename)}`);
   if (!response.ok) throw new Error(`Không tìm thấy template: ${filename}`);
   const buf = await response.arrayBuffer();
+  // File .docx là zip, luôn bắt đầu bằng "PK" — nếu không phải (ví dụ SPA fallback
+  // trả index.html với status 200) thì báo lỗi rõ ràng thay vì để PizZip crash
+  const sig = new Uint8Array(buf.slice(0, 2));
+  if (sig[0] !== 0x50 || sig[1] !== 0x4b)
+    throw new Error(`Server không trả về file .docx hợp lệ cho template: ${filename}`);
   const zip = new PizZip(buf);
   // Normalize {{...}} → {...} and optionally strip addLegal paragraph when empty
   const removeAddLegal = !n.addLegal;

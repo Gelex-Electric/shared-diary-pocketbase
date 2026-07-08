@@ -19,5 +19,18 @@ export default defineConfig(({ mode }) => {
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom'],
+            charts: ['recharts'],
+            pdf: ['pdfmake'],
+            xlsx: ['xlsx'],
+            docx: ['docxtemplater', 'pizzip'],
+          },
+        },
+      },
+    },
   };
 });
