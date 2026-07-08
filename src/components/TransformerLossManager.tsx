@@ -18,6 +18,8 @@ import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 const fmt = (v: number, d = 1) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: d }).format(v);
 const pct = (v: number) => `${fmt(v, 1)}%`;
+/** Tỷ lệ tổn thất chuẩn = tổn thất / điện NHẬN (= sản lượng giao + tổn thất). Luôn < 100%. */
+const ratio = (loss: number, output: number) => { const inp = output + loss; return inp > 0 ? (loss / inp) * 100 : 0; };
 const dateVN = (k: string) => { const [y, m, d] = k.split('-'); return d ? `${d}/${m}/${y}` : k; };
 const monthVN = (m: string) => { const [y, mm] = m.split('-'); return mm ? `Tháng ${mm}/${y}` : m; };
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'vi');
@@ -178,7 +180,7 @@ export default function TransformerLossManager() {
       const prevLoss = prev.get(code)?.loss;
       stations.push({
         code, name: s.name, kcn: codeToKcn.get(code) || 'Khác',
-        output: s.output, loss: s.loss, lossPct: s.output > 0 ? (s.loss / s.output) * 100 : 0,
+        output: s.output, loss: s.loss, lossPct: ratio(s.loss, s.output),
         maxLoad: s.maxLoad, delta: prevLoss != null && prevLoss > 0 ? (s.loss - prevLoss) / prevLoss : null,
         slots: s.slots,
       });
@@ -190,13 +192,13 @@ export default function TransformerLossManager() {
       z.output += st.output; z.loss += st.loss; z.stations.push(st);
     }
     const zones = [...zmap.values()].map(z => ({
-      ...z, lossPct: z.output > 0 ? (z.loss / z.output) * 100 : 0, stations: z.stations.sort(byName),
+      ...z, lossPct: ratio(z.loss, z.output), stations: z.stations.sort(byName),
     })).sort(byKcn);
     const loss = stations.reduce((s, x) => s + x.loss, 0);
     const output = stations.reduce((s, x) => s + x.output, 0);
     return {
-      zones, kpi: { loss, output, pct: output > 0 ? (loss / output) * 100 : 0, n: stations.length },
-      stationsSorted: [...stations].filter(s => s.output > 0).sort((a, b) => a.lossPct - b.lossPct),
+      zones, kpi: { loss, output, pct: ratio(loss, output), n: stations.length },
+      stationsSorted: [...stations].filter(s => s.output + s.loss > 0).sort((a, b) => a.lossPct - b.lossPct),
     };
   }, [rows, selDate, codeToKcn]);
 
@@ -212,15 +214,15 @@ export default function TransformerLossManager() {
       z.stations.push({
         code: r.code, name: r.lineName || r.code, kcn,
         output: r.outputKwh, loss: r.totalKwh, noload: r.noloadKwh, load: r.loadKwh,
-        lossPct: r.outputKwh > 0 ? (r.totalKwh / r.outputKwh) * 100 : 0,
+        lossPct: ratio(r.totalKwh, r.outputKwh),
       });
     }
     const mZones = [...zmap.values()].map(z => ({
-      ...z, lossPct: z.output > 0 ? (z.loss / z.output) * 100 : 0, stations: z.stations.sort(byName),
+      ...z, lossPct: ratio(z.loss, z.output), stations: z.stations.sort(byName),
     })).sort(byKcn);
     const loss = rowsM.reduce((s, r) => s + r.totalKwh, 0);
     const output = rowsM.reduce((s, r) => s + r.outputKwh, 0);
-    return { mZones, mKpi: { loss, output, pct: output > 0 ? (loss / output) * 100 : 0, n: rowsM.length } };
+    return { mZones, mKpi: { loss, output, pct: ratio(loss, output), n: rowsM.length } };
   }, [monthly, selMonth, codeToKcn]);
 
   /* ---- 6 biểu đồ: 3 %TT thấp + 3 cao ---- */
@@ -247,7 +249,7 @@ export default function TransformerLossManager() {
         </div>
         <p className="text-sm text-soft max-w-3xl flex items-start gap-1.5">
           <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
-          Tổn thất kỹ thuật ΔP = P0 + Pk·(S/Sdm)² theo từng trạm, gom theo khu công nghiệp. % tổn thất = tổn thất / sản lượng.
+          Tổn thất kỹ thuật ΔP = P0 + Pk·(S/Sdm)² theo từng trạm, gom theo khu công nghiệp. % tổn thất = tổn thất / điện nhận (sản lượng + tổn thất).
         </p>
       </div>
 
