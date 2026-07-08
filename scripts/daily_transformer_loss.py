@@ -18,6 +18,7 @@ Khu trung theo khoa (CODE, DATE_TIME) nen chay lai an toan. Prune giu KEEP_DAYS 
 gan nhat. KHONG tu commit (daily-pipeline.yml commit chung).
 """
 import csv
+import io
 import math
 import os
 import sys
@@ -69,26 +70,65 @@ def load_main_meters() -> dict:
     return meter2code
 
 
+def _parse_num(s, vi: bool):
+    """Parse so. vi=True: kieu vi-VN ('.'=ngan nghin, ','=thap phan). None neu rong."""
+    s = str(s or "").strip()
+    if not s:
+        return None
+    s = s.replace(".", "").replace(",", ".") if vi else s.replace(",", "")
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return None
+
+
 def load_mba() -> dict:
-    """{CODE: {LINE_NAME, SDM_KVA, P0_KW, PK_KW}} tu mba_info.csv (nhap tay)."""
+    """{CODE: {LINE_NAME, SDM_KVA, P0_KW, PK_KW}} tu mba_info.csv (nhap tay).
+
+    Ho tro:
+      - Phan cach ';' (Excel vi-VN) hoac ','.
+      - Cot cong suat W (P0_W/PK_W) -> tu dong /1000 ra kW; hoac kW (P0_KW/PK_KW).
+      - So kieu vi-VN khi dung ';' ('.'=ngan nghin, ','=thap phan).
+      - O TRONG P0/PK => tram khong hoat dong -> BO QUA.
+    """
     if not os.path.isfile(MBA_PATH):
         sys.exit(f"Khong tim thay {MBA_PATH}. Hay tao va nhap thong so MBA.")
+    with open(MBA_PATH, encoding="utf-8-sig") as f:
+        text = f.read()
+    header = text.splitlines()[0] if text.strip() else ""
+    delim = ";" if ";" in header else ","
+    vi = (delim == ";")
+
+    reader = csv.DictReader(io.StringIO(text), delimiter=delim)
+    cols = [c.strip() for c in (reader.fieldnames or [])]
+    p0_col = "P0_W" if "P0_W" in cols else "P0_KW"
+    pk_col = "PK_W" if "PK_W" in cols else "PK_KW"
+    to_kw = 1000.0 if p0_col.endswith("_W") else 1.0
+
     mba = {}
-    with open(MBA_PATH, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            code = str(row.get("CODE") or "").strip()
-            if not code or code.startswith("#"):
-                continue
-            sdm = _to_float(row.get("SDM_KVA"))
-            if sdm <= 0:
-                print(f"[WARN] Tram {code}: SDM_KVA khong hop le ({row.get('SDM_KVA')!r}) -> bo qua.")
-                continue
-            mba[code] = {
-                "LINE_NAME": (row.get("LINE_NAME") or "").strip(),
-                "SDM_KVA": sdm,
-                "P0_KW": _to_float(row.get("P0_KW")),
-                "PK_KW": _to_float(row.get("PK_KW")),
-            }
+    inactive = 0
+    for row in reader:
+        row = { (k or "").strip(): v for k, v in row.items() }
+        code = str(row.get("CODE") or "").strip()
+        if not code or code.startswith("#"):
+            continue
+        p0 = _parse_num(row.get(p0_col), vi)
+        pk = _parse_num(row.get(pk_col), vi)
+        if p0 is None or pk is None:      # o trong -> tram khong hoat dong
+            inactive += 1
+            continue
+        sdm = _parse_num(row.get("SDM_KVA"), vi)
+        if not sdm or sdm <= 0:
+            print(f"[WARN] Tram {code}: SDM_KVA khong hop le ({row.get('SDM_KVA')!r}) -> bo qua.")
+            continue
+        mba[code] = {
+            "LINE_NAME": (row.get("LINE_NAME") or "").strip(),
+            "SDM_KVA": sdm,
+            "P0_KW": p0 / to_kw,
+            "PK_KW": pk / to_kw,
+        }
+    if inactive:
+        print(f"Bo qua {inactive} tram khong co P0/PK (khong hoat dong).")
     return mba
 
 
