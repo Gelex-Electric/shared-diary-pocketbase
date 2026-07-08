@@ -4,10 +4,10 @@ import {
 } from 'recharts';
 import {
   TrendingDown, Info, CalendarDays, CalendarRange, BarChart3, Building2, Zap, Gauge,
-  ChevronDown, ArrowUpRight, ArrowDownRight, Minus, TrendingUp,
+  ChevronDown, ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react';
 import { toast as notify } from '../lib/toast';
-import { StatTile, Panel, EmptyState, ChartTooltip, CHART } from './ui/dashboard';
+import { StatTile, EmptyState, ChartTooltip, CHART } from './ui/dashboard';
 import { Tabs, TabItem } from './ui/Tabs';
 import { Select } from './ui/Select';
 import { DatePicker } from './ui/DateTimePickers';
@@ -100,7 +100,7 @@ function ZoneCard({ kcn, count, loss, lossPct, collapsed, onToggle, children }: 
 }
 
 /* ================= types ================= */
-interface Slot { time: string; loss: number; load: number; p: number; }
+interface Slot { time: string; loss: number; load: number; p: number; output: number; lossPct: number; }
 interface StationDay {
   code: string; name: string; kcn: string;
   output: number; loss: number; lossPct: number; maxLoad: number; delta: number | null; slots: Slot[];
@@ -118,7 +118,7 @@ function dailyByStation(rows: Loss30minRow[], date: string) {
     s.output += r.outputKwh;
     s.loss += r.lossKwh;
     if (r.loadPct > s.maxLoad) s.maxLoad = r.loadPct;
-    s.slots.push({ time: r.time, loss: r.lossKwh, load: r.loadPct, p: r.p });
+    s.slots.push({ time: r.time, loss: r.lossKwh, load: r.loadPct, p: r.p, output: r.outputKwh, lossPct: ratio(r.lossKwh, r.outputKwh) });
   }
   m.forEach(s => s.slots.sort((a, b) => a.time.localeCompare(b.time)));
   return m;
@@ -170,8 +170,11 @@ export default function TransformerLossManager() {
   useEffect(() => { if (months.length) setSelMonth(p => p || months[0]); }, [months]);
 
   /* ---- Gom theo NGÀY (bảng ngày + biểu đồ) — sắp theo TÊN TRẠM ---- */
-  const { zones, kpi, stationsSorted } = useMemo(() => {
-    const empty = { zones: [] as ZoneDay[], kpi: { loss: 0, output: 0, pct: 0, n: 0 }, stationsSorted: [] as StationDay[] };
+  const { zones, kpi, stationsSorted, stationByCode, allStations } = useMemo(() => {
+    const empty = {
+      zones: [] as ZoneDay[], kpi: { loss: 0, output: 0, pct: 0, n: 0 },
+      stationsSorted: [] as StationDay[], stationByCode: new Map<string, StationDay>(), allStations: [] as StationDay[],
+    };
     if (!selDate) return empty;
     const cur = dailyByStation(rows, selDate);
     const prev = dailyByStation(rows, prevDay(selDate));
@@ -199,6 +202,8 @@ export default function TransformerLossManager() {
     return {
       zones, kpi: { loss, output, pct: ratio(loss, output), n: stations.length },
       stationsSorted: [...stations].filter(s => s.output + s.loss > 0).sort((a, b) => a.lossPct - b.lossPct),
+      stationByCode: new Map(stations.map(s => [s.code, s])),
+      allStations: [...stations].sort(byName),
     };
   }, [rows, selDate, codeToKcn]);
 
@@ -235,6 +240,16 @@ export default function TransformerLossManager() {
       .forEach(([kind, st]) => { if (!seen.has(st.code)) { seen.add(st.code); pick.push({ st, kind }); } });
     return pick;
   }, [stationsSorted]);
+
+  /* Mặc định 6 ô = 3 %TT thấp + 3 cao; cho phép đổi trạm từng ô. Reset khi đổi ngày. */
+  const defaultPicks = useMemo(() => {
+    const p = chartStations.map(c => c.st.code);
+    while (p.length < 6) p.push('');
+    return p.slice(0, 6);
+  }, [chartStations]);
+  const [chartPicks, setChartPicks] = useState<string[]>([]);
+  useEffect(() => { setChartPicks(defaultPicks); }, [defaultPicks]);
+  const stationOptions = useMemo(() => allStations.map(s => ({ value: s.code, label: s.name })), [allStations]);
 
   const hasData = rows.length > 0 || monthly.length > 0;
   const toggleZone = (k: string) => setCollapsed(c => ({ ...c, [k]: !c[k] }));
@@ -275,36 +290,43 @@ export default function TransformerLossManager() {
         /* ---------- BIỂU ĐỒ ---------- */
         <>
           <KpiRow kpi={kpi} label={`ngày ${dateVN(selDate)}`} />
-          {chartStations.length === 0 ? (
+          {allStations.length === 0 ? (
             <div className="vl-card"><EmptyState icon={BarChart3} title="Không đủ dữ liệu vẽ biểu đồ" /></div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {chartStations.map(({ st, kind }) => (
-                <Panel key={st.code} title={st.name} sub={`${st.code} · % TT ${pct(st.lossPct)}`}
-                  icon={kind === 'high' ? TrendingUp : TrendingDown}>
-                  <div className="px-3 py-3">
-                    <div className="mb-2 text-[11px] font-bold uppercase tracking-wide"
-                      style={{ color: kind === 'high' ? 'var(--danger)' : 'var(--success)' }}>
-                      {kind === 'high' ? 'Tỷ lệ tổn thất CAO' : 'Tỷ lệ tổn thất THẤP'}
-                    </div>
-                    <div className="h-[240px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={st.slots} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
-                          <XAxis dataKey="time" tickLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={22} />
-                          <YAxis yAxisId="l" hide />
-                          <YAxis yAxisId="load" orientation="right" hide domain={[0, 100]} />
-                          <Tooltip content={<ChartTooltip fmt={(v, n) => (n === 'Tải %' ? `${fmt(v, 0)}%` : `${fmt(v, 3)} kWh`)} />} />
-                          <Bar yAxisId="l" dataKey="loss" name="Tổn thất" radius={[2, 2, 0, 0]} maxBarSize={10}>
-                            {st.slots.map((s, i) => <Cell key={i} fill={loadColor(s.load)} />)}
-                          </Bar>
-                          <Line yAxisId="load" type="monotone" dataKey="load" name="Tải %" stroke={CHART.cd} strokeWidth={2} dot={false} />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
+              {chartPicks.map((code, i) => {
+                const st = stationByCode.get(code);
+                return (
+                  <div key={i} className="vl-card p-4 flex flex-col gap-3 min-h-[340px]">
+                    <Select value={code} onChange={v => setChartPicks(p => p.map((x, idx) => (idx === i ? v : x)))}
+                      searchable icon={Gauge} className="w-full" placeholder="Chọn trạm…" options={stationOptions} />
+                    {st ? (
+                      <>
+                        <div className="text-[11px] font-mono text-faint">
+                          % tổn thất <strong style={{ color: lossPctColor(st.lossPct) }}>{pct(st.lossPct)}</strong> · sản lượng {fmt(st.output)} kWh
+                        </div>
+                        <div className="h-[240px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={st.slots} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
+                              <XAxis dataKey="time" tickLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={22} />
+                              <YAxis yAxisId="l" hide />
+                              <YAxis yAxisId="pct" orientation="right" hide domain={[0, 100]} />
+                              <Tooltip content={<ChartTooltip fmt={(v, n) => (n === '% tổn thất' ? `${fmt(v, 1)}%` : `${fmt(v, 3)} kWh`)} />} />
+                              <Bar yAxisId="l" dataKey="loss" name="Tổn thất" radius={[2, 2, 0, 0]} maxBarSize={10}>
+                                {st.slots.map((s, idx) => <Cell key={idx} fill={loadColor(s.load)} />)}
+                              </Bar>
+                              <Line yAxisId="pct" type="monotone" dataKey="lossPct" name="% tổn thất" stroke={CHART.vc} strokeWidth={2} dot={false} />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="h-[240px] flex items-center justify-center text-faint text-sm">Chọn trạm để xem biểu đồ</div>
+                    )}
                   </div>
-                </Panel>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
