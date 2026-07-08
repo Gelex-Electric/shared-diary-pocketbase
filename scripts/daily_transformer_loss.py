@@ -21,6 +21,7 @@ import csv
 import io
 import math
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -52,11 +53,18 @@ def _to_float(v) -> float:
         return 0.0
 
 
-def load_main_meters() -> dict:
-    """{METER_NO: CODE} cho cac cong to ROLE=chinh + STATUS=Yes co CODE."""
+def _norm_code(s) -> str:
+    """Chuan hoa CODE de so khop: bo khoang trang, viet hoa."""
+    return re.sub(r"\s+", "", str(s or "").strip().upper())
+
+
+def load_main_meters():
+    """Tra ve (meter2code, code2line):
+      meter2code {METER_NO: CODE} cho cong to ROLE=chinh + STATUS=Yes co CODE.
+      code2line  {CODE: LINE_NAME} lay ten tram tu metterinfo."""
     if not os.path.isfile(METTERINFO_PATH):
         sys.exit(f"Khong tim thay {METTERINFO_PATH}. Hay chay fetch_meter_info.py truoc.")
-    meter2code = {}
+    meter2code, code2line = {}, {}
     with open(METTERINFO_PATH, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             if str(row.get("ROLE") or "").strip() != "chinh":
@@ -67,7 +75,8 @@ def load_main_meters() -> dict:
             no = str(row.get("METER_NO") or "").strip()
             if code and no:
                 meter2code[no] = code
-    return meter2code
+                code2line.setdefault(code, (row.get("LINE_NAME") or "").strip())
+    return meter2code, code2line
 
 
 def _parse_num(s, vi: bool):
@@ -82,14 +91,26 @@ def _parse_num(s, vi: bool):
         return None
 
 
-def load_mba() -> dict:
-    """{CODE: {LINE_NAME, SDM_KVA, P0_KW, PK_KW}} tu mba_info.csv (nhap tay).
+def _find_col(cols, *keys):
+    """Tim ten cot chua tat ca `keys` (khong phan biet hoa/thuong)."""
+    for c in cols:
+        cu = c.upper()
+        if all(k in cu for k in keys):
+            return c
+    return None
 
-    Ho tro:
+
+def load_mba() -> dict:
+    """{norm_code: {RAW_CODE, SDM_KVA, P0_KW, PK_KW}} tu mba_info.csv (nhap tay).
+
+    Ho tro linh hoat:
       - Phan cach ';' (Excel vi-VN) hoac ','.
-      - Cot cong suat W (P0_W/PK_W) -> tu dong /1000 ra kW; hoac kW (P0_KW/PK_KW).
-      - So kieu vi-VN khi dung ';' ('.'=ngan nghin, ','=thap phan).
+      - Ten cot linh hoat: CODE (TBA/CODE), SDM (Sdm(kVA)/SDM_KVA),
+        P0 (DEP0(W)/P0_W/P0_KW), PK (DEPK(W)/PK_W/PK_KW).
+      - Don vi W -> tu dong /1000 ra kW (dua vao ten cot co 'W' ma khong co 'KW').
+      - So kieu vi-VN khi dung ';' (',' = thap phan).
       - O TRONG P0/PK => tram khong hoat dong -> BO QUA.
+    Key theo CODE chuan hoa de so khop voi metterinfo.
     """
     if not os.path.isfile(MBA_PATH):
         sys.exit(f"Khong tim thay {MBA_PATH}. Hay tao va nhap thong so MBA.")
@@ -101,15 +122,21 @@ def load_mba() -> dict:
 
     reader = csv.DictReader(io.StringIO(text), delimiter=delim)
     cols = [c.strip() for c in (reader.fieldnames or [])]
-    p0_col = "P0_W" if "P0_W" in cols else "P0_KW"
-    pk_col = "PK_W" if "PK_W" in cols else "PK_KW"
-    to_kw = 1000.0 if p0_col.endswith("_W") else 1.0
+    code_col = _find_col(cols, "CODE") or _find_col(cols, "TBA") or (cols[0] if cols else "")
+    sdm_col = _find_col(cols, "SDM") or _find_col(cols, "KVA")
+    p0_col = _find_col(cols, "P0")
+    pk_col = _find_col(cols, "PK")
+    if not (code_col and sdm_col and p0_col and pk_col):
+        sys.exit(f"mba_info.csv thieu cot (CODE/SDM/P0/PK). Header: {cols}")
+    # Don vi: co 'W' nhung khong co 'KW' -> watt
+    p0u = p0_col.upper()
+    to_kw = 1000.0 if ("W" in p0u and "KW" not in p0u) else 1.0
 
     mba = {}
     inactive = 0
     for row in reader:
-        row = { (k or "").strip(): v for k, v in row.items() }
-        code = str(row.get("CODE") or "").strip()
+        row = {(k or "").strip(): v for k, v in row.items()}
+        code = str(row.get(code_col) or "").strip()
         if not code or code.startswith("#"):
             continue
         p0 = _parse_num(row.get(p0_col), vi)
@@ -117,12 +144,12 @@ def load_mba() -> dict:
         if p0 is None or pk is None:      # o trong -> tram khong hoat dong
             inactive += 1
             continue
-        sdm = _parse_num(row.get("SDM_KVA"), vi)
+        sdm = _parse_num(row.get(sdm_col), vi)
         if not sdm or sdm <= 0:
-            print(f"[WARN] Tram {code}: SDM_KVA khong hop le ({row.get('SDM_KVA')!r}) -> bo qua.")
+            print(f"[WARN] Tram {code}: SDM khong hop le ({row.get(sdm_col)!r}) -> bo qua.")
             continue
-        mba[code] = {
-            "LINE_NAME": (row.get("LINE_NAME") or "").strip(),
+        mba[_norm_code(code)] = {
+            "RAW_CODE": code,
             "SDM_KVA": sdm,
             "P0_KW": p0 / to_kw,
             "PK_KW": pk / to_kw,
@@ -130,6 +157,18 @@ def load_mba() -> dict:
     if inactive:
         print(f"Bo qua {inactive} tram khong co P0/PK (khong hoat dong).")
     return mba
+
+
+def resolve_params(code: str, mba: dict):
+    """Khop CODE metterinfo voi mba: chuan hoa chinh xac, roi tien to
+    (mba viet gon la tien to cua CODE metterinfo, vd bo hau to 'XLNT')."""
+    n = _norm_code(code)
+    if n in mba:
+        return mba[n]
+    cands = [k for k in mba if n.startswith(k) or k.startswith(n)]
+    if cands:
+        return mba[max(cands, key=len)]  # khop dai nhat cho chac
+    return None
 
 
 def accumulate(day: str, meter2code: dict, valid_codes: set) -> dict:
@@ -155,10 +194,10 @@ def accumulate(day: str, meter2code: dict, valid_codes: set) -> dict:
     return agg
 
 
-def build_rows(agg: dict, mba: dict) -> list:
+def build_rows(agg: dict, params_by_code: dict, code2line: dict) -> list:
     rows = []
     for (code, dt), slot in agg.items():
-        m = mba[code]
+        m = params_by_code[code]
         sdm, p0, pk = m["SDM_KVA"], m["P0_KW"], m["PK_KW"]
         p, q = slot["P"], slot["Q"]
         s = math.sqrt(p * p + q * q)
@@ -168,7 +207,7 @@ def build_rows(agg: dict, mba: dict) -> list:
         delta_p = p0 + pk * load * load
         rows.append({
             "CODE": code,
-            "LINE_NAME": m["LINE_NAME"],
+            "LINE_NAME": code2line.get(code, m.get("RAW_CODE", code)),
             "DATE_TIME": dt,
             "N_METERS": slot["n"],
             "P_KW": f"{p:g}",
@@ -208,9 +247,15 @@ def write_out(new_rows: list):
 
 def main():
     day = target_date()
-    meter2code = load_main_meters()
+    meter2code, code2line = load_main_meters()
     mba = load_mba()
-    codes = set(meter2code.values()) & set(mba.keys())
+    # Khop tung CODE metterinfo (co cong to chinh) voi thong so MBA
+    params_by_code = {}
+    for code in set(meter2code.values()):
+        p = resolve_params(code, mba)
+        if p:
+            params_by_code[code] = p
+    codes = set(params_by_code.keys())
     print(f"Ngay {day}: {len(meter2code)} cong to chinh, {len(mba)} tram co thong so MBA, "
           f"{len(codes)} tram se tinh ton that.")
     if not codes:
@@ -221,7 +266,7 @@ def main():
     if not agg:
         print(f"Khong co du lieu datametter cho ngay {day}. Bo qua.")
         return
-    new_rows = build_rows(agg, mba)
+    new_rows = build_rows(agg, params_by_code, code2line)
     total = write_out(new_rows)
     print(f"Ghi {len(new_rows)} moc 30 phut (ngay {day}). Tong file: {total} dong -> {OUT_PATH}")
 
