@@ -1,0 +1,90 @@
+name: Daily Pipeline (00:00 gio VN)
+
+on:
+  schedule:
+    - cron: "0 17 * * *"   # 00:00 gio VN (17:00 UTC hom truoc) -> xu ly tron ngay hom qua
+  workflow_dispatch:        # chay thu cong / backfill 1 ngay
+    inputs:
+      target_date:
+        description: "Ngay can xu ly (YYYY-MM-DD). De trong = hom qua."
+        required: false
+        default: ""
+      user_id:
+        description: "UserID dung cho GetMeterAccount / GetLineList."
+        required: false
+        default: "2"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Ho_Chi_Minh
+      API_USER: ${{ secrets.API_USER }}
+      API_PASS: ${{ secrets.API_PASS }}
+      TARGET_DATE: ${{ inputs.target_date }}
+      USER_ID: ${{ inputs.user_id || '2' }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet requests
+
+      # 1) Danh sach cong to + HSN + LINE_ID/CODE/ROLE + canh bao (tram, HSN)
+      - name: Refresh meter info (GetMeterAccount + GetLineList + GetMeter)
+        env:
+          PB_URL: ${{ secrets.PB_URL }}
+          PB_EMAIL: ${{ secrets.PB_EMAIL }}
+          PB_PASS: ${{ secrets.PB_PASS }}
+        run: python scripts/fetch_meter_info.py
+
+      # 2) Du lieu do xa 30 phut (full ngay hom qua, ×HSN, them I pha + KVAR)
+      - name: Fetch meter data (full day)
+        env:
+          FETCH_HOURS: "25"   # chay 1 lan/ngay -> cua so phu tron 48 moc cua hom qua
+        run: python scripts/fetch_meter_data.py
+
+      # 3) Pmax ngay
+      - name: Compute daily Pmax
+        run: python scripts/daily_pmax.py
+
+      # 4) Chi so HES dau/cuoi ky
+      - name: Fetch HES index
+        run: python scripts/fetch_hes_index.py
+
+      # 5) Ton that MBA 30 phut (giu 40 ngay)
+      - name: Transformer loss (30 min)
+        run: python scripts/daily_transformer_loss.py
+
+      # 6) Ton that MBA theo thang (luu vinh vien)
+      - name: Transformer loss (monthly)
+        run: python scripts/monthly_transformer_loss.py
+
+      # 7) Commit MOT LAN tat ca CSV
+      - name: Commit & push CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/metterinfo.csv public/datametter.csv public/pmax_daily.csv \
+                  public/hes_index_daily.csv \
+                  public/transformer_loss_30min.csv public/transformer_loss_monthly.csv
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: daily pipeline $(date +'%Y-%m-%d %H:%M ICT')"
+            git pull --rebase origin ${{ github.ref_name }}
+            git push
+          fi

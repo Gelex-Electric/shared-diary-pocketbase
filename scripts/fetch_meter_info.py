@@ -16,11 +16,12 @@ File nay la nguon danh sach cong to + HSN cho fetch_meter_data.py (chay moi gio)
 import csv
 import os
 import sys
+import time
 from datetime import datetime, timedelta
 
 import requests
 
-from fetch_meter_data import BASE_URL, VN_TZ, login_data
+from fetch_meter_data import BASE_URL, VN_TZ, get_retry, login_data
 
 CSV_PATH = "public/metterinfo.csv"
 DATAMETTER_PATH = "public/datametter.csv"
@@ -28,14 +29,19 @@ DATAMETTER_PATH = "public/datametter.csv"
 # ==================== CANH BAO HSN BAT THUONG ====================
 # HSN (cot METER_NAME) coi la SAI khi > nguong hoac trung so cong to
 # (loi nhap so serial vao o TEN CONG TO tren HES, vd cong to 2510203126).
-HSN_MAX = float(os.environ.get("HSN_MAX", "100000"))
+HSN_MAX = float(os.environ.get("HSN_MAX", "1000000"))
 # PocketBase de gui thong bao vao collection `notifications` (bo trong = khong gui)
 PB_URL = os.environ.get("PB_URL", "").rstrip("/")
 PB_EMAIL = os.environ.get("PB_EMAIL", "")
 PB_PASS = os.environ.get("PB_PASS", "")
 API_FIELDS = ["METER_NO", "METER_NAME", "METER_MODEL_DESC", "CUSTOMER_CODE",
               "CUSTOMER_NAME", "ADDRESS", "LINE_NAME"]
-FIELDS = API_FIELDS + ["STATUS"]
+# LINE_ID/CODE/ROLE bo sung tu GetLineList + GetMeter (anh xa cong to -> tram).
+#   ROLE = "chinh" khi line co CODE != rong  -> diem do dem chinh (cong P, Q)
+#   ROLE = "phu"   khi CODE rong             -> diem do phu (bo qua khi tinh ton that)
+STATION_FIELDS = ["LINE_ID", "CODE", "ROLE"]
+FIELDS = API_FIELDS + STATION_FIELDS + ["STATUS"]
+BATCH_SLEEP = float(os.environ.get("BATCH_SLEEP", "0.15"))  # nghi giua cac lan goi GetMeter
 USER_ID = os.environ.get("USER_ID", "2")   # tai khoan luon dung UserID = 2
 INACTIVE_DAYS = int(os.environ.get("INACTIVE_DAYS", "7"))  # so ngay lien tiep U=0 moi gan No
 
@@ -188,6 +194,116 @@ def notify_bad_hsn(bad: list):
     print(f"Canh bao HSN: {len(bad)} cong to bat thuong, da gui {sent} thong bao.")
 
 
+def fetch_line_list(user_id: str, token: str) -> dict:
+    """GetLineList -> {LINE_ID: {"LINE_NAME":..., "CODE":...}}."""
+    r = get_retry(
+        f"{BASE_URL}/GetLineList",
+        params={"UserID": user_id, "Token": token},
+        timeout=60,
+    )
+    r.raise_for_status()
+    data = r.json()
+    if isinstance(data, dict):
+        data = data.get("DATA", data.get("data", []))
+    lines = {}
+    for rec in data or []:
+        lid = str(rec.get("LINE_ID") or "").strip()
+        if not lid:
+            continue
+        lines[lid] = {
+            "LINE_NAME": (rec.get("LINE_NAME") or "").strip(),
+            "CODE": (rec.get("CODE") or "").strip(),
+        }
+    return lines
+
+
+def fetch_meter_line_id(meter_no: str, token: str) -> str:
+    """GetMeter(No) -> LINE_ID cua cong to (rong neu loi/khong co)."""
+    try:
+        r = get_retry(
+            f"{BASE_URL}/GetMeter",
+            params={"No": meter_no, "Token": token},
+            timeout=30,
+        )
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:  # noqa: BLE001
+        print(f"[WARN] GetMeter {meter_no}: {e}")
+        return ""
+    if isinstance(data, list):
+        data = data[0] if data else {}
+    if isinstance(data, dict):
+        return str(data.get("LINE_ID") or "").strip()
+    return ""
+
+
+def enrich_stations(meters: dict, user_id: str, token: str) -> list:
+    """Gan LINE_ID/CODE/ROLE cho tung cong to; tra ve danh sach tram bat thuong
+    (CODE != rong nhung KHONG phai tien to cua LINE_NAME) de gui canh bao."""
+    lines = fetch_line_list(user_id, token)
+    print(f"GetLineList: {len(lines)} tram.")
+
+    bad_stations = []          # tram co CODE nhung LINE_NAME khong bat dau bang CODE
+    seen_bad = set()
+    for no, m in meters.items():
+        lid = fetch_meter_line_id(no, token)
+        line = lines.get(lid, {})
+        code = line.get("CODE", "")
+        line_name = line.get("LINE_NAME") or m.get("LINE_NAME") or ""
+        m["LINE_ID"] = lid
+        m["CODE"] = code
+        if code:
+            m["ROLE"] = "chinh"
+            if not line_name.startswith(code) and lid not in seen_bad:
+                seen_bad.add(lid)
+                bad_stations.append({"line_id": lid, "code": code, "line_name": line_name})
+        else:
+            m["ROLE"] = "phu"
+        if BATCH_SLEEP:
+            time.sleep(BATCH_SLEEP)
+    return bad_stations
+
+
+def notify_bad_stations(bad_stations: list):
+    """Canh bao tram: CODE khong phai tien to cua LINE_NAME -> collection notifications."""
+    if not bad_stations:
+        return
+    if not (PB_URL and PB_EMAIL and PB_PASS):
+        print("[WARN] Phat hien tram bat thuong nhung thieu PB_URL/PB_EMAIL/PB_PASS -> khong gui thong bao.")
+        return
+    token = pb_login()
+    if not token:
+        print("[WARN] Khong dang nhap duoc PocketBase -> khong gui thong bao tram.")
+        return
+    headers = {"Authorization": token}
+    api = f"{PB_URL}/api/collections/notifications/records"
+    sent = 0
+    for s in bad_stations:
+        message = (f"Trạm mã CODE \"{s['code']}\" không khớp tên trạm "
+                   f"\"{s['line_name']}\" (CODE phải là tiền tố của LINE_NAME) — kiểm tra lại HES.")
+        try:
+            dup = requests.get(
+                api,
+                params={"filter": f'message="{message}" && area=""', "perPage": 1},
+                headers=headers, timeout=30,
+            )
+            if dup.ok and dup.json().get("totalItems", 0) > 0:
+                continue
+            r = requests.post(
+                api,
+                json={"title": "Cảnh báo dữ liệu trạm (CODE/LINE_NAME)",
+                      "message": message, "type": "info", "mkh": "", "area": ""},
+                headers=headers, timeout=30,
+            )
+            if r.ok:
+                sent += 1
+            else:
+                print(f"[WARN] Gui canh bao tram that bai ({r.status_code}): {r.text[:200]}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[WARN] Loi gui canh bao tram: {e}")
+    print(f"Canh bao tram: {len(bad_stations)} tram bat thuong, da gui {sent} thong bao.")
+
+
 def main():
     info = login_data()
     token = info.get("TOKEN")
@@ -210,6 +326,11 @@ def main():
         for k in API_FIELDS:
             meters[no][k] = rec.get(k) if rec.get(k) is not None else ""
         meters[no]["METER_NO"] = no
+
+    # Anh xa cong to -> tram (LINE_ID/CODE/ROLE) qua GetLineList + GetMeter
+    bad_stations = enrich_stations(meters, USER_ID, token)
+    n_chinh = sum(1 for m in meters.values() if m.get("ROLE") == "chinh")
+    print(f"Phan loai diem do: {n_chinh} chinh / {len(meters) - n_chinh} phu.")
 
     # STATUS: "Yes" neu co dien ap pha > 0 trong INACTIVE_DAYS ngay gan nhat
     last_day = os.environ.get("TARGET_DATE", "").strip() or (datetime.now(VN_TZ).date() - timedelta(days=1)).isoformat()
@@ -235,6 +356,11 @@ def main():
         print(f"[ALERT] {b['no']} ({b['customer']}): HSN={b['hsn']:g} bat thuong "
               f"(> {HSN_MAX:g} hoac trung so cong to).")
     notify_bad_hsn(bad)
+
+    # Canh bao tram: CODE khong phai tien to cua LINE_NAME
+    for s in bad_stations:
+        print(f"[ALERT] Tram {s['line_id']}: CODE='{s['code']}' khong la tien to cua LINE_NAME='{s['line_name']}'.")
+    notify_bad_stations(bad_stations)
 
 
 if __name__ == "__main__":
