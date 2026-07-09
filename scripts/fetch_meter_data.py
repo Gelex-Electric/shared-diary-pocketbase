@@ -31,7 +31,12 @@ def get_retry(url, *, attempts=4, **kwargs):
 
 BASE_URL = "http://14.225.244.63:8899/api"
 CSV_PATH = "public/datametter.csv"
-FIELDS = ["METER_NO", "DATE_TIME", "PHASE_A_VOLTS", "PHASE_B_VOLTS", "PHASE_C_VOLTS", "TOTAL_KW"]
+# Giữ 6 cột đầu ĐÚNG THỨ TỰ CŨ (frontend VoltagePowerDashboard đọc theo vị trí:
+# TOTAL_KW ở index 5). Cột mới chỉ được NỐI VÀO CUỐI để không phá tương thích.
+FIELDS = ["METER_NO", "DATE_TIME", "PHASE_A_VOLTS", "PHASE_B_VOLTS", "PHASE_C_VOLTS", "TOTAL_KW",
+          "PHASE_A_AMPERE", "PHASE_B_AMPERE", "PHASE_C_AMPERE", "TOTAL_KVAR"]
+# Các trường phải nhân hệ số nhân (HSN) khi lưu — công suất & dòng điện.
+SCALED_FIELDS = ["TOTAL_KW", "PHASE_A_AMPERE", "PHASE_B_AMPERE", "PHASE_C_AMPERE", "TOTAL_KVAR"]
 KEEP_RECORDS = int(os.environ.get("KEEP_RECORDS", "336"))  # 7 ngay x 48 ban ghi/ngay moi cong to
 FETCH_HOURS = int(os.environ.get("FETCH_HOURS", "6"))       # cua so lay du lieu, rong de vot ban ghi ve tre
 
@@ -64,7 +69,14 @@ def load_meter_list():
 
 
 def login_data() -> dict:
-    """Dang nhap API dien, tra ve toan bo object (gom USER_ID, TOKEN)."""
+    """Tra ve object dang nhap (gom USER_ID, TOKEN).
+
+    Neu co API_TOKEN (token da lay san) thi dung luon, KHONG goi Login — theo luu y
+    trong API_HES.md: chi login khi cac ham khac loi. USER_ID mac dinh '2' (GETC).
+    """
+    token = os.environ.get("API_TOKEN", "").strip()
+    if token:
+        return {"CODE": "1", "TOKEN": token, "USER_ID": os.environ.get("USER_ID", "2")}
     if not (USER_ACCOUNT and PASSWORD):
         sys.exit("Thieu API_USER/API_PASS. Hay them vao GitHub Secrets.")
     r = get_retry(
@@ -143,6 +155,10 @@ def append_csv(rows):
             "PHASE_B_VOLTS": rec.get("PHASE_B_VOLTS", ""),
             "PHASE_C_VOLTS": rec.get("PHASE_C_VOLTS", ""),
             "TOTAL_KW": rec.get("TOTAL_KW", ""),
+            "PHASE_A_AMPERE": rec.get("PHASE_A_AMPERE", ""),
+            "PHASE_B_AMPERE": rec.get("PHASE_B_AMPERE", ""),
+            "PHASE_C_AMPERE": rec.get("PHASE_C_AMPERE", ""),
+            "TOTAL_KVAR": rec.get("TOTAL_KVAR", ""),
         }
 
     # Gom theo cong to, chi giu KEEP_RECORDS ban ghi moi nhat moi cong to
@@ -182,7 +198,8 @@ def main():
         rows = fetch_instant(token, no)
         for rec in rows:
             rec.setdefault("METER_NO", no)
-            rec["TOTAL_KW"] = scale(rec.get("TOTAL_KW"), hsn)
+            for fld in SCALED_FIELDS:  # công suất + dòng điện đều ×HSN; điện áp giữ nguyên
+                rec[fld] = scale(rec.get(fld), hsn)
         print(f"  {no} (HSN={hsn:g}): {len(rows)} ban ghi")
         all_rows.extend(rows)
 

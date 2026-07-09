@@ -25,7 +25,7 @@ import os
 import sys
 from datetime import date, datetime, timedelta
 
-from fetch_meter_data import VN_TZ, load_meter_list, login, scale, append_csv
+from fetch_meter_data import VN_TZ, SCALED_FIELDS, load_meter_list, login, scale, append_csv
 from backfill_pmax import month_chunks, fetch_range, load_existing as load_pmax, write_out as write_pmax
 
 
@@ -85,6 +85,10 @@ def main():
                 if day not in pmax_by_day or kw > pmax_by_day[day]:
                     pmax_by_day[day] = kw
                 rec["TOTAL_KW"] = kw_str
+                # Scale cac cot moi (I pha, KVAR) cho khop datametter.csv
+                for fld in SCALED_FIELDS:
+                    if fld != "TOTAL_KW":
+                        rec[fld] = scale(rec.get(fld), hsn)
                 datametter_rows.append(rec)
                 meter_records += 1
 

@@ -6,6 +6,9 @@ export interface MeterInfoRow {
   CUSTOMER_NAME: string;
   ADDRESS: string;
   LINE_NAME: string;
+  LINE_ID: string;
+  CODE: string;
+  ROLE: string;   // 'chinh' | 'phu'
   STATUS: string;
 }
 

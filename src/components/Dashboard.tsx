@@ -10,6 +10,7 @@ import SummaryDashboard from './SummaryDashboard';
 import CustomerManager from './CustomerManager';
 import HesReadingManager from './hes/HesReadingManager';
 import VoltagePowerDashboard from './VoltagePowerDashboard';
+import TransformerLossManager from './TransformerLossManager';
 import JournalManager from './JournalManager';
 import PowerOutageManager from './PowerOutageManager';
 import NewUpdateTour from './NewUpdateTour';
@@ -17,7 +18,7 @@ import SldPage from './sld/SldPage';
 import NotificationBell from './ui/NotificationBell';
 import ThemeToggle from './ui/ThemeToggle';
 
-type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'operating' | 'hes' | 'opchart' | 'sld' | 'later';
+type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
@@ -27,9 +28,13 @@ const TAB_LABEL: Record<Tab, string> = {
   operating: 'Thông số vận hành',
   hes:       'Lấy chỉ số HES',
   opchart:   'Đồ thị điện áp & công suất',
+  loss:      'Tổn thất tính toán',
   sld:       'Sơ đồ một sợi',
   later:     'Cập nhật sau',
 };
+
+/** Các tab con thuộc nhóm "Thông số vận hành". */
+const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
 
 export default function Dashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
@@ -200,7 +205,7 @@ export default function Dashboard() {
             <button
               onClick={() => toggleSection('operating')}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'operating' || topTab === 'hes' || topTab === 'opchart' || topTab === 'sld' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+                OPERATING_TABS.includes(topTab) ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <Activity className="w-5 h-5 shrink-0" />
@@ -250,6 +255,18 @@ export default function Dashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Đồ thị điện áp &amp; công suất</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      id="nav-loss-sub"
+                      onClick={() => { setTopTab('loss'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'loss' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Tổn thất tính toán</span>
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
@@ -263,7 +280,6 @@ export default function Dashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Sơ đồ một sợi</span>
-                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
                 </motion.ul>
@@ -306,7 +322,7 @@ export default function Dashboard() {
               setTopTab(tab);
               // Mở sẵn nhóm sidebar chứa tab đích để người dùng thấy ngữ cảnh
               if (tab === 'journal') { setIsJournalExpanded(true); setIsOperatingExpanded(false); }
-              else if (tab === 'operating' || tab === 'hes' || tab === 'opchart' || tab === 'sld') { setIsOperatingExpanded(true); setIsJournalExpanded(false); }
+              else if (OPERATING_TABS.includes(tab as Tab)) { setIsOperatingExpanded(true); setIsJournalExpanded(false); }
             }}
           />
         )}
@@ -435,6 +451,8 @@ export default function Dashboard() {
               <HesReadingManager />
             ) : topTab === 'opchart' ? (
               <VoltagePowerDashboard />
+            ) : topTab === 'loss' ? (
+              <TransformerLossManager />
             ) : topTab === 'sld' ? (
               <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
                 <SldPage />
