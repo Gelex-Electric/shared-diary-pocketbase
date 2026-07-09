@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from '../lib/toast';
 
 /** Tab đích để điều hướng khi nhấn "Xem ngay" — khớp với type Tab trong Dashboard */
-export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'sld' | 'later';
+export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'loss' | 'sld' | 'later';
 
 /** Đường dẫn tài liệu hướng dẫn sử dụng (mở khi đóng thông báo) */
 const GUIDE_URL = '/document.pdf';
@@ -22,44 +22,52 @@ interface UpdateItem {
 }
 
 // Phiên bản & ngày phát hành hiển thị trên header
-const VERSION      = '1.5';
-const RELEASE_DATE = '30/06/2026';
+const VERSION      = '1.6';
+const RELEASE_DATE = '08/07/2026';
 
 const UPDATES: UpdateItem[] = [
   {
-    title: 'Lấy chỉ số trực tiếp tự động lúc 00h00 hằng ngày',
-    desc: 'Tại "Lấy chỉ số từ HES", bổ sung chế độ đọc chỉ số tự động vào 00h00 mỗi ngày trong suốt một tháng — không cần thao tác thủ công từng ngày.',
+    title: 'Tổn thất tính toán máy biến áp',
+    desc: 'Tính tổn thất kỹ thuật từng trạm (ΔP = P0 + Pk·(S/Sdm)²) theo thời gian thực đo, gom theo khu công nghiệp. 3 chế độ xem: theo ngày, theo tháng, và biểu đồ mức tải & tỷ lệ tổn thất theo từng trạm.',
     tag: 'Mới',
-    link: { tab: 'hes', label: 'Mở Lấy chỉ số HES' },
+    link: { tab: 'loss', label: 'Xem Tổn thất tính toán' },
   },
   {
-    title: 'Dashboard Tổng hợp làm mới — dữ liệu trực tiếp từ hóa đơn',
-    desc: 'Trang Tổng hợp (Vận hành & Kinh doanh) đọc số liệu trực tiếp từ hệ thống hóa đơn thay cho tệp CSV, luôn cập nhật theo thời gian thực và lọc theo khu vực của tài khoản.',
+    title: 'Đồ thị điện áp & công suất theo thời gian thực',
+    desc: 'Xem đường điện áp 3 pha và cột công suất của từng trạm theo từng mốc 30 phút trong ngày, tự phát hiện và tô vùng thời gian mất điện.',
     tag: 'Mới',
-    link: { tab: 'summary', label: 'Xem Tổng hợp' },
+    link: { tab: 'opchart', label: 'Mở Đồ thị điện áp & công suất' },
   },
   {
-    title: 'Biểu đồ phụ tải, Pmax & cơ cấu biểu giá',
-    desc: 'Thêm biểu đồ phụ tải theo tháng (so sánh 3 năm), công suất cực đại Pmax theo ngày (đánh dấu Thứ 7 / Chủ nhật), cơ cấu biểu giá BT/CĐ/TĐ và biểu đồ sản lượng–công suất theo từng khách hàng.',
+    title: 'Sơ đồ một sợi (SLD)',
+    desc: 'Xem sơ đồ một sợi (ảnh và PDF) của từng khu vực ngay trong ứng dụng, không cần tải file rời.',
     tag: 'Mới',
-    link: { tab: 'summary', label: 'Xem Tổng hợp' },
+    link: { tab: 'sld', label: 'Mở Sơ đồ một sợi' },
   },
   {
-    title: 'Bảng sản lượng & doanh thu theo khách hàng',
-    desc: 'Hiển thị ngày đóng điện (chỉ số sớm nhất của công tơ), mức tăng/giảm so với tháng liền trước, và mở rộng xem chi tiết tới từng công tơ của mỗi khách.',
+    title: 'Dữ liệu đo xa đầy đủ hơn — dòng điện & công suất phản kháng',
+    desc: 'Bổ sung dòng điện 3 pha và công suất phản kháng (kVAr) vào dữ liệu đo xa mỗi 30 phút, làm nền tảng tính công suất biểu kiến cho tổn thất máy biến áp.',
     tag: 'Cải tiến',
-    link: { tab: 'summary', label: 'Xem Tổng hợp' },
   },
   {
-    title: 'Bảng sản lượng HES gọn & dễ đọc hơn',
-    desc: 'Bỏ biểu tượng vương miện, cột "Tổng (kWh)" không còn tô nền màu khó nhìn mà làm nổi bằng chữ đậm và đường kẻ cột — đọc nhanh hơn.',
+    title: 'Phân loại điểm đo chính / phụ theo trạm',
+    desc: 'Tự động xác định công tơ nào là điểm đo chính của mỗi trạm biến áp (dựa trên dữ liệu HES), tránh cộng trùng sản lượng giữa các điểm đo.',
     tag: 'Cải tiến',
-    link: { tab: 'hes', label: 'Mở Lấy chỉ số HES' },
   },
   {
-    title: 'Giao diện "Phòng điều khiển" & chế độ Sáng / Tối',
-    desc: 'Toàn bộ ứng dụng theo phong cách bảng điều khiển trạm (đèn trạng thái, số liệu canh cột) kèm nút chuyển nền sáng–tối được ghi nhớ cho lần sau.',
-    tag: 'Giao diện',
+    title: 'Đồng bộ dữ liệu 1 lần mỗi ngày lúc 00h00',
+    desc: 'Toàn bộ dữ liệu công tơ, chỉ số HES và tổn thất được cập nhật gọn trong một lượt chạy duy nhất mỗi ngày, giảm số lần khởi động lại hệ thống so với trước.',
+    tag: 'Cải tiến',
+  },
+  {
+    title: 'Sửa lỗi xuất Word thông báo cắt điện',
+    desc: 'Khắc phục lỗi không tải được file Word thông báo cắt điện cho khu vực Thuận Thành I.',
+    tag: 'Sửa lỗi',
+  },
+  {
+    title: 'Sửa màu header đen trong PDF sổ nhật ký',
+    desc: 'Header bảng trong PDF sổ nhật ký vận hành và biên bản giao nhận ca không còn bị in màu đen, đã chuyển về màu xám nhẹ dễ đọc.',
+    tag: 'Sửa lỗi',
   },
 ];
 
@@ -227,12 +235,12 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
         {/* Gợi ý nhanh hai tính năng nổi bật */}
         <div className="mx-6 mb-1 grid grid-cols-2 gap-2">
           <div className="flex items-center gap-2 rounded-xl bg-subtle px-3 py-2">
-            <Clock className="h-4 w-4 text-accent" />
-            <span className="text-[11px] font-semibold text-dim">Tự lấy chỉ số 00h00</span>
+            <BarChart3 className="h-4 w-4 text-accent" />
+            <span className="text-[11px] font-semibold text-dim">Tổn thất tính toán MBA</span>
           </div>
           <div className="flex items-center gap-2 rounded-xl bg-subtle px-3 py-2">
-            <BarChart3 className="h-4 w-4 text-accent" />
-            <span className="text-[11px] font-semibold text-dim">Dashboard tổng hợp mới</span>
+            <Clock className="h-4 w-4 text-accent" />
+            <span className="text-[11px] font-semibold text-dim">Đồng bộ dữ liệu 00h00</span>
           </div>
         </div>
 
