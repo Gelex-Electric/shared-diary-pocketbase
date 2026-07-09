@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, ReactNode } from 'react';
 import {
-  ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Bar, Line, Cell,
+  ResponsiveContainer, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Line,
 } from 'recharts';
 import {
   TrendingDown, Info, CalendarDays, CalendarRange, BarChart3, Building2, Zap, Gauge,
@@ -38,13 +38,22 @@ const prevDay = (k: string) => {
   return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
 };
 
-/** Màu theo mức đầy tải: đỏ ≤10% hoặc ≥90%; vàng 10–30% & 80–90%; xanh 30–80%. */
+/** Màu mức đầy tải: đỏ < 20% (non tải); vàng 20–30%; xanh > 30%. */
 function loadColor(p: number): string {
-  if (p <= 10 || p >= 90) return 'var(--danger)';
-  if (p < 30 || p > 80) return 'var(--warning)';
+  if (p < 20) return 'var(--danger)';
+  if (p <= 30) return 'var(--warning)';
   return 'var(--success)';
 }
 const lossPctColor = (p: number) => (p >= 5 ? 'var(--danger)' : p >= 2 ? 'var(--warning)' : 'var(--success)');
+
+/* Badge % tổn thất nổi bật — dùng ở cả bảng ngày & tháng. */
+function LossPctBadge({ v }: { v: number }) {
+  const c = lossPctColor(v);
+  return (
+    <span className="inline-flex items-center justify-center min-w-[56px] px-2.5 py-1 rounded-full text-sm font-black tabular-nums"
+      style={{ color: c, background: `color-mix(in srgb, ${c} 15%, transparent)` }}>{pct(v)}</span>
+  );
+}
 
 function LoadBar({ value }: { value: number }) {
   const w = Math.max(0, Math.min(100, value));
@@ -230,25 +239,34 @@ export default function TransformerLossManager() {
     return { mZones, mKpi: { loss, output, pct: ratio(loss, output), n: rowsM.length } };
   }, [monthly, selMonth, codeToKcn]);
 
-  /* ---- 6 biểu đồ: 3 %TT thấp + 3 cao ---- */
-  const chartStations = useMemo(() => {
-    const lo = stationsSorted.slice(0, 3);
-    const hi = stationsSorted.slice(-3).reverse();
-    const seen = new Set<string>();
-    const pick: { st: StationDay; kind: 'low' | 'high' }[] = [];
-    [...lo.map(st => ['low', st] as const), ...hi.map(st => ['high', st] as const)]
-      .forEach(([kind, st]) => { if (!seen.has(st.code)) { seen.add(st.code); pick.push({ st, kind }); } });
-    return pick;
-  }, [stationsSorted]);
+  /* ---- Chuỗi theo NGÀY trong tháng cho từng trạm (biểu đồ tháng) ---- */
+  const dailySeriesByCode = useMemo(() => {
+    const m = new Map<string, Map<string, { loss: number; output: number; loadSum: number; n: number }>>();
+    for (const r of rows) {
+      let byD = m.get(r.code);
+      if (!byD) { byD = new Map(); m.set(r.code, byD); }
+      let d = byD.get(r.date);
+      if (!d) { d = { loss: 0, output: 0, loadSum: 0, n: 0 }; byD.set(r.date, d); }
+      d.loss += r.lossKwh; d.output += r.outputKwh; d.loadSum += r.loadPct; d.n++;
+    }
+    const out = new Map<string, { label: string; lossPct: number; load: number }[]>();
+    m.forEach((byD, code) => {
+      out.set(code, [...byD.entries()]
+        .map(([date, d]) => ({ label: dateVN(date).slice(0, 5), lossPct: ratio(d.loss, d.output), load: d.n ? d.loadSum / d.n : 0, _d: date }))
+        .sort((a, b) => a._d.localeCompare(b._d))
+        .map(({ _d, ...rest }) => rest));
+    });
+    return out;
+  }, [rows]);
 
-  /* Mặc định 6 ô = 3 %TT thấp + 3 cao; cho phép đổi trạm từng ô. Reset khi đổi ngày. */
-  const defaultPicks = useMemo(() => {
-    const p = chartStations.map(c => c.st.code);
-    while (p.length < 6) p.push('');
-    return p.slice(0, 6);
-  }, [chartStations]);
-  const [chartPicks, setChartPicks] = useState<string[]>([]);
-  useEffect(() => { setChartPicks(defaultPicks); }, [defaultPicks]);
+  /* Mặc định 3 cặp = 3 trạm %TT THẤP nhất; đổi được từng cặp. Reset khi đổi ngày. */
+  const defaultPairs = useMemo(() => {
+    const p = stationsSorted.slice(0, 3).map(s => s.code);
+    while (p.length < 3) p.push('');
+    return p.slice(0, 3);
+  }, [stationsSorted]);
+  const [pairPicks, setPairPicks] = useState<string[]>([]);
+  useEffect(() => { setPairPicks(defaultPairs); }, [defaultPairs]);
   const stationOptions = useMemo(() => allStations.map(s => ({ value: s.code, label: s.name })), [allStations]);
 
   const hasData = rows.length > 0 || monthly.length > 0;
@@ -293,48 +311,44 @@ export default function TransformerLossManager() {
           {allStations.length === 0 ? (
             <div className="vl-card"><EmptyState icon={BarChart3} title="Không đủ dữ liệu vẽ biểu đồ" /></div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {chartPicks.map((code, i) => {
+            <div className="space-y-4">
+              {pairPicks.map((code, i) => {
                 const st = stationByCode.get(code);
-                // Trục % tự co giãn quanh khoảng dữ liệu (để 0,3–0,4% vẫn nhìn rõ)
-                const pv = st ? st.slots.map(s => s.lossPct) : [];
-                const lo = pv.length ? Math.min(...pv) : 0;
-                const hi = pv.length ? Math.max(...pv) : 1;
-                const pad = (hi - lo) * 0.25 || Math.max(hi * 0.1, 0.05);
-                const pctDomain: [number, number] = [Math.max(0, lo - pad), hi + pad];
+                const daySlots = st ? st.slots : [];
+                const monthSeries = dailySeriesByCode.get(code) || [];
                 return (
-                  <div key={i} className="vl-card p-4 flex flex-col gap-3 min-h-[340px]">
-                    <Select value={code} onChange={v => setChartPicks(p => p.map((x, idx) => (idx === i ? v : x)))}
-                      searchable icon={Gauge} className="w-full" placeholder="Chọn trạm…" options={stationOptions} />
-                    {st ? (
-                      <>
-                        <div className="text-[11px] font-mono text-faint">
-                          % tổn thất <strong style={{ color: lossPctColor(st.lossPct) }}>{pct(st.lossPct)}</strong> · sản lượng {fmt(st.output)} kWh
+                  <div key={i} className="vl-card p-4 md:p-5 space-y-3">
+                    {/* Bộ chọn trạm dùng chung cho cả cặp */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Select value={code} onChange={v => setPairPicks(p => p.map((x, idx) => (idx === i ? v : x)))}
+                        searchable icon={Gauge} className="min-w-[240px]" placeholder="Chọn trạm…" options={stationOptions} />
+                      {st && (
+                        <span className="inline-flex items-center gap-2 text-[12px] text-soft">
+                          % tổn thất <LossPctBadge v={st.lossPct} /> · mức tải đỉnh <strong style={{ color: loadColor(st.maxLoad) }}>{fmt(st.maxLoad, 0)}%</strong>
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-[11px] font-bold text-faint uppercase tracking-wider mb-1">Trong ngày · {dateVN(selDate)}</div>
+                        <div className="h-[220px]">
+                          {daySlots.length ? <LossLoadChart data={daySlots} xKey="time" /> : <div className="h-full flex items-center justify-center text-faint text-xs">Không có dữ liệu ngày này</div>}
                         </div>
-                        <div className="h-[240px]">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={st.slots} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
-                              <XAxis dataKey="time" tickLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={22} />
-                              <YAxis yAxisId="l" hide />
-                              <YAxis yAxisId="pct" orientation="right" domain={pctDomain} width={44}
-                                tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }}
-                                tickFormatter={(v: number) => `${fmt(v, 2)}%`} />
-                              <Tooltip content={<ChartTooltip fmt={(v, n) => (n === '% tổn thất' ? `${fmt(v, 2)}%` : `${fmt(v, 3)} kWh`)} />} />
-                              <Bar yAxisId="l" dataKey="loss" name="Tổn thất" radius={[2, 2, 0, 0]} maxBarSize={10} fillOpacity={0.32}>
-                                {st.slots.map((s, idx) => <Cell key={idx} fill={loadColor(s.load)} />)}
-                              </Bar>
-                              <Line yAxisId="pct" type="monotone" dataKey="lossPct" name="% tổn thất" stroke={CHART.vc} strokeWidth={2.4} dot={false} />
-                            </ComposedChart>
-                          </ResponsiveContainer>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-faint uppercase tracking-wider mb-1">Theo tháng · {monthSeries.length} ngày</div>
+                        <div className="h-[220px]">
+                          {monthSeries.length ? <LossLoadChart data={monthSeries} xKey="label" /> : <div className="h-full flex items-center justify-center text-faint text-xs">Không có dữ liệu tháng</div>}
                         </div>
-                      </>
-                    ) : (
-                      <div className="h-[240px] flex items-center justify-center text-faint text-sm">Chọn trạm để xem biểu đồ</div>
-                    )}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
+              <p className="text-[11px] text-faint flex items-center gap-3 px-1">
+                <span className="inline-flex items-center gap-1"><span className="w-4 h-[3px] rounded" style={{ background: CHART.cd }} /> Mức tải (%)</span>
+                <span className="inline-flex items-center gap-1"><span className="w-4 h-[3px] rounded" style={{ background: CHART.vc }} /> Tỷ lệ tổn thất (%)</span>
+              </p>
             </div>
           )}
         </>
@@ -369,7 +383,7 @@ export default function TransformerLossManager() {
                           </td>
                           <td className="py-3 px-4 text-right text-sm text-dim tabular-nums">{fmt(st.output)}</td>
                           <td className="py-3 px-4 text-right text-sm font-bold text-ink tabular-nums">{fmt(st.loss)}</td>
-                          <td className="py-3 px-4 text-right text-sm font-semibold tabular-nums" style={{ color: lossPctColor(st.lossPct) }}>{pct(st.lossPct)}</td>
+                          <td className="py-3 px-4 text-right"><LossPctBadge v={st.lossPct} /></td>
                           <td className="py-3 px-4 text-right text-sm text-soft tabular-nums">{fmt(st.noload)}</td>
                           <td className="py-3 px-4 text-right text-sm text-soft tabular-nums">{fmt(st.load)}</td>
                         </tr>
@@ -421,7 +435,7 @@ export default function TransformerLossManager() {
                           </td>
                           <td className="py-3 px-4 text-right text-sm text-dim tabular-nums">{fmt(st.output)}</td>
                           <td className="py-3 px-4 text-right text-sm font-bold text-ink tabular-nums">{fmt(st.loss)}</td>
-                          <td className="py-3 px-4 text-right text-sm font-semibold tabular-nums" style={{ color: lossPctColor(st.lossPct) }}>{pct(st.lossPct)}</td>
+                          <td className="py-3 px-4 text-right"><LossPctBadge v={st.lossPct} /></td>
                           <td className="py-3 px-4 text-center"><LossDelta d={st.delta} /></td>
                           <td className="py-3 px-4"><LoadBar value={st.maxLoad} /></td>
                         </tr>
@@ -443,7 +457,50 @@ export default function TransformerLossManager() {
           )}
         </>
       )}
+
+      {/* Chú thích phương pháp tính */}
+      {!loading && (
+        <div className="vl-card p-5 text-xs text-soft space-y-2 leading-relaxed">
+          <div className="flex items-center gap-2 font-bold text-dim uppercase text-[11px] tracking-wider">
+            <Info className="w-4 h-4 text-amber-500" /> Phương pháp tính tổn thất
+          </div>
+          <p>
+            <strong className="text-ink">Đang dùng — Phương pháp trực tiếp (giải tích):</strong> tại từng mốc 30 phút lấy công suất
+            thực đo P, Q → công suất biểu kiến S = √(P²+Q²) → tổn thất tức thời <strong>ΔP = P0 + Pk·(S/Sdm)²</strong>, rồi nhân với
+            khoảng thời gian thực Δt giữa hai bản ghi và cộng dồn cả ngày/tháng. Bám sát đồ thị phụ tải thực từng thời điểm nên
+            chính xác, tính đúng cả tổn thất không tải (P0, cố định khi MBA mang điện) lẫn tổn thất có tải (theo S²).
+          </p>
+          <p>
+            <strong className="text-ink">KHÔNG dùng — Phương pháp dòng cực đại I_max &amp; bình phương hệ số:</strong> chỉ lấy dòng
+            điện đỉnh I_max và thời gian tổn thất τ (suy ra từ bình phương hệ số phụ tải / hệ số hình dạng đồ thị) để ước lượng
+            gần đúng: <strong>ΔA ≈ P0·T + Pk·(I_max/I_đm)²·τ</strong>. Phương pháp này dùng khi thiếu đồ thị phụ tải chi tiết; do
+            phụ thuộc giả định về hình dạng tải nên sai số lớn hơn phương pháp trực tiếp.
+          </p>
+        </div>
+      )}
     </div>
+  );
+}
+
+/* Biểu đồ đường: Mức tải (%) + Tỷ lệ tổn thất (%). Trục tải trái 0–100; trục %TT phải tự co giãn. */
+function LossLoadChart({ data, xKey }: { data: { lossPct: number; load: number }[]; xKey: string }) {
+  const pv = data.map(d => d.lossPct);
+  const lo = pv.length ? Math.min(...pv) : 0;
+  const hi = pv.length ? Math.max(...pv) : 1;
+  const pad = (hi - lo) * 0.25 || Math.max(hi * 0.1, 0.05);
+  const pctDomain: [number, number] = [Math.max(0, lo - pad), hi + pad];
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={data} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
+        <XAxis dataKey={xKey} tickLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={20} />
+        <YAxis yAxisId="load" domain={[0, 100]} width={28} tickLine={false} axisLine={false} stroke={CHART.cd} style={{ fontSize: 9 }} />
+        <YAxis yAxisId="pct" orientation="right" domain={pctDomain} width={46} tickLine={false} axisLine={false} stroke={CHART.vc} style={{ fontSize: 9 }} tickFormatter={(v: number) => `${fmt(v, 2)}%`} />
+        <Tooltip content={<ChartTooltip fmt={(v, n) => (n === 'Mức tải' ? `${fmt(v, 1)}%` : `${fmt(v, 2)}%`)} />} />
+        <Line yAxisId="load" type="monotone" dataKey="load" name="Mức tải" stroke={CHART.cd} strokeWidth={2} dot={false} />
+        <Line yAxisId="pct" type="monotone" dataKey="lossPct" name="Tỷ lệ tổn thất" stroke={CHART.vc} strokeWidth={2.4} dot={false} />
+      </ComposedChart>
+    </ResponsiveContainer>
   );
 }
 
