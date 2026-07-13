@@ -11,7 +11,7 @@ import { StatTile, EmptyState, ChartTooltip, CHART } from './ui/dashboard';
 import { Tabs, TabItem } from './ui/Tabs';
 import { Select } from './ui/Select';
 import { DatePicker } from './ui/DateTimePickers';
-import { fetchLoss30min, fetchLossMonthly, Loss30minRow, LossMonthlyRow } from '../lib/transformerLoss';
+import { fetchLoss30min, fetchLossDaily, fetchLossMonthly, Loss30minRow, LossDailyRow, LossMonthlyRow } from '../lib/transformerLoss';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { fetchMbaInfo, buildMbaLookup, MbaParams } from '../lib/mbaInfo';
 
@@ -124,7 +124,7 @@ function ZoneCard({ kcn, count, capacity, loss, lossPct, collapsed, onToggle, ch
 interface Slot { time: string; loss: number; load: number; p: number; output: number; lossPct: number; }
 interface StationDay {
   code: string; name: string; kcn: string; sdm: number; active: boolean;
-  output: number; loss: number; lossPct: number; maxLoad: number; delta: number | null; slots: Slot[];
+  output: number; loss: number; lossPct: number; maxLoad: number; delta: number | null;
 }
 interface ZoneDay { kcn: string; capacity: number; output: number; loss: number; lossPct: number; stations: StationDay[]; }
 interface StationMonth { code: string; name: string; kcn: string; sdm: number; active: boolean; output: number; loss: number; noload: number; load: number; lossPct: number; }
@@ -132,18 +132,16 @@ interface ZoneMonth { kcn: string; capacity: number; output: number; loss: numbe
 
 interface StationMeta { kcn: string; name: string; sdm: number; }
 
-function dailyByStation(rows: Loss30minRow[], date: string) {
-  const m = new Map<string, { output: number; loss: number; maxLoad: number; name: string; slots: Slot[] }>();
+/** Slot 30 phút cho biểu đồ TRONG NGÀY (chỉ để vẽ hình dạng; số liệu báo cáo lấy file ngày). */
+function slotsByStation(rows: Loss30minRow[], date: string) {
+  const m = new Map<string, Slot[]>();
   for (const r of rows) {
     if (r.date !== date) continue;
     let s = m.get(r.code);
-    if (!s) { s = { output: 0, loss: 0, maxLoad: 0, name: r.lineName || r.code, slots: [] }; m.set(r.code, s); }
-    s.output += r.outputKwh;
-    s.loss += r.lossKwh;
-    if (r.loadPct > s.maxLoad) s.maxLoad = r.loadPct;
-    s.slots.push({ time: r.time, loss: r.lossKwh, load: r.loadPct, p: r.p, output: r.outputKwh, lossPct: ratio(r.lossKwh, r.outputKwh) });
+    if (!s) { s = []; m.set(r.code, s); }
+    s.push({ time: r.time, loss: r.lossKwh, load: r.loadPct, p: r.p, output: r.outputKwh, lossPct: ratio(r.lossKwh, r.outputKwh) });
   }
-  m.forEach(s => s.slots.sort((a, b) => a.time.localeCompare(b.time)));
+  m.forEach(s => s.sort((a, b) => a.time.localeCompare(b.time)));
   return m;
 }
 
@@ -157,6 +155,7 @@ const TABS: TabItem<View>[] = [
 
 export default function TransformerLossManager() {
   const [rows, setRows] = useState<Loss30minRow[]>([]);
+  const [daily, setDaily] = useState<LossDailyRow[]>([]);
   const [monthly, setMonthly] = useState<LossMonthlyRow[]>([]);
   const [meters, setMeters] = useState<MeterInfoRow[]>([]);
   const [mba, setMba] = useState<MbaParams[]>([]);
@@ -170,11 +169,11 @@ export default function TransformerLossManager() {
     let ok = true;
     setLoading(true);
     Promise.all([
-      fetchLoss30min(), fetchLossMonthly(),
+      fetchLoss30min(), fetchLossDaily(), fetchLossMonthly(),
       fetchMeterInfo().catch(() => [] as MeterInfoRow[]),
       fetchMbaInfo().catch(() => [] as MbaParams[]),
     ])
-      .then(([r, mo, mi, mb]) => { if (ok) { setRows(r); setMonthly(mo); setMeters(mi); setMba(mb); } })
+      .then(([r, dy, mo, mi, mb]) => { if (ok) { setRows(r); setDaily(dy); setMonthly(mo); setMeters(mi); setMba(mb); } })
       .catch(e => { console.error(e); notify.error('Lỗi dữ liệu', e?.message || 'Không tải được tổn thất MBA.'); })
       .finally(() => { if (ok) setLoading(false); });
     return () => { ok = false; };
@@ -198,7 +197,7 @@ export default function TransformerLossManager() {
     return map;
   }, [meters, mba]);
 
-  const dates = useMemo(() => [...new Set(rows.map(r => r.date))].sort().reverse(), [rows]);
+  const dates = useMemo(() => [...new Set(daily.map(r => r.date))].sort().reverse(), [daily]);
   useEffect(() => {
     if (dates.length) setSelDate(p => p || (dates.includes(yesterdayKey()) ? yesterdayKey() : dates[0]));
   }, [dates]);
@@ -212,19 +211,18 @@ export default function TransformerLossManager() {
       stationsSorted: [] as StationDay[], stationByCode: new Map<string, StationDay>(), allStations: [] as StationDay[],
     };
     if (!selDate) return empty;
-    const cur = dailyByStation(rows, selDate);
-    const prev = dailyByStation(rows, prevDay(selDate));
+    const cur = new Map(daily.filter(r => r.date === selDate).map(r => [r.code, r]));
+    const prev = new Map(daily.filter(r => r.date === prevDay(selDate)).map(r => [r.code, r]));
     const stations: StationDay[] = [];
     // Nền là toàn bộ trạm có đủ P0/PK => gồm cả trạm KHÔNG hoạt động (không có bản ghi hôm nay).
     metaByCode.forEach((meta, code) => {
       const s = cur.get(code);
-      const prevLoss = prev.get(code)?.loss;
+      const prevLoss = prev.get(code)?.lossKwh;
       stations.push({
         code, name: meta.name, kcn: meta.kcn, sdm: meta.sdm, active: !!s,
-        output: s?.output ?? 0, loss: s?.loss ?? 0, lossPct: s ? ratio(s.loss, s.output) : 0,
-        maxLoad: s?.maxLoad ?? 0,
-        delta: s && prevLoss != null && prevLoss > 0 ? (s.loss - prevLoss) / prevLoss : null,
-        slots: s?.slots ?? [],
+        output: s?.outputKwh ?? 0, loss: s?.lossKwh ?? 0, lossPct: s?.lossPct ?? 0,
+        maxLoad: s?.maxLoadPct ?? 0,
+        delta: s && prevLoss != null && prevLoss > 0 ? (s.lossKwh - prevLoss) / prevLoss : null,
       });
     });
     const zmap = new Map<string, ZoneDay>();
@@ -245,7 +243,10 @@ export default function TransformerLossManager() {
       stationByCode: new Map(stations.map(s => [s.code, s])),
       allStations: [...stations].sort(byName),
     };
-  }, [rows, selDate, metaByCode]);
+  }, [daily, selDate, metaByCode]);
+
+  /* Slot 30 phút cho biểu đồ trong ngày (chỉ vẽ hình dạng). */
+  const slotsByCode = useMemo(() => slotsByStation(rows, selDate), [rows, selDate]);
 
   /* ---- Gom theo THÁNG — sắp theo TÊN TRẠM ---- */
   const { mZones, mKpi } = useMemo(() => {
@@ -277,25 +278,20 @@ export default function TransformerLossManager() {
     return { mZones, mKpi: { loss, output, capacity, pct: ratio(loss, output), n: stations.length } };
   }, [monthly, selMonth, metaByCode]);
 
-  /* ---- Chuỗi theo NGÀY trong tháng cho từng trạm (biểu đồ tháng) ---- */
+  /* ---- Chuỗi theo NGÀY cho từng trạm (biểu đồ tháng) — lấy từ file NGÀY (chính xác) ---- */
   const dailySeriesByCode = useMemo(() => {
-    const m = new Map<string, Map<string, { loss: number; output: number; loadSum: number; n: number }>>();
-    for (const r of rows) {
-      let byD = m.get(r.code);
-      if (!byD) { byD = new Map(); m.set(r.code, byD); }
-      let d = byD.get(r.date);
-      if (!d) { d = { loss: 0, output: 0, loadSum: 0, n: 0 }; byD.set(r.date, d); }
-      d.loss += r.lossKwh; d.output += r.outputKwh; d.loadSum += r.loadPct; d.n++;
+    const out = new Map<string, { label: string; lossPct: number; load: number; _d: string }[]>();
+    for (const r of daily) {
+      let arr = out.get(r.code);
+      if (!arr) { arr = []; out.set(r.code, arr); }
+      arr.push({ label: dateVN(r.date).slice(0, 5), lossPct: r.lossPct, load: r.avgLoadPct, _d: r.date });
     }
-    const out = new Map<string, { label: string; lossPct: number; load: number }[]>();
-    m.forEach((byD, code) => {
-      out.set(code, [...byD.entries()]
-        .map(([date, d]) => ({ label: dateVN(date).slice(0, 5), lossPct: ratio(d.loss, d.output), load: d.n ? d.loadSum / d.n : 0, _d: date }))
-        .sort((a, b) => a._d.localeCompare(b._d))
-        .map(({ _d, ...rest }) => rest));
+    const res = new Map<string, { label: string; lossPct: number; load: number }[]>();
+    out.forEach((arr, code) => {
+      res.set(code, arr.sort((a, b) => a._d.localeCompare(b._d)).map(({ _d, ...rest }) => rest));
     });
-    return out;
-  }, [rows]);
+    return res;
+  }, [daily]);
 
   /* Mặc định 3 cặp = 3 trạm %TT THẤP nhất; đổi được từng cặp. Reset khi đổi ngày. */
   const defaultPairs = useMemo(() => {
@@ -307,7 +303,7 @@ export default function TransformerLossManager() {
   useEffect(() => { setPairPicks(defaultPairs); }, [defaultPairs]);
   const stationOptions = useMemo(() => allStations.map(s => ({ value: s.code, label: s.name })), [allStations]);
 
-  const hasData = rows.length > 0 || monthly.length > 0;
+  const hasData = daily.length > 0 || monthly.length > 0;
   const toggleZone = (k: string) => setCollapsed(c => ({ ...c, [k]: !c[k] }));
 
   return (
@@ -352,7 +348,7 @@ export default function TransformerLossManager() {
             <div className="space-y-4">
               {pairPicks.map((code, i) => {
                 const st = stationByCode.get(code);
-                const daySlots = st ? st.slots : [];
+                const daySlots = slotsByCode.get(code) || [];
                 const monthSeries = dailySeriesByCode.get(code) || [];
                 return (
                   <div key={i} className="vl-card p-4 md:p-5 space-y-3">
