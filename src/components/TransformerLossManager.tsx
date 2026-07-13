@@ -328,7 +328,7 @@ export default function TransformerLossManager() {
             <Select value={selMonth} onChange={setSelMonth} className="min-w-[170px]"
               options={months.map(m => ({ value: m, label: monthVN(m) }))} />
           ) : (
-            <DatePicker value={selDate} onChange={setSelDate} label="Ngày" className="w-[190px]" />
+            <DatePicker value={selDate} onChange={setSelDate} label="Ngày" className="w-[190px]" usePortal />
           )}
         </div>
       </div>
@@ -413,10 +413,7 @@ export default function TransformerLossManager() {
                       {z.stations.map(st => (
                         <tr key={st.code} className={`hover:bg-subtle transition-colors ${st.active ? '' : 'opacity-60'}`}>
                           <td className="py-3 px-4">
-                            <div className="text-sm font-semibold text-ink break-words flex items-center gap-2">
-                              {st.name}
-                              {!st.active && <span className="text-[10px] font-bold text-faint uppercase px-1.5 py-0.5 rounded bg-subtle">Không vận hành</span>}
-                            </div>
+                            <div className={`text-sm font-semibold break-words ${st.active ? 'text-ink' : 'text-faint'}`}>{st.name}</div>
                             <div className="text-[11px] text-faint font-mono">{st.code}</div>
                           </td>
                           <td className="py-3 px-4 text-right text-sm text-dim tabular-nums">{fmt(st.sdm, 0)}</td>
@@ -477,10 +474,7 @@ export default function TransformerLossManager() {
                       {z.stations.map(st => (
                         <tr key={st.code} className={`hover:bg-subtle transition-colors ${st.active ? '' : 'opacity-60'}`}>
                           <td className="py-3 px-4">
-                            <div className="text-sm font-semibold text-ink break-words flex items-center gap-2">
-                              {st.name}
-                              {!st.active && <span className="text-[10px] font-bold text-faint uppercase px-1.5 py-0.5 rounded bg-subtle">Không vận hành</span>}
-                            </div>
+                            <div className={`text-sm font-semibold break-words ${st.active ? 'text-ink' : 'text-faint'}`}>{st.name}</div>
                             <div className="text-[11px] text-faint font-mono">{st.code}</div>
                           </td>
                           <td className="py-3 px-4 text-right text-sm text-dim tabular-nums">{fmt(st.sdm, 0)}</td>
