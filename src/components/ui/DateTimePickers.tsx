@@ -76,10 +76,16 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
       const dropdownH = 360;
+      const dropdownW = 272;  // ~minWidth 270 của lịch
+      const M = 8;            // lề an toàn với mép màn hình
       const openUp = rect.bottom + dropdownH > window.innerHeight && rect.top > dropdownH;
+      // Kẹp ngang: nếu mở từ mép trái sẽ tràn phải → canh phải theo trigger; luôn giữ trong viewport.
+      let left = rect.left;
+      if (left + dropdownW > window.innerWidth - M) left = rect.right - dropdownW;
+      left = Math.max(M, Math.min(left, window.innerWidth - dropdownW - M));
       setPortalPos({
         top: openUp ? rect.top - dropdownH - 6 : rect.bottom + 6,
-        left: rect.left,
+        left,
         width: rect.width,
       });
     };

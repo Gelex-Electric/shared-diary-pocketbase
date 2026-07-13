@@ -11,8 +11,14 @@ Mo hinh:
   - CHI tinh khi con dien: cong to co dien ap pha U>0. U=0 (mat dien) -> bo qua.
     Neu ca tram khong con cong to nao U>0 tai moc do -> khong tinh ton that (0).
   - Cong thuc: S = sqrt(P^2 + Q^2); tai = S/Sdm; dP = P0 + Pk*(S/Sdm)^2 (kW).
-    OUTPUT = P*dt; LOSS_NOLOAD = P0*dt; LOSS_LOAD = Pk*tai^2*dt; LOSS = dP*dt.
+    LOSS_NOLOAD = P0*dt; LOSS_LOAD = Pk*tai^2*dt; LOSS = dP*dt (tich phan 30 phut).
   - Tram nhieu cong to lech gio: van cong san luong; thoi gian trai tu min->max moc.
+
+Xuat 2 file:
+  - transformer_loss_30min.csv : moc 30 phut (OUTPUT=P*dt) -> ve BIEU DO trong ngay.
+  - transformer_loss_daily.csv : mot dong/tram/ngay. OUTPUT lay theo HIEU CHI SO cong to
+    x HSN tu hes_index_daily.csv (chinh xac); LOSS van tich phan dP. Day la nguon SO LIEU
+    bao cao (bang ngay/thang, %TT). Thieu chi so ngay do -> fallback OUTPUT=Sum(P*dt).
 
 Nguon du lieu:
   - metterinfo.csv : CODE, ROLE, STATUS cho tung cong to (do fetch_meter_info.py sinh).
@@ -40,13 +46,22 @@ DT_NOMINAL_H = float(os.environ.get("DT_NOMINAL_H", "0.5"))  # dt cho moc ghi cu
 METTERINFO_PATH = os.environ.get("METTERINFO_PATH", "public/metterinfo.csv")
 MBA_PATH = os.environ.get("MBA_PATH", "public/mba_info.csv")
 DATAMETTER_PATH = os.environ.get("DATAMETTER_PATH", "public/datametter.csv")
+HES_INDEX_PATH = os.environ.get("HES_INDEX_PATH", "public/hes_index_daily.csv")
 OUT_PATH = "public/transformer_loss_30min.csv"
+DAILY_OUT_PATH = "public/transformer_loss_daily.csv"
 
-KEEP_DAYS = int(os.environ.get("KEEP_DAYS", "40"))  # giu 40 ngay gan nhat/tram
+KEEP_DAYS = int(os.environ.get("KEEP_DAYS", "40"))  # giu 40 ngay gan nhat/tram (file 30 phut)
+DAILY_KEEP_DAYS = int(os.environ.get("DAILY_KEEP_DAYS", "0"))  # 0 = giu toan bo (file ngay nho)
 
 OUT_FIELDS = ["CODE", "LINE_NAME", "DATE_TIME", "DUR_H", "N_METERS", "P_KW", "Q_KVAR",
               "S_KVA", "LOAD_PCT", "DELTA_P_KW", "OUTPUT_KWH", "LOSS_NOLOAD_KWH",
               "LOSS_LOAD_KWH", "LOSS_KWH"]
+
+# File NGAY: san luong OUTPUT lay theo hieu chi so cong to x HSN (chinh xac);
+# ton that van tich phan dP ca ngay tu du lieu 30 phut.
+DAILY_OUT_FIELDS = ["CODE", "LINE_NAME", "DATE", "OUTPUT_KWH", "LOSS_NOLOAD_KWH",
+                    "LOSS_LOAD_KWH", "LOSS_KWH", "LOSS_PCT", "MAX_LOAD_PCT",
+                    "AVG_LOAD_PCT", "N_INTERVALS", "OUTPUT_SRC"]
 
 
 def target_date() -> str:
@@ -279,6 +294,102 @@ def build_rows(day: str, by_code: dict, params_by_code: dict, code2line: dict) -
     return rows
 
 
+def load_daily_output(day: str, meter2code: dict, valid_codes: set) -> dict:
+    """San luong ngay theo TRAM = tong (PG_END - PG_START) * HSN cua cac cong to CHINH.
+
+    Doc hes_index_daily.csv (PG = huu cong tong, raw). Chi cong cong to chinh thuoc
+    valid_codes. Bo qua cong to bi reset/thay (PG_END < PG_START). Tra ve
+    {code: output_kwh} chi gom cac tram co it nhat 1 cong to co chi so hop le."""
+    if not os.path.isfile(HES_INDEX_PATH):
+        print(f"[WARN] Khong tim thay {HES_INDEX_PATH} -> OUTPUT se fallback P*dt.")
+        return {}
+    out = {}
+    with open(HES_INDEX_PATH, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            if str(row.get("DATE") or "").strip() != day:
+                continue
+            no = str(row.get("METER_NO") or "").strip()
+            code = meter2code.get(no)
+            if not code or code not in valid_codes:
+                continue
+            hsn = _to_float(row.get("HSN")) or 1.0
+            pg0 = _to_float(row.get("PG_START"))
+            pg1 = _to_float(row.get("PG_END"))
+            diff = pg1 - pg0
+            if diff < 0:  # cong to reset/thay trong ngay -> khong tin cay
+                print(f"  [skip idx] {no} ({code}): PG_END<PG_START ({pg1}<{pg0}).")
+                continue
+            out[code] = out.get(code, 0.0) + diff * hsn
+    return out
+
+
+def build_daily_rows(day: str, by_code: dict, params_by_code: dict,
+                     code2line: dict, output_by_code: dict) -> list:
+    """Gom moi tram ve 1 dong/ngay: OUTPUT theo chi so (fallback Sum P*dt), LOSS tich phan dP."""
+    rows = []
+    for code, recs_by_meter in by_code.items():
+        m = params_by_code[code]
+        sdm, p0, pk = m["SDM_KVA"], m["P0_KW"], m["PK_KW"]
+        loss_noload = loss_load = out_pxdt = load_sum = load_max = 0.0
+        n = 0
+        for t0, dt, p, q, cnt in station_intervals(recs_by_meter):
+            s = math.sqrt(p * p + q * q)
+            load = s / sdm if sdm else 0.0
+            loss_noload += p0 * dt
+            loss_load += pk * load * load * dt
+            out_pxdt += p * dt
+            load_sum += load
+            load_max = max(load_max, load)
+            n += 1
+        if n == 0:
+            continue
+        loss = loss_noload + loss_load
+        reg = output_by_code.get(code)
+        if reg is not None:
+            output, src = reg, "index"
+        else:
+            output, src = out_pxdt, "pxdt"
+        denom = output + loss
+        rows.append({
+            "CODE": code,
+            "LINE_NAME": code2line.get(code, m.get("RAW_CODE", code)),
+            "DATE": day,
+            "OUTPUT_KWH": f"{output:g}",
+            "LOSS_NOLOAD_KWH": f"{loss_noload:g}",
+            "LOSS_LOAD_KWH": f"{loss_load:g}",
+            "LOSS_KWH": f"{loss:g}",
+            "LOSS_PCT": f"{(loss / denom * 100) if denom > 0 else 0:g}",
+            "MAX_LOAD_PCT": f"{load_max * 100:g}",
+            "AVG_LOAD_PCT": f"{(load_sum / n * 100):g}",
+            "N_INTERVALS": n,
+            "OUTPUT_SRC": src,
+        })
+    return rows
+
+
+def write_daily_out(new_rows: list):
+    merged = {}
+    if os.path.isfile(DAILY_OUT_PATH):
+        with open(DAILY_OUT_PATH, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                merged[(row.get("CODE", ""), row.get("DATE", ""))] = row
+    for row in new_rows:
+        merged[(row["CODE"], row["DATE"])] = row
+
+    rows = list(merged.values())
+    if DAILY_KEEP_DAYS > 0:
+        cutoff = (datetime.now(VN_TZ).date() - timedelta(days=DAILY_KEEP_DAYS)).isoformat()
+        rows = [r for r in rows if str(r.get("DATE", "")) >= cutoff]
+    rows.sort(key=lambda r: (r.get("DATE", ""), r.get("CODE", "")))
+
+    os.makedirs(os.path.dirname(DAILY_OUT_PATH), exist_ok=True)
+    with open(DAILY_OUT_PATH, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=DAILY_OUT_FIELDS)
+        w.writeheader()
+        w.writerows(rows)
+    return len(rows)
+
+
 def write_out(new_rows: list):
     merged = {}
     if os.path.isfile(OUT_PATH):
@@ -326,6 +437,14 @@ def main():
     new_rows = build_rows(day, by_code, params_by_code, code2line)
     total = write_out(new_rows)
     print(f"Ghi {len(new_rows)} moc 30 phut (ngay {day}). Tong file: {total} dong -> {OUT_PATH}")
+
+    # File NGAY: OUTPUT theo hieu chi so x HSN (chinh xac), LOSS tich phan dP.
+    output_by_code = load_daily_output(day, meter2code, codes)
+    daily_rows = build_daily_rows(day, by_code, params_by_code, code2line, output_by_code)
+    n_idx = sum(1 for r in daily_rows if r["OUTPUT_SRC"] == "index")
+    d_total = write_daily_out(daily_rows)
+    print(f"Ghi {len(daily_rows)} tram/ngay ({n_idx} theo chi so, {len(daily_rows) - n_idx} fallback P*dt). "
+          f"Tong file ngay: {d_total} dong -> {DAILY_OUT_PATH}")
 
 
 if __name__ == "__main__":

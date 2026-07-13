@@ -1,18 +1,35 @@
 /**
  * Reader cho dữ liệu tổn thất máy biến áp (kỹ thuật) do GitHub Action sinh ra:
- *   - /transformer_loss_30min.csv   : tổn thất mỗi 30 phút theo trạm (giữ 40 ngày).
+ *   - /transformer_loss_daily.csv   : MỘT dòng/trạm/ngày — NGUỒN SỐ LIỆU báo cáo.
+ *       OUTPUT lấy theo hiệu chỉ số công tơ × HSN (chính xác); LOSS tích phân ΔP.
+ *   - /transformer_loss_30min.csv   : mốc 30 phút (OUTPUT=P×Δt) — chỉ để VẼ biểu đồ trong ngày.
  *   - /transformer_loss_monthly.csv : tổn thất theo tháng theo trạm (lưu vĩnh viễn).
  *
- * Trạm = CODE (1 máy biến áp). Công thức tính ở scripts/daily_transformer_loss.py:
- *   S = √(P² + Q²); ΔP = P0 + Pk×(S/Sdm)²; LOSS_KWH = ΔP×0.5 mỗi mốc 30 phút.
+ * Trạm = CODE (1 máy biến áp). Công thức ở scripts/daily_transformer_loss.py:
+ *   S = √(P² + Q²); ΔP = P0 + Pk×(S/Sdm)²; LOSS = Σ ΔP×Δt.
  * File có thể chưa tồn tại (chưa nhập mba_info.csv) → coi như rỗng, không báo lỗi.
  */
+
+export interface LossDailyRow {
+  code: string;
+  lineName: string;
+  date: string;           // YYYY-MM-DD
+  outputKwh: number;      // sản lượng = Σ(chỉ số cuối−đầu)×HSN (hoặc fallback P×Δt)
+  noloadKwh: number;
+  loadKwh: number;
+  lossKwh: number;
+  lossPct: number;        // %
+  maxLoadPct: number;     // %
+  avgLoadPct: number;     // %
+  nIntervals: number;
+  outputSrc: string;      // 'index' | 'pxdt'
+}
 
 export interface LossMonthlyRow {
   code: string;
   lineName: string;
   month: string;          // YYYY-MM
-  nIntervals: number;
+  nDays: number;
   outputKwh: number;
   noloadKwh: number;
   loadKwh: number;
@@ -80,11 +97,41 @@ export async function fetchLossMonthly(): Promise<LossMonthlyRow[]> {
       code,
       lineName: (c[h['LINE_NAME']] ?? '').trim(),
       month: (c[h['MONTH']] ?? '').trim(),
-      nIntervals: num(c[h['N_INTERVALS']]),
+      nDays: num(c[h['N_DAYS']]),
       outputKwh: num(c[h['OUTPUT_KWH']]),
       noloadKwh: num(c[h['LOSS_NOLOAD_KWH']]),
       loadKwh: num(c[h['LOSS_LOAD_KWH']]),
       totalKwh: num(c[h['LOSS_TOTAL_KWH']]),
+    });
+  }
+  return out;
+}
+
+export async function fetchLossDaily(): Promise<LossDailyRow[]> {
+  const text = await fetchText('/transformer_loss_daily.csv');
+  if (!text) return [];
+  const rows = splitCsv(text);
+  if (rows.length <= 1) return [];
+  const h = headerIndex(rows);
+  const out: LossDailyRow[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const c = rows[i];
+    const code = (c[h['CODE']] ?? '').trim();
+    const date = (c[h['DATE']] ?? '').trim();
+    if (!code || !date) continue;
+    out.push({
+      code,
+      lineName: (c[h['LINE_NAME']] ?? '').trim(),
+      date,
+      outputKwh: num(c[h['OUTPUT_KWH']]),
+      noloadKwh: num(c[h['LOSS_NOLOAD_KWH']]),
+      loadKwh: num(c[h['LOSS_LOAD_KWH']]),
+      lossKwh: num(c[h['LOSS_KWH']]),
+      lossPct: num(c[h['LOSS_PCT']]),
+      maxLoadPct: num(c[h['MAX_LOAD_PCT']]),
+      avgLoadPct: num(c[h['AVG_LOAD_PCT']]),
+      nIntervals: num(c[h['N_INTERVALS']]),
+      outputSrc: (c[h['OUTPUT_SRC']] ?? '').trim(),
     });
   }
   return out;
