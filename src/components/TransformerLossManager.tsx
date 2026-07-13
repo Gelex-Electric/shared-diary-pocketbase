@@ -31,9 +31,11 @@ function zoneCodeOf(code: string): string {
 }
 
 /* ================= helpers ================= */
-const fmt = (v: number, d = 1) =>
-  new Intl.NumberFormat('vi-VN', { maximumFractionDigits: d }).format(v);
-const pct = (v: number) => `${fmt(v, 1)}%`;
+// Mặc định 0 số lẻ: tổn thất & sản lượng (kWh) làm tròn số nguyên.
+const fmt = (v: number, d = 0) =>
+  new Intl.NumberFormat('vi-VN', { minimumFractionDigits: d, maximumFractionDigits: d }).format(v);
+// Tỷ lệ tổn thất (%): hiển thị 2 số sau dấu phẩy.
+const pct = (v: number) => `${fmt(v, 2)}%`;
 /** Tỷ lệ tổn thất chuẩn = tổn thất / điện NHẬN (= sản lượng giao + tổn thất). Luôn < 100%. */
 const ratio = (loss: number, output: number) => { const inp = output + loss; return inp > 0 ? (loss / inp) * 100 : 0; };
 const dateVN = (k: string) => { const [y, m, d] = k.split('-'); return d ? `${d}/${m}/${y}` : k; };
@@ -90,7 +92,7 @@ function LossDelta({ d }: { d: number | null }) {
   const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
   return (
     <span className={`inline-flex items-center gap-0.5 text-xs font-bold tabular-nums ${up ? 'text-bad' : down ? 'text-ok' : 'text-faint'}`}>
-      <Icon className="w-3.5 h-3.5" />{d == null ? '—' : `${Math.abs(d * 100).toFixed(1)}%`}
+      <Icon className="w-3.5 h-3.5" />{d == null ? '—' : `${Math.abs(d * 100).toFixed(2)}%`}
     </span>
   );
 }
