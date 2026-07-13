@@ -14,9 +14,21 @@ import { DatePicker } from './ui/DateTimePickers';
 import { fetchLoss30min, fetchLossDaily, fetchLossMonthly, Loss30minRow, LossDailyRow, LossMonthlyRow } from '../lib/transformerLoss';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { fetchMbaInfo, buildMbaLookup, MbaParams } from '../lib/mbaInfo';
+import { pb } from '../lib/pocketbase';
+import { zoneFromArea, ZONE_MAP } from '../lib/invoices';
 
 /** Ngưỡng cảnh báo tỷ lệ tổn thất tổng của khu công nghiệp (%). */
 const ZONE_WARN_PCT = 1.5;
+
+/** Tiền tố CODE của trạm (chuẩn hoá ASCII, Đ→D) → mã tài khoản KCN. */
+const PREFIX_ZONE: Record<string, string> = {
+  TH: 'KCNTH', PD: 'KCNPĐ', '03': 'KCN03', YM: 'KCNYM', TTI: 'KCNTTI',
+};
+/** Mã KCN của một trạm suy từ tiền tố CODE (vd "TTI.NGÂN AN.T1" → KCNTTI). */
+function zoneCodeOf(code: string): string {
+  const pre = (code.split('.')[0] || '').trim().toUpperCase().replace(/Đ/g, 'D');
+  return PREFIX_ZONE[pre] || '';
+}
 
 /* ================= helpers ================= */
 const fmt = (v: number, d = 1) =>
@@ -179,9 +191,14 @@ export default function TransformerLossManager() {
     return () => { ok = false; };
   }, []);
 
+  /** KCN của tài khoản đang đăng nhập (rỗng = kinh doanh/admin → xem tất cả). */
+  const userZone = useMemo(() => zoneFromArea((pb.authStore.model as any)?.area), []);
+
   /**
    * Meta từng trạm CHÍNH có đủ P0 & PK (nền để hiển thị cả trạm không hoạt động).
-   * Trạm không có đủ P0/PK => bỏ qua (không tính, không hiển thị).
+   * - Gom theo KCN suy từ TIỀN TỐ CODE (chuẩn), không dùng ADDRESS (có thể sai, vd "Emic").
+   * - Chỉ giữ trạm thuộc KCN của tài khoản đang đăng nhập (bỏ qua khi là kinh doanh/admin).
+   * - Trạm không đủ P0/PK => bỏ qua (không tính, không hiển thị).
    */
   const metaByCode = useMemo(() => {
     const lookup = buildMbaLookup(mba);
@@ -190,12 +207,18 @@ export default function TransformerLossManager() {
       if ((m.ROLE || '').trim() !== 'chinh') continue;
       const code = (m.CODE || '').trim();
       if (!code || map.has(code)) continue;
+      const zc = zoneCodeOf(code);
+      if (userZone && zc !== userZone) continue;   // chỉ KCN của tài khoản
       const p = lookup(code);
-      if (!p || !p.hasParams) continue;   // không đủ Po/Pk => không tính
-      map.set(code, { kcn: (m.ADDRESS || '').trim() || 'Khác', name: (m.LINE_NAME || '').trim() || code, sdm: p.sdm });
+      if (!p || !p.hasParams) continue;            // không đủ Po/Pk => không tính
+      map.set(code, {
+        kcn: ZONE_MAP[zc] || (m.ADDRESS || '').trim() || 'Khác',
+        name: (m.LINE_NAME || '').trim() || code,
+        sdm: p.sdm,
+      });
     }
     return map;
-  }, [meters, mba]);
+  }, [meters, mba, userZone]);
 
   const dates = useMemo(() => [...new Set(daily.map(r => r.date))].sort().reverse(), [daily]);
   useEffect(() => {
