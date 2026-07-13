@@ -31,6 +31,7 @@
   --accent:        #2f6fed;
   --accent-hover:  #2660d6;
   --accent-soft:   rgba(47, 111, 237, 0.10);
+  --accent-2:      #86aef7;   /* xanh accent nhạt — cột/nền phụ, đồng bộ hệ thống */
   --on-accent:     #ffffff;
 
   /* Status — text/fill */
@@ -106,6 +107,7 @@
   --accent:        #4f8cff;
   --accent-hover:  #6a9dff;
   --accent-soft:   rgba(79, 140, 255, 0.14);
+  --accent-2:      #3a63b8;   /* xanh accent nhạt (theme tối) */
   --on-accent:     #06122a;
 
   --success: #35d07f;

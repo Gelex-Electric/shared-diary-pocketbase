@@ -130,7 +130,7 @@ interface CustomerChart {
    Mỗi biểu đồ chỉ vẽ 1 trạm: 3 đường điện áp + 1 cột công suất.
 ================================================================ */
 const PHASE_COLOR = { ua: 'var(--accent)', ub: '#10b981', uc: '#f59e0b' }; // Ua xanh dương, Ub xanh lá, Uc hổ phách
-const P_FILL = '#a5b4fc';                                            // cột P (kW)
+const P_FILL = 'var(--accent-2)';                                    // cột P (kW) — xanh accent nhạt, đồng bộ hệ thống
 
 /** Nhãn trạm để hiển thị (vd: YM.KIMTIN.3000KVA.ECHO). */
 const stationLabel = (s: { line: string; meterNo: string }) => s.line || s.meterNo;

@@ -15,20 +15,10 @@ import { fetchLoss30min, fetchLossDaily, fetchLossMonthly, Loss30minRow, LossDai
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { fetchMbaInfo, buildMbaLookup, MbaParams } from '../lib/mbaInfo';
 import { pb } from '../lib/pocketbase';
-import { zoneFromArea, ZONE_MAP } from '../lib/invoices';
+import { zoneFromArea, zoneCodeOf, ZONE_MAP } from '../lib/invoices';
 
 /** Ngưỡng cảnh báo tỷ lệ tổn thất tổng của khu công nghiệp (%). */
 const ZONE_WARN_PCT = 1.5;
-
-/** Tiền tố CODE của trạm (chuẩn hoá ASCII, Đ→D) → mã tài khoản KCN. */
-const PREFIX_ZONE: Record<string, string> = {
-  TH: 'KCNTH', PD: 'KCNPĐ', '03': 'KCN03', YM: 'KCNYM', TTI: 'KCNTTI',
-};
-/** Mã KCN của một trạm suy từ tiền tố CODE (vd "TTI.NGÂN AN.T1" → KCNTTI). */
-function zoneCodeOf(code: string): string {
-  const pre = (code.split('.')[0] || '').trim().toUpperCase().replace(/Đ/g, 'D');
-  return PREFIX_ZONE[pre] || '';
-}
 
 /* ================= helpers ================= */
 // Mặc định 0 số lẻ: tổn thất & sản lượng (kWh) làm tròn số nguyên.

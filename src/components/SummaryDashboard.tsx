@@ -1,17 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart, LabelList,
 } from 'recharts';
 import {
-  Zap, TrendingUp, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw, Users,
+  Zap, TrendingUp, TrendingDown, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw, Users,
 } from 'lucide-react';
 import { Select } from './ui/Select';
 import { StatTile, Panel, ChartTooltip, EmptyState, CHART, CustomerZoneCard } from './ui/dashboard';
 import {
-  useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, ZONE_MAP,
+  useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, ZONE_MAP, zoneCodeOf,
 } from '../lib/invoices';
 import { usePmaxDaily } from '../lib/pmax';
+import { fetchLossMonthly, LossMonthlyRow } from '../lib/transformerLoss';
+
+/** Ngưỡng đánh giá tỷ lệ tổn thất tính toán năm (%). */
+const LOSS_TARGET_PCT = 1.5;
+const pctVN = (v: number) => v.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
 
 const MONTHS = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
 const MONTH_OPTS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `Tháng ${i + 1}` }));
@@ -44,6 +49,25 @@ export default function SummaryDashboard() {
 
   const yearBills = useMemo(() => bills.filter(b => b.year === year), [bills, year]);
   const kpis = useMemo(() => computeKpis(yearBills), [yearBills]);
+
+  /* ── Tổn thất tính toán năm (từ transformer_loss_monthly.csv), lọc theo KCN của tài khoản ── */
+  const [lossMonthly, setLossMonthly] = useState<LossMonthlyRow[]>([]);
+  useEffect(() => {
+    let ok = true;
+    fetchLossMonthly().then(r => { if (ok) setLossMonthly(r); }).catch(() => {});
+    return () => { ok = false; };
+  }, []);
+  const lossYear = useMemo(() => {
+    const yStr = String(year);
+    let loss = 0, out = 0;
+    for (const r of lossMonthly) {
+      if (r.month.slice(0, 4) !== yStr) continue;
+      if (zoneLock && zoneCodeOf(r.code) !== zoneLock) continue;
+      loss += r.totalKwh; out += r.outputKwh;
+    }
+    const denom = out + loss;
+    return { pct: denom > 0 ? (loss / denom) * 100 : 0, has: denom > 0 };
+  }, [lossMonthly, year, zoneLock]);
 
   /* ── Row 2: monthly load (grouped bars), 3 most-recent years ── */
   const load3y = useMemo(() => {
@@ -135,7 +159,7 @@ export default function SummaryDashboard() {
     const cur = `${year}-${pad2(tableMonthIdx)}`;
     const prev = tableMonthIdx === 1 ? `${year - 1}-12` : `${year}-${pad2(tableMonthIdx - 1)}`;
     interface Meter { sct: string; addr: string; curKwh: number; prevKwh: number; curVnd: number; }
-    interface Cust { mkh: string; name: string; curKwh: number; prevKwh: number; curVnd: number; meters: Map<string, Meter>; }
+    interface Cust { mkh: string; name: string; curKwh: number; prevKwh: number; curVnd: number; bt: number; cd: number; td: number; meters: Map<string, Meter>; }
     const map = new Map<string, Cust>();
     if (cur) {
       records.forEach(r => {
@@ -146,13 +170,16 @@ export default function SummaryDashboard() {
         if (month !== cur && month !== prev) return;
         const kwh = num(r.TongSL_HC), vnd = num(r.ThTien_HC) + num(r.ThTien_PK);
         let c = map.get(mkh);
-        if (!c) { c = { mkh, name: r.NMua || mkh, curKwh: 0, prevKwh: 0, curVnd: 0, meters: new Map() }; map.set(mkh, c); }
+        if (!c) { c = { mkh, name: r.NMua || mkh, curKwh: 0, prevKwh: 0, curVnd: 0, bt: 0, cd: 0, td: 0, meters: new Map() }; map.set(mkh, c); }
         if (r.NMua && (!c.name || c.name === mkh)) c.name = r.NMua;
         const sct = (r.SCT || '—').trim();
         let mt = c.meters.get(sct);
         if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), curKwh: 0, prevKwh: 0, curVnd: 0 }; c.meters.set(sct, mt); }
         if (r.DChiNMua && !mt.addr) mt.addr = (r.DChiNMua || '').trim();
-        if (month === cur) { c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd; }
+        if (month === cur) {
+          c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd;
+          c.bt += num(r.SL_BT); c.cd += num(r.SL_CD); c.td += num(r.SL_TD);   // khung giờ
+        }
         else if (month === prev) { c.prevKwh += kwh; mt.prevKwh += kwh; }
       });
     }
@@ -250,13 +277,17 @@ export default function SummaryDashboard() {
 
       {error && <div className="vl-alert vl-alert-light-danger text-sm">{error}</div>}
 
-      {/* Row 1 — two KPI cards (full kWh / full ₫) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Row 1 — KPI cards (kWh / ₫ / tổn thất năm) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatTile label="Sản lượng hữu công" value={fmtInt(kpis.kwh)} unit="kWh" icon={Zap} tone="accent" loading={loading}
           sub={`${fmtInt(kpis.bills)} hóa đơn · ${fmtInt(kpis.customers)} khách hàng`} subTone="neutral" />
         <StatTile label="Doanh thu" value={fmtInt(kpis.vnd)} unit="đồng" icon={TrendingUp} tone="neutral" loading={loading}
           sub={`Đã thu ${Math.round(kpis.collectRate * 100)}% · cosφ ${kpis.avgCosFi ? kpis.avgCosFi.toFixed(3) : '—'}`}
           subTone={kpis.collectRate >= 0.8 ? 'ok' : 'warn'} />
+        <StatTile label="Tổn thất tính toán năm" value={lossYear.has ? pctVN(lossYear.pct) : '—'} icon={TrendingDown}
+          tone={!lossYear.has ? 'neutral' : lossYear.pct > LOSS_TARGET_PCT ? 'bad' : 'ok'} loading={loading}
+          sub={`Mốc ${pctVN(LOSS_TARGET_PCT)} · năm ${year}`}
+          subTone={!lossYear.has ? 'neutral' : lossYear.pct > LOSS_TARGET_PCT ? 'bad' : 'ok'} />
       </div>
 
       {/* Row 2 — monthly load bars (3) + tariff donut (1), 3:1 on xl */}
@@ -354,6 +385,7 @@ export default function SummaryDashboard() {
           expandedRows={expanded}
           onToggleRow={mkh => setExpanded(e => ({ ...e, [mkh]: !e[mkh] }))}
           emptyLabel={busy ? 'Đang tải…' : 'Không có dữ liệu'}
+          showTariff
         />
       </div>
     </div>

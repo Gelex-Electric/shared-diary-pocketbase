@@ -36,6 +36,31 @@ const TAB_LABEL: Record<Tab, string> = {
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
 
+/* Animation submenu sidebar — tách nhịp height/opacity + easing mượt + stagger mục con. */
+const EASE_SMOOTH = [0.32, 0.72, 0, 1] as const;
+const subMenuV = {
+  open: {
+    height: 'auto' as const, opacity: 1,
+    transition: {
+      height: { duration: 0.32, ease: EASE_SMOOTH },
+      opacity: { duration: 0.22, ease: 'easeOut' as const },
+      staggerChildren: 0.035, delayChildren: 0.06,
+    },
+  },
+  closed: {
+    height: 0, opacity: 0,
+    transition: {
+      height: { duration: 0.26, ease: EASE_SMOOTH },
+      opacity: { duration: 0.16 },
+      staggerChildren: 0.02, staggerDirection: -1 as const,
+    },
+  },
+};
+const subItemV = {
+  open: { opacity: 1, x: 0, transition: { duration: 0.22, ease: 'easeOut' as const } },
+  closed: { opacity: 0, x: -10, transition: { duration: 0.12 } },
+};
+
 export default function Dashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -152,13 +177,10 @@ export default function Dashboard() {
             <AnimatePresence initial={false}>
               {isJournalExpanded && (
                 <motion.ul
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.22 }}
+                  initial="closed" animate="open" exit="closed" variants={subMenuV}
                   className="overflow-hidden list-none px-0"
                 >
-                  <li>
+                  <motion.li variants={subItemV}>
                     <button
                       id="nav-journal-sub"
                       onClick={() => { setTopTab('journal'); onNavigate?.(); }}
@@ -169,8 +191,8 @@ export default function Dashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       Sổ nhật ký vận hành
                     </button>
-                  </li>
-                  <li>
+                  </motion.li>
+                  <motion.li variants={subItemV}>
                     <button
                       id="nav-outage-sub"
                       onClick={() => { setTopTab('outage'); onNavigate?.(); }}
@@ -181,8 +203,8 @@ export default function Dashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       Thông báo ngừng cấp điện
                     </button>
-                  </li>
-                  <li>
+                  </motion.li>
+                  <motion.li variants={subItemV}>
                     <button
                       id="nav-handover-record-sub"
                       onClick={() => { setTopTab('handover-record'); onNavigate?.(); }}
@@ -194,7 +216,7 @@ export default function Dashboard() {
                       <span className="flex-1">Biên bản treo tháo</span>
                       <span className="text-[10px] font-black text-amber-500 shrink-0 uppercase tracking-wide">Beta</span>
                     </button>
-                  </li>
+                  </motion.li>
                 </motion.ul>
               )}
             </AnimatePresence>
@@ -215,13 +237,10 @@ export default function Dashboard() {
             <AnimatePresence initial={false}>
               {isOperatingExpanded && (
                 <motion.ul
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.22 }}
+                  initial="closed" animate="open" exit="closed" variants={subMenuV}
                   className="overflow-hidden list-none px-0"
                 >
-                  <li>
+                  <motion.li variants={subItemV}>
                     <button
                       id="nav-operating-sub"
                       onClick={() => { setTopTab('operating'); onNavigate?.(); }}
@@ -232,8 +251,8 @@ export default function Dashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       Thông tin khách hàng &amp; Công tơ
                     </button>
-                  </li>
-                  <li>
+                  </motion.li>
+                  <motion.li variants={subItemV}>
                     <button
                       id="nav-hes-sub"
                       onClick={() => { setTopTab('hes'); onNavigate?.(); }}
@@ -244,8 +263,8 @@ export default function Dashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       Lấy chỉ số từ HES
                     </button>
-                  </li>
-                  <li>
+                  </motion.li>
+                  <motion.li variants={subItemV}>
                     <button
                       id="nav-opchart-sub"
                       onClick={() => { setTopTab('opchart'); onNavigate?.(); }}
@@ -256,8 +275,8 @@ export default function Dashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Đồ thị điện áp &amp; công suất</span>
                     </button>
-                  </li>
-                  <li>
+                  </motion.li>
+                  <motion.li variants={subItemV}>
                     <button
                       id="nav-loss-sub"
                       onClick={() => { setTopTab('loss'); onNavigate?.(); }}
@@ -269,8 +288,8 @@ export default function Dashboard() {
                       <span className="flex-1">Tổn thất tính toán</span>
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
-                  </li>
-                  <li>
+                  </motion.li>
+                  <motion.li variants={subItemV}>
                     <button
                       id="nav-sld-sub"
                       onClick={() => { setTopTab('sld'); onNavigate?.(); }}
@@ -281,7 +300,7 @@ export default function Dashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Sơ đồ một sợi</span>
                     </button>
-                  </li>
+                  </motion.li>
                 </motion.ul>
               )}
             </AnimatePresence>

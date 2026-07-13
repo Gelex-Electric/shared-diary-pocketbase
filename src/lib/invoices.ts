@@ -64,6 +64,16 @@ export const ZONE_MAP: Record<string, string> = {
 export const ZONE_ORDER = Object.keys(ZONE_MAP);
 export const zoneOf = (mkh: string) => (mkh.split('-')[0] || '').trim();
 
+/** Tiền tố CODE của trạm (chuẩn hoá ASCII, Đ→D) → mã KCN. Dùng chung cho bảng tổn thất. */
+export const PREFIX_ZONE: Record<string, string> = {
+  TH: 'KCNTH', PD: 'KCNPĐ', '03': 'KCN03', YM: 'KCNYM', TTI: 'KCNTTI',
+};
+/** Mã KCN suy từ tiền tố CODE của trạm (vd "TTI.NGÂN AN.T1" → KCNTTI). '' nếu không khớp. */
+export function zoneCodeOf(code: string): string {
+  const pre = (code.split('.')[0] || '').trim().toUpperCase().replace(/Đ/g, 'D');
+  return PREFIX_ZONE[pre] || '';
+}
+
 /** Map a user's `area` (free text) to a zone code, or '' for all (admin). */
 export function zoneFromArea(area?: string): string {
   const n = (area || '').toLowerCase();

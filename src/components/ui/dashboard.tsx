@@ -159,6 +159,39 @@ export interface ZoneCustomerRow {
   curVnd: number;
   delta: number | null;
   meterList: ZoneMeterRow[];
+  /** Sản lượng theo khung giờ (kWh) — chỉ dùng khi bảng bật showTariff. */
+  bt?: number;
+  cd?: number;
+  td?: number;
+}
+
+/* Màu 3 khung giờ — trùng donut "Cơ cấu phụ tải theo khung giờ". */
+const TARIFF_SEG = [
+  { key: 'bt', color: 'var(--accent)', label: 'BT' },
+  { key: 'cd', color: '#f59e0b', label: 'CĐ' },
+  { key: 'td', color: '#22b8c4', label: 'TĐ' },
+] as const;
+
+/** Thanh bar ngang xếp chồng % sản lượng theo 3 khung giờ (BT/CĐ/TĐ), có số % làm tròn. */
+export function TariffBar({ bt = 0, cd = 0, td = 0 }: { bt?: number; cd?: number; td?: number }) {
+  const total = bt + cd + td;
+  if (total <= 0) return <span className="text-faint text-xs">—</span>;
+  const vals: Record<string, number> = { bt, cd, td };
+  const title = TARIFF_SEG.map(s => `${s.label} ${Math.round((vals[s.key] / total) * 100)}%`).join(' · ');
+  return (
+    <div className="flex h-5 w-full min-w-[150px] rounded-md overflow-hidden bg-subtle" title={title}>
+      {TARIFF_SEG.map(s => {
+        const p = (vals[s.key] / total) * 100;
+        if (p <= 0) return null;
+        return (
+          <div key={s.key} style={{ width: `${p}%`, background: s.color }}
+            className="flex items-center justify-center text-[10px] font-bold text-white tabular-nums leading-none">
+            {p >= 12 ? `${Math.round(p)}%` : ''}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /**
@@ -180,6 +213,7 @@ export function CustomerZoneCard({
   expandedRows,
   onToggleRow,
   emptyLabel = 'Không có dữ liệu',
+  showTariff = false,
 }: {
   icon?: LucideIcon;
   title: string;
@@ -192,7 +226,13 @@ export function CustomerZoneCard({
   expandedRows: Record<string, boolean>;
   onToggleRow: (mkh: string) => void;
   emptyLabel?: string;
+  /** Bật cột "Cơ cấu khung giờ" (thanh bar BT/CĐ/TĐ). */
+  showTariff?: boolean;
 }) {
+  const nCols = showTariff ? 5 : 4;
+  const tot = showTariff
+    ? rows.reduce((a, r) => ({ bt: a.bt + (r.bt || 0), cd: a.cd + (r.cd || 0), td: a.td + (r.td || 0) }), { bt: 0, cd: 0, td: 0 })
+    : { bt: 0, cd: 0, td: 0 };
   return (
     <div className="vl-card overflow-hidden">
       {/* Header — gradient accent, bấm để thu gọn/mở */}
@@ -236,11 +276,23 @@ export function CustomerZoneCard({
                     <th className="py-3.5 px-4 text-right border-l border-[var(--border)] text-ink">Sản lượng (kWh)</th>
                     <th className="py-3.5 px-4 text-center">Thay đổi</th>
                     <th className="py-3.5 px-4 text-right">Doanh thu (đồng)</th>
+                    {showTariff && (
+                      <th className="py-3.5 px-4 text-center border-l border-[var(--border)]">
+                        <div>Cơ cấu khung giờ</div>
+                        <div className="flex items-center justify-center gap-2 mt-1 font-normal normal-case text-[9px] text-faint">
+                          {TARIFF_SEG.map(s => (
+                            <span key={s.key} className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />{s.label}
+                            </span>
+                          ))}
+                        </div>
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                   {rows.length === 0 ? (
-                    <tr><td colSpan={4} className="py-10 text-center text-faint text-sm italic">{emptyLabel}</td></tr>
+                    <tr><td colSpan={nCols} className="py-10 text-center text-faint text-sm italic">{emptyLabel}</td></tr>
                   ) : rows.map(r => {
                     const open = !!expandedRows[r.mkh];
                     return (
@@ -261,6 +313,9 @@ export function CustomerZoneCard({
                           <td className="py-3.5 px-4 text-right text-sm font-bold text-ink tabular-nums border-l border-[var(--border)]">{fmtInt(r.curKwh)}</td>
                           <td className="py-3.5 px-4 text-center"><DeltaBadge d={r.delta} /></td>
                           <td className="py-3.5 px-4 text-right text-sm text-dim tabular-nums">{fmtInt(r.curVnd)}</td>
+                          {showTariff && (
+                            <td className="py-3.5 px-4 border-l border-[var(--border)]"><TariffBar bt={r.bt} cd={r.cd} td={r.td} /></td>
+                          )}
                         </tr>
                         {open && r.meterList.map((m, mi) => (
                           <tr
@@ -276,6 +331,7 @@ export function CustomerZoneCard({
                             <td className="py-3 px-4 text-right font-semibold text-dim tabular-nums border-l border-[var(--border)]">{fmtInt(m.curKwh)}</td>
                             <td className="py-3 px-4 text-center"><DeltaBadge d={m.delta} /></td>
                             <td className="py-3 px-4 text-right text-soft tabular-nums">{fmtInt(m.curVnd)}</td>
+                            {showTariff && <td className="border-l border-[var(--border)]" />}
                           </tr>
                         ))}
                       </Fragment>
@@ -289,6 +345,9 @@ export function CustomerZoneCard({
                       <td className="py-3.5 px-4 text-right tabular-nums border-l border-[var(--border)]">{fmtInt(kwh)}</td>
                       <td className="py-3.5 px-4" />
                       <td className="py-3.5 px-4 text-right tabular-nums text-accent">{fmtInt(vnd)}</td>
+                      {showTariff && (
+                        <td className="py-3.5 px-4 border-l border-[var(--border)]"><TariffBar bt={tot.bt} cd={tot.cd} td={tot.td} /></td>
+                      )}
                     </tr>
                   </tfoot>
                 )}
