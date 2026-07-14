@@ -152,10 +152,11 @@ function slotsByStation(rows: Loss30minRow[], date: string) {
 /* ================= component ================= */
 type View = 'table' | 'monthly' | 'chart';
 const TABS: TabItem<View>[] = [
-  { id: 'table', label: 'Theo trạm (ngày)', icon: CalendarDays },
+  { id: 'table', label: 'Theo ngày', icon: CalendarDays },
   { id: 'monthly', label: 'Theo tháng', icon: CalendarRange },
   { id: 'chart', label: 'Biểu đồ', icon: BarChart3 },
 ];
+const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate(); // m: 1-based
 
 export default function TransformerLossManager() {
   const [rows, setRows] = useState<Loss30minRow[]>([]);
@@ -217,7 +218,20 @@ export default function TransformerLossManager() {
     if (dates.length) setSelDate(p => p || (dates.includes(yesterdayKey()) ? yesterdayKey() : dates[0]));
   }, [dates]);
   const months = useMemo(() => [...new Set(monthly.map(r => r.month))].sort().reverse(), [monthly]);
-  useEffect(() => { if (months.length) setSelMonth(p => p || months[0]); }, [months]);
+  // Tháng luôn đồng bộ theo ngày đã chọn (nguồn dữ liệu duy nhất = selDate).
+  useEffect(() => { if (selDate) setSelMonth(p => p || selDate.slice(0, 7)); }, [selDate]);
+
+  /** Đổi ngày → tháng tự cập nhật theo. */
+  const onChangeDate = (d: string) => { setSelDate(d); if (d) setSelMonth(d.slice(0, 7)); };
+  /** Đổi tháng → ngày nhảy sang cùng ngày-trong-tháng ở tháng mới (kẹp nếu tháng ngắn hơn). */
+  const onChangeMonth = (m: string) => {
+    setSelMonth(m);
+    const [y, mm] = m.split('-').map(Number);
+    if (!y || !mm) return;
+    const curDay = selDate ? Number(selDate.slice(8, 10)) || 1 : 1;
+    const day = Math.min(curDay, daysInMonth(y, mm));
+    setSelDate(`${y}-${pad2(mm)}-${pad2(day)}`);
+  };
 
   /* ---- Gom theo NGÀY (bảng ngày + biểu đồ) — sắp theo TÊN TRẠM ---- */
   const { zones, kpi, stationsSorted, stationByCode, allStations } = useMemo(() => {
@@ -293,10 +307,11 @@ export default function TransformerLossManager() {
     return { mZones, mKpi: { loss, output, capacity, pct: ratio(loss, output), n: stations.length } };
   }, [monthly, selMonth, metaByCode]);
 
-  /* ---- Chuỗi theo NGÀY cho từng trạm (biểu đồ tháng) — lấy từ file NGÀY (chính xác) ---- */
-  const dailySeriesByCode = useMemo(() => {
+  /* ---- Chuỗi theo NGÀY trong THÁNG đã chọn cho từng trạm (biểu đồ tháng) ---- */
+  const monthSeriesByCode = useMemo(() => {
     const out = new Map<string, { label: string; lossPct: number; load: number; _d: string }[]>();
     for (const r of daily) {
+      if (r.date.slice(0, 7) !== selMonth) continue;
       let arr = out.get(r.code);
       if (!arr) { arr = []; out.set(r.code, arr); }
       arr.push({ label: dateVN(r.date).slice(0, 5), lossPct: r.lossPct, load: r.avgLoadPct, _d: r.date });
@@ -306,13 +321,30 @@ export default function TransformerLossManager() {
       res.set(code, arr.sort((a, b) => a._d.localeCompare(b._d)).map(({ _d, ...rest }) => rest));
     });
     return res;
-  }, [daily]);
+  }, [daily, selMonth]);
 
-  /* Mặc định 3 cặp = 3 trạm %TT THẤP nhất; đổi được từng cặp. Reset khi đổi ngày. */
+  /* ---- Chuỗi theo THÁNG trong NĂM đã chọn cho từng trạm (biểu đồ năm) — không có mức tải trung bình theo tháng ---- */
+  const yearSeriesByCode = useMemo(() => {
+    const year = selMonth.slice(0, 4);
+    const out = new Map<string, { label: string; lossPct: number; _m: string }[]>();
+    for (const r of monthly) {
+      if (r.month.slice(0, 4) !== year) continue;
+      let arr = out.get(r.code);
+      if (!arr) { arr = []; out.set(r.code, arr); }
+      arr.push({ label: monthVN(r.month).replace('Tháng ', 'Th'), lossPct: ratio(r.totalKwh, r.outputKwh), _m: r.month });
+    }
+    const res = new Map<string, { label: string; lossPct: number }[]>();
+    out.forEach((arr, code) => {
+      res.set(code, arr.sort((a, b) => a._m.localeCompare(b._m)).map(({ _m, ...rest }) => rest));
+    });
+    return res;
+  }, [monthly, selMonth]);
+
+  /* Mặc định 2 cặp = 2 trạm %TT THẤP nhất; đổi được từng cặp. Reset khi đổi ngày. */
   const defaultPairs = useMemo(() => {
-    const p = stationsSorted.slice(0, 3).map(s => s.code);
-    while (p.length < 3) p.push('');
-    return p.slice(0, 3);
+    const p = stationsSorted.slice(0, 2).map(s => s.code);
+    while (p.length < 2) p.push('');
+    return p.slice(0, 2);
   }, [stationsSorted]);
   const [pairPicks, setPairPicks] = useState<string[]>([]);
   useEffect(() => { setPairPicks(defaultPairs); }, [defaultPairs]);
@@ -338,12 +370,13 @@ export default function TransformerLossManager() {
       {/* Thanh tab đồng bộ + bộ chọn theo ngữ cảnh */}
       <div className="flex flex-wrap items-center gap-3">
         <Tabs<View> tabs={TABS} value={view} onChange={setView} />
-        <div className="ml-auto">
-          {view === 'monthly' ? (
-            <Select value={selMonth} onChange={setSelMonth} className="min-w-[170px]"
+        <div className="ml-auto flex items-end gap-3">
+          {(view === 'monthly' || view === 'chart') && (
+            <Select value={selMonth} onChange={onChangeMonth} label="Tháng" icon={CalendarRange} className="min-w-[170px]"
               options={months.map(m => ({ value: m, label: monthVN(m) }))} />
-          ) : (
-            <DatePicker value={selDate} onChange={setSelDate} label="Ngày" className="w-[190px]" usePortal />
+          )}
+          {(view === 'table' || view === 'chart') && (
+            <DatePicker value={selDate} onChange={onChangeDate} label="Ngày" className="w-[190px]" usePortal />
           )}
         </div>
       </div>
@@ -364,10 +397,11 @@ export default function TransformerLossManager() {
               {pairPicks.map((code, i) => {
                 const st = stationByCode.get(code);
                 const daySlots = slotsByCode.get(code) || [];
-                const monthSeries = dailySeriesByCode.get(code) || [];
+                const monthSeries = monthSeriesByCode.get(code) || [];
+                const yearSeries = yearSeriesByCode.get(code) || [];
                 return (
                   <div key={i} className="vl-card p-4 md:p-5 space-y-3">
-                    {/* Bộ chọn trạm dùng chung cho cả cặp */}
+                    {/* Bộ chọn trạm dùng chung cho cả 3 biểu đồ trong cặp */}
                     <div className="flex flex-wrap items-center gap-3">
                       <Select value={code} onChange={v => setPairPicks(p => p.map((x, idx) => (idx === i ? v : x)))}
                         searchable icon={Gauge} className="min-w-[240px]" placeholder="Chọn trạm…" options={stationOptions} />
@@ -377,7 +411,7 @@ export default function TransformerLossManager() {
                         </span>
                       )}
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                       <div>
                         <div className="text-[11px] font-bold text-faint uppercase tracking-wider mb-1">Trong ngày · {dateVN(selDate)}</div>
                         <div className="h-[220px]">
@@ -385,9 +419,15 @@ export default function TransformerLossManager() {
                         </div>
                       </div>
                       <div>
-                        <div className="text-[11px] font-bold text-faint uppercase tracking-wider mb-1">Theo tháng · {monthSeries.length} ngày</div>
+                        <div className="text-[11px] font-bold text-faint uppercase tracking-wider mb-1">Theo tháng · {monthVN(selMonth)} · {monthSeries.length} ngày</div>
                         <div className="h-[220px]">
                           {monthSeries.length ? <LossLoadChart data={monthSeries} xKey="label" /> : <div className="h-full flex items-center justify-center text-faint text-xs">Không có dữ liệu tháng</div>}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-faint uppercase tracking-wider mb-1">Theo năm · {selMonth.slice(0, 4)} · {yearSeries.length} tháng</div>
+                        <div className="h-[220px]">
+                          {yearSeries.length ? <LossLoadChart data={yearSeries} xKey="label" showLoad={false} /> : <div className="h-full flex items-center justify-center text-faint text-xs">Không có dữ liệu năm</div>}
                         </div>
                       </div>
                     </div>
@@ -397,6 +437,7 @@ export default function TransformerLossManager() {
               <p className="text-[11px] text-faint flex items-center gap-3 px-1">
                 <span className="inline-flex items-center gap-1"><span className="w-4 h-[3px] rounded" style={{ background: CHART.cd }} /> Mức tải (%)</span>
                 <span className="inline-flex items-center gap-1"><span className="w-4 h-[3px] rounded" style={{ background: CHART.vc }} /> Tỷ lệ tổn thất (%)</span>
+                <span>· Biểu đồ năm không có mức tải trung bình theo tháng, chỉ hiển thị tỷ lệ tổn thất.</span>
               </p>
             </div>
           )}
@@ -590,8 +631,12 @@ function pctAxis(lo: number, hi: number): { domain: [number, number]; ticks: num
   return { domain: [start, end], ticks };
 }
 
-/* Biểu đồ đường: Mức tải (%) + Tỷ lệ tổn thất (%). Trục tải trái 0–100; trục %TT phải tự co giãn. */
-function LossLoadChart({ data, xKey }: { data: { lossPct: number; load: number }[]; xKey: string }) {
+/**
+ * Biểu đồ đường: Tỷ lệ tổn thất (%) luôn có; Mức tải (%) tùy chọn (showLoad — biểu đồ
+ * năm không có mức tải trung bình theo tháng nên ẩn). Trục tải trái 0–100 khi có;
+ * trục %TT tự co giãn theo dữ liệu.
+ */
+function LossLoadChart({ data, xKey, showLoad = true }: { data: { lossPct: number; load?: number }[]; xKey: string; showLoad?: boolean }) {
   const pv = data.map(d => d.lossPct);
   const lo = pv.length ? Math.min(...pv) : 0;
   const hi = pv.length ? Math.max(...pv) : 1;
@@ -602,10 +647,14 @@ function LossLoadChart({ data, xKey }: { data: { lossPct: number; load: number }
       <ComposedChart data={data} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
         <XAxis dataKey={xKey} tickLine={false} stroke="var(--text-4)" style={{ fontSize: 9 }} interval="preserveStartEnd" minTickGap={20} />
-        <YAxis yAxisId="load" domain={[0, 100]} width={28} tickLine={false} axisLine={false} stroke={CHART.cd} style={{ fontSize: 9 }} />
-        <YAxis yAxisId="pct" orientation="right" domain={domain} ticks={ticks} allowDecimals width={52} tickLine={false} axisLine={false} stroke={CHART.vc} style={{ fontSize: 9 }} tickFormatter={(v: number) => `${fmt(v, 2)}%`} />
+        {showLoad && (
+          <YAxis yAxisId="load" domain={[0, 100]} width={28} tickLine={false} axisLine={false} stroke={CHART.cd} style={{ fontSize: 9 }} />
+        )}
+        <YAxis yAxisId="pct" orientation={showLoad ? 'right' : 'left'} domain={domain} ticks={ticks} allowDecimals width={52} tickLine={false} axisLine={false} stroke={CHART.vc} style={{ fontSize: 9 }} tickFormatter={(v: number) => `${fmt(v, 2)}%`} />
         <Tooltip content={<ChartTooltip fmt={(v, n) => (n === 'Mức tải' ? `${fmt(v, 1)}%` : `${fmt(v, 2)}%`)} />} />
-        <Line yAxisId="load" type="monotone" dataKey="load" name="Mức tải" stroke={CHART.cd} strokeWidth={2} dot={false} />
+        {showLoad && (
+          <Line yAxisId="load" type="monotone" dataKey="load" name="Mức tải" stroke={CHART.cd} strokeWidth={2} dot={false} />
+        )}
         <Line yAxisId="pct" type="monotone" dataKey="lossPct" name="Tỷ lệ tổn thất" stroke={CHART.vc} strokeWidth={2.4} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
