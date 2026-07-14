@@ -624,8 +624,7 @@ export default function PowerOutageManager() {
                         <th className="border border-black px-2 py-2 text-center font-bold w-[6%]">STT</th>
                         <th className="border border-black px-2 py-2 text-center font-bold w-[40%]">Thời gian</th>
                         <th className="border border-black px-2 py-2 text-center font-bold w-[18%]">Khu vực</th>
-                        <th className="border border-black px-2 py-2 text-center font-bold">Phạm vi</th>
-                        <th className="border border-black px-2 py-2 text-center font-bold w-[15%]">Phụ lục</th>
+                        <th className="border border-black px-2 py-2 text-center font-bold w-[27%]">Phạm vi</th>
                         <th className="border border-black px-1 py-2 w-[20px]"></th>
                       </tr>
                     </thead>
@@ -655,15 +654,15 @@ export default function PowerOutageManager() {
                             {area || <span className="text-faint italic text-[11px]">—</span>}
                           </td>
                           <td className="border border-black px-2 py-3">
-                            <textarea value={s.scope} onChange={e => updateSlot(i, { scope: e.target.value })}
-                              placeholder="Phạm vi..." rows={4}
-                              className="w-full text-[12px] bg-accent-soft/40 border border-dashed border-blue-200 rounded outline-none resize-none focus:border-blue-400 p-1.5 placeholder:text-faint placeholder:italic" />
-                          </td>
-                          <td className="border border-black px-2 py-3 align-middle">
-                            <Select
-                              value={String(s.appendixIndex)}
-                              onChange={v => updateSlot(i, { appendixIndex: Number(v) })}
-                              options={appendixOptions} />
+                            <div className="space-y-1.5">
+                              <textarea value={s.scope} onChange={e => updateSlot(i, { scope: e.target.value })}
+                                placeholder="Phạm vi..." rows={4}
+                                className="w-full text-[12px] bg-accent-soft/40 border border-dashed border-blue-200 rounded outline-none resize-none focus:border-blue-400 p-1.5 placeholder:text-faint placeholder:italic" />
+                              <Select
+                                value={String(s.appendixIndex)}
+                                onChange={v => updateSlot(i, { appendixIndex: Number(v) })}
+                                options={appendixOptions} />
+                            </div>
                           </td>
                           <td className="border border-black px-1 py-3 text-center align-top">
                             {slots.length > 1 && (
