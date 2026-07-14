@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import {
   Check, Sparkles, X, ArrowRight, FileText,
   Palette, Zap, Wrench, Tag, Layers, CloudDownload,
-  Clock, BarChart3,
+  BarChart3,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from '../lib/toast';
 
 /** Tab đích để điều hướng khi nhấn "Xem ngay" — khớp với type Tab trong Dashboard */
-export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'loss' | 'sld' | 'later';
+export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'loss' | 'sld' | 'billconfirm' | 'debt' | 'later';
 
 /** Đường dẫn tài liệu hướng dẫn sử dụng (mở khi đóng thông báo) */
 const GUIDE_URL = '/document.pdf';
@@ -22,52 +22,44 @@ interface UpdateItem {
 }
 
 // Phiên bản & ngày phát hành hiển thị trên header
-const VERSION      = '1.6';
-const RELEASE_DATE = '08/07/2026';
+const VERSION      = '1.7';
+const RELEASE_DATE = '14/07/2026';
 
 const UPDATES: UpdateItem[] = [
   {
-    title: 'Tổn thất tính toán máy biến áp',
-    desc: 'Tính tổn thất kỹ thuật từng trạm (ΔP = P0 + Pk·(S/Sdm)²) theo thời gian thực đo, gom theo khu công nghiệp. 3 chế độ xem: theo ngày, theo tháng, và biểu đồ mức tải & tỷ lệ tổn thất theo từng trạm.',
+    title: 'Biên bản xác nhận chỉ số — xem & tải ngay bên Vận hành',
+    desc: 'Nhóm Vận hành xem được biên bản xác nhận chỉ số của khách hàng thuộc khu công nghiệp mình phụ trách và tải file Word (từng biên bản hoặc hàng loạt). Dữ liệu chỉ xem, không chỉnh sửa được.',
     tag: 'Mới',
+    link: { tab: 'billconfirm', label: 'Mở Biên bản xác nhận chỉ số' },
+  },
+  {
+    title: 'Công nợ khách hàng — theo dõi thanh toán bên Vận hành',
+    desc: 'Xem tổng hợp sản lượng, doanh thu và trạng thái thanh toán từng kỳ của khách hàng trong khu công nghiệp phụ trách. Chỉ xem — việc cập nhật ngày thanh toán vẫn do khối Kinh doanh thực hiện.',
+    tag: 'Mới',
+    link: { tab: 'debt', label: 'Mở Công nợ khách hàng' },
+  },
+  {
+    title: 'Sổ nhật ký vận hành — bố cục thẻ mới, gọn hơn',
+    desc: 'Bỏ bộ chọn Khu vực (dữ liệu tự giới hạn theo tài khoản). Bộ chọn tháng và nút Tạo lịch trực gom vào thẻ tiêu đề; Mở/Thu tất cả, Chọn hết/Bỏ chọn và Tải PDF hàng loạt gom vào thanh công cụ — đồng bộ giao diện với trang Biên bản xác nhận chỉ số.',
+    tag: 'Giao diện',
+    link: { tab: 'journal', label: 'Mở Sổ nhật ký vận hành' },
+  },
+  {
+    title: 'Tab Tổn thất tính toán — bộ chọn ngày/tháng đồng bộ',
+    desc: 'Đổi tên "Theo trạm (Ngày)" thành "Theo ngày"; tab Biểu đồ hiển thị cả bộ chọn ngày và tháng đồng bộ hai chiều, với 2 cụm × 3 biểu đồ (trong ngày / theo tháng / theo năm).',
+    tag: 'Cải tiến',
     link: { tab: 'loss', label: 'Xem Tổn thất tính toán' },
   },
   {
-    title: 'Đồ thị điện áp & công suất theo thời gian thực',
-    desc: 'Xem đường điện áp 3 pha và cột công suất của từng trạm theo từng mốc 30 phút trong ngày, tự phát hiện và tô vùng thời gian mất điện.',
-    tag: 'Mới',
-    link: { tab: 'opchart', label: 'Mở Đồ thị điện áp & công suất' },
-  },
-  {
-    title: 'Sơ đồ một sợi (SLD)',
-    desc: 'Xem sơ đồ một sợi (ảnh và PDF) của từng khu vực ngay trong ứng dụng, không cần tải file rời.',
-    tag: 'Mới',
-    link: { tab: 'sld', label: 'Mở Sơ đồ một sợi' },
-  },
-  {
-    title: 'Dữ liệu đo xa đầy đủ hơn — dòng điện & công suất phản kháng',
-    desc: 'Bổ sung dòng điện 3 pha và công suất phản kháng (kVAr) vào dữ liệu đo xa mỗi 30 phút, làm nền tảng tính công suất biểu kiến cho tổn thất máy biến áp.',
+    title: 'Bổ sung dữ liệu tổn thất 6 tháng đầu năm 2026',
+    desc: 'Nạp lại toàn bộ dữ liệu tổn thất máy biến áp từ tháng 01 đến 06/2026 — báo cáo tháng và KPI tổn thất năm giờ đủ trọn 7 tháng.',
     tag: 'Cải tiến',
   },
   {
-    title: 'Phân loại điểm đo chính / phụ theo trạm',
-    desc: 'Tự động xác định công tơ nào là điểm đo chính của mỗi trạm biến áp (dựa trên dữ liệu HES), tránh cộng trùng sản lượng giữa các điểm đo.',
+    title: 'Cập nhật mẫu Word thông báo ngừng cấp điện',
+    desc: 'Làm mới mẫu thông báo ngừng cấp điện của cả 4 khu công nghiệp (KCN Số 3, Tiền Hải, Thuận Thành I, Yên Mỹ): bỏ cột Phụ lục riêng, mở rộng cột Phạm vi.',
     tag: 'Cải tiến',
-  },
-  {
-    title: 'Đồng bộ dữ liệu 1 lần mỗi ngày lúc 00h00',
-    desc: 'Toàn bộ dữ liệu công tơ, chỉ số HES và tổn thất được cập nhật gọn trong một lượt chạy duy nhất mỗi ngày, giảm số lần khởi động lại hệ thống so với trước.',
-    tag: 'Cải tiến',
-  },
-  {
-    title: 'Sửa lỗi xuất Word thông báo cắt điện',
-    desc: 'Khắc phục lỗi không tải được file Word thông báo cắt điện cho khu vực Thuận Thành I.',
-    tag: 'Sửa lỗi',
-  },
-  {
-    title: 'Sửa màu header đen trong PDF sổ nhật ký',
-    desc: 'Header bảng trong PDF sổ nhật ký vận hành và biên bản giao nhận ca không còn bị in màu đen, đã chuyển về màu xám nhẹ dễ đọc.',
-    tag: 'Sửa lỗi',
+    link: { tab: 'outage', label: 'Mở Thông báo ngừng cấp điện' },
   },
 ];
 
@@ -235,12 +227,12 @@ export default function NewUpdateTour({ onDismiss, onClose, onNavigate }: Props)
         {/* Gợi ý nhanh hai tính năng nổi bật */}
         <div className="mx-6 mb-1 grid grid-cols-2 gap-2">
           <div className="flex items-center gap-2 rounded-xl bg-subtle px-3 py-2">
-            <BarChart3 className="h-4 w-4 text-accent" />
-            <span className="text-[11px] font-semibold text-dim">Tổn thất tính toán MBA</span>
+            <FileText className="h-4 w-4 text-accent" />
+            <span className="text-[11px] font-semibold text-dim">Biên bản xác nhận chỉ số</span>
           </div>
           <div className="flex items-center gap-2 rounded-xl bg-subtle px-3 py-2">
-            <Clock className="h-4 w-4 text-accent" />
-            <span className="text-[11px] font-semibold text-dim">Đồng bộ dữ liệu 00h00</span>
+            <BarChart3 className="h-4 w-4 text-accent" />
+            <span className="text-[11px] font-semibold text-dim">Công nợ khách hàng</span>
           </div>
         </div>
 

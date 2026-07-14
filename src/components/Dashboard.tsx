@@ -372,7 +372,7 @@ export default function Dashboard() {
             onNavigate={(tab) => {
               setTopTab(tab);
               // Mở sẵn nhóm sidebar chứa tab đích để người dùng thấy ngữ cảnh
-              if (tab === 'journal') { setIsJournalExpanded(true); setIsOperatingExpanded(false); }
+              if (JOURNAL_TABS.includes(tab as Tab)) { setIsJournalExpanded(true); setIsOperatingExpanded(false); }
               else if (OPERATING_TABS.includes(tab as Tab)) { setIsOperatingExpanded(true); setIsJournalExpanded(false); }
             }}
           />
