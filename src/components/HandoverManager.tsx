@@ -63,7 +63,6 @@ export default function HandoverManager() {
   const [isSaving, setIsSaving] = useState(false);
   const [filter, setFilter] = useState({
     month: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}`,
-    area: ''
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -137,9 +136,8 @@ export default function HandoverManager() {
     setIsLoading(true);
     try {
       const filterParts: string[] = [];
-      if (filter.area) {
-        filterParts.push(`area = '${filter.area.replace(/'/g, "\\'")}'`);
-      } else if (userAreas.length > 0) {
+      // Khu vực đã được phân theo tài khoản — luôn giới hạn theo KCN của người dùng.
+      if (userAreas.length > 0) {
         const areaFilters = userAreas.map(a => `area = '${a.replace(/'/g, "\\'")}'`).join(' || ');
         filterParts.push(`(${areaFilters})`);
       }
@@ -589,64 +587,49 @@ export default function HandoverManager() {
   }, [logs]);
 
   return (
-    <div className="space-y-8 relative">
+    <div className="space-y-6 relative">
       {confirmDialog}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+      {/* Header Card — bố cục giống trang Biên bản xác nhận chỉ số */}
+      <div className="vl-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-2xl font-bold text-ink">Sổ nhật ký điện tử</h2>
-            {!isLoading && logs.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-soft bg-surface border border-[var(--border)] px-2.5 py-1 rounded shadow-xs">
-                  <Calendar className="w-3.5 h-3.5 text-accent" />
-                  T{filter.month.split('-')[1]}: {uniqueDaysCount} ngày · {logs.length} ca
-                </span>
-                {([
-                  { key: 'Bình thường', dot: 'bg-emerald-500', label: 'BT' },
-                  { key: 'Sự cố',       dot: 'bg-red-500',     label: 'SC' },
-                  { key: 'Đóng cắt',   dot: 'bg-amber-500',   label: 'ĐC' },
-                  { key: 'Kiểm tra định kỳ', dot: 'bg-blue-500', label: 'KTĐK' },
-                ] as const).filter(({ key }) => typeShiftCounts[key] > 0).map(({ key, dot, label }) => (
-                  <span key={key} className="inline-flex items-center gap-1 text-xs font-bold text-soft bg-surface border border-[var(--border)] px-2 py-1 rounded shadow-xs">
-                    <span className={`w-2 h-2 rounded-full ${dot}`} />
-                    {label}: {typeShiftCounts[key]}
-                  </span>
-                ))}
-              </div>
-            )}
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2.5 bg-accent-soft rounded-2xl text-accent">
+              <ClipboardList className="w-6 h-6" />
+            </div>
+            <h1 className="text-2xl font-black text-ink tracking-tight uppercase">Sổ nhật ký điện tử</h1>
           </div>
-          <p className="text-soft text-sm mt-1">Quản lý lịch trực và tình hình vận hành</p>
+          <p className="text-sm text-soft max-w-2xl">Quản lý lịch trực và tình hình vận hành</p>
+          {!isLoading && logs.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-3">
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-soft bg-surface border border-[var(--border)] px-2.5 py-1 rounded shadow-xs">
+                <Calendar className="w-3.5 h-3.5 text-accent" />
+                T{filter.month.split('-')[1]}: {uniqueDaysCount} ngày · {logs.length} ca
+              </span>
+              {([
+                { key: 'Bình thường', dot: 'bg-emerald-500', label: 'BT' },
+                { key: 'Sự cố',       dot: 'bg-red-500',     label: 'SC' },
+                { key: 'Đóng cắt',   dot: 'bg-amber-500',   label: 'ĐC' },
+                { key: 'Kiểm tra định kỳ', dot: 'bg-blue-500', label: 'KTĐK' },
+              ] as const).filter(({ key }) => typeShiftCounts[key] > 0).map(({ key, dot, label }) => (
+                <span key={key} className="inline-flex items-center gap-1 text-xs font-bold text-soft bg-surface border border-[var(--border)] px-2 py-1 rounded shadow-xs">
+                  <span className={`w-2 h-2 rounded-full ${dot}`} />
+                  {label}: {typeShiftCounts[key]}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <Select
-            value={filter.area}
-            onChange={(v) => setFilter({ ...filter, area: v })}
-            options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map(area => ({ value: area, label: area }))]}
-            className="min-w-[160px]"
-          />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
           <MonthPicker
             value={filter.month}
             onChange={(v) => setFilter({ ...filter, month: v })}
-            className="min-w-[150px]"
+            className="w-full sm:w-[180px]"
           />
           <button
             onClick={startAddLog}
-            className="vl-btn vl-btn-primary flex-1 md:flex-none px-6 py-2.5 font-medium text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] shadow-sm transition-all shrink-0"
           >
-            <Plus className="w-5 h-5" />
-            Tạo lịch trực
-          </button>
-          <button
-            disabled={selectedIds.size === 0 || isExportingPdf}
-            onClick={exportMultipleToPDF}
-            className={`flex-1 md:flex-none px-6 py-2.5 font-medium text-[13px] flex items-center justify-center gap-2 transition-all ${selectedIds.size > 0 && !isExportingPdf ? 'vl-btn vl-btn-secondary shadow-lg shadow-slate-700/20' : 'bg-subtle text-faint rounded cursor-not-allowed'}`}
-          >
-            {isExportingPdf ? (
-              <RefreshCw className="w-5 h-5 animate-spin" />
-            ) : (
-              <Download className="w-5 h-5" />
-            )}
-            {isExportingPdf ? 'Đang xuất...' : `PDF${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+            <Plus className="w-4 h-4" /> Tạo lịch trực
           </button>
         </div>
       </div>
@@ -1095,45 +1078,49 @@ export default function HandoverManager() {
           )}
         </AnimatePresence>
 
-        {/* Sub-header strip: expand/collapse + select/deselect + count */}
-        {!isLoading && logs.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-1">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={expandAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-dim rounded-lg text-xs font-bold hover:bg-subtle transition-all shadow-xs"
-              >
-                <ChevronDown className="w-3.5 h-3.5" />
-                Mở tất cả
-              </button>
-              <button
-                onClick={collapseAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-dim rounded-lg text-xs font-bold hover:bg-subtle transition-all shadow-xs"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-                Thu tất cả
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={selectAllInMonth}
-                disabled={logs.length === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-dim rounded-lg text-xs font-bold hover:bg-subtle transition-all shadow-xs disabled:opacity-50"
-              >
-                <CheckSquare className="w-3.5 h-3.5" />
-                Chọn hết
-              </button>
-              <button
-                onClick={deselectAll}
-                disabled={selectedIds.size === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-[var(--border)] text-dim rounded-lg text-xs font-bold hover:bg-subtle transition-all shadow-xs disabled:opacity-50"
-              >
-                <Square className="w-3.5 h-3.5" />
-                Bỏ chọn {selectedIds.size > 0 && `(${selectedIds.size})`}
-              </button>
-            </div>
+        {/* Filter bar Card — mở/thu tất cả + chọn + xuất PDF hàng loạt (giống trang BBXN) */}
+        <div className="vl-card p-4 md:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={expandAll}
+              disabled={logs.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50"
+            >
+              <ChevronDown className="w-3.5 h-3.5" /> Mở tất cả
+            </button>
+            <button
+              onClick={collapseAll}
+              disabled={logs.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50"
+            >
+              <ChevronRight className="w-3.5 h-3.5" /> Thu tất cả
+            </button>
           </div>
-        )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={selectAllInMonth}
+              disabled={logs.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50"
+            >
+              <CheckSquare className="w-3.5 h-3.5" /> Chọn hết
+            </button>
+            <button
+              onClick={deselectAll}
+              disabled={selectedIds.size === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50"
+            >
+              <Square className="w-3.5 h-3.5" /> Bỏ chọn {selectedIds.size > 0 && `(${selectedIds.size})`}
+            </button>
+            <button
+              onClick={exportMultipleToPDF}
+              disabled={selectedIds.size === 0 || isExportingPdf}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:bg-[var(--border-strong)]"
+            >
+              {isExportingPdf ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              {isExportingPdf ? 'Đang xuất...' : `Tải PDF${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+            </button>
+          </div>
+        </div>
 
         {/* Data List grouped by Date & Industrial park */}
         <div className="vl-accordion">
