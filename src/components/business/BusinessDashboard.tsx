@@ -2,29 +2,47 @@ import { useState } from 'react';
 import { pb } from '../../lib/pocketbase';
 import {
   LogOut, X, Menu, ChevronDown,
-  FileText, LayoutDashboard, Briefcase,
+  FileText, LayoutDashboard, Briefcase, Activity,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
 import QuickImportManager from './QuickImportManager';
 import CustomerDebtManager from './CustomerDebtManager';
+import CustomerManager from '../CustomerManager';
+import HesReadingManager from '../hes/HesReadingManager';
+import VoltagePowerDashboard from '../VoltagePowerDashboard';
+import TransformerLossManager from '../TransformerLossManager';
+import SldPage from '../sld/SldPage';
 import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
 
-type Tab = 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt';
+type Tab =
+  | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt'
+  | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
   'bill-confirm':  'Biên bản xác nhận chỉ số',
   'quick-import':  'Nạp dữ liệu nhanh',
   'customer-debt': 'Công nợ khách hàng',
+  operating:       'Thông tin khách hàng & Công tơ',
+  hes:             'Lấy chỉ số HES',
+  opchart:         'Đồ thị điện áp & công suất',
+  loss:            'Tổn thất tính toán',
+  sld:             'Sơ đồ một sợi',
 };
+
+/** Tab con thuộc nhóm "Hồ sơ kinh doanh". */
+const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt'];
+/** Tab con thuộc nhóm "Thông số vận hành". */
+const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isBusinessExpanded, setIsBusinessExpanded] = useState(true);
+  const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
 
   const handleLogout = () => { pb.authStore.clear(); window.location.reload(); };
 
@@ -73,7 +91,7 @@ export default function BusinessDashboard() {
               id="nav-business"
               onClick={() => setIsBusinessExpanded(v => !v)}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'bill-confirm' || topTab === 'quick-import' || topTab === 'customer-debt' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+                BUSINESS_TABS.includes(topTab) ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <Briefcase className="w-5 h-5 shrink-0" />
@@ -127,6 +145,53 @@ export default function BusinessDashboard() {
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
+                </motion.ul>
+              )}
+            </AnimatePresence>
+          </li>
+
+          {/* Thông số vận hành — xem toàn bộ khu công nghiệp */}
+          <li className="relative mt-1">
+            <button
+              id="nav-operating"
+              onClick={() => setIsOperatingExpanded(v => !v)}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                OPERATING_TABS.includes(topTab) ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <Activity className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Thông số vận hành</span>
+              <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isOperatingExpanded ? 'rotate-180' : ''}`} />
+            </button>
+            <AnimatePresence initial={false}>
+              {isOperatingExpanded && (
+                <motion.ul
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22 }}
+                  className="overflow-hidden list-none px-0"
+                >
+                  {([
+                    { id: 'operating', label: 'Thông tin khách hàng & Công tơ' },
+                    { id: 'hes',       label: 'Lấy chỉ số từ HES' },
+                    { id: 'opchart',   label: 'Đồ thị điện áp & công suất' },
+                    { id: 'loss',      label: 'Tổn thất tính toán' },
+                    { id: 'sld',       label: 'Sơ đồ một sợi' },
+                  ] as { id: Tab; label: string }[]).map(item => (
+                    <li key={item.id}>
+                      <button
+                        id={`nav-${item.id}-sub`}
+                        onClick={() => { setTopTab(item.id); onNavigate?.(); }}
+                        className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                          topTab === item.id ? 'text-accent' : 'text-soft hover:text-dim'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                        <span className="flex-1">{item.label}</span>
+                      </button>
+                    </li>
+                  ))}
                 </motion.ul>
               )}
             </AnimatePresence>
@@ -251,6 +316,18 @@ export default function BusinessDashboard() {
               <QuickImportManager />
             ) : topTab === 'customer-debt' ? (
               <CustomerDebtManager />
+            ) : topTab === 'operating' ? (
+              <CustomerManager />
+            ) : topTab === 'hes' ? (
+              <HesReadingManager />
+            ) : topTab === 'opchart' ? (
+              <VoltagePowerDashboard />
+            ) : topTab === 'loss' ? (
+              <TransformerLossManager />
+            ) : topTab === 'sld' ? (
+              <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
+                <SldPage zoneTabs />
+              </div>
             ) : (
               <BillConfirmManager />
             )}

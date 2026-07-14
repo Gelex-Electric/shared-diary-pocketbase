@@ -22,7 +22,7 @@ import {
   TrendingDown,
   ZapOff,
 } from 'lucide-react';
-import { pb, ID_TO_AREA } from '../lib/pocketbase';
+import { pb, ID_TO_AREA, AREAS } from '../lib/pocketbase';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { DatePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
@@ -242,6 +242,10 @@ export default function VoltagePowerDashboard() {
     return items.map(item => normArea(ID_TO_AREA[item] || item));
   }, [JSON.stringify(pb.authStore.model?.area)]);
 
+  // Bộ lọc KCN (chỉ hiện với tài khoản không khoá đúng 1 KCN — tức khối Kinh doanh).
+  const [filterArea, setFilterArea] = useState('');
+  const showAreaFilter = userAreas.length !== 1;
+
   useEffect(() => {
     let mounted = true;
     setIsLoadingMeters(true);
@@ -258,6 +262,7 @@ export default function VoltagePowerDashboard() {
     const allowed = userAreas.length > 0 ? new Set(userAreas) : null;
     for (const r of meterRows) {
       if (allowed && !allowed.has(normArea(r.ADDRESS))) continue;
+      if (filterArea && normArea(r.ADDRESS) !== filterArea) continue;
       const cid = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
       if (!cid) continue;
       if (!map.has(cid)) {
@@ -271,7 +276,7 @@ export default function VoltagePowerDashboard() {
       map.get(cid)!.meters.push({ meterNo: r.METER_NO, line: r.LINE_NAME || '' });
     }
     return map;
-  }, [meterRows, userAreas]);
+  }, [meterRows, userAreas, filterArea]);
 
   /* ---- Phân tích CSV → chỉ mục theo công tơ / ngày (giữ nguyên thời điểm) ---- */
   const { readingIndex, dateKeys } = useMemo(() => {
@@ -645,19 +650,32 @@ export default function VoltagePowerDashboard() {
           </p>
         </div>
 
-        {/* Date selector */}
-        <div className="shrink-0">
-          <DatePicker
-            value={selectedDate}
-            onChange={setSelectedDate}
-            label="Ngày hiển thị"
-            className="w-[200px]"
-          />
-          {dateKeys.length > 0 && (
-            <p className="text-[11px] text-faint mt-1.5 font-medium">
-              Có dữ liệu: {fmtDateVN(dateKeys[0])} – {fmtDateVN(dateKeys[dateKeys.length - 1])}
-            </p>
+        {/* Bộ lọc KCN (chỉ Kinh doanh) + bộ chọn ngày */}
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4 shrink-0">
+          {showAreaFilter && (
+            <div>
+              <label className="block text-[11px] font-bold text-faint uppercase tracking-wider mb-1.5">Khu công nghiệp</label>
+              <Select
+                value={filterArea}
+                onChange={setFilterArea}
+                options={[{ value: '', label: 'Tất cả khu vực' }, ...AREAS.map(a => ({ value: a, label: a }))]}
+                className="w-[200px]"
+              />
+            </div>
           )}
+          <div>
+            <DatePicker
+              value={selectedDate}
+              onChange={setSelectedDate}
+              label="Ngày hiển thị"
+              className="w-[200px]"
+            />
+            {dateKeys.length > 0 && (
+              <p className="text-[11px] text-faint mt-1.5 font-medium">
+                Có dữ liệu: {fmtDateVN(dateKeys[0])} – {fmtDateVN(dateKeys[dateKeys.length - 1])}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

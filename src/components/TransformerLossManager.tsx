@@ -187,6 +187,10 @@ export default function TransformerLossManager() {
   /** KCN của tài khoản đang đăng nhập (rỗng = kinh doanh/admin → xem tất cả). */
   const userZone = useMemo(() => zoneFromArea((pb.authStore.model as any)?.area), []);
 
+  // Bộ lọc KCN (mã zone, '' = tất cả) — chỉ hiện với kinh doanh/admin (userZone rỗng).
+  const [filterKcn, setFilterKcn] = useState('');
+  const showKcnFilter = !userZone;
+
   /**
    * Meta từng trạm CHÍNH có đủ P0 & PK (nền để hiển thị cả trạm không hoạt động).
    * - Gom theo KCN suy từ TIỀN TỐ CODE (chuẩn), không dùng ADDRESS (có thể sai, vd "Emic").
@@ -202,6 +206,7 @@ export default function TransformerLossManager() {
       if (!code || map.has(code)) continue;
       const zc = zoneCodeOf(code);
       if (userZone && zc !== userZone) continue;   // chỉ KCN của tài khoản
+      if (filterKcn && zc !== filterKcn) continue;  // bộ lọc KCN (khối kinh doanh)
       const p = lookup(code);
       if (!p || !p.hasParams) continue;            // không đủ Po/Pk => không tính
       map.set(code, {
@@ -211,7 +216,7 @@ export default function TransformerLossManager() {
       });
     }
     return map;
-  }, [meters, mba, userZone]);
+  }, [meters, mba, userZone, filterKcn]);
 
   const dates = useMemo(() => [...new Set(daily.map(r => r.date))].sort().reverse(), [daily]);
   useEffect(() => {
@@ -371,6 +376,10 @@ export default function TransformerLossManager() {
       <div className="flex flex-wrap items-center gap-3">
         <Tabs<View> tabs={TABS} value={view} onChange={setView} />
         <div className="ml-auto flex items-end gap-3">
+          {showKcnFilter && (
+            <Select value={filterKcn} onChange={setFilterKcn} label="Khu công nghiệp" icon={Building2} className="min-w-[190px]"
+              options={[{ value: '', label: 'Tất cả khu vực' }, ...Object.entries(ZONE_MAP).map(([code, name]) => ({ value: code, label: name }))]} />
+          )}
           {(view === 'monthly' || view === 'chart') && (
             <Select value={selMonth} onChange={onChangeMonth} label="Tháng" icon={CalendarRange} className="min-w-[170px]"
               options={months.map(m => ({ value: m, label: monthVN(m) }))} />
