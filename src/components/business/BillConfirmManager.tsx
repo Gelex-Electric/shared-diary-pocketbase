@@ -5,6 +5,7 @@ import { DatePicker, TimePicker, MonthPicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
+import { zoneFromArea, zoneOf } from '../../lib/invoices';
 import PizZip from 'pizzip';
 import {
   FileCheck2, Save, Gauge, Building2, Users,
@@ -19,7 +20,8 @@ import {
    - Sản lượng = (cuối - đầu) * HSN
    - Biểu cuối = sản lượng - biểu phụ
    - Cosφ = biểu Tổng / √(biểu Tổng² + biểu VC²)
-   Chỉ dành cho khối Kinh doanh.
+   Khối Kinh doanh: đầy đủ chức năng. Khối Vận hành dùng lại với
+   readOnly=true — chỉ xem + tải Word, dữ liệu lọc theo KCN tài khoản.
 ============================================================ */
 
 import { toast as notify } from '../../lib/toast';
@@ -183,8 +185,14 @@ function computeResults(d: Record<string, any>) {
   return { sanLuong, bieu, cosphi };
 }
 
-export default function BillConfirmManager() {
+export default function BillConfirmManager({ readOnly = false }: { readOnly?: boolean }) {
   const { confirm, dialog: confirmDialog } = useConfirm();
+
+  // Khối Vận hành (readOnly): chỉ thấy khách hàng thuộc KCN của tài khoản.
+  const zoneLock = useMemo(
+    () => (readOnly ? zoneFromArea(pb.authStore.model?.area) : ''),
+    [readOnly],
+  );
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -414,14 +422,15 @@ export default function BillConfirmManager() {
 
   // Tháng đã được lọc ở server (loadRecords); ở đây chỉ còn lọc theo ô tìm kiếm khách hàng/SCT
   const filteredRecords = useMemo(() => {
+    const base = zoneLock ? records.filter(r => zoneOf(r.MKHang || '') === zoneLock) : records;
     const q = search.trim().toLowerCase();
-    if (!q) return records;
-    return records.filter(r =>
+    if (!q) return base;
+    return base.filter(r =>
       (r.SCT || '').toLowerCase().includes(q) ||
       (r.NMua || '').toLowerCase().includes(q) ||
       (r.NBan || '').toLowerCase().includes(q),
     );
-  }, [records, search]);
+  }, [records, search, zoneLock]);
 
   /* ── Gộp các khoảng đổi giá thành 1 dòng biên bản liên tục.
         Ưu tiên gộp theo BillId (mã hóa đơn, từ XML/SOAP), kế đến IndexId (=MIN MHHDVu công
@@ -651,7 +660,9 @@ export default function BillConfirmManager() {
             <h1 className="text-2xl font-black text-ink tracking-tight uppercase">Biên bản xác nhận chỉ số</h1>
           </div>
           <p className="text-sm text-soft max-w-2xl">
-            Lưu theo từng khách hàng. Tạo mới, xem lại, chỉnh sửa, xóa hoặc tải PDF.
+            {readOnly
+              ? 'Xem và tải biên bản của khách hàng thuộc khu công nghiệp phụ trách.'
+              : 'Lưu theo từng khách hàng. Tạo mới, xem lại, chỉnh sửa, xóa hoặc tải PDF.'}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
@@ -672,12 +683,14 @@ export default function BillConfirmManager() {
               className="pl-10 pr-4 py-2 border border-[var(--border)] bg-surface rounded text-dim text-sm focus:outline-none focus:ring-1 focus:ring-accent w-full sm:w-[260px]"
             />
           </div>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] shadow-sm transition-all shrink-0"
-          >
-            <Plus className="w-4 h-4" /> Tạo biên bản mới
-          </button>
+          {!readOnly && (
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] shadow-sm transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Tạo biên bản mới
+            </button>
+          )}
         </div>
       </div>
 
@@ -688,6 +701,7 @@ export default function BillConfirmManager() {
           <button onClick={collapseAll} className="px-3 py-1.5 rounded text-xs font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors">Thu tất cả</button>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {!readOnly && (<>
           <button
             onClick={getToken}
             disabled={isGettingToken || !hesAccount}
@@ -705,6 +719,7 @@ export default function BillConfirmManager() {
             {isSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             {isSyncing ? `Đang đồng bộ... ${syncProgress ? `${syncProgress.done}/${syncProgress.total}` : ''}` : 'Đồng bộ thời gian lấy chỉ số'}
           </button>
+          </>)}
           <button
             onClick={selectAllFiltered}
             disabled={filteredRecords.length === 0}
@@ -737,7 +752,7 @@ export default function BillConfirmManager() {
         <div className="vl-card py-16 text-center text-faint">
           <div className="flex flex-col items-center justify-center">
             <FileSpreadsheet className="w-12 h-12 text-faint mb-3" />
-            <p className="text-sm">Không có biên bản nào khớp bộ lọc. Nhấn "Tạo biên bản mới".</p>
+            <p className="text-sm">{readOnly ? 'Không có biên bản nào khớp bộ lọc.' : 'Không có biên bản nào khớp bộ lọc. Nhấn "Tạo biên bản mới".'}</p>
           </div>
         </div>
       ) : (
@@ -821,7 +836,7 @@ export default function BillConfirmManager() {
                                   <td className="py-3.5 px-4">
                                     <div className="flex items-center justify-end gap-1.5">
                                       {/* Hóa đơn đổi giá (gộp nhiều khoảng) không sửa tay được — ẩn nút Sửa */}
-                                      {!row.merged && (
+                                      {!readOnly && !row.merged && (
                                         <button onClick={() => openEdit(row.primary)} title="Sửa"
                                           className="p-2 rounded-lg text-soft hover:bg-accent-soft hover:text-accent transition-colors">
                                           <Pencil className="w-4 h-4" />
@@ -831,10 +846,12 @@ export default function BillConfirmManager() {
                                         className="p-2 rounded-lg text-soft hover:bg-[var(--success-soft)] hover:text-ok transition-colors disabled:opacity-50">
                                         <FileDown className="w-4 h-4" />
                                       </button>
-                                      <button onClick={() => handleDelete(row)} title="Xóa"
-                                        className="p-2 rounded-lg text-soft hover:bg-rose-50 hover:text-rose-600 transition-colors">
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
+                                      {!readOnly && (
+                                        <button onClick={() => handleDelete(row)} title="Xóa"
+                                          className="p-2 rounded-lg text-soft hover:bg-rose-50 hover:text-rose-600 transition-colors">
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      )}
                                       <input
                                         type="checkbox"
                                         checked={isSelected}

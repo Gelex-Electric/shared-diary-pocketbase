@@ -16,10 +16,12 @@ import {
    - Cấp 2 (mở rộng): theo (MKHang + EndDate) — mỗi kỳ chốt chỉ số
      (có thể gồm nhiều công tơ cùng ngày EndDate).
    "Ngày thanh toán" (trường NTToan) ghi đồng nhất cho mọi bản ghi
-   trong 1 kỳ. Chỉ dành cho khối Kinh doanh.
+   trong 1 kỳ. Khối Kinh doanh: đầy đủ chức năng. Khối Vận hành dùng
+   lại với readOnly=true — chỉ xem, lọc theo KCN của tài khoản.
 ============================================================ */
 
 import { toast as notify } from '../../lib/toast';
+import { zoneFromArea } from '../../lib/invoices';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 type PaymentFilter = 'all' | 'paid' | 'unpaid';
@@ -126,7 +128,12 @@ function computeRecordTotals(r: DebtInvoiceRecord): Totals {
   };
 }
 
-export default function CustomerDebtManager() {
+export default function CustomerDebtManager({ readOnly = false }: { readOnly?: boolean }) {
+  // Khối Vận hành (readOnly): chỉ thấy khách hàng thuộc KCN của tài khoản.
+  const zoneLock = useMemo(
+    () => (readOnly ? zoneFromArea(pb.authStore.model?.area) : ''),
+    [readOnly],
+  );
   const [records, setRecords] = useState<DebtInvoiceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [monthFilter, setMonthFilter] = useState<string>(currentYearMonth());
@@ -267,7 +274,8 @@ export default function CustomerDebtManager() {
   /* ── áp các thay đổi đang soạn (pending) lên dữ liệu để hiển thị tức thì
         nhưng CHƯA lưu vào collection ── */
   const effectiveCustomers = useMemo<CustomerGroup[]>(() => {
-    return customers.map(c => {
+    const scoped = zoneLock ? customers.filter(c => zoneOf(c.mkh) === zoneLock) : customers;
+    return scoped.map(c => {
       let unpaidCount = 0;
       const kyList = c.kyList.map(ky => {
         const nTToan = ky.key in pending ? pending[ky.key] : ky.nTToan;
@@ -276,7 +284,7 @@ export default function CustomerDebtManager() {
       });
       return { ...c, kyList, unpaidCount, isPaid: unpaidCount === 0 };
     });
-  }, [customers, pending]);
+  }, [customers, pending, zoneLock]);
 
   /* ── số thay đổi thực sự (khác giá trị gốc) đang chờ lưu ── */
   const pendingCount = useMemo(
@@ -473,26 +481,34 @@ export default function CustomerDebtManager() {
                 {fmtDate(ky.endDate)}
               </td>
               <td className="py-3 px-4 text-center">
-                <div className="flex items-center justify-center gap-1.5">
-                  <DatePicker
-                    value={ky.nTToan}
-                    onChange={val => stagePaymentDate(ky.key, val)}
-                    className="w-[140px]"
-                    usePortal
-                  />
-                  {ky.nTToan && (
-                    <button
-                      onClick={() => stagePaymentDate(ky.key, '')}
-                      title="Đánh dấu chưa thanh toán"
-                      className="p-1 rounded-lg text-faint hover:bg-[var(--danger-soft)] hover:text-red-500 transition-colors shrink-0"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                  {isStaged && (
-                    <span title="Chưa lưu" className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-                  )}
-                </div>
+                {readOnly ? (
+                  ky.nTToan ? (
+                    <span className="font-mono text-[11px] font-bold text-ok">{fmtDate(ky.nTToan)}</span>
+                  ) : (
+                    <span className="text-rose-500/80 font-semibold text-[11px]">Chưa thanh toán</span>
+                  )
+                ) : (
+                  <div className="flex items-center justify-center gap-1.5">
+                    <DatePicker
+                      value={ky.nTToan}
+                      onChange={val => stagePaymentDate(ky.key, val)}
+                      className="w-[140px]"
+                      usePortal
+                    />
+                    {ky.nTToan && (
+                      <button
+                        onClick={() => stagePaymentDate(ky.key, '')}
+                        title="Đánh dấu chưa thanh toán"
+                        className="p-1 rounded-lg text-faint hover:bg-[var(--danger-soft)] hover:text-red-500 transition-colors shrink-0"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                    {isStaged && (
+                      <span title="Chưa lưu" className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                    )}
+                  </div>
+                )}
               </td>
               <td className="py-3 px-4 text-right font-mono text-[11px]">
                 {(ky.slHC > 0 || ky.slVC === 0) && (
@@ -614,7 +630,8 @@ export default function CustomerDebtManager() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Lưu thay đổi (chỉ lưu khi bấm nút này) */}
+          {/* Lưu thay đổi (chỉ lưu khi bấm nút này) — ẩn với khối Vận hành */}
+          {!readOnly && (
           <button
             onClick={saveChanges}
             disabled={saving || pendingCount === 0}
@@ -625,8 +642,9 @@ export default function CustomerDebtManager() {
               ? `Đang lưu... ${saveProgress ? `${saveProgress.done}/${saveProgress.total}` : ''}`
               : `Lưu thay đổi${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
           </button>
+          )}
 
-          {pendingCount > 0 && !saving && (
+          {!readOnly && pendingCount > 0 && !saving && (
             <button
               onClick={discardChanges}
               className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-[var(--border)] rounded-lg text-sm font-bold text-soft hover:bg-subtle transition-colors"

@@ -15,16 +15,20 @@ import JournalManager from './JournalManager';
 import PowerOutageManager from './PowerOutageManager';
 import NewUpdateTour from './NewUpdateTour';
 import SldPage from './sld/SldPage';
+import BillConfirmManager from './business/BillConfirmManager';
+import CustomerDebtManager from './business/CustomerDebtManager';
 import NotificationBell from './ui/NotificationBell';
 import ThemeToggle from './ui/ThemeToggle';
 
-type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
+type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
   journal:   'Hồ sơ vận hành',
   outage:            'Thông báo ngừng cấp điện',
   'handover-record': 'Biên bản treo tháo',
+  billconfirm: 'Biên bản xác nhận chỉ số',
+  debt:        'Công nợ khách hàng',
   operating: 'Thông số vận hành',
   hes:       'Lấy chỉ số HES',
   opchart:   'Đồ thị điện áp & công suất',
@@ -35,6 +39,8 @@ const TAB_LABEL: Record<Tab, string> = {
 
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
+/** Các tab con thuộc nhóm "Hồ sơ vận hành". */
+const JOURNAL_TABS: Tab[] = ['journal', 'outage', 'handover-record', 'billconfirm', 'debt'];
 
 /* Animation submenu sidebar — tách nhịp height/opacity + easing mượt + stagger mục con. */
 const EASE_SMOOTH = [0.32, 0.72, 0, 1] as const;
@@ -167,7 +173,7 @@ export default function Dashboard() {
               id="nav-journal"
               onClick={() => toggleSection('journal')}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'journal' || topTab === 'outage' || topTab === 'handover-record' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+                JOURNAL_TABS.includes(topTab) ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <ClipboardList className="w-5 h-5 shrink-0" />
@@ -215,6 +221,32 @@ export default function Dashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Biên bản treo tháo</span>
                       <span className="text-[10px] font-black text-amber-500 shrink-0 uppercase tracking-wide">Beta</span>
+                    </button>
+                  </motion.li>
+                  <motion.li variants={subItemV}>
+                    <button
+                      id="nav-billconfirm-sub"
+                      onClick={() => { setTopTab('billconfirm'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'billconfirm' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Biên bản xác nhận chỉ số</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+                    </button>
+                  </motion.li>
+                  <motion.li variants={subItemV}>
+                    <button
+                      id="nav-debt-sub"
+                      onClick={() => { setTopTab('debt'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'debt' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Công nợ khách hàng</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </motion.li>
                 </motion.ul>
@@ -480,6 +512,10 @@ export default function Dashboard() {
               <JournalManager />
             ) : topTab === 'outage' ? (
               <PowerOutageManager />
+            ) : topTab === 'billconfirm' ? (
+              <BillConfirmManager readOnly />
+            ) : topTab === 'debt' ? (
+              <CustomerDebtManager readOnly />
             ) : topTab === 'handover-record' ? (
               <div className="vl-card flex flex-col items-center justify-center py-24 gap-4 text-faint">
                 <RefreshCw className="w-14 h-14 animate-[spin_3s_linear_infinite] text-faint" />
