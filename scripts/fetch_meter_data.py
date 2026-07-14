@@ -30,7 +30,10 @@ def get_retry(url, *, attempts=4, **kwargs):
     raise RuntimeError(last)
 
 BASE_URL = "http://14.225.244.63:8899/api"
-CSV_PATH = "public/datametter.csv"
+# DATAMETTER_PATH: cung ten bien voi daily_transformer_loss.py (doc file nay) — cho
+# phep backfill tro toi file tam, khong dung public/datametter.csv (rolling 7 ngay
+# cho dashboard Dien ap).
+CSV_PATH = os.environ.get("DATAMETTER_PATH", "public/datametter.csv")
 # Giữ 6 cột đầu ĐÚNG THỨ TỰ CŨ (frontend VoltagePowerDashboard đọc theo vị trí:
 # TOTAL_KW ở index 5). Cột mới chỉ được NỐI VÀO CUỐI để không phá tương thích.
 FIELDS = ["METER_NO", "DATE_TIME", "PHASE_A_VOLTS", "PHASE_B_VOLTS", "PHASE_C_VOLTS", "TOTAL_KW",
@@ -39,6 +42,12 @@ FIELDS = ["METER_NO", "DATE_TIME", "PHASE_A_VOLTS", "PHASE_B_VOLTS", "PHASE_C_VO
 SCALED_FIELDS = ["TOTAL_KW", "PHASE_A_AMPERE", "PHASE_B_AMPERE", "PHASE_C_AMPERE", "TOTAL_KVAR"]
 KEEP_RECORDS = int(os.environ.get("KEEP_RECORDS", "336"))  # 7 ngay x 48 ban ghi/ngay moi cong to
 FETCH_HOURS = int(os.environ.get("FETCH_HOURS", "6"))       # cua so lay du lieu, rong de vot ban ghi ve tre
+# TARGET_DATE (YYYY-MM-DD): backfill 1 ngay qua khu (00:00->24:00) thay vi now-FETCH_HOURS->now.
+TARGET_DATE = os.environ.get("TARGET_DATE", "").strip()
+# ROLE_FILTER: chi lay cong to co ROLE nay trong metterinfo.csv (vd "chinh"). Rong = lay tat ca.
+ROLE_FILTER = os.environ.get("ROLE_FILTER", "").strip()
+# Sleep nho giua cac cong to khi backfill (TARGET_DATE) de khong don tai server HES.
+FETCH_SLEEP = float(os.environ.get("FETCH_SLEEP", "0"))
 
 USER_ACCOUNT = os.environ.get("API_USER", "")
 PASSWORD = os.environ.get("API_PASS", "")
@@ -51,7 +60,8 @@ VN_TZ = timezone(timedelta(hours=7))
 
 
 def load_meter_list():
-    """Doc {METER_NO: HSN} tu metterinfo.csv. HSN lay tu cot METER_NAME."""
+    """Doc {METER_NO: HSN} tu metterinfo.csv. HSN lay tu cot METER_NAME.
+    ROLE_FILTER (neu co) chi lay cong to dung ROLE do."""
     if not os.path.isfile(METTERINFO_PATH):
         sys.exit(f"Khong tim thay {METTERINFO_PATH}. Hay chay fetch_meter_info.py truoc.")
     meters = {}
@@ -59,6 +69,8 @@ def load_meter_list():
         for row in csv.DictReader(f):
             no = str(row.get("METER_NO") or "").strip()
             if not no:
+                continue
+            if ROLE_FILTER and (row.get("ROLE") or "").strip() != ROLE_FILTER:
                 continue
             try:
                 hsn = float(row.get("METER_NAME") or 1) or 1.0
@@ -97,17 +109,25 @@ def login() -> str:
     return login_data()["TOKEN"]
 
 
+class InvalidToken(Exception):
+    """Token het han giua chung — KHONG duoc coi la '0 ban ghi', phai dung lai va relogin."""
+
+
 def fetch_instant(token: str, meter_no: str):
-    now = datetime.now(VN_TZ)
-    start = now - timedelta(hours=FETCH_HOURS)
     fmt = "%Y%m%d%H%M%S"
+    if TARGET_DATE:
+        day = datetime.strptime(TARGET_DATE, "%Y-%m-%d")
+        start, end = day, day + timedelta(days=1)
+    else:
+        end = datetime.now(VN_TZ)
+        start = end - timedelta(hours=FETCH_HOURS)
     try:
         r = requests.get(
             f"{BASE_URL}/GetInstantByDate",
             params={
                 "MeterNo": meter_no,
                 "StartDate": start.strftime(fmt),
-                "EndDate": now.strftime(fmt),
+                "EndDate": end.strftime(fmt),
                 "Token": token,
             },
             timeout=60,
@@ -118,6 +138,11 @@ def fetch_instant(token: str, meter_no: str):
         print(f"[WARN] {meter_no}: loi khi goi API ({e}), bo qua.")
         return []
     if isinstance(data, dict):
+        # Token het han tra ve {"CODE":"0","MESSAGE":"invalid token"} — KHONG duoc
+        # nuot thanh "khong co du lieu" (se lam sai backfill: ghi nham ngay co du
+        # lieu thanh ngay trong).
+        if str(data.get("MESSAGE", "")).strip().lower() == "invalid token":
+            raise InvalidToken(meter_no)
         data = data.get("DATA", data.get("data", []))
     return data or []
 
@@ -188,20 +213,29 @@ def append_csv(rows):
 
 def main():
     meters = load_meter_list()
-    print(f"Doc {len(meters)} cong to tu {METTERINFO_PATH}")
+    print(f"Doc {len(meters)} cong to tu {METTERINFO_PATH}"
+          f"{f' (ROLE={ROLE_FILTER})' if ROLE_FILTER else ''}"
+          f"{f' — TARGET_DATE={TARGET_DATE}' if TARGET_DATE else ''}")
     if not meters:
         sys.exit(f"Khong co cong to nao trong {METTERINFO_PATH}.")
     token = login()
 
     all_rows = []
     for no, hsn in meters.items():
-        rows = fetch_instant(token, no)
+        try:
+            rows = fetch_instant(token, no)
+        except InvalidToken:
+            # Thoat voi ma loi rieng de driver backfill nhan biet va relogin roi
+            # chay lai DUNG ngay nay (khong ghi gi ca — an toan, idempotent).
+            sys.exit("TOKEN_EXPIRED")
         for rec in rows:
             rec.setdefault("METER_NO", no)
             for fld in SCALED_FIELDS:  # công suất + dòng điện đều ×HSN; điện áp giữ nguyên
                 rec[fld] = scale(rec.get(fld), hsn)
         print(f"  {no} (HSN={hsn:g}): {len(rows)} ban ghi")
         all_rows.extend(rows)
+        if FETCH_SLEEP:
+            time.sleep(FETCH_SLEEP)
 
     if not all_rows:
         print("Khong co du lieu moi trong khung gio nay.")
