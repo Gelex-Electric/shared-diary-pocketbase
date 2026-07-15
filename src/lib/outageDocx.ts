@@ -10,6 +10,15 @@ const AREA_TEMPLATE: Record<string, string> = {
   'KCN Số 3':          'PO.KCN-03.docx',
 };
 
+/** Địa chỉ đầy đủ mặc định của cột "Khu vực" theo KCN (khớp text cũ trong template). */
+export const AREA_ADDRESS: Record<string, string> = {
+  'KCN Tiền Hải':      'KCN Tiền Hải, xã Ái Quốc, tỉnh Hưng Yên',
+  'KCN Phong Điền':    'KCN Phong Điền – Viglacera, TP Huế',
+  'KCN Thuận Thành I': 'KCN Số Thuận Thành I, tỉnh Bắc Ninh',
+  'KCN Yên Mỹ':        'KCN Yên Mỹ, tỉnh Hưng Yên',
+  'KCN Số 3':          'KCN Số 3, tỉnh Hưng Yên',
+};
+
 const p2 = (n: number) => String(n).padStart(2, '0');
 const toUTC = (dt: string) => new Date(dt.includes('Z') ? dt : dt + 'Z');
 
@@ -60,6 +69,10 @@ export async function generateOutageDocx(n: PowerOutage): Promise<Blob> {
       startTime:   fmtMoment(s.startTime),
       endTime:     fmtMoment(s.endTime),
       scope:       s.scope || '',
+      // Cột "Khu vực": địa chỉ nhập tay của khung giờ; trống → địa chỉ mặc định theo KCN.
+      area:        (s.area && s.area.trim()) ? s.area : (AREA_ADDRESS[n.area] || n.area || ''),
+      // Số phụ lục đính kèm khung giờ (theo appendixIndex đã chọn, KHÔNG theo số khung giờ).
+      appendixNum: String((s.appendixIndex ?? 0) + 1).padStart(2, '0'),
       appendixRef: `Phụ lục ${String((s.appendixIndex ?? 0) + 1).padStart(2, '0')}`,
     })),
     appendices: appendices.map((a, i) => ({

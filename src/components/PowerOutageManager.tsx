@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
 import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
-import { generateOutageDocx } from '../lib/outageDocx';
+import { generateOutageDocx, AREA_ADDRESS } from '../lib/outageDocx';
 import { toast as notify } from '../lib/toast';
 
 const TOAST_TITLE: Record<ToastType, string> = {
@@ -69,12 +69,18 @@ interface SlotForm {
   endTime: string;
   scope: string;
   appendixIndex: number;
+  areaText: string;   // Khu vực/địa chỉ hiển thị ở cột "Khu vực" (nhập tay)
 }
 const emptySlot = (): SlotForm => ({
   startDate: todayStr(), startTime: '08:00',
   endDate: todayStr(),   endTime: '12:00',
-  scope: '', appendixIndex: 0,
+  scope: '', appendixIndex: 0, areaText: '',
 });
+/** Địa chỉ mặc định của cột Khu vực theo KCN (rơi về tên KCN nếu chưa khai báo). */
+const defaultAreaText = (a: string) => AREA_ADDRESS[a] || a || '';
+/** Text có phải địa chỉ mặc định (chưa bị người dùng sửa) không → để tự cập nhật khi đổi KCN. */
+const isDefaultAreaText = (t: string) =>
+  !t.trim() || AREAS.includes(t.trim()) || Object.values(AREA_ADDRESS).includes(t.trim());
 
 /* ── appendix form ── */
 interface AppendixForm {
@@ -194,7 +200,15 @@ export default function PowerOutageManager() {
   /* ── slot helpers ── */
   const updateSlot = (i: number, patch: Partial<SlotForm>) =>
     setSlots(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
-  const addSlot = () => setSlots(prev => [...prev, { ...emptySlot(), appendixIndex: appendices.length - 1 }]);
+  // Khung giờ mới kế thừa phụ lục + Khu vực của khung giờ trước (chung phụ lục là mặc định trực quan).
+  const addSlot = () => setSlots(prev => {
+    const last = prev[prev.length - 1];
+    return [...prev, {
+      ...emptySlot(),
+      appendixIndex: last?.appendixIndex ?? 0,
+      areaText: last?.areaText ?? defaultAreaText(area),
+    }];
+  });
   const removeSlot = (i: number) => setSlots(prev => prev.filter((_, idx) => idx !== i));
 
   /* ── appendix helpers ── */
@@ -255,10 +269,11 @@ export default function PowerOutageManager() {
     setEditingId(null);
     setNoticeDate(todayStr());
     setType('planned');
-    setArea(effectiveAreas[0] || AREAS[0]);
+    const a0 = effectiveAreas[0] || AREAS[0];
+    setArea(a0);
     setReason('');
     setAddLegal('');
-    setSlots([emptySlot()]);
+    setSlots([{ ...emptySlot(), areaText: defaultAreaText(a0) }]);
     setAppendices([emptyAppendix()]);
     setManualCustomers([]);
     setManualForm(null);
@@ -280,6 +295,7 @@ export default function PowerOutageManager() {
         endDate: et.date,   endTime: et.time,
         scope: s.scope || '',
         appendixIndex: s.appendixIndex ?? 0,
+        areaText: (s.area && s.area.trim()) ? s.area : defaultAreaText(n.area),
       };
     }));
     setAppendices((n.appendices || []).map(a => ({
@@ -295,6 +311,13 @@ export default function PowerOutageManager() {
   };
 
   const closeModal = () => { setIsModalOpen(false); setEditingId(null); };
+
+  /** Đổi KCN: cập nhật địa chỉ mặc định cho các khung giờ chưa bị sửa tay. */
+  const changeArea = (v: string) => {
+    setArea(v);
+    setSlots(prev => prev.map(s =>
+      isDefaultAreaText(s.areaText) ? { ...s, areaText: defaultAreaText(v) } : s));
+  };
 
   /* ── save ── */
   const saveNotice = async () => {
@@ -315,6 +338,7 @@ export default function PowerOutageManager() {
         endTime:   joinDT(s.endDate, s.endTime),
         scope:     s.scope,
         appendixIndex: s.appendixIndex,
+        area:      (s.areaText && s.areaText.trim()) ? s.areaText.trim() : defaultAreaText(area),
       }));
       const outageAppendices: OutageAppendix[] = appendices.map(a => ({
         customers: allCustomers.filter(c => a.selectedIds.includes(c.id)),
@@ -566,7 +590,7 @@ export default function PowerOutageManager() {
                 <div className="mx-auto max-w-3xl grid grid-cols-2 gap-4">
                   <div className="flex items-center gap-3">
                     <label className="text-[11px] font-bold text-soft uppercase shrink-0">Khu vực</label>
-                    <Select value={area} onChange={setArea}
+                    <Select value={area} onChange={changeArea}
                       options={effectiveAreas.map((a: string) => ({ value: a, label: a }))}
                       placeholder="Chọn khu vực" />
                   </div>
@@ -650,8 +674,11 @@ export default function PowerOutageManager() {
                               </div>
                             </div>
                           </td>
-                          <td className="border border-black px-2 py-3 text-center align-middle text-[12px] font-medium">
-                            {area || <span className="text-faint italic text-[11px]">—</span>}
+                          <td className="border border-black px-2 py-3 align-top">
+                            <textarea value={s.areaText}
+                              onChange={e => updateSlot(i, { areaText: e.target.value })}
+                              placeholder="Khu vực / địa chỉ..." rows={3}
+                              className="w-full text-[12px] text-center bg-accent-soft/40 border border-dashed border-blue-200 rounded outline-none resize-none focus:border-blue-400 p-1.5 placeholder:text-faint placeholder:italic" />
                           </td>
                           <td className="border border-black px-2 py-3">
                             <div className="space-y-1.5">

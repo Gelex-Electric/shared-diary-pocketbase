@@ -94,6 +94,7 @@ export interface OutageSlot {
   endTime: string;
   scope: string;
   appendixIndex: number;  // index vào appendices[]
+  area?: string;          // Khu vực/địa chỉ hiển thị ở cột "Khu vực" (nhập tay, mặc định theo KCN)
 }
 
 export interface OutageAppendix {
