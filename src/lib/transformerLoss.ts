@@ -1,7 +1,8 @@
 /**
  * Reader cho dữ liệu tổn thất máy biến áp (kỹ thuật) do GitHub Action sinh ra:
- *   - /transformer_loss_daily.csv   : MỘT dòng/trạm/ngày — NGUỒN SỐ LIỆU báo cáo.
+ *   - collection PB `tloss_daily`   : MỘT dòng/trạm/ngày — NGUỒN SỐ LIỆU báo cáo.
  *       OUTPUT lấy theo hiệu chỉ số công tơ × HSN (chính xác); LOSS tích phân ΔP.
+ *       (Đã di trú từ transformer_loss_daily.csv sang PocketBase — Task 1.)
  *   - /transformer_loss_30min.csv   : mốc 30 phút (OUTPUT=P×Δt) — chỉ để VẼ biểu đồ trong ngày.
  *   - /transformer_loss_monthly.csv : tổn thất theo tháng theo trạm (lưu vĩnh viễn).
  *
@@ -9,6 +10,7 @@
  *   S = √(P² + Q²); ΔP = P0 + Pk×(S/Sdm)²; LOSS = Σ ΔP×Δt.
  * File có thể chưa tồn tại (chưa nhập mba_info.csv) → coi như rỗng, không báo lỗi.
  */
+import { fetchAll } from './pbData';
 
 export interface LossDailyRow {
   code: string;
@@ -107,31 +109,46 @@ export async function fetchLossMonthly(): Promise<LossMonthlyRow[]> {
   return out;
 }
 
+/** Bản ghi thô từ collection PB `tloss_daily` (tên field viết thường). */
+interface TlossDailyRecord {
+  code?: string;
+  line_name?: string;
+  date?: string;
+  output_kwh?: number;
+  loss_noload_kwh?: number;
+  loss_load_kwh?: number;
+  loss_kwh?: number;
+  loss_pct?: number;
+  max_load_pct?: number;
+  avg_load_pct?: number;
+  n_intervals?: number;
+  output_src?: string;
+}
+
+/**
+ * Đọc tổn thất theo trạm/ngày từ collection PocketBase `tloss_daily`
+ * (thay cho transformer_loss_daily.csv — Task 1). Yêu cầu đã đăng nhập.
+ */
 export async function fetchLossDaily(): Promise<LossDailyRow[]> {
-  const text = await fetchText('/transformer_loss_daily.csv');
-  if (!text) return [];
-  const rows = splitCsv(text);
-  if (rows.length <= 1) return [];
-  const h = headerIndex(rows);
+  const items = await fetchAll<TlossDailyRecord>('tloss_daily');
   const out: LossDailyRow[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const c = rows[i];
-    const code = (c[h['CODE']] ?? '').trim();
-    const date = (c[h['DATE']] ?? '').trim();
+  for (const r of items) {
+    const code = (r.code ?? '').trim();
+    const date = (r.date ?? '').trim();
     if (!code || !date) continue;
     out.push({
       code,
-      lineName: (c[h['LINE_NAME']] ?? '').trim(),
+      lineName: (r.line_name ?? '').trim(),
       date,
-      outputKwh: num(c[h['OUTPUT_KWH']]),
-      noloadKwh: num(c[h['LOSS_NOLOAD_KWH']]),
-      loadKwh: num(c[h['LOSS_LOAD_KWH']]),
-      lossKwh: num(c[h['LOSS_KWH']]),
-      lossPct: num(c[h['LOSS_PCT']]),
-      maxLoadPct: num(c[h['MAX_LOAD_PCT']]),
-      avgLoadPct: num(c[h['AVG_LOAD_PCT']]),
-      nIntervals: num(c[h['N_INTERVALS']]),
-      outputSrc: (c[h['OUTPUT_SRC']] ?? '').trim(),
+      outputKwh: r.output_kwh ?? 0,
+      noloadKwh: r.loss_noload_kwh ?? 0,
+      loadKwh: r.loss_load_kwh ?? 0,
+      lossKwh: r.loss_kwh ?? 0,
+      lossPct: r.loss_pct ?? 0,
+      maxLoadPct: r.max_load_pct ?? 0,
+      avgLoadPct: r.avg_load_pct ?? 0,
+      nIntervals: r.n_intervals ?? 0,
+      outputSrc: (r.output_src ?? '').trim(),
     });
   }
   return out;
