@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS } from '../lib/pocketbase';
-import { fetchMeterInfo, MeterInfoRow, updateMeterHsn, canEditHsn } from '../lib/meterInfo';
+import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import {
   MapPin, RefreshCw, ChevronRight,
   CheckCircle2, XCircle, Search, Gauge,
-  Users, Pencil, Check, X, Loader2,
+  Users,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
@@ -18,71 +18,20 @@ const TOAST_TITLE: Record<ToastType, string> = {
 /* ---- Types ---- */
 type CustomerGroup = { code: string; name: string; area: string; meters: MeterInfoRow[] };
 
-/* ---- Ô hệ số nhân (HSN) sửa tại chỗ ---- */
-function HsnCell({ meter, onSaved, showToast }: {
-  meter: MeterInfoRow;
-  onSaved: (meterNo: string, hsn: number) => void;
-  showToast: (msg: string, type?: ToastType) => void;
-}) {
-  const editable = canEditHsn(meter.CUSTOMER_CODE) && !!meter._id;
-  const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(meter.METER_NAME || '');
-  const [saving, setSaving] = useState(false);
-
-  if (!editing) {
-    const empty = !meter.METER_NAME;
+/* ---- Ô hệ số nhân (HSN) — CHỈ ĐỌC. HSN đồng bộ tự động từ hóa đơn (superuser/pipeline
+   quản lý), không sửa được trên UI. Công tơ chưa có hóa đơn → báo cần liên hệ quản trị. */
+function HsnCell({ meter }: { meter: MeterInfoRow }) {
+  if (!meter.METER_NAME) {
     return (
-      <span className="inline-flex items-center gap-1.5 group/hsn">
-        {empty ? (
-          <span className="text-xs font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded" title="Chưa có hóa đơn — cần nhập hệ số nhân, tạm chưa tính vào các phép tính">
-            Cần nhập HSN
-          </span>
-        ) : (
-          <span className="text-sm text-dim">{meter.METER_NAME}</span>
-        )}
-        {editable && (
-          <button
-            onClick={() => { setVal(meter.METER_NAME || ''); setEditing(true); }}
-            className="opacity-0 group-hover/hsn:opacity-100 transition-opacity text-soft hover:text-accent"
-            title="Sửa hệ số nhân"
-          ><Pencil className="w-3.5 h-3.5" /></button>
-        )}
+      <span
+        className="text-xs font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded"
+        title="Công tơ chưa có hóa đơn nên chưa có hệ số nhân — liên hệ quản trị viên để thêm."
+      >
+        Cần liên hệ quản trị viên để thêm HSN
       </span>
     );
   }
-
-  const save = async () => {
-    const n = Number(String(val).replace(',', '.').trim());
-    if (!isFinite(n) || n <= 0) { showToast('Hệ số nhân phải là số dương.', 'error'); return; }
-    setSaving(true);
-    try {
-      await updateMeterHsn(meter._id, n);
-      onSaved(meter.METER_NO, n);
-      showToast(`Đã cập nhật HSN công tơ ${meter.METER_NO} = ${n}.`, 'success');
-      setEditing(false);
-    } catch (err: any) {
-      showToast('Không lưu được HSN: ' + (err?.message || 'lỗi quyền hoặc mạng'), 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <span className="inline-flex items-center gap-1">
-      <input
-        type="number" autoFocus value={val} disabled={saving}
-        onChange={e => setVal(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
-        className="w-24 px-2 py-1 text-sm rounded border border-[var(--border)] bg-[var(--bg)] text-ink"
-      />
-      <button onClick={save} disabled={saving} className="text-green-600 hover:text-green-700" title="Lưu">
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-      </button>
-      <button onClick={() => setEditing(false)} disabled={saving} className="text-soft hover:text-red-600" title="Hủy">
-        <X className="w-4 h-4" />
-      </button>
-    </span>
-  );
+  return <span className="text-sm text-dim">{meter.METER_NAME}</span>;
 }
 
 /* ================================================================
@@ -157,11 +106,6 @@ export default function CustomerManager() {
   ================================================================ */
   const toggleExpand = (cid: string) =>
     setExpandedIds(prev => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
-
-  /* Cập nhật HSN vừa sửa vào state để hiển thị ngay (không phải tải lại cả danh sách). */
-  const onHsnSaved = useCallback((meterNo: string, hsn: number) => {
-    setRows(prev => prev.map(r => (r.METER_NO === meterNo ? { ...r, METER_NAME: String(hsn) } : r)));
-  }, []);
 
 
   /* ================================================================
@@ -270,7 +214,7 @@ export default function CustomerManager() {
                                   <td className="pl-12">
                                     <span className="font-mono text-sm font-bold text-accent bg-accent-soft px-2 py-1 rounded">{meter.METER_NO}</span>
                                   </td>
-                                  <td><HsnCell meter={meter} onSaved={onHsnSaved} showToast={showToast} /></td>
+                                  <td><HsnCell meter={meter} /></td>
                                   <td><span className="text-sm text-dim">{meter.METER_MODEL_DESC || '—'}</span></td>
                                   <td><span className="text-sm text-dim">{meter.LINE_NAME || '—'}</span></td>
                                   <td><span className="text-sm text-soft flex items-center gap-1"><MapPin className="w-3 h-3" />{meter.ADDRESS || '—'}</span></td>

@@ -13,7 +13,6 @@
  * Yêu cầu đã đăng nhập (station_map.listRule = auth).
  */
 import { fetchAll } from './pbData';
-import { pb } from './pocketbase';
 
 export interface MeterInfoRow {
   _id: string;              // record id trong station_map (để sửa HSN)
@@ -70,23 +69,5 @@ export async function fetchMeterInfo(): Promise<MeterInfoRow[]> {
   return promise;
 }
 
-/** Xóa cache danh bạ (gọi sau khi sửa HSN để lần fetch sau lấy giá trị mới). */
+/** Xóa cache danh bạ (gọi sau khi backend cập nhật để lần fetch sau lấy giá trị mới). */
 export function invalidateMeterInfoCache() { _cache = null; }
-
-/**
- * Cập nhật hệ số nhân (HSN) do người dùng đặt → lưu vào `station_map.hsn`.
- * `id` = MeterInfoRow._id (record id station_map). PB kiểm quyền theo updateRule
- * (chỉ KCN của tài khoản; GETC sửa tất cả) → ném lỗi nếu không đủ quyền.
- */
-export async function updateMeterHsn(id: string, hsn: number): Promise<void> {
-  await pb.collection('station_map').update(id, { hsn });
-  invalidateMeterInfoCache();
-}
-
-/** True nếu tài khoản hiện tại được phép sửa HSN của công tơ (khớp updateRule PB). */
-export function canEditHsn(customerCode: string): boolean {
-  const area2 = (pb.authStore.model as { area2?: string } | null)?.area2 ?? '';
-  if (!pb.authStore.isValid) return false;
-  if (area2 === '') return true;               // GETC/admin: sửa tất cả
-  return (customerCode || '').includes(area2); // chỉ KCN của tài khoản
-}
