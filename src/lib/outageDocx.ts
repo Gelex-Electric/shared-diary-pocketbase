@@ -12,7 +12,7 @@ const AREA_TEMPLATE: Record<string, string> = {
 
 /** Địa chỉ đầy đủ mặc định của cột "Khu vực" theo KCN (khớp text cũ trong template). */
 export const AREA_ADDRESS: Record<string, string> = {
-  'KCN Tiền Hải':      'KCN Tiền Hải, xã Ái Quốc, tỉnh Hưng Yên',
+  'KCN Tiền Hải':      'KCN Tiền Hải tỉnh Hưng Yên',
   'KCN Phong Điền':    'KCN Phong Điền – Viglacera, TP Huế',
   'KCN Thuận Thành I': 'KCN Thuận Thành I, tỉnh Bắc Ninh',
   'KCN Yên Mỹ':        'KCN Yên Mỹ, tỉnh Hưng Yên',
