@@ -13,10 +13,10 @@ import { pb } from './pocketbase';
  */
 export async function fetchAll<T = Record<string, unknown>>(
   collection: string,
-  options: { filter?: string; sort?: string } = {},
+  options: { filter?: string; sort?: string; fields?: string } = {},
 ): Promise<T[]> {
   return pb.collection(collection).getFullList<T>({
-    batch: 500,
+    batch: 1000, // PB chặn perPage ở 1000 → giảm số request phân trang
     requestKey: null, // không auto-cancel khi gọi song song nhiều nơi
     ...options,
   });

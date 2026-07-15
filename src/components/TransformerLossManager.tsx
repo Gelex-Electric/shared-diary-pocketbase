@@ -11,7 +11,7 @@ import { StatTile, EmptyState, ChartTooltip, CHART } from './ui/dashboard';
 import { Tabs, TabItem } from './ui/Tabs';
 import { Select } from './ui/Select';
 import { DatePicker } from './ui/DateTimePickers';
-import { fetchLoss30min, fetchLossDaily, fetchLossMonthly, Loss30minRow, LossDailyRow, LossMonthlyRow } from '../lib/transformerLoss';
+import { fetchLoss30min, fetchLatestLossDate, fetchLossDailyRange, fetchLossMonthly, Loss30minRow, LossDailyRow, LossMonthlyRow } from '../lib/transformerLoss';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { fetchMbaInfo, buildMbaLookup, MbaParams } from '../lib/mbaInfo';
 import { pb } from '../lib/pocketbase';
@@ -160,7 +160,8 @@ const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate(); // m:
 
 export default function TransformerLossManager() {
   const [rows, setRows] = useState<Loss30minRow[]>([]);
-  const [daily, setDaily] = useState<LossDailyRow[]>([]);
+  const [daily, setDaily] = useState<LossDailyRow[]>([]);   // chỉ chứa THÁNG đang chọn (+ ngày liền trước) — tải on-demand
+  const [latestDate, setLatestDate] = useState('');         // ngày có dữ liệu mới nhất (để chọn mặc định)
   const [monthly, setMonthly] = useState<LossMonthlyRow[]>([]);
   const [meters, setMeters] = useState<MeterInfoRow[]>([]);
   const [mba, setMba] = useState<MbaParams[]>([]);
@@ -174,15 +175,26 @@ export default function TransformerLossManager() {
     let ok = true;
     setLoading(true);
     Promise.all([
-      fetchLoss30min(), fetchLossDaily(), fetchLossMonthly(),
+      fetchLoss30min(), fetchLatestLossDate(), fetchLossMonthly(),
       fetchMeterInfo().catch(() => [] as MeterInfoRow[]),
       fetchMbaInfo().catch(() => [] as MbaParams[]),
     ])
-      .then(([r, dy, mo, mi, mb]) => { if (ok) { setRows(r); setDaily(dy); setMonthly(mo); setMeters(mi); setMba(mb); } })
+      .then(([r, ld, mo, mi, mb]) => { if (ok) { setRows(r); setLatestDate(ld); setMonthly(mo); setMeters(mi); setMba(mb); } })
       .catch(e => { console.error(e); notify.error('Lỗi dữ liệu', e?.message || 'Không tải được tổn thất MBA.'); })
       .finally(() => { if (ok) setLoading(false); });
     return () => { ok = false; };
   }, []);
+
+  /* Tải dữ liệu NGÀY chỉ cho THÁNG đang chọn (+ ngày liền trước đầu tháng cho so sánh
+     ngày 01). Lọc phía server → nhanh, không kéo toàn bộ lịch sử. */
+  useEffect(() => {
+    if (!selMonth) return;
+    let ok = true;
+    fetchLossDailyRange(prevDay(`${selMonth}-01`), `${selMonth}-31`)
+      .then(r => { if (ok) setDaily(r); })
+      .catch(e => { console.error(e); notify.error('Lỗi dữ liệu', e?.message || 'Không tải được tổn thất theo ngày.'); });
+    return () => { ok = false; };
+  }, [selMonth]);
 
   /** KCN của tài khoản đang đăng nhập (rỗng = kinh doanh/admin → xem tất cả). */
   const userZone = useMemo(() => zoneFromArea((pb.authStore.model as any)?.area), []);
@@ -218,10 +230,12 @@ export default function TransformerLossManager() {
     return map;
   }, [meters, mba, userZone, filterKcn]);
 
-  const dates = useMemo(() => [...new Set(daily.map(r => r.date))].sort().reverse(), [daily]);
+  // Ngày mặc định: hôm qua nếu chưa vượt quá ngày mới nhất có dữ liệu, ngược lại là ngày mới nhất.
   useEffect(() => {
-    if (dates.length) setSelDate(p => p || (dates.includes(yesterdayKey()) ? yesterdayKey() : dates[0]));
-  }, [dates]);
+    if (!latestDate) return;
+    const yk = yesterdayKey();
+    setSelDate(p => p || (yk <= latestDate ? yk : latestDate));
+  }, [latestDate]);
   const months = useMemo(() => [...new Set(monthly.map(r => r.month))].sort().reverse(), [monthly]);
   // Tháng luôn đồng bộ theo ngày đã chọn (nguồn dữ liệu duy nhất = selDate).
   useEffect(() => { if (selDate) setSelMonth(p => p || selDate.slice(0, 7)); }, [selDate]);
@@ -355,7 +369,7 @@ export default function TransformerLossManager() {
   useEffect(() => { setPairPicks(defaultPairs); }, [defaultPairs]);
   const stationOptions = useMemo(() => allStations.map(s => ({ value: s.code, label: s.name })), [allStations]);
 
-  const hasData = daily.length > 0 || monthly.length > 0;
+  const hasData = !!latestDate || daily.length > 0 || monthly.length > 0;
   const toggleZone = (k: string) => setCollapsed(c => ({ ...c, [k]: !c[k] }));
 
   return (

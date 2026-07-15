@@ -11,6 +11,7 @@
  * File có thể chưa tồn tại (chưa nhập mba_info.csv) → coi như rỗng, không báo lỗi.
  */
 import { fetchAll } from './pbData';
+import { pb } from './pocketbase';
 
 export interface LossDailyRow {
   code: string;
@@ -125,31 +126,50 @@ interface TlossDailyRecord {
   output_src?: string;
 }
 
+function mapDailyRecord(r: TlossDailyRecord): LossDailyRow | null {
+  const code = (r.code ?? '').trim();
+  const date = (r.date ?? '').trim();
+  if (!code || !date) return null;
+  return {
+    code,
+    lineName: (r.line_name ?? '').trim(),
+    date,
+    outputKwh: r.output_kwh ?? 0,
+    noloadKwh: r.loss_noload_kwh ?? 0,
+    loadKwh: r.loss_load_kwh ?? 0,
+    lossKwh: r.loss_kwh ?? 0,
+    lossPct: r.loss_pct ?? 0,
+    maxLoadPct: r.max_load_pct ?? 0,
+    avgLoadPct: r.avg_load_pct ?? 0,
+    nIntervals: r.n_intervals ?? 0,
+    outputSrc: (r.output_src ?? '').trim(),
+  };
+}
+
 /**
- * Đọc tổn thất theo trạm/ngày từ collection PocketBase `tloss_daily`
- * (thay cho transformer_loss_daily.csv — Task 1). Yêu cầu đã đăng nhập.
+ * NGÀY có dữ liệu MỚI NHẤT trong `tloss_daily` (để chọn ngày mặc định) — 1 query nhẹ.
+ * Trả '' nếu chưa có dữ liệu. Yêu cầu đã đăng nhập.
  */
-export async function fetchLossDaily(): Promise<LossDailyRow[]> {
-  const items = await fetchAll<TlossDailyRecord>('tloss_daily');
+export async function fetchLatestLossDate(): Promise<string> {
+  const items = await pb.collection('tloss_daily').getList(1, 1, {
+    sort: '-date', fields: 'date', requestKey: null,
+  });
+  return ((items.items[0] as { date?: string } | undefined)?.date ?? '').trim();
+}
+
+/**
+ * Đọc tổn thất theo trạm/ngày trong KHOẢNG [startDate, endDate] (bao gồm 2 đầu),
+ * lọc phía server → chỉ kéo đúng phần cần xem (thay cho việc load toàn bộ bảng).
+ * Định dạng ngày "YYYY-MM-DD". Yêu cầu đã đăng nhập.
+ */
+export async function fetchLossDailyRange(startDate: string, endDate: string): Promise<LossDailyRow[]> {
+  const items = await fetchAll<TlossDailyRecord>('tloss_daily', {
+    filter: `date >= "${startDate}" && date <= "${endDate}"`,
+  });
   const out: LossDailyRow[] = [];
   for (const r of items) {
-    const code = (r.code ?? '').trim();
-    const date = (r.date ?? '').trim();
-    if (!code || !date) continue;
-    out.push({
-      code,
-      lineName: (r.line_name ?? '').trim(),
-      date,
-      outputKwh: r.output_kwh ?? 0,
-      noloadKwh: r.loss_noload_kwh ?? 0,
-      loadKwh: r.loss_load_kwh ?? 0,
-      lossKwh: r.loss_kwh ?? 0,
-      lossPct: r.loss_pct ?? 0,
-      maxLoadPct: r.max_load_pct ?? 0,
-      avgLoadPct: r.avg_load_pct ?? 0,
-      nIntervals: r.n_intervals ?? 0,
-      outputSrc: (r.output_src ?? '').trim(),
-    });
+    const row = mapDailyRecord(r);
+    if (row) out.push(row);
   }
   return out;
 }
