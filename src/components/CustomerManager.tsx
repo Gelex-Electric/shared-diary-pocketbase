@@ -30,9 +30,16 @@ function HsnCell({ meter, onSaved, showToast }: {
   const [saving, setSaving] = useState(false);
 
   if (!editing) {
+    const empty = !meter.METER_NAME;
     return (
       <span className="inline-flex items-center gap-1.5 group/hsn">
-        <span className="text-sm text-dim">{meter.METER_NAME || '—'}</span>
+        {empty ? (
+          <span className="text-xs font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded" title="Chưa có hóa đơn — cần nhập hệ số nhân, tạm chưa tính vào các phép tính">
+            Cần nhập HSN
+          </span>
+        ) : (
+          <span className="text-sm text-dim">{meter.METER_NAME}</span>
+        )}
         {editable && (
           <button
             onClick={() => { setVal(meter.METER_NAME || ''); setEditing(true); }}

@@ -61,12 +61,12 @@ VN_TZ = timezone(timedelta(hours=7))
 
 def load_meter_list():
     """Doc {METER_NO: HSN} — uu tien collection PocketBase `station_map` (Task 2c),
-    fallback metterinfo.csv. HSN = cot hsn (station_map) / METER_NAME (CSV) = HSN HES.
-    ROLE_FILTER (neu co) chi lay cong to dung ROLE do.
+    fallback metterinfo.csv. HSN nguon station_map = tu HOA DON (invoice), KHONG con
+    tu HES (xem sync_hsn_from_invoice trong fetch_meter_info.py). ROLE_FILTER (neu co)
+    chi lay cong to dung ROLE do.
 
-    LUU Y: HSN o day dung de NHAN GIA TRI datametter (scaling). Giu HSN HES de khong
-    tao gian doan du lieu lich su; viec chuyen sang HSN hoa don (chuan) la thay doi
-    anh huong du lieu -> quyet dinh rieng."""
+    Cong to CHUA CO hsn (chua tung co hoa don, chua nhap tay) -> LOAI HOAN TOAN khoi
+    ket qua (khong fetch/scale) de tranh du lieu sai lot vao tinh toan."""
     # 1) Thu PocketBase station_map
     if os.environ.get("READ_PB", "1") != "0" and os.environ.get("PB_URL"):
         try:
@@ -74,17 +74,28 @@ def load_meter_list():
             recs = PBClient().query_all("station_map", fields="meter_no,hsn,role")
             if recs:
                 meters = {}
+                skipped_no_hsn = 0
                 for r in recs:
                     no = str(r.get("meter_no") or "").strip()
                     if not no:
                         continue
                     if ROLE_FILTER and str(r.get("role") or "").strip() != ROLE_FILTER:
                         continue
+                    hsn_raw = r.get("hsn")
+                    if hsn_raw is None:
+                        skipped_no_hsn += 1
+                        continue
                     try:
-                        hsn = float(r.get("hsn") or 1) or 1.0
+                        hsn = float(hsn_raw)
                     except (TypeError, ValueError):
-                        hsn = 1.0
+                        skipped_no_hsn += 1
+                        continue
+                    if hsn <= 0:
+                        skipped_no_hsn += 1
+                        continue
                     meters[no] = hsn
+                if skipped_no_hsn:
+                    print(f"[PB] Bo qua {skipped_no_hsn} cong to CHUA CO hsn (can nhap he so nhan).")
                 if meters:
                     return meters
             print("[PB] station_map rong -> fallback metterinfo.csv.")

@@ -1,21 +1,16 @@
 /**
- * Danh bạ công tơ (MeterInfoRow) — trước đây đọc từ /metterinfo.csv, nay ghép 2 nguồn PB:
- *   - `station_map` : topology trạm HES (LINE_ID/CODE/ROLE/LINE_NAME) + HSN(HES) + STATUS
- *                     + danh bạ HES làm FALLBACK. Chứa TẤT CẢ công tơ (gồm điểm đo chính
- *                     không phát hành hóa đơn).
- *   - `invoice`     : HSN CHUẨN (CCIS) + tên KH. Lấy kỳ hóa đơn MỚI NHẤT mỗi số công tơ
- *                     (SCT) → override HSN + CUSTOMER_NAME. Bị lọc theo area2 tài khoản.
- *
- * LƯU Ý override có chọn lọc:
- *   - HSN (METER_NAME): invoice CHUẨN → override (đây là mục tiêu chính, HES HSN hay sai).
- *   - CUSTOMER_NAME: invoice → override (chỉ hiển thị).
- *   - ADDRESS, CUSTOMER_CODE: GIỮ từ station_map (HES). KHÔNG override vì:
- *       + ADDRESS trong HES = TÊN KCN (dùng lọc khu vực ở VoltagePowerDashboard),
- *         còn invoice.DChiNMua = địa chỉ đường phố → override sẽ vỡ bộ lọc KCN.
- *       + CUSTOMER_CODE dùng để GOM nhóm khách (CustomerManager) → giữ HES cho ổn định.
+ * Danh bạ công tơ (MeterInfoRow) — trước đây đọc từ /metterinfo.csv, nay đọc thẳng
+ * collection PB `station_map`:
+ *   - Topology (LINE_ID/CODE/ROLE/LINE_NAME/CUSTOMER/ADDRESS/STATUS) — từ HES, pipeline
+ *     ghi đè hằng ngày.
+ *   - HSN (`hsn`) — pipeline đồng bộ TRỰC TIẾP từ hóa đơn mới nhất (không còn từ HES) mỗi
+ *     ngày, nên đã "đúng sẵn" khi tới đây — KHÔNG cần frontend join `invoice` nữa (tránh
+ *     tải cả bảng invoice chỉ để lấy HSN, đúng bài học "đọc on-demand, không load-all").
+ *     Công tơ CHƯA có hóa đơn + CHƯA nhập tay → `hsn` rỗng (METER_NAME = '') — các nơi
+ *     tính toán (tổn thất, công suất...) phải tự loại các công tơ này.
  *
  * Giữ NGUYÊN interface MeterInfoRow để các consumer không phải sửa.
- * Yêu cầu đã đăng nhập (cả 2 collection đều listRule = auth).
+ * Yêu cầu đã đăng nhập (station_map.listRule = auth).
  */
 import { fetchAll } from './pbData';
 import { pb } from './pocketbase';
@@ -23,7 +18,7 @@ import { pb } from './pocketbase';
 export interface MeterInfoRow {
   _id: string;              // record id trong station_map (để sửa HSN)
   METER_NO: string;
-  METER_NAME: string;       // HSN (chuỗi, để tương thích consumer cũ)
+  METER_NAME: string;       // HSN (chuỗi; rỗng = CHƯA có hóa đơn/chưa nhập tay)
   METER_MODEL_DESC: string;
   CUSTOMER_CODE: string;
   CUSTOMER_NAME: string;
@@ -38,10 +33,9 @@ export interface MeterInfoRow {
 interface StationMapRec {
   id?: string;
   meter_no?: string; line_id?: string; line_name?: string; code?: string; role?: string;
-  hsn?: number; meter_model?: string; customer_code?: string; customer_name?: string;
+  hsn?: number | null; meter_model?: string; customer_code?: string; customer_name?: string;
   address?: string; status?: string;
 }
-interface InvoiceLite { SCT?: string; HSN?: number; NMua?: string; EndDate?: string; }
 
 const s = (v: unknown): string => (v == null ? '' : String(v)).trim();
 
@@ -50,39 +44,21 @@ let _cache: { at: number; promise: Promise<MeterInfoRow[]> } | null = null;
 const CACHE_MS = 60_000;
 
 async function loadMeterInfo(): Promise<MeterInfoRow[]> {
-  const [sm, inv] = await Promise.all([
-    fetchAll<StationMapRec>('station_map'),
-    // Chỉ field cần; sort giảm dần EndDate để bản ghi ĐẦU mỗi SCT là kỳ mới nhất.
-    fetchAll<InvoiceLite>('invoice', { fields: 'SCT,HSN,NMua,EndDate', sort: '-EndDate' }),
-  ]);
-
-  const latestInv = new Map<string, InvoiceLite>();
-  for (const r of inv) {
-    const sct = s(r.SCT);
-    if (sct && !latestInv.has(sct)) latestInv.set(sct, r); // đầu tiên = mới nhất (đã sort)
-  }
-
-  return sm.map((st): MeterInfoRow => {
-    const no = s(st.meter_no);
-    const iv = latestInv.get(no);
-    // HSN: ưu tiên hóa đơn (chuẩn); thiếu (điểm đo không hóa đơn) → HSN từ HES.
-    const hsn = iv && iv.HSN != null ? iv.HSN : (st.hsn ?? '');
-    const invName = iv ? s(iv.NMua) : '';
-    return {
-      _id: s(st.id),
-      METER_NO: no,
-      METER_NAME: hsn === '' ? '' : String(hsn),
-      METER_MODEL_DESC: s(st.meter_model),
-      CUSTOMER_CODE: s(st.customer_code),                   // giữ HES (gom nhóm ổn định)
-      CUSTOMER_NAME: invName || s(st.customer_name),        // ưu tiên tên từ hóa đơn
-      ADDRESS: s(st.address),                                // giữ HES = tên KCN (lọc khu vực)
-      LINE_NAME: s(st.line_name),
-      LINE_ID: s(st.line_id),
-      CODE: s(st.code),
-      ROLE: s(st.role),
-      STATUS: s(st.status),
-    };
-  });
+  const sm = await fetchAll<StationMapRec>('station_map');
+  return sm.map((st): MeterInfoRow => ({
+    _id: s(st.id),
+    METER_NO: s(st.meter_no),
+    METER_NAME: st.hsn == null ? '' : String(st.hsn),
+    METER_MODEL_DESC: s(st.meter_model),
+    CUSTOMER_CODE: s(st.customer_code),
+    CUSTOMER_NAME: s(st.customer_name),
+    ADDRESS: s(st.address),                                // = tên KCN (dùng lọc khu vực)
+    LINE_NAME: s(st.line_name),
+    LINE_ID: s(st.line_id),
+    CODE: s(st.code),
+    ROLE: s(st.role),
+    STATUS: s(st.status),
+  }));
 }
 
 export async function fetchMeterInfo(): Promise<MeterInfoRow[]> {

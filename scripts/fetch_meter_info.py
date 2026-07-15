@@ -29,10 +29,6 @@ DATAMETTER_PATH = "public/datametter.csv"
 LINE_INFO_PATH = "public/line_info.csv"
 MBA_PATH = "public/mba_info.csv"
 
-# ==================== CANH BAO HSN BAT THUONG ====================
-# HSN (cot METER_NAME) coi la SAI khi > nguong hoac trung so cong to
-# (loi nhap so serial vao o TEN CONG TO tren HES, vd cong to 2510203126).
-HSN_MAX = float(os.environ.get("HSN_MAX", "1000000"))
 # PocketBase de gui thong bao vao collection `notifications` (bo trong = khong gui)
 PB_URL = os.environ.get("PB_URL", "").rstrip("/")
 PB_EMAIL = os.environ.get("PB_EMAIL", "")
@@ -294,14 +290,15 @@ def notify_bad_stations(bad_stations: list):
 
 
 def upsert_station_map(meters: dict) -> list:
-    """Cap nhat topology + hsn_hes + STATUS vao `station_map` — KHONG ghi de `hsn`
-    (hsn la gia tri chinh thuc do NGUOI DUNG quan ly, sua tay tren UI).
+    """Cap nhat topology (line/code/role/customer/status) vao `station_map` tu HES —
+    duoc phep GHI DE hang ngay (topology HES la nguon dung). KHONG dong den `hsn` o day
+    (HSN khong con lay tu HES nua — xem sync_hsn_from_invoice).
 
-    - Cong to da co: PATCH topology + hsn_hes(=HES) + status; GIU nguyen hsn.
-      Neu HES bao HSN khac hsn dang dung -> canh bao.
-    - Cong to moi: them voi hsn=HES + hsn_hes=HES -> canh bao "cong to moi".
+    - Cong to da co: PATCH topology (khong co `hsn` trong payload -> giu nguyen).
+    - Cong to moi: them voi hsn de TRONG (None) — cho sync_hsn_from_invoice dien tiep,
+      hoac nguoi dung nhap tay neu chua co hoa don.
 
-    Tra ve list canh bao [{title, message, area}]. Bat/tat qua WRITE_PB."""
+    Tra ve list canh bao [{title, message, area}] cho cong to MOI. Bat/tat qua WRITE_PB."""
     if os.environ.get("WRITE_PB", "1") == "0" or not PB_URL:
         if not PB_URL:
             print("[PB] Bo qua station_map: thieu PB_URL.")
@@ -315,7 +312,7 @@ def upsert_station_map(meters: dict) -> list:
     pb = PBClient()
     try:
         tok = pb.token
-        existing = {r["meter_no"]: r for r in pb.query_all("station_map", fields="id,meter_no,hsn")}
+        existing = {r["meter_no"]: r["id"] for r in pb.query_all("station_map", fields="id,meter_no")}
     except PBError as e:
         print(f"[PB][WARN] Doc station_map that bai: {e}")
         return []
@@ -326,88 +323,93 @@ def upsert_station_map(meters: dict) -> list:
     for no, m in meters.items():
         if not no:
             continue
-        hes = _to_float(m.get("METER_NAME"))
         cust = (m.get("CUSTOMER_NAME") or "").strip()
         area = (m.get("ADDRESS") or "").strip()
         common = {
             "line_id": m.get("LINE_ID", ""), "line_name": m.get("LINE_NAME", ""),
             "code": m.get("CODE", ""), "role": m.get("ROLE", ""),
-            "hsn_hes": hes, "meter_model": m.get("METER_MODEL_DESC", ""),
+            "meter_model": m.get("METER_MODEL_DESC", ""),
             "customer_code": m.get("CUSTOMER_CODE", ""), "customer_name": cust,
             "address": area, "status": m.get("STATUS", ""),
         }
-        ex = existing.get(no)
+        rid = existing.get(no)
         try:
-            if ex:
-                _request("PATCH", f"{base}/{ex['id']}", token=tok, payload=common)  # KHONG co hsn
+            if rid:
+                _request("PATCH", f"{base}/{rid}", token=tok, payload=common)  # KHONG co hsn
                 updated += 1
-                cur = _to_float(ex.get("hsn"))
-                if abs(hes - cur) > 0.5:
-                    warns.append({
-                        "title": "HSN HES khác giá trị đang dùng",
-                        "message": f"Công tơ {no} ({cust}): HES báo HSN={hes:g}, khác HSN đang dùng={cur:g}. Kiểm tra lại.",
-                        "area": area})
             else:
-                _request("POST", base, token=tok, payload={**common, "meter_no": no, "hsn": hes})
+                _request("POST", base, token=tok, payload={**common, "meter_no": no, "hsn": None})
                 created += 1
                 warns.append({
-                    "title": "Công tơ mới",
-                    "message": f"Công tơ mới {no} ({cust}) — HSN tạm lấy từ HES={hes:g}, kiểm tra và chỉnh lại nếu cần.",
+                    "title": "Công tơ mới trên HES",
+                    "message": f"Công tơ mới {no} ({cust}) xuất hiện trên HES — cần đối chiếu/nhập hệ số nhân.",
                     "area": area})
         except PBError as e:
             print(f"[PB][WARN] station_map {no} that bai: {e}")
-    print(f"[PB] station_map: {created} moi, {updated} cap nhat (GIU nguyen hsn).")
+    print(f"[PB] station_map: {created} moi, {updated} cap nhat topology (tu HES, ghi de).")
     return warns
 
 
-def check_invoice_hsn() -> list:
-    """Doi chieu HSN voi hoa don (invoice) — 2 vong (D3):
-      Vong 1: chi xet hoa don co ky trong 30 ngay gan nhat, lay latest theo SCT.
-              invoice_hsn != hsn -> canh bao "HSN sai theo hoa don".
-      Vong 2: cong to KHONG co hoa don 30 ngay -> neu hsn > 1.000.000 -> canh bao.
+def sync_hsn_from_invoice() -> list:
+    """HSN = gia tri tu HOA DON (invoice), KHONG con lay tu HES nua (loai sai xot HES).
+
+    - Cong to CO hoa don (lay ban ghi MOI NHAT theo SCT, moi thoi diem — khong gioi han
+      30 ngay): GHI DE station_map.hsn = invoice_hsn truc tiep (khong can canh bao lech,
+      da tu sua dung).
+    - Cong to CHUA TUNG co hoa don (moi tren HES) VA station_map.hsn dang trong/0:
+      KHONG dong hsn -> canh bao "can nhap he so nhan". Cong to nay se bi loai khoi
+      tinh toan (xem fetch_meter_data.py / TASK note) cho toi khi co hsn.
+
     Tra ve list canh bao [{title, message, area}]."""
     if not PB_URL:
         return []
     try:
-        from pb_client import PBClient, PBError
+        from pb_client import PBClient, PBError, _request
     except ImportError:
         return []
     pb = PBClient()
-    cutoff = (datetime.now(VN_TZ).date() - timedelta(days=30)).isoformat()
     try:
-        inv = pb.query_all("invoice", filter=f'EndDate >= "{cutoff}"',
-                           fields="SCT,HSN,EndDate", sort="-EndDate")
-        sm = pb.query_all("station_map", fields="meter_no,hsn,customer_name,address")
+        tok = pb.token
+        inv = pb.query_all("invoice", fields="SCT,HSN,EndDate", sort="-EndDate")
+        sm = pb.query_all("station_map", fields="id,meter_no,hsn,customer_name,address")
     except PBError as e:
         print(f"[PB][WARN] Doc invoice/station_map that bai: {e}")
         return []
+
     latest = {}
     for r in inv:
         s = str(r.get("SCT") or "").strip()
-        if s and s not in latest:
+        if s and s not in latest:  # da sort -EndDate -> ban ghi dau = moi nhat
             latest[s] = r
+
+    base = f"{pb.url}/api/collections/station_map/records"
     warns = []
+    synced = 0
     for r in sm:
         no = str(r.get("meter_no") or "").strip()
         if not no:
             continue
-        hsn = _to_float(r.get("hsn"))
         cust = (r.get("customer_name") or "").strip()
         area = (r.get("address") or "").strip()
         iv = latest.get(no)
-        if iv:  # vong 1: co hoa don 30 ngay
+        if iv:
             ihsn = _to_float(iv.get("HSN"))
-            if abs(ihsn - hsn) > 0.5:
+            cur = r.get("hsn")
+            if cur is None or abs(_to_float(cur) - ihsn) > 0.5:
+                try:
+                    _request("PATCH", f"{base}/{r['id']}", token=tok, payload={"hsn": ihsn})
+                    synced += 1
+                except PBError as e:
+                    print(f"[PB][WARN] Cap nhat hsn tu hoa don {no} that bai: {e}")
+        else:
+            cur = r.get("hsn")
+            if cur is None or _to_float(cur) <= 0:
                 warns.append({
-                    "title": "HSN sai theo hóa đơn",
-                    "message": f"Công tơ {no} ({cust}): hóa đơn HSN={ihsn:g}, khác HSN đang dùng={hsn:g}.",
+                    "title": "Cần nhập hệ số nhân",
+                    "message": f"Công tơ {no} ({cust}) chưa có hóa đơn — cần nhập hệ số nhân thủ công. "
+                               f"Chưa tính vào tổn thất/công suất cho đến khi nhập HSN.",
                     "area": area})
-        else:  # vong 2: khong co hoa don 30 ngay
-            if hsn > 1_000_000:
-                warns.append({
-                    "title": "HSN bất thường",
-                    "message": f"Công tơ {no} ({cust}): HSN={hsn:g} > 1.000.000 — nghi nhập nhầm số công tơ vào ô hệ số nhân.",
-                    "area": area})
+    print(f"[PB] station_map: dong bo hsn tu hoa don cho {synced} cong to.")
     return warns
 
 
@@ -501,7 +503,7 @@ def main():
     # station_map: cap nhat topology + hsn_hes + STATUS, GIU nguyen hsn (nguoi dung quan ly).
     # Sinh canh bao: HES khac hsn dang dung + cong to moi (upsert) va doi chieu hoa don (invoice).
     warns = upsert_station_map(meters)
-    warns += check_invoice_hsn()
+    warns += sync_hsn_from_invoice()
     for w in warns:
         print(f"[ALERT] {w['title']}: {w['message']}")
     send_notifications(warns)
