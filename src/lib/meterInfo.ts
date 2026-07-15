@@ -18,8 +18,10 @@
  * Yêu cầu đã đăng nhập (cả 2 collection đều listRule = auth).
  */
 import { fetchAll } from './pbData';
+import { pb } from './pocketbase';
 
 export interface MeterInfoRow {
+  _id: string;              // record id trong station_map (để sửa HSN)
   METER_NO: string;
   METER_NAME: string;       // HSN (chuỗi, để tương thích consumer cũ)
   METER_MODEL_DESC: string;
@@ -34,6 +36,7 @@ export interface MeterInfoRow {
 }
 
 interface StationMapRec {
+  id?: string;
   meter_no?: string; line_id?: string; line_name?: string; code?: string; role?: string;
   hsn?: number; meter_model?: string; customer_code?: string; customer_name?: string;
   address?: string; status?: string;
@@ -66,6 +69,7 @@ async function loadMeterInfo(): Promise<MeterInfoRow[]> {
     const hsn = iv && iv.HSN != null ? iv.HSN : (st.hsn ?? '');
     const invName = iv ? s(iv.NMua) : '';
     return {
+      _id: s(st.id),
       METER_NO: no,
       METER_NAME: hsn === '' ? '' : String(hsn),
       METER_MODEL_DESC: s(st.meter_model),
@@ -88,4 +92,25 @@ export async function fetchMeterInfo(): Promise<MeterInfoRow[]> {
   _cache = { at: now, promise };
   promise.catch(() => { _cache = null; }); // lỗi → không cache
   return promise;
+}
+
+/** Xóa cache danh bạ (gọi sau khi sửa HSN để lần fetch sau lấy giá trị mới). */
+export function invalidateMeterInfoCache() { _cache = null; }
+
+/**
+ * Cập nhật hệ số nhân (HSN) do người dùng đặt → lưu vào `station_map.hsn`.
+ * `id` = MeterInfoRow._id (record id station_map). PB kiểm quyền theo updateRule
+ * (chỉ KCN của tài khoản; GETC sửa tất cả) → ném lỗi nếu không đủ quyền.
+ */
+export async function updateMeterHsn(id: string, hsn: number): Promise<void> {
+  await pb.collection('station_map').update(id, { hsn });
+  invalidateMeterInfoCache();
+}
+
+/** True nếu tài khoản hiện tại được phép sửa HSN của công tơ (khớp updateRule PB). */
+export function canEditHsn(customerCode: string): boolean {
+  const area2 = (pb.authStore.model as { area2?: string } | null)?.area2 ?? '';
+  if (!pb.authStore.isValid) return false;
+  if (area2 === '') return true;               // GETC/admin: sửa tất cả
+  return (customerCode || '').includes(area2); // chỉ KCN của tài khoản
 }
