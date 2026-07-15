@@ -572,7 +572,7 @@ export default function PowerOutageManager() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative w-full max-w-5xl max-h-[96vh] bg-surface rounded-lg shadow-2xl overflow-hidden flex flex-col">
+              className="relative w-full max-w-6xl max-h-[96vh] bg-surface rounded-lg shadow-2xl overflow-hidden flex flex-col">
 
               {/* Modal header */}
               <div className="px-6 py-5 border-b border-[var(--border)] flex items-center justify-between bg-subtle/50 shrink-0">
@@ -594,7 +594,7 @@ export default function PowerOutageManager() {
               <div className="flex-1 overflow-y-auto bg-subtle p-4 space-y-4">
 
                 {/* KCN + Ngày TB */}
-                <div className="mx-auto max-w-3xl grid grid-cols-2 gap-4">
+                <div className="mx-auto max-w-4xl grid grid-cols-2 gap-4">
                   <div className="flex items-center gap-3">
                     <label className="text-[11px] font-bold text-soft uppercase shrink-0">Khu vực</label>
                     <Select value={area} onChange={changeArea}
@@ -608,7 +608,7 @@ export default function PowerOutageManager() {
                 </div>
 
                 {/* ── Tờ văn bản ── */}
-                <div className="bg-surface shadow rounded-sm mx-auto max-w-3xl px-12 py-8 space-y-3 text-[13px] leading-relaxed" style={{ fontFamily: 'Times New Roman, serif' }}>
+                <div className="bg-surface shadow rounded-sm mx-auto max-w-4xl px-12 py-8 space-y-3 text-[13px] leading-relaxed" style={{ fontFamily: 'Times New Roman, serif' }}>
 
                   {/* Tiêu đề */}
                   <div className="text-center space-y-1">
@@ -653,8 +653,8 @@ export default function PowerOutageManager() {
                     <thead>
                       <tr>
                         <th className="border border-black px-2 py-2 text-center font-bold w-[6%]">STT</th>
-                        <th className="border border-black px-2 py-2 text-center font-bold w-[28%]">Thời gian</th>
-                        <th className="border border-black px-2 py-2 text-center font-bold w-[30%]">Khu vực</th>
+                        <th className="border border-black px-2 py-2 text-center font-bold w-[32%]">Thời gian</th>
+                        <th className="border border-black px-2 py-2 text-center font-bold w-[28%]">Khu vực</th>
                         <th className="border border-black px-2 py-2 text-center font-bold w-[27%]">Phạm vi</th>
                         <th className="border border-black px-1 py-2 w-[20px]"></th>
                       </tr>
@@ -667,16 +667,16 @@ export default function PowerOutageManager() {
                             <div className="space-y-2">
                               <div>
                                 <div className="text-[10px] font-bold text-faint uppercase mb-1">Bắt đầu ngừng</div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <DatePicker value={s.startDate} onChange={v => updateSlot(i, { startDate: v })} className="w-[104px]" />
-                                  <TimePicker value={s.startTime} onChange={v => updateSlot(i, { startTime: v })} className="w-[74px]" />
+                                <div className="flex items-center gap-2">
+                                  <DatePicker value={s.startDate} onChange={v => updateSlot(i, { startDate: v })} className="w-[132px] shrink-0" />
+                                  <TimePicker value={s.startTime} onChange={v => updateSlot(i, { startTime: v })} className="w-[92px] shrink-0" />
                                 </div>
                               </div>
                               <div>
                                 <div className="text-[10px] font-bold text-faint uppercase mb-1">Cấp điện trở lại</div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <DatePicker value={s.endDate} onChange={v => updateSlot(i, { endDate: v })} className="w-[104px]" />
-                                  <TimePicker value={s.endTime} onChange={v => updateSlot(i, { endTime: v })} className="w-[74px]" />
+                                <div className="flex items-center gap-2">
+                                  <DatePicker value={s.endDate} onChange={v => updateSlot(i, { endDate: v })} className="w-[132px] shrink-0" />
+                                  <TimePicker value={s.endTime} onChange={v => updateSlot(i, { endTime: v })} className="w-[92px] shrink-0" />
                                 </div>
                               </div>
                             </div>
@@ -733,7 +733,7 @@ export default function PowerOutageManager() {
                     .filter((x): x is number => x !== null);
 
                   return (
-                    <div key={ai} className="bg-surface shadow rounded-sm mx-auto max-w-3xl px-12 py-6 space-y-3" style={{ fontFamily: 'Times New Roman, serif' }}>
+                    <div key={ai} className="bg-surface shadow rounded-sm mx-auto max-w-4xl px-12 py-6 space-y-3" style={{ fontFamily: 'Times New Roman, serif' }}>
                       {/* Header */}
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-3">
@@ -828,7 +828,7 @@ export default function PowerOutageManager() {
                 })}
 
                 {/* Add appendix button */}
-                <div className="mx-auto max-w-3xl">
+                <div className="mx-auto max-w-4xl">
                   <button type="button" onClick={addAppendix}
                     className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-[var(--border-strong)] text-soft hover:border-blue-400 hover:text-blue-600 rounded-sm text-[13px] font-bold transition-colors">
                     <Plus className="w-4 h-4" /> Thêm phụ lục
