@@ -500,8 +500,8 @@ def main():
     print(f"metterinfo.csv: tong {len(out)} cong to (+{added} moi, {updated} cap nhat). "
           f"STATUS xet U pha {INACTIVE_DAYS} ngay gan {last_day}: {active} Yes / {len(out) - active} No.")
 
-    # station_map: cap nhat topology + hsn_hes + STATUS, GIU nguyen hsn (nguoi dung quan ly).
-    # Sinh canh bao: HES khac hsn dang dung + cong to moi (upsert) va doi chieu hoa don (invoice).
+    # station_map: cap nhat topology (line/code/role/customer/status) tu HES, ghi de hang ngay.
+    # HSN dong bo rieng tu hoa don (sync_hsn_from_invoice), KHONG con tu HES.
     warns = upsert_station_map(meters)
     warns += sync_hsn_from_invoice()
     for w in warns:
