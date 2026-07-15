@@ -14,7 +14,7 @@ const AREA_TEMPLATE: Record<string, string> = {
 export const AREA_ADDRESS: Record<string, string> = {
   'KCN Tiền Hải':      'KCN Tiền Hải, xã Ái Quốc, tỉnh Hưng Yên',
   'KCN Phong Điền':    'KCN Phong Điền – Viglacera, TP Huế',
-  'KCN Thuận Thành I': 'KCN Số Thuận Thành I, tỉnh Bắc Ninh',
+  'KCN Thuận Thành I': 'KCN Thuận Thành I, tỉnh Bắc Ninh',
   'KCN Yên Mỹ':        'KCN Yên Mỹ, tỉnh Hưng Yên',
   'KCN Số 3':          'KCN Số 3, tỉnh Hưng Yên',
 };

@@ -29,6 +29,13 @@ const todayStr = () => {
   const t = new Date();
   return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`;
 };
+/** Ngày cách hôm nay `days` ngày, dạng YYYY-MM-DD (mặc định khung giờ = +5 ngày). */
+const datePlusStr = (days: number) => {
+  const t = new Date();
+  t.setDate(t.getDate() + days);
+  return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`;
+};
+const DEFAULT_SLOT_OFFSET_DAYS = 5;
 const fmtNoticeDateSave = (s: string) => {
   const [y, m, d] = s.split('-');
   if (!y || !m || !d) return s;
@@ -72,8 +79,8 @@ interface SlotForm {
   areaText: string;   // Khu vực/địa chỉ hiển thị ở cột "Khu vực" (nhập tay)
 }
 const emptySlot = (): SlotForm => ({
-  startDate: todayStr(), startTime: '08:00',
-  endDate: todayStr(),   endTime: '12:00',
+  startDate: datePlusStr(DEFAULT_SLOT_OFFSET_DAYS), startTime: '08:00',
+  endDate:   datePlusStr(DEFAULT_SLOT_OFFSET_DAYS), endTime: '12:00',
   scope: '', appendixIndex: 0, areaText: '',
 });
 /** Địa chỉ mặc định của cột Khu vực theo KCN (rơi về tên KCN nếu chưa khai báo). */
@@ -646,8 +653,8 @@ export default function PowerOutageManager() {
                     <thead>
                       <tr>
                         <th className="border border-black px-2 py-2 text-center font-bold w-[6%]">STT</th>
-                        <th className="border border-black px-2 py-2 text-center font-bold w-[40%]">Thời gian</th>
-                        <th className="border border-black px-2 py-2 text-center font-bold w-[18%]">Khu vực</th>
+                        <th className="border border-black px-2 py-2 text-center font-bold w-[28%]">Thời gian</th>
+                        <th className="border border-black px-2 py-2 text-center font-bold w-[30%]">Khu vực</th>
                         <th className="border border-black px-2 py-2 text-center font-bold w-[27%]">Phạm vi</th>
                         <th className="border border-black px-1 py-2 w-[20px]"></th>
                       </tr>
@@ -660,16 +667,16 @@ export default function PowerOutageManager() {
                             <div className="space-y-2">
                               <div>
                                 <div className="text-[10px] font-bold text-faint uppercase mb-1">Bắt đầu ngừng</div>
-                                <div className="flex items-center gap-1.5">
-                                  <DatePicker value={s.startDate} onChange={v => updateSlot(i, { startDate: v })} />
-                                  <TimePicker value={s.startTime} onChange={v => updateSlot(i, { startTime: v })} />
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <DatePicker value={s.startDate} onChange={v => updateSlot(i, { startDate: v })} className="w-[104px]" />
+                                  <TimePicker value={s.startTime} onChange={v => updateSlot(i, { startTime: v })} className="w-[74px]" />
                                 </div>
                               </div>
                               <div>
                                 <div className="text-[10px] font-bold text-faint uppercase mb-1">Cấp điện trở lại</div>
-                                <div className="flex items-center gap-1.5">
-                                  <DatePicker value={s.endDate} onChange={v => updateSlot(i, { endDate: v })} />
-                                  <TimePicker value={s.endTime} onChange={v => updateSlot(i, { endTime: v })} />
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <DatePicker value={s.endDate} onChange={v => updateSlot(i, { endDate: v })} className="w-[104px]" />
+                                  <TimePicker value={s.endTime} onChange={v => updateSlot(i, { endTime: v })} className="w-[74px]" />
                                 </div>
                               </div>
                             </div>
@@ -677,8 +684,8 @@ export default function PowerOutageManager() {
                           <td className="border border-black px-2 py-3 align-top">
                             <textarea value={s.areaText}
                               onChange={e => updateSlot(i, { areaText: e.target.value })}
-                              placeholder="Khu vực / địa chỉ..." rows={3}
-                              className="w-full text-[12px] text-center bg-accent-soft/40 border border-dashed border-blue-200 rounded outline-none resize-none focus:border-blue-400 p-1.5 placeholder:text-faint placeholder:italic" />
+                              placeholder="Khu vực / địa chỉ..." rows={5}
+                              className="w-full text-[12px] text-center bg-accent-soft/40 border border-dashed border-blue-200 rounded outline-none resize-none focus:border-blue-400 p-2 placeholder:text-faint placeholder:italic" />
                           </td>
                           <td className="border border-black px-2 py-3">
                             <div className="space-y-1.5">
