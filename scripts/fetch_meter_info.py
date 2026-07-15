@@ -367,6 +367,49 @@ def notify_bad_stations(bad_stations: list):
     print(f"Canh bao tram: {len(bad_stations)} tram bat thuong, da gui {sent} thong bao.")
 
 
+def upsert_station_map(meters: dict):
+    """Dual-write topology + danh ba HES vao collection PocketBase `station_map`.
+
+    Bat/tat qua env WRITE_PB (mac dinh "1"). Bo qua neu thieu PB_URL. Khong anh huong
+    luong CSV. Khoa duy nhat `meter_no` -> chay lai chi update. Frontend doc station_map
+    (ghep voi invoice) thay cho metterinfo.csv (Task 2b)."""
+    if os.environ.get("WRITE_PB", "1") == "0":
+        return
+    if not PB_URL:
+        print("[PB] Bo qua station_map: thieu PB_URL.")
+        return
+    try:
+        from pb_client import PBClient, PBError
+    except ImportError as e:  # noqa: BLE001
+        print(f"[PB] Khong import duoc pb_client: {e}")
+        return
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    rows = [{
+        "meter_no": no,
+        "line_id": m.get("LINE_ID", ""),
+        "line_name": m.get("LINE_NAME", ""),
+        "code": m.get("CODE", ""),
+        "role": m.get("ROLE", ""),
+        "hsn": num(m.get("METER_NAME")),
+        "meter_model": m.get("METER_MODEL_DESC", ""),
+        "customer_code": m.get("CUSTOMER_CODE", ""),
+        "customer_name": m.get("CUSTOMER_NAME", ""),
+        "address": m.get("ADDRESS", ""),
+        "status": m.get("STATUS", ""),
+    } for no, m in meters.items() if no]
+    try:
+        c, u = PBClient().upsert_batch("station_map", rows, ("meter_no",))
+        print(f"[PB] station_map: upsert {len(rows)} cong to ({c} moi, {u} cap nhat).")
+    except PBError as e:
+        print(f"[PB][WARN] Ghi station_map that bai (khong chan pipeline CSV): {e}")
+
+
 def main():
     info = login_data()
     token = info.get("TOKEN")
@@ -418,6 +461,9 @@ def main():
         w.writerows(out)
     print(f"metterinfo.csv: tong {len(out)} cong to (+{added} moi, {updated} cap nhat). "
           f"STATUS xet U pha {INACTIVE_DAYS} ngay gan {last_day}: {active} Yes / {len(out) - active} No.")
+
+    # Dual-write sang PocketBase `station_map` (song song, khong anh huong CSV) — Task 2c.
+    upsert_station_map(meters)
 
     # Canh bao HSN bat thuong (chi xet cong to dang hoat dong)
     bad = find_bad_hsn({no: m for no, m in meters.items() if m.get("STATUS") == "Yes"})

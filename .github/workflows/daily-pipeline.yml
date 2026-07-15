@@ -52,9 +52,13 @@ jobs:
         run: python scripts/fetch_meter_info.py
 
       # 2) Du lieu do xa 30 phut (full ngay hom qua, ×HSN, them I pha + KVAR)
+      #    Doc danh sach cong to tu station_map (PB); fallback metterinfo.csv.
       - name: Fetch meter data (full day)
         env:
           FETCH_HOURS: "25"   # chay 1 lan/ngay -> cua so phu tron 48 moc cua hom qua
+          PB_URL: ${{ secrets.PB_URL }}
+          PB_EMAIL: ${{ secrets.PB_EMAIL }}
+          PB_PASS: ${{ secrets.PB_PASS }}
         run: python scripts/fetch_meter_data.py
 
       # 3) Pmax ngay

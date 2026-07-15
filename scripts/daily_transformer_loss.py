@@ -83,24 +83,61 @@ def _norm_code(s) -> str:
     return re.sub(r"\s+", "", str(s or "").strip().upper())
 
 
+def load_station_records():
+    """Nguon topology cong to: uu tien collection PocketBase `station_map` (Task 2c),
+    fallback ve metterinfo.csv neu thieu PB / loi / rong.
+
+    Tra ve list dict chuan hoa key thuong: meter_no, code, role, status, line_name."""
+    # 1) Thu PocketBase station_map
+    if os.environ.get("READ_PB", "1") != "0" and os.environ.get("PB_URL"):
+        try:
+            from pb_client import PBClient, PBError
+            recs = PBClient().query_all(
+                "station_map",
+                fields="meter_no,code,role,status,line_name",
+            )
+            if recs:
+                return [{
+                    "meter_no": str(r.get("meter_no") or "").strip(),
+                    "code": str(r.get("code") or "").strip(),
+                    "role": str(r.get("role") or "").strip(),
+                    "status": str(r.get("status") or "").strip(),
+                    "line_name": str(r.get("line_name") or "").strip(),
+                } for r in recs]
+            print("[PB] station_map rong -> fallback metterinfo.csv.")
+        except (PBError, ImportError) as e:
+            print(f"[PB][WARN] Doc station_map that bai ({e}) -> fallback metterinfo.csv.")
+    # 2) Fallback CSV
+    if not os.path.isfile(METTERINFO_PATH):
+        sys.exit(f"Khong tim thay {METTERINFO_PATH} va khong doc duoc station_map.")
+    out = []
+    with open(METTERINFO_PATH, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            out.append({
+                "meter_no": str(row.get("METER_NO") or "").strip(),
+                "code": str(row.get("CODE") or "").strip(),
+                "role": str(row.get("ROLE") or "").strip(),
+                "status": str(row.get("STATUS") or "").strip(),
+                "line_name": str(row.get("LINE_NAME") or "").strip(),
+            })
+    return out
+
+
 def load_main_meters():
     """Tra ve (meter2code, code2line):
       meter2code {METER_NO: CODE} cho cong to ROLE=chinh + STATUS=Yes co CODE.
-      code2line  {CODE: LINE_NAME} lay ten tram tu metterinfo."""
-    if not os.path.isfile(METTERINFO_PATH):
-        sys.exit(f"Khong tim thay {METTERINFO_PATH}. Hay chay fetch_meter_info.py truoc.")
+      code2line  {CODE: LINE_NAME} lay ten tram.
+    Nguon: station_map (PB) hoac metterinfo.csv (fallback) — xem load_station_records."""
     meter2code, code2line = {}, {}
-    with open(METTERINFO_PATH, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            if str(row.get("ROLE") or "").strip() != "chinh":
-                continue
-            if str(row.get("STATUS") or "").strip().lower() != "yes":
-                continue
-            code = str(row.get("CODE") or "").strip()
-            no = str(row.get("METER_NO") or "").strip()
-            if code and no:
-                meter2code[no] = code
-                code2line.setdefault(code, (row.get("LINE_NAME") or "").strip())
+    for row in load_station_records():
+        if row["role"] != "chinh":
+            continue
+        if row["status"].lower() != "yes":
+            continue
+        code, no = row["code"], row["meter_no"]
+        if code and no:
+            meter2code[no] = code
+            code2line.setdefault(code, row["line_name"])
     return meter2code, code2line
 
 

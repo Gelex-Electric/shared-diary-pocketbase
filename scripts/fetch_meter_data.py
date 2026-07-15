@@ -60,10 +60,39 @@ VN_TZ = timezone(timedelta(hours=7))
 
 
 def load_meter_list():
-    """Doc {METER_NO: HSN} tu metterinfo.csv. HSN lay tu cot METER_NAME.
-    ROLE_FILTER (neu co) chi lay cong to dung ROLE do."""
+    """Doc {METER_NO: HSN} — uu tien collection PocketBase `station_map` (Task 2c),
+    fallback metterinfo.csv. HSN = cot hsn (station_map) / METER_NAME (CSV) = HSN HES.
+    ROLE_FILTER (neu co) chi lay cong to dung ROLE do.
+
+    LUU Y: HSN o day dung de NHAN GIA TRI datametter (scaling). Giu HSN HES de khong
+    tao gian doan du lieu lich su; viec chuyen sang HSN hoa don (chuan) la thay doi
+    anh huong du lieu -> quyet dinh rieng."""
+    # 1) Thu PocketBase station_map
+    if os.environ.get("READ_PB", "1") != "0" and os.environ.get("PB_URL"):
+        try:
+            from pb_client import PBClient, PBError
+            recs = PBClient().query_all("station_map", fields="meter_no,hsn,role")
+            if recs:
+                meters = {}
+                for r in recs:
+                    no = str(r.get("meter_no") or "").strip()
+                    if not no:
+                        continue
+                    if ROLE_FILTER and str(r.get("role") or "").strip() != ROLE_FILTER:
+                        continue
+                    try:
+                        hsn = float(r.get("hsn") or 1) or 1.0
+                    except (TypeError, ValueError):
+                        hsn = 1.0
+                    meters[no] = hsn
+                if meters:
+                    return meters
+            print("[PB] station_map rong -> fallback metterinfo.csv.")
+        except (PBError, ImportError) as e:
+            print(f"[PB][WARN] Doc station_map that bai ({e}) -> fallback metterinfo.csv.")
+    # 2) Fallback CSV
     if not os.path.isfile(METTERINFO_PATH):
-        sys.exit(f"Khong tim thay {METTERINFO_PATH}. Hay chay fetch_meter_info.py truoc.")
+        sys.exit(f"Khong tim thay {METTERINFO_PATH} va khong doc duoc station_map.")
     meters = {}
     with open(METTERINFO_PATH, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
