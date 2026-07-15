@@ -367,6 +367,51 @@ def build_daily_rows(day: str, by_code: dict, params_by_code: dict,
     return rows
 
 
+def write_daily_pb(daily_rows: list):
+    """Dual-write: upsert cac dong ngay vao collection PocketBase `tloss_daily`.
+
+    Bat/tat bang env WRITE_PB (mac dinh "1"). Bo qua neu thieu PB_URL/creds.
+    KHONG anh huong luong CSV: chi la ghi song song de chuyen dan sang PB.
+    Khoa duy nhat (code, date) -> chay lai chi update.
+    """
+    if os.environ.get("WRITE_PB", "1") == "0":
+        return
+    if not os.environ.get("PB_URL"):
+        print("[PB] Bo qua ghi PB: thieu PB_URL.")
+        return
+    try:
+        from pb_client import PBClient, PBError
+    except ImportError as e:
+        print(f"[PB] Khong import duoc pb_client: {e}")
+        return
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    rows = [{
+        "code": r["CODE"],
+        "line_name": r.get("LINE_NAME", ""),
+        "date": r["DATE"],
+        "output_kwh": num(r.get("OUTPUT_KWH")),
+        "loss_noload_kwh": num(r.get("LOSS_NOLOAD_KWH")),
+        "loss_load_kwh": num(r.get("LOSS_LOAD_KWH")),
+        "loss_kwh": num(r.get("LOSS_KWH")),
+        "loss_pct": num(r.get("LOSS_PCT")),
+        "max_load_pct": num(r.get("MAX_LOAD_PCT")),
+        "avg_load_pct": num(r.get("AVG_LOAD_PCT")),
+        "n_intervals": int(num(r.get("N_INTERVALS"))),
+        "output_src": r.get("OUTPUT_SRC", ""),
+    } for r in daily_rows]
+    try:
+        created, updated = PBClient().upsert_batch("tloss_daily", rows, ("code", "date"))
+        print(f"[PB] tloss_daily: upsert {len(rows)} dong ({created} moi, {updated} cap nhat).")
+    except PBError as e:
+        print(f"[PB][WARN] Ghi tloss_daily that bai (khong chan pipeline CSV): {e}")
+
+
 def write_daily_out(new_rows: list):
     merged = {}
     if os.path.isfile(DAILY_OUT_PATH):
@@ -445,6 +490,9 @@ def main():
     d_total = write_daily_out(daily_rows)
     print(f"Ghi {len(daily_rows)} tram/ngay ({n_idx} theo chi so, {len(daily_rows) - n_idx} fallback P*dt). "
           f"Tong file ngay: {d_total} dong -> {DAILY_OUT_PATH}")
+
+    # Dual-write sang PocketBase (song song, khong anh huong CSV) — Task 0 migration.
+    write_daily_pb(daily_rows)
 
 
 if __name__ == "__main__":

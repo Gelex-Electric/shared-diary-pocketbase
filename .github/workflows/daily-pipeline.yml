@@ -65,8 +65,12 @@ jobs:
       - name: Fetch HES index
         run: python scripts/fetch_hes_index.py
 
-      # 5) Ton that MBA 30 phut (giu 40 ngay)
+      # 5) Ton that MBA 30 phut (giu 40 ngay) + dual-write tloss_daily sang PocketBase
       - name: Transformer loss (30 min)
+        env:
+          PB_URL: ${{ secrets.PB_URL }}
+          PB_EMAIL: ${{ secrets.PB_EMAIL }}
+          PB_PASS: ${{ secrets.PB_PASS }}
         run: python scripts/daily_transformer_loss.py
 
       # 6) Ton that MBA theo thang (luu vinh vien)
