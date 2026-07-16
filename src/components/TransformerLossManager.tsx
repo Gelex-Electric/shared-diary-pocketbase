@@ -13,7 +13,7 @@ import { Select } from './ui/Select';
 import { DatePicker } from './ui/DateTimePickers';
 import { fetchLoss30min, fetchLatestLossDate, fetchLossDailyRange, fetchLossMonthly, Loss30minRow, LossDailyRow, LossMonthlyRow } from '../lib/transformerLoss';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
-import { fetchMbaInfo, buildMbaLookup, MbaParams } from '../lib/mbaInfo';
+import { fetchMbaInfo, buildMbaLookup, updateMbaParams, canEditMba, MbaParams } from '../lib/mbaInfo';
 import { pb } from '../lib/pocketbase';
 import { zoneFromArea, zoneCodeOf, ZONE_MAP } from '../lib/invoices';
 
@@ -150,13 +150,86 @@ function slotsByStation(rows: Loss30minRow[], date: string) {
 }
 
 /* ================= component ================= */
-type View = 'table' | 'monthly' | 'chart';
+type View = 'table' | 'monthly' | 'chart' | 'mba';
 const TABS: TabItem<View>[] = [
   { id: 'table', label: 'Theo ngày', icon: CalendarDays },
   { id: 'monthly', label: 'Theo tháng', icon: CalendarRange },
   { id: 'chart', label: 'Biểu đồ', icon: BarChart3 },
+  { id: 'mba', label: 'Thông số MBA', icon: Gauge },
 ];
 const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate(); // m: 1-based
+
+/* ---- Dòng thông số MBA sửa tại chỗ (Sdm/P0/PK). Quyền theo KCN (mba.zone). ---- */
+function MbaRow({ mba, onSaved }: { mba: MbaParams; onSaved: (id: string, sdm: number, p0: number, pk: number) => void }) {
+  const editable = canEditMba(mba.zone) && !!mba._id;
+  const [editing, setEditing] = useState(false);
+  const [sdm, setSdm] = useState(String(mba.sdm || ''));
+  const [p0, setP0] = useState(String(mba.p0 > 0 ? mba.p0 * 1000 : ''));
+  const [pk, setPk] = useState(String(mba.pk > 0 ? mba.pk * 1000 : ''));
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = () => {
+    setSdm(String(mba.sdm || ''));
+    setP0(String(mba.p0 > 0 ? mba.p0 * 1000 : ''));
+    setPk(String(mba.pk > 0 ? mba.pk * 1000 : ''));
+    setEditing(true);
+  };
+
+  const save = async () => {
+    const nSdm = Number(String(sdm).replace(',', '.').trim());
+    const nP0 = Number(String(p0).replace(',', '.').trim());
+    const nPk = Number(String(pk).replace(',', '.').trim());
+    if (![nSdm, nP0, nPk].every(n => isFinite(n) && n > 0)) {
+      notify.error('Lỗi', 'Sdm, P0, PK phải là số dương.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateMbaParams(mba._id, nSdm, nP0, nPk);
+      onSaved(mba._id, nSdm, nP0, nPk);
+      notify.success('Thành công', `Đã cập nhật thông số MBA trạm ${mba.code}.`);
+      setEditing(false);
+    } catch (err: any) {
+      notify.error('Lỗi', 'Không lưu được thông số MBA: ' + (err?.message || 'lỗi quyền hoặc mạng'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <tr className="hover:bg-accent-soft transition-colors">
+        <td className="pl-4"><span className="font-mono text-sm font-bold text-accent">{mba.code}</span></td>
+        <td>{mba.hasParams ? <span className="text-sm text-dim">{fmt(mba.sdm, 0)} kVA</span> : <span className="text-xs font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded">Cần nhập thông số</span>}</td>
+        <td><span className="text-sm text-dim">{mba.p0 > 0 ? `${fmt(mba.p0 * 1000, 0)} W` : '—'}</span></td>
+        <td><span className="text-sm text-dim">{mba.pk > 0 ? `${fmt(mba.pk * 1000, 0)} W` : '—'}</span></td>
+        <td>
+          {editable ? (
+            <button onClick={startEdit} className="text-xs font-bold text-accent hover:underline">Sửa</button>
+          ) : (
+            <span className="text-xs text-faint">—</span>
+          )}
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr className="bg-accent-soft">
+      <td className="pl-4"><span className="font-mono text-sm font-bold text-accent">{mba.code}</span></td>
+      <td><input type="number" value={sdm} disabled={saving} onChange={e => setSdm(e.target.value)}
+        placeholder="Sdm (kVA)" className="w-24 px-2 py-1 text-sm rounded border border-[var(--border)] bg-[var(--bg)] text-ink" /></td>
+      <td><input type="number" value={p0} disabled={saving} onChange={e => setP0(e.target.value)}
+        placeholder="P0 (W)" className="w-24 px-2 py-1 text-sm rounded border border-[var(--border)] bg-[var(--bg)] text-ink" /></td>
+      <td><input type="number" value={pk} disabled={saving} onChange={e => setPk(e.target.value)}
+        placeholder="PK (W)" className="w-24 px-2 py-1 text-sm rounded border border-[var(--border)] bg-[var(--bg)] text-ink" /></td>
+      <td className="flex items-center gap-2">
+        <button onClick={save} disabled={saving} className="text-xs font-bold text-green-600 hover:underline">{saving ? '…' : 'Lưu'}</button>
+        <button onClick={() => setEditing(false)} disabled={saving} className="text-xs text-soft hover:underline">Hủy</button>
+      </td>
+    </tr>
+  );
+}
 
 export default function TransformerLossManager() {
   const [rows, setRows] = useState<Loss30minRow[]>([]);
@@ -406,9 +479,39 @@ export default function TransformerLossManager() {
 
       {loading ? (
         <div className="vl-card"><EmptyState icon={Gauge} title="Đang tải dữ liệu tổn thất…" /></div>
+      ) : view === 'mba' ? (
+        /* ---------- THÔNG SỐ MBA (nhập/sửa Sdm, P0, PK) ---------- */
+        <div className="vl-card overflow-x-auto">
+          <table className="vl-table w-full text-left border-collapse">
+            <thead>
+              <tr>
+                <th className="pl-4">Trạm (CODE)</th>
+                <th>Sdm</th>
+                <th>P0</th>
+                <th>PK</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border)]">
+              {mba
+                .filter(m => !userZone ? (!filterKcn || m.zone === filterKcn) : m.zone === userZone)
+                .sort((a, b) => a.code.localeCompare(b.code))
+                .map(m => (
+                  <MbaRow key={m._id || m.code} mba={m} onSaved={(id, sdm, p0, pk) => {
+                    setMba(prev => prev.map(x => (x._id === id
+                      ? { ...x, sdm, p0: p0 / 1000, pk: pk / 1000, hasParams: true }
+                      : x)));
+                  }} />
+                ))}
+              {mba.length === 0 && (
+                <tr><td colSpan={5} className="py-6 text-center text-sm text-soft">Chưa có trạm nào — pipeline sẽ tự thêm trạm chính mới mỗi khi phát hiện trên HES.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       ) : !hasData ? (
         <div className="vl-card"><EmptyState icon={Zap} title="Chưa có dữ liệu tổn thất"
-          hint="Cần nhập thông số MBA vào public/mba_info.csv và chờ pipeline chạy (00:00 hằng ngày)." /></div>
+          hint="Vào tab &quot;Thông số MBA&quot; để nhập Sdm/P0/PK cho các trạm, rồi chờ pipeline chạy (00:00 hằng ngày)." /></div>
       ) : view === 'chart' ? (
         /* ---------- BIỂU ĐỒ ---------- */
         <>

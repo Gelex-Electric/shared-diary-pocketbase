@@ -163,7 +163,45 @@ def _find_col(cols, *keys):
 
 
 def load_mba() -> dict:
-    """{norm_code: {RAW_CODE, SDM_KVA, P0_KW, PK_KW}} tu mba_info.csv (nhap tay).
+    """{norm_code: {RAW_CODE, SDM_KVA, P0_KW, PK_KW}} — uu tien collection PocketBase
+    `mba_info` (nhap qua UI, Task 3), fallback mba_info.csv (nhap tay/legacy).
+    O TRONG Sdm/P0/PK => tram khong hoat dong -> BO QUA."""
+    if os.environ.get("READ_PB", "1") != "0" and os.environ.get("PB_URL"):
+        try:
+            from pb_client import PBClient, PBError
+            recs = PBClient().query_all("mba_info", fields="code,sdm_kva,p0_w,pk_w")
+            if recs:
+                mba, inactive = {}, 0
+                for r in recs:
+                    code = str(r.get("code") or "").strip()
+                    if not code:
+                        continue
+                    p0, pk, sdm = r.get("p0_w"), r.get("pk_w"), r.get("sdm_kva")
+                    # PocketBase ep NULL -> 0 cho field number (khong luu NULL that) nen
+                    # KHONG the dung "is None" de biet "chua nhap". P0/PK/Sdm vat ly luon
+                    # phai duong -> dung nguong <=0 lam dieu kien "chua nhap / khong hop le".
+                    if not p0 or not pk or p0 <= 0 or pk <= 0:
+                        inactive += 1
+                        continue
+                    if not sdm or sdm <= 0:
+                        print(f"[WARN] Tram {code}: SDM khong hop le ({sdm!r}) -> bo qua.")
+                        continue
+                    mba[_norm_code(code)] = {
+                        "RAW_CODE": code, "SDM_KVA": float(sdm),
+                        "P0_KW": float(p0) / 1000.0, "PK_KW": float(pk) / 1000.0,
+                    }
+                if inactive:
+                    print(f"Bo qua {inactive} tram khong co P0/PK (khong hoat dong).")
+                if mba:
+                    return mba
+            print("[PB] mba_info rong -> fallback mba_info.csv.")
+        except (PBError, ImportError) as e:
+            print(f"[PB][WARN] Doc mba_info that bai ({e}) -> fallback mba_info.csv.")
+    return load_mba_csv()
+
+
+def load_mba_csv() -> dict:
+    """Fallback: {norm_code: {RAW_CODE, SDM_KVA, P0_KW, PK_KW}} tu mba_info.csv.
 
     Ho tro linh hoat:
       - Phan cach ';' (Excel vi-VN) hoac ','.

@@ -27,7 +27,6 @@ from fetch_meter_data import BASE_URL, VN_TZ, get_retry, login_data
 CSV_PATH = "public/metterinfo.csv"
 DATAMETTER_PATH = "public/datametter.csv"
 LINE_INFO_PATH = "public/line_info.csv"
-MBA_PATH = "public/mba_info.csv"
 
 # PocketBase de gui thong bao vao collection `notifications` (bo trong = khong gui)
 PB_URL = os.environ.get("PB_URL", "").rstrip("/")
@@ -180,47 +179,66 @@ def _norm_code(s) -> str:
     return re.sub(r"\s+", "", str(s or "").strip().upper())
 
 
-def sync_mba_info(meters: dict):
-    """Tu sinh cot TBA cho mba_info.csv: THEM dong moi cho tram chinh chua co,
-    Sdm/P0/PK de TRONG cho nguoi dung nhap tay. KHONG dung cac dong da co (giu
-    nguyen format + gia tri tay). Khop theo ma chuan hoa + tien to (CODE viet gon van khop)."""
+PREFIX_ZONE = {"TH": "KCNTH", "PD": "KCNPĐ", "03": "KCN03", "YM": "KCNYM", "TTI": "KCNTTI"}
+# notifications.area la select field, gia tri phai la TEN DAY DU (khop AREAS trong pocketbase.ts).
+ZONE_NAME = {
+    "KCNTH": "KCN Tiền Hải", "KCNPĐ": "KCN Phong Điền", "KCNTTI": "KCN Thuận Thành I",
+    "KCNYM": "KCN Yên Mỹ", "KCN03": "KCN Số 3",
+}
+
+
+def _zone_of(code: str) -> str:
+    pre = (code.split(".")[0] or "").strip().upper().replace("Đ", "D")
+    return PREFIX_ZONE.get(pre, "")
+
+
+def sync_mba_stations(meters: dict) -> list:
+    """Phat hien tram CHINH moi chua co trong collection PB `mba_info` -> tao record
+    RONG (Sdm/P0/PK de trong, cho nguoi dung nhap qua UI) + canh bao. KHONG dong den
+    tram da co (giu nguyen gia tri da nhap). Khop theo ma chuan hoa + tien to.
+
+    Tra ve list canh bao [{title, message, area}]. Bat/tat qua WRITE_PB."""
     codes = sorted({(m.get("CODE") or "").strip()
                     for m in meters.values()
                     if str(m.get("ROLE") or "").strip() == "chinh" and (m.get("CODE") or "").strip()})
-    # Doc mba_info hien co (giu nguyen text)
-    if os.path.isfile(MBA_PATH):
-        with open(MBA_PATH, encoding="utf-8-sig") as f:
-            text = f.read()
-        header = text.splitlines()[0] if text.strip() else "TBA;Sdm(kVA);DEP0(W);DEPK(W)"
-        delim = ";" if ";" in header else ","
-        existing = set()
-        for ln in text.splitlines()[1:]:
-            if not ln.strip():
-                continue
-            tba = ln.split(delim)[0].strip()
-            if tba:
-                existing.add(_norm_code(tba))
-    else:
-        header = "TBA;Sdm(kVA);DEP0(W);DEPK(W)"
-        delim = ";"
-        text = header + "\n"
-        existing = set()
+    if os.environ.get("WRITE_PB", "1") == "0" or not PB_URL:
+        return []
+    try:
+        from pb_client import PBClient, PBError, _request
+    except ImportError as e:  # noqa: BLE001
+        print(f"[PB] Khong import duoc pb_client: {e}")
+        return []
+    pb = PBClient()
+    try:
+        tok = pb.token
+        existing = {_norm_code(r["code"]) for r in pb.query_all("mba_info", fields="code")}
+    except PBError as e:
+        print(f"[PB][WARN] Doc mba_info that bai: {e}")
+        return []
 
     def matched(nc):
         return any(nc == e or nc.startswith(e) or e.startswith(nc) for e in existing)
 
     new = [c for c in codes if not matched(_norm_code(c))]
     if not new:
-        print("mba_info.csv: khong co tram chinh moi.")
-        return
-    ncol = len(header.split(delim))
-    blanks = delim.join([""] * (ncol - 1))   # Sdm;P0;PK de trong
-    if not text.endswith("\n"):
-        text += "\n"
-    text += "".join(f"{c}{delim}{blanks}\n" for c in new)
-    with open(MBA_PATH, "w", encoding="utf-8") as f:
-        f.write(text)
-    print(f"mba_info.csv: them {len(new)} tram chinh moi (TBA), Sdm/P0/PK de trong: {new}")
+        print("mba_info: khong co tram chinh moi.")
+        return []
+    base = f"{pb.url}/api/collections/mba_info/records"
+    warns = []
+    for code in new:
+        zone = _zone_of(code)
+        try:
+            _request("POST", base, token=tok,
+                     payload={"code": code, "zone": zone, "sdm_kva": None, "p0_w": None, "pk_w": None})
+        except PBError as e:
+            print(f"[PB][WARN] Tao mba_info cho tram moi {code} that bai: {e}")
+            continue
+        warns.append({
+            "title": "Trạm mới cần nhập thông số MBA",
+            "message": f"Trạm {code} là điểm đo chính mới — cần nhập Sdm/P0/PK để tính tổn thất.",
+            "area": ZONE_NAME.get(zone, "")})
+    print(f"mba_info: them {len(new)} tram chinh moi (Sdm/P0/PK de trong): {new}")
+    return warns
 
 
 def enrich_stations(meters: dict, token: str, lines: dict) -> list:
@@ -479,9 +497,6 @@ def main():
     n_chinh = sum(1 for m in meters.values() if m.get("ROLE") == "chinh")
     print(f"Phan loai diem do: {n_chinh} chinh / {len(meters) - n_chinh} phu.")
 
-    # Tu sinh TBA cho mba_info.csv (them tram chinh moi; Sdm/P0/PK nhap tay)
-    sync_mba_info(meters)
-
     # STATUS: "Yes" neu co dien ap pha > 0 trong INACTIVE_DAYS ngay gan nhat
     last_day = os.environ.get("TARGET_DATE", "").strip() or (datetime.now(VN_TZ).date() - timedelta(days=1)).isoformat()
     active_meters = phase_active_meters(last_day, INACTIVE_DAYS)
@@ -504,6 +519,7 @@ def main():
     # HSN dong bo rieng tu hoa don (sync_hsn_from_invoice), KHONG con tu HES.
     warns = upsert_station_map(meters)
     warns += sync_hsn_from_invoice()
+    warns += sync_mba_stations(meters)  # tram chinh moi -> record mba_info rong + canh bao
     for w in warns:
         print(f"[ALERT] {w['title']}: {w['message']}")
     send_notifications(warns)
