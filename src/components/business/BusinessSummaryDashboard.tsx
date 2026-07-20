@@ -62,14 +62,15 @@ export default function BusinessSummaryDashboard() {
     return arr.length ? arr : [endYear];
   }, [bills, pmaxRows, endYear]);
 
-  /* Mặc định lần đầu: BẬT 3 NĂM GẦN NHẤT (years sắp giảm dần → slice 3 đầu). */
+  /* Mặc định lần đầu: BẬT 3 NĂM GẦN NHẤT. Chỉ khởi tạo SAU KHI tải xong dữ liệu
+     (loading + pmaxLoading = false) để `years` đã đủ — tránh chốt sớm chỉ có năm hiện tại. */
   const yearsInited = useRef(false);
   useEffect(() => {
-    if (!yearsInited.current && years.length) {
+    if (!yearsInited.current && !loading && !pmaxLoading && years.length) {
       setSelectedYears(new Set(years.slice(0, 3)));
       yearsInited.current = true;
     }
-  }, [years]);
+  }, [loading, pmaxLoading, years]);
 
   const toggleYear = (y: number) =>
     setSelectedYears(prev => {
