@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart, LabelList,
@@ -23,18 +23,35 @@ const axisNum = (v: number) => new Intl.NumberFormat('vi-VN', { notation: 'compa
 const fmtKw = (v: number) => fmtInt(Math.round(v)) + ' kW';
 const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
 
+/* Chip tích chọn (KCN + năm) — đồng bộ 1 màu accent. */
+function FilterChip({ on, label, onToggle }: { on: boolean; label: string; onToggle: () => void }) {
+  return (
+    <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={onToggle}
+        className="w-3.5 h-3.5 rounded border-[var(--border-strong)] cursor-pointer"
+        style={{ accentColor: 'var(--accent)' }}
+      />
+      <span className={`text-xs font-medium ${on ? 'text-ink' : 'text-faint'}`}>{label}</span>
+    </label>
+  );
+}
+
 export default function BusinessSummaryDashboard() {
   const endYear = new Date().getFullYear();
-  const { bills, records, meterIndex, loading, error, reload } = useInvoices({ endYear, yearsBack: 2, lockToArea: false });
+  const { bills, records, meterIndex, loading, error, reload } = useInvoices({ allYears: true, lockToArea: false });
   const { rows: pmaxRows, loading: pmaxLoading } = usePmaxDaily();
 
-  const [year, setYear] = useState<number>(endYear);
+  /* Năm: TÍCH CHỌN NHIỀU (checkbox), mặc định BẬT HẾT. KCN: tích chọn (ẩn/hiện). */
+  const [selectedYears, setSelectedYears] = useState<Set<number>>(new Set());
   const [tableMonthIdx, setTableMonthIdx] = useState<number>(new Date().getMonth() + 1);
   const [custA, setCustA] = useState('');
   const [custB, setCustB] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [collapsedZones, setCollapsedZones] = useState<Record<string, boolean>>({});
-  /* KCN bị ẩn khỏi "Sản lượng theo khu công nghiệp" — liên kết luôn với "Biểu đồ phụ tải theo tháng" */
+  /* KCN bị ẩn — dùng chung cho MỌI biểu đồ/bảng/KPI. */
   const [hiddenZones, setHiddenZones] = useState<Record<string, boolean>>({});
 
   const years = useMemo(() => {
@@ -45,8 +62,36 @@ export default function BusinessSummaryDashboard() {
     return arr.length ? arr : [endYear];
   }, [bills, pmaxRows, endYear]);
 
-  const yearBills = useMemo(() => bills.filter(b => b.year === year), [bills, year]);
-  const kpis = useMemo(() => computeKpis(yearBills), [yearBills]);
+  /* Mặc định lần đầu: BẬT 3 NĂM GẦN NHẤT. Chỉ khởi tạo SAU KHI tải xong dữ liệu
+     (loading + pmaxLoading = false) để `years` đã đủ — tránh chốt sớm chỉ có năm hiện tại. */
+  const yearsInited = useRef(false);
+  useEffect(() => {
+    if (!yearsInited.current && !loading && !pmaxLoading && years.length) {
+      setSelectedYears(new Set(years.slice(0, 3)));
+      yearsInited.current = true;
+    }
+  }, [loading, pmaxLoading, years]);
+
+  const toggleYear = (y: number) =>
+    setSelectedYears(prev => {
+      const n = new Set(prev);
+      n.has(y) ? n.delete(y) : n.add(y);
+      if (n.size === 0) n.add(y); // luôn giữ ít nhất 1 năm
+      return n;
+    });
+  const yearsSorted = useMemo(() => [...selectedYears].sort((a, b) => a - b), [selectedYears]);
+  const yearsLabel = yearsSorted.join(', ');
+
+  const zoneOn = (z: string) => !hiddenZones[z];
+  const toggleZoneVisible = (z: string) => setHiddenZones(h => ({ ...h, [z]: !h[z] }));
+
+  /* Hoá đơn đã lọc theo KCN đang bật + năm đang chọn — NGUỒN CHUNG cho mọi thành phần. */
+  const filteredBills = useMemo(
+    () => bills.filter(b => selectedYears.has(b.year) && zoneOn(b.zone)),
+    [bills, selectedYears, hiddenZones],
+  );
+
+  const kpis = useMemo(() => computeKpis(filteredBills), [filteredBills]);
 
   /* Debt reminder on the notification bell */
   useEffect(() => {
@@ -55,84 +100,78 @@ export default function BusinessSummaryDashboard() {
       setLocalNotification({
         id: 'unpaid-invoices',
         title: 'Công nợ chưa thu',
-        message: `Có ${fmtInt(kpis.unpaid)} hóa đơn chưa thanh toán (${fmtVNDShort(kpis.vndDebt)} ₫) trong năm ${year}.`,
+        message: `Có ${fmtInt(kpis.unpaid)} hóa đơn chưa thanh toán (${fmtVNDShort(kpis.vndDebt)} ₫) trong năm ${yearsLabel}.`,
         type: 'warning',
       });
     } else {
       clearLocalNotification('unpaid-invoices');
     }
-  }, [kpis.unpaid, kpis.vndDebt, year, loading]);
+  }, [kpis.unpaid, kpis.vndDebt, yearsLabel, loading]);
 
-  /* Toàn bộ KCN có dữ liệu (không đổi theo bật/tắt) — dùng để vẽ chip chọn */
+  /* Toàn bộ KCN có dữ liệu — dùng để vẽ chip chọn + màu cột. */
   const zoneCatalog = useMemo(() => ZONE_ORDER.filter(z => bills.some(b => b.zone === z)), [bills]);
-  /* Hoá đơn thuộc KCN đang BẬT — dùng chung cho "phụ tải theo tháng" + "sản lượng theo KCN" */
-  const activeBills = useMemo(() => bills.filter(b => !hiddenZones[b.zone]), [bills, hiddenZones]);
-  const toggleZoneVisible = (z: string) => setHiddenZones(h => ({ ...h, [z]: !h[z] }));
 
-  /* ── Row 2: monthly load (grouped bars), 3 most-recent years — chỉ tính KCN đang bật ── */
-  const load3y = useMemo(() => {
-    const last3 = [...years].sort((a, b) => a - b).slice(-3);
-    const byYear = new Map<number, number[]>(last3.map(y => [y, Array(12).fill(0)]));
-    activeBills.forEach(b => {
+  /* ── Biểu đồ phụ tải theo tháng — nhóm cột theo TỪNG NĂM đang chọn, chỉ KCN đang bật ── */
+  const loadByYear = useMemo(() => {
+    const ys = yearsSorted;
+    const byYear = new Map<number, number[]>(ys.map(y => [y, Array(12).fill(0)]));
+    filteredBills.forEach(b => {
       const arr = byYear.get(b.year);
       if (!arr) return;
       const mi = Number(b.month.slice(5, 7)) - 1;
       if (mi >= 0 && mi < 12) arr[mi] += b.slHC;
     });
     return {
-      years: last3,
+      years: ys,
       data: MONTHS.map((label, i) => {
         const row: Record<string, any> = { label };
-        last3.forEach(y => { row[String(y)] = Math.round(byYear.get(y)![i]); });
+        ys.forEach(y => { row[String(y)] = Math.round(byYear.get(y)![i]); });
         return row;
       }),
     };
-  }, [activeBills, years]);
+  }, [filteredBills, yearsSorted]);
 
-  /* ── Stacked: sản lượng tổng theo KCN, 12 tháng lùi từ tháng mới nhất — chỉ KCN đang bật ── */
+  /* ── Sản lượng theo KCN — 12 tháng tính từ tháng có dữ liệu GẦN NHẤT (trong phạm vi
+        bộ chọn KCN + năm). Vẫn tuân theo bộ chọn: dữ liệu lấy từ filteredBills. ── */
   const stackByZone = useMemo(() => {
-    const months = activeBills.map(b => b.month).filter(Boolean);
-    if (!months.length) return { data: [] as any[], zones: [] as string[] };
-    const sorted = months.slice().sort();
-    const newest = sorted[sorted.length - 1];
+    const zonesPresent = zoneCatalog.filter(z => zoneOn(z));
+    const months = filteredBills.map(b => b.month).filter(Boolean);
+    if (!months.length) return { data: [] as any[], zones: zonesPresent };
+    const newest = months.slice().sort()[months.length - 1];
     const [ny, nm] = newest.split('-').map(Number);
     const buckets: string[] = [];
     for (let i = 11; i >= 0; i--) { let m = nm - i, y = ny; while (m <= 0) { m += 12; y--; } buckets.push(`${y}-${pad2(m)}`); }
     const idx = new Map(buckets.map((mk, i) => [mk, i]));
-    const zonesPresent = zoneCatalog.filter(z => !hiddenZones[z]);
     const rows = buckets.map(mk => {
       const row: Record<string, any> = { label: `${Number(mk.slice(5))}/${mk.slice(2, 4)}` };
       zonesPresent.forEach(z => { row[z] = 0; });
       return row;
     });
-    activeBills.forEach(b => {
+    filteredBills.forEach(b => {
       const i = idx.get(b.month);
       if (i == null || !b.zone) return;
       if (rows[i][b.zone] != null) rows[i][b.zone] += b.slHC;
     });
     rows.forEach(r => zonesPresent.forEach(z => { r[z] = Math.round(r[z]); }));
     return { data: rows, zones: zonesPresent };
-  }, [activeBills, zoneCatalog, hiddenZones]);
+  }, [filteredBills, zoneCatalog, hiddenZones]);
 
-  /* Hoá đơn của năm đang chọn, chỉ KCN đang bật — dùng cho donut (liên kết cùng bộ bật/tắt) */
-  const activeYearBills = useMemo(() => yearBills.filter(b => !hiddenZones[b.zone]), [yearBills, hiddenZones]);
-
-  /* ── Row 3a: tariff donut — liên kết bộ bật/tắt KCN ── */
+  /* ── Cơ cấu phụ tải theo khung giờ (donut) — lọc KCN + năm ── */
   const tariff = useMemo(() => {
-    const t = tariffSplit(activeYearBills);
+    const t = tariffSplit(filteredBills);
     const total = t.bt + t.cd + t.td || 1;
     return [
       { name: 'Bình thường', value: Math.round(t.bt), pct: t.bt / total },
       { name: 'Cao điểm',    value: Math.round(t.cd), pct: t.cd / total },
       { name: 'Thấp điểm',   value: Math.round(t.td), pct: t.td / total },
     ];
-  }, [activeYearBills]);
+  }, [filteredBills]);
   const tariffTotal = tariff.reduce((s, x) => s + x.value, 0);
 
-  /* Tần suất sử dụng theo khung giờ (BT/CĐ/TĐ) — mọi KCN (kể cả đang tắt, sẽ tô xám khi vẽ) */
+  /* Tần suất theo khung giờ theo KCN — lọc KCN + năm. */
   const freqByZone = useMemo(() => {
     const m = new Map<string, { code: string; bt: number; cd: number; td: number }>();
-    yearBills.forEach(b => {
+    filteredBills.forEach(b => {
       const code = b.zone || 'Khác';
       let z = m.get(code);
       if (!z) { z = { code, bt: 0, cd: 0, td: 0 }; m.set(code, z); }
@@ -149,15 +188,17 @@ export default function BusinessSummaryDashboard() {
           bt: Math.round(z.bt), cd: Math.round(z.cd), td: Math.round(z.td),
         };
       });
-  }, [yearBills]);
+  }, [filteredBills]);
 
-  /* Per-customer daily totals for the selected year → monthly peak + yearly peak */
+  /* Per-customer daily peaks cho các NĂM đang chọn, chỉ KCN đang bật. */
   const pmaxByCustomer = useMemo(() => {
     const day = new Map<string, Map<string, number>>();
     pmaxRows.forEach(r => {
-      if (r.year !== year) return;
+      if (!selectedYears.has(r.year)) return;
       const info = meterIndex.get(r.meter);
       if (!info) return;
+      const zone = (info.mkh.split('-')[0] || '');
+      if (!zoneOn(zone)) return;
       let d = day.get(info.mkh);
       if (!d) { d = new Map(); day.set(info.mkh, d); }
       d.set(r.date, (d.get(r.date) || 0) + r.pmax);
@@ -165,7 +206,7 @@ export default function BusinessSummaryDashboard() {
     const yearPeak = new Map<string, number>();
     day.forEach((d, mkh) => yearPeak.set(mkh, Math.max(0, ...d.values())));
     return { day, yearPeak };
-  }, [pmaxRows, year, meterIndex]);
+  }, [pmaxRows, selectedYears, hiddenZones, meterIndex]);
 
   const monthlyPmaxOf = (mkh: string): number[] => {
     const d = pmaxByCustomer.day.get(mkh);
@@ -174,8 +215,8 @@ export default function BusinessSummaryDashboard() {
     return out.map(v => Math.round(v));
   };
 
-  /* ── Customers: list + default representatives ── */
-  const custByKwh = useMemo(() => rollupByCustomer(yearBills).sort((a, b) => b.kwh - a.kwh), [yearBills]);
+  /* ── Customers ── */
+  const custByKwh = useMemo(() => rollupByCustomer(filteredBills).sort((a, b) => b.kwh - a.kwh), [filteredBills]);
   const custOptions = useMemo(
     () => custByKwh.map(c => ({ value: c.mkh, label: `${c.nMua || c.mkh} · ${c.mkh}` })),
     [custByKwh],
@@ -194,41 +235,48 @@ export default function BusinessSummaryDashboard() {
 
   const seriesFor = (mkh: string) => {
     const kwh = Array(12).fill(0);
-    yearBills.filter(b => b.mkh === mkh).forEach(b => { const mi = Number(b.month.slice(5, 7)) - 1; if (mi >= 0 && mi < 12) kwh[mi] += b.slHC; });
+    filteredBills.filter(b => b.mkh === mkh).forEach(b => { const mi = Number(b.month.slice(5, 7)) - 1; if (mi >= 0 && mi < 12) kwh[mi] += b.slHC; });
     const pmax = monthlyPmaxOf(mkh);
     return MONTHS.map((label, i) => ({ label, kwh: Math.round(kwh[i]), pmax: pmax[i] }));
   };
-  const dataA = useMemo(() => (effA ? seriesFor(effA) : []), [effA, yearBills, pmaxByCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
-  const dataB = useMemo(() => (effB ? seriesFor(effB) : []), [effB, yearBills, pmaxByCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dataA = useMemo(() => (effA ? seriesFor(effA) : []), [effA, filteredBills, pmaxByCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dataB = useMemo(() => (effB ? seriesFor(effB) : []), [effB, filteredBills, pmaxByCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── Row 5: per-customer table grouped by KCN, cho tháng đã chọn ── */
+  /* ── Bảng KH theo KCN, cho tháng đã chọn — cộng gộp các NĂM đang chọn, chỉ KCN đang bật ── */
   const detail = useMemo(() => {
-    const cur = `${year}-${pad2(tableMonthIdx)}`;
-    const prev = tableMonthIdx === 1 ? `${year - 1}-12` : `${year}-${pad2(tableMonthIdx - 1)}`;
+    const curMonths = new Set(yearsSorted.map(y => `${y}-${pad2(tableMonthIdx)}`));
+    const prevMonths = new Set(yearsSorted.map(y => tableMonthIdx === 1 ? `${y - 1}-12` : `${y}-${pad2(tableMonthIdx - 1)}`));
     interface Meter { sct: string; addr: string; curKwh: number; prevKwh: number; curVnd: number; }
-    interface Cust { mkh: string; name: string; zone: string; curKwh: number; prevKwh: number; curVnd: number; meters: Map<string, Meter>; }
+    interface Cust { mkh: string; name: string; zone: string; curKwh: number; prevKwh: number; curVnd: number; bt: number; cd: number; td: number; meters: Map<string, Meter>; }
     const map = new Map<string, Cust>();
     records.forEach(r => {
       const mkh = (r.MKHang || '').trim();
       if (!mkh) return;
+      const zone = mkh.split('-')[0] || 'Khác';
+      if (!zoneOn(zone)) return;
       const month = dateOnly(r.EndDate).slice(0, 7);
-      if (month !== cur && month !== prev) return;
+      const isCur = curMonths.has(month), isPrev = prevMonths.has(month);
+      if (!isCur && !isPrev) return;
       const kwh = num(r.TongSL_HC), vnd = num(r.ThTien_HC) + num(r.ThTien_PK);
       let c = map.get(mkh);
-      if (!c) { c = { mkh, name: r.NMua || mkh, zone: mkh.split('-')[0] || 'Khác', curKwh: 0, prevKwh: 0, curVnd: 0, meters: new Map() }; map.set(mkh, c); }
+      if (!c) { c = { mkh, name: r.NMua || mkh, zone, curKwh: 0, prevKwh: 0, curVnd: 0, bt: 0, cd: 0, td: 0, meters: new Map() }; map.set(mkh, c); }
       if (r.NMua && (!c.name || c.name === mkh)) c.name = r.NMua;
       const sct = (r.SCT || '—').trim();
       let mt = c.meters.get(sct);
       if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), curKwh: 0, prevKwh: 0, curVnd: 0 }; c.meters.set(sct, mt); }
       if (r.DChiNMua && !mt.addr) mt.addr = (r.DChiNMua || '').trim();
-      if (month === cur) { c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd; }
-      else if (month === prev) { c.prevKwh += kwh; mt.prevKwh += kwh; }
+      if (isCur) {
+        c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd;
+        c.bt += num(r.SL_BT); c.cd += num(r.SL_CD); c.td += num(r.SL_TD);   // khung giờ
+      }
+      else if (isPrev) { c.prevKwh += kwh; mt.prevKwh += kwh; }
     });
     const delta = (a: number, b: number) => (b > 0 ? (a - b) / b : null);
     const custRows = Array.from(map.values())
       .filter(c => c.curKwh > 0 || c.curVnd > 0)
       .map(c => ({
         mkh: c.mkh, name: c.name, zone: c.zone, curKwh: c.curKwh, curVnd: c.curVnd,
+        bt: c.bt, cd: c.cd, td: c.td,
         delta: delta(c.curKwh, c.prevKwh),
         meterList: Array.from(c.meters.values())
           .filter(m => m.curKwh > 0 || m.prevKwh > 0 || m.curVnd > 0)
@@ -246,26 +294,24 @@ export default function BusinessSummaryDashboard() {
       return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     });
     zones.forEach(z => z.rows.sort((a, b) => b.curKwh - a.curKwh));
-    return { cur, prev, zones };
-  }, [records, year, tableMonthIdx]);
+    return { zones };
+  }, [records, selectedYears, tableMonthIdx, hiddenZones]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fmtMonth = (ym?: string) => (ym ? `${ym.slice(5)}/${ym.slice(0, 4)}` : '—');
   const busy = loading || pmaxLoading;
   const thousand = (v: number) => fmtInt(Math.round(v / 1000));
   const collectPct = Math.round(kpis.collectRate * 100);
 
-  /* Màu cố định theo KCN (không đổi khi bật/tắt, để chip + cột luôn khớp màu) */
+  /* Màu cố định theo KCN — DÙNG CHO CỘT BIỂU ĐỒ (để phân biệt các KCN). Chip chọn dùng màu accent chung. */
   const zoneColor = useMemo(
     () => new Map(zoneCatalog.map((z, i) => [z, ZONE_BARS[i % ZONE_BARS.length]])),
     [zoneCatalog],
   );
 
-  /* Số trên đỉnh mỗi cột năm — ẩn nếu < 10% giá trị năm cao nhất trong cùng tháng */
   const renderYearBarLabel = (props: any) => {
     const { x, y: py, width, value, index } = props;
     if (value == null || width == null) return null;
-    const row = load3y.data[index];
-    const max = Math.max(0, ...load3y.years.map(yr => row[String(yr)] || 0));
+    const row = loadByYear.data[index];
+    const max = Math.max(0, ...loadByYear.years.map(yr => row[String(yr)] || 0));
     if (max <= 0 || value < max * 0.1) return null;
     return (
       <text x={x + width / 2} y={py - 4} textAnchor="middle" fontSize={9} fontWeight={600} fill="var(--text-3)">
@@ -274,7 +320,6 @@ export default function BusinessSummaryDashboard() {
     );
   };
 
-  /* Số bên trong mỗi đoạn cột xếp chồng theo KCN — ẩn nếu < 10% tổng tháng đó */
   const renderZoneStackLabel = (zoneCode: string) => (props: any) => {
     const { x, y: py, width, height, value, index } = props;
     if (!value || width == null || height < 14) return null;
@@ -288,7 +333,6 @@ export default function BusinessSummaryDashboard() {
     );
   };
 
-  /* % hiển thị ngay trong mỗi đoạn cột tần suất khung giờ */
   const renderFreqPctLabel = (props: any) => {
     const { x, y: py, width, height, value } = props;
     if (!value || width < 20) return null;
@@ -299,7 +343,6 @@ export default function BusinessSummaryDashboard() {
     );
   };
 
-  /* % hiển thị ngay trong donut */
   const renderTariffPctLabel = (props: any) => {
     const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
     if (percent < 0.03) return null;
@@ -345,21 +388,42 @@ export default function BusinessSummaryDashboard() {
         <div className="flex-1 min-w-0">
           <h2 className="text-xl font-bold text-ink tracking-tight">Tổng hợp kinh doanh</h2>
           <p className="text-xs text-faint mt-0.5 flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5" /> Toàn bộ khu công nghiệp · sản lượng & doanh thu
+            <Building2 className="w-3.5 h-3.5" /> KCN &amp; năm đã chọn · sản lượng &amp; doanh thu
           </p>
         </div>
       </div>
 
       {error && <div className="vl-alert vl-alert-light-danger text-sm">{error}</div>}
 
-      {/* Row 1 — sản lượng · doanh thu · công nợ (biểu đồ tiến trình) */}
+      {/* Row 1.5 — bộ TÍCH CHỌN KCN + năm (đồng bộ màu accent). Lọc TOÀN BỘ KPI/biểu đồ/bảng bên dưới. */}
+      <div className="bg-surface border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 flex flex-col gap-2.5" style={{ boxShadow: 'var(--shadow-card)' }}>
+        <div className="flex items-start gap-x-4 gap-y-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-faint uppercase tracking-wide shrink-0 mt-0.5">Khu công nghiệp</span>
+          {zoneCatalog.length === 0 ? (
+            <span className="text-xs text-faint italic">Chưa có dữ liệu</span>
+          ) : zoneCatalog.map(z => (
+            <FilterChip key={z} on={zoneOn(z)} label={ZONE_MAP[z] || z} onToggle={() => toggleZoneVisible(z)} />
+          ))}
+        </div>
+        <div className="h-px bg-[var(--border)]" />
+        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-faint uppercase tracking-wide shrink-0">Năm</span>
+          {years.map(y => (
+            <FilterChip key={y} on={selectedYears.has(y)} label={String(y)} onToggle={() => toggleYear(y)} />
+          ))}
+          <button onClick={reload} disabled={busy} className="vl-btn vl-btn-secondary vl-btn-sm gap-1.5 disabled:opacity-50 ml-auto">
+            <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} /> Tải lại
+          </button>
+        </div>
+      </div>
+
+      {/* Row 1 — sản lượng · doanh thu · công nợ (KPI, lọc theo KCN + năm) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatTile label="Sản lượng hữu công" value={fmtInt(kpis.kwh)} unit="kWh" icon={Zap} tone="accent" loading={loading}
           sub={`${fmtInt(kpis.bills)} hóa đơn · ${fmtInt(kpis.customers)} khách hàng`} subTone="neutral" />
         <StatTile label="Doanh thu" value={fmtInt(kpis.vnd)} unit="đồng" icon={TrendingUp} tone="neutral" loading={loading}
           sub={`TB ${fmtInt(kpis.bills > 0 ? Math.round(kpis.vnd / kpis.bills) : 0)} đồng/hóa đơn`} subTone="neutral" />
 
-        {/* Công nợ — thẻ riêng có thanh tiến trình tỷ lệ đã thu */}
         <div
           className="bg-surface border border-[var(--border)] rounded-[var(--radius)] p-4 flex flex-col gap-2.5"
           style={{ borderLeft: `3px solid ${kpis.vndDebt > 0 ? 'var(--danger)' : 'var(--success)'}`, boxShadow: 'var(--shadow-card)' }}
@@ -389,48 +453,15 @@ export default function BusinessSummaryDashboard() {
         </div>
       </div>
 
-      {/* Row 1.5 — bộ lọc KCN (checkbox) + năm + tải lại. Liên kết chung cho
-          "Biểu đồ phụ tải theo tháng", "Cơ cấu phụ tải theo khung giờ" và "Sản lượng theo khu công nghiệp". */}
-      <div className="bg-surface border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 flex flex-col md:flex-row md:items-center gap-3" style={{ boxShadow: 'var(--shadow-card)' }}>
-        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap flex-1 min-w-0">
-          <span className="text-[11px] font-semibold text-faint uppercase tracking-wide shrink-0">Khu công nghiệp</span>
-          {zoneCatalog.length === 0 ? (
-            <span className="text-xs text-faint italic">Chưa có dữ liệu</span>
-          ) : zoneCatalog.map(z => {
-            const on = !hiddenZones[z];
-            const color = zoneColor.get(z)!;
-            return (
-              <label key={z} className="inline-flex items-center gap-1.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={on}
-                  onChange={() => toggleZoneVisible(z)}
-                  className="w-3.5 h-3.5 rounded border-[var(--border-strong)] cursor-pointer"
-                  style={{ accentColor: color }}
-                />
-                <span className={`text-xs font-medium ${on ? 'text-ink' : 'text-faint'}`}>{ZONE_MAP[z] || z}</span>
-              </label>
-            );
-          })}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Select value={String(year)} onChange={v => setYear(Number(v))}
-            options={years.map(y => ({ value: String(y), label: `Năm ${y}` }))} className="min-w-[130px]" />
-          <button onClick={reload} disabled={busy} className="vl-btn vl-btn-secondary vl-btn-sm gap-1.5 disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} /> Tải lại
-          </button>
-        </div>
-      </div>
-
-      {/* Row 2 — monthly load bars (3) + tariff donut (1), 3:1 on xl */}
+      {/* Row 2 — monthly load bars (theo năm chọn) + tariff donut, 3:1 on xl */}
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-        <Panel className="xl:col-span-3" title="Biểu đồ phụ tải theo tháng" sub={`So sánh ${load3y.years.length} năm gần nhất · sản lượng (kWh)`} icon={BarChart3}>
+        <Panel className="xl:col-span-3" title="Biểu đồ phụ tải theo tháng" sub={`Năm ${yearsLabel} · sản lượng (kWh) · lọc theo KCN`} icon={BarChart3}>
           <div className="h-[320px] px-3 py-4">
-            {bills.length === 0 ? (
-              <EmptyState icon={Activity} title="Chưa có dữ liệu" hint="Không có hóa đơn nào trong khoảng đã tải." />
+            {loadByYear.data.every(r => loadByYear.years.every(y => !r[String(y)])) ? (
+              <EmptyState icon={Activity} title="Chưa có dữ liệu" hint="Không có hóa đơn nào với KCN/năm đang chọn." />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={load3y.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }} barGap={2} barCategoryGap="18%">
+                <BarChart data={loadByYear.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }} barGap={2} barCategoryGap="18%">
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 11 }} />
                   <YAxis
@@ -439,7 +470,7 @@ export default function BusinessSummaryDashboard() {
                   />
                   <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {load3y.years.map((y, i) => (
+                  {loadByYear.years.map((y, i) => (
                     <Bar key={y} dataKey={String(y)} name={String(y)} fill={YEAR_BARS[i % YEAR_BARS.length]} radius={[3, 3, 0, 0]} maxBarSize={28}>
                       <LabelList dataKey={String(y)} content={renderYearBarLabel} />
                     </Bar>
@@ -450,7 +481,7 @@ export default function BusinessSummaryDashboard() {
           </div>
         </Panel>
 
-        <Panel className="xl:col-span-1" title="Cơ cấu phụ tải theo khung giờ" sub={`Năm ${year} · lọc theo KCN đang bật`} icon={Layers}>
+        <Panel className="xl:col-span-1" title="Cơ cấu phụ tải theo khung giờ" sub={`Năm ${yearsLabel} · lọc theo KCN`} icon={Layers}>
           {tariffTotal === 0 ? (
             <EmptyState icon={Layers} title="Chưa có dữ liệu biểu giá" />
           ) : (
@@ -485,13 +516,13 @@ export default function BusinessSummaryDashboard() {
         </Panel>
       </div>
 
-      {/* Row 3 — stacked kWh theo KCN (3) + tần suất khung giờ theo KCN (1), 3:1 */}
+      {/* Row 3 — stacked kWh theo KCN + tần suất khung giờ theo KCN, 3:1 */}
       {zoneCatalog.length > 0 && (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-          <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · lọc theo bộ chọn KCN ở trên" icon={Layers}>
+          <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · lọc theo bộ chọn KCN &amp; năm" icon={Layers}>
             <div className="h-[300px] xl:h-[380px] px-3 py-4">
-              {stackByZone.zones.length === 0 ? (
-                <EmptyState icon={Layers} title="Đã tắt hết KCN" hint="Bật lại ít nhất một khu để xem biểu đồ." />
+              {stackByZone.zones.length === 0 || stackByZone.data.length === 0 ? (
+                <EmptyState icon={Layers} title="Không có dữ liệu" hint="Bật lại KCN hoặc chọn năm có dữ liệu." />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={stackByZone.data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }}>
@@ -516,7 +547,7 @@ export default function BusinessSummaryDashboard() {
             </div>
           </Panel>
 
-          <Panel className="xl:col-span-1" title="Tần suất khung giờ theo KCN" sub={`Năm ${year} · tỷ trọng Bình thường / Cao điểm / Thấp điểm`} icon={BarChart3}>
+          <Panel className="xl:col-span-1" title="Tần suất khung giờ theo KCN" sub={`Năm ${yearsLabel} · tỷ trọng BT / CĐ / TĐ`} icon={BarChart3}>
             <div className="h-[300px] px-3 py-4">
               {freqByZone.length === 0 ? (
                 <EmptyState icon={BarChart3} title="Chưa có dữ liệu" />
@@ -528,22 +559,13 @@ export default function BusinessSummaryDashboard() {
                     <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} stroke="var(--text-3)" width={92} style={{ fontSize: 10 }} />
                     <Tooltip content={<ChartTooltip fmt={v => `${v}%`} />} />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
-                    <Bar dataKey="btPct" name="Bình thường" stackId="f" maxBarSize={22}>
-                      {freqByZone.map((f, i) => (
-                        <Cell key={i} fill={hiddenZones[f.code] ? 'var(--text-4)' : PIE_COLORS[0]} fillOpacity={hiddenZones[f.code] ? 0.4 : 1} />
-                      ))}
+                    <Bar dataKey="btPct" name="Bình thường" stackId="f" maxBarSize={22} fill={PIE_COLORS[0]}>
                       <LabelList dataKey="btPct" content={renderFreqPctLabel} />
                     </Bar>
-                    <Bar dataKey="cdPct" name="Cao điểm" stackId="f" maxBarSize={22}>
-                      {freqByZone.map((f, i) => (
-                        <Cell key={i} fill={hiddenZones[f.code] ? 'var(--text-4)' : PIE_COLORS[1]} fillOpacity={hiddenZones[f.code] ? 0.4 : 1} />
-                      ))}
+                    <Bar dataKey="cdPct" name="Cao điểm" stackId="f" maxBarSize={22} fill={PIE_COLORS[1]}>
                       <LabelList dataKey="cdPct" content={renderFreqPctLabel} />
                     </Bar>
-                    <Bar dataKey="tdPct" name="Thấp điểm" stackId="f" radius={[0, 3, 3, 0]} maxBarSize={22}>
-                      {freqByZone.map((f, i) => (
-                        <Cell key={i} fill={hiddenZones[f.code] ? 'var(--text-4)' : PIE_COLORS[2]} fillOpacity={hiddenZones[f.code] ? 0.4 : 1} />
-                      ))}
+                    <Bar dataKey="tdPct" name="Thấp điểm" stackId="f" radius={[0, 3, 3, 0]} maxBarSize={22} fill={PIE_COLORS[2]}>
                       <LabelList dataKey="tdPct" content={renderFreqPctLabel} />
                     </Bar>
                   </BarChart>
@@ -556,20 +578,20 @@ export default function BusinessSummaryDashboard() {
 
       {/* Row 4 — two customer charts with selectors */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Panel title="Biểu đồ sản lượng & công suất khách hàng" sub={`Sản lượng (kWh) & Pmax (kW) · năm ${year}`} icon={Zap}>
+        <Panel title="Biểu đồ sản lượng & công suất khách hàng" sub={`Sản lượng (kWh) & Pmax (kW) · năm ${yearsLabel}`} icon={Zap}>
           {renderCustomerChart(effA, setCustA, dataA)}
         </Panel>
-        <Panel title="Biểu đồ sản lượng & công suất khách hàng" sub={`Sản lượng (kWh) & Pmax (kW) · năm ${year}`} icon={Gauge}>
+        <Panel title="Biểu đồ sản lượng & công suất khách hàng" sub={`Sản lượng (kWh) & Pmax (kW) · năm ${yearsLabel}`} icon={Gauge}>
           {renderCustomerChart(effB, setCustB, dataB)}
         </Panel>
       </div>
 
-      {/* Row 5 — bảng khách hàng theo từng KCN (thẻ gradient thu gọn được) */}
+      {/* Row 5 — bảng khách hàng theo từng KCN */}
       <div className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-bold text-ink flex items-center gap-2"><TrendingUp className="w-4 h-4 text-accent" /> Sản lượng & doanh thu theo khách hàng</h3>
-            <p className="text-[11px] text-faint mt-0.5">Tháng {fmtMonth(detail.cur)} so với {fmtMonth(detail.prev)} · tách theo khu công nghiệp · bấm KH để xem công tơ</p>
+            <p className="text-[11px] text-faint mt-0.5">Tháng {tableMonthIdx} · năm {yearsLabel} · so tháng liền trước · tách theo KCN · bấm KH để xem công tơ</p>
           </div>
           <Select value={String(tableMonthIdx)} onChange={v => setTableMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[130px]" />
         </div>
@@ -587,6 +609,7 @@ export default function BusinessSummaryDashboard() {
                 kwh={z.kwh}
                 vnd={z.vnd}
                 rows={z.rows}
+                showTariff
                 collapsed={!!collapsedZones[z.code]}
                 onToggleCollapse={() => setCollapsedZones(c => ({ ...c, [z.code]: !c[z.code] }))}
                 expandedRows={expanded}

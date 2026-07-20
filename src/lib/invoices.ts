@@ -151,8 +151,13 @@ export function mergeBills(records: InvoiceRecord[]): Bill[] {
     const loai = (r.LoaiHD || '').trim();
     const billId = (r.BillId ?? '').toString().trim();
     const indexId = (r.IndexId ?? '').toString().trim();
-    if (billId && billId !== '0')       fold(`${mkh}|${loai}|B:${billId}`, r);
-    else if (indexId && indexId !== '0') fold(`${mkh}|${loai}|I:${indexId}`, r);
+    // Kèm THÁNG (YYYY-MM của EndDate) vào khóa: BillId/IndexId (=MIN MHHDVu, số nhỏ) KHÔNG
+    // duy nhất giữa các kỳ → nếu không kèm tháng sẽ gộp nhầm hóa đơn khác kỳ trùng IndexId,
+    // dời sản lượng sang tháng khác (vd KCNTH-002: 18 kWh 02/2023 bị hút sang 01/2026).
+    // Các khoảng đổi giá của CÙNG kỳ vẫn chung BillId/IndexId + cùng tháng → vẫn gộp đúng.
+    const mth = end.slice(0, 7);
+    if (billId && billId !== '0')       fold(`${mkh}|${loai}|B:${billId}|${mth}`, r);
+    else if (indexId && indexId !== '0') fold(`${mkh}|${loai}|I:${indexId}|${mth}`, r);
     else                                 fold(`${mkh}|${loai}|${(r.SCT || '').trim()}|${end}`, r);
   });
 
@@ -249,12 +254,14 @@ export interface UseInvoicesOpts {
   endYear?: number;
   /** How many years back to load for trend comparison (default: 2 → 3 years total). */
   yearsBack?: number;
+  /** Nạp TOÀN BỘ hóa đơn (bỏ qua giới hạn năm). Ưu tiên hơn endYear/yearsBack. */
+  allYears?: boolean;
   /** Lock to the signed-in user's zone (operations role). Admin/business: false. */
   lockToArea?: boolean;
 }
 
 export function useInvoices(opts: UseInvoicesOpts = {}) {
-  const { endYear = new Date().getFullYear(), yearsBack = 2, lockToArea = false } = opts;
+  const { endYear = new Date().getFullYear(), yearsBack = 2, allYears = false, lockToArea = false } = opts;
   const [records, setRecords] = useState<InvoiceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -272,7 +279,8 @@ export function useInvoices(opts: UseInvoicesOpts = {}) {
       const start = `${startYear}-01-01`;
       const nextStart = `${endYear + 1}-01-01`;
       const list = await pb.collection('invoice').getFullList<InvoiceRecord>({
-        filter: pb.filter('EndDate >= {:start} && EndDate < {:nextStart}', { start, nextStart }),
+        // allYears: nạp toàn bộ (không lọc năm); ngược lại giới hạn cửa sổ [startYear, endYear].
+        ...(allYears ? {} : { filter: pb.filter('EndDate >= {:start} && EndDate < {:nextStart}', { start, nextStart }) }),
         sort: '-EndDate',
         requestKey: null,
       });
@@ -282,7 +290,7 @@ export function useInvoices(opts: UseInvoicesOpts = {}) {
     } finally {
       setLoading(false);
     }
-  }, [endYear, yearsBack]);
+  }, [endYear, yearsBack, allYears]);
 
   useEffect(() => { load(); }, [load]);
 
