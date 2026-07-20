@@ -151,8 +151,13 @@ export function mergeBills(records: InvoiceRecord[]): Bill[] {
     const loai = (r.LoaiHD || '').trim();
     const billId = (r.BillId ?? '').toString().trim();
     const indexId = (r.IndexId ?? '').toString().trim();
-    if (billId && billId !== '0')       fold(`${mkh}|${loai}|B:${billId}`, r);
-    else if (indexId && indexId !== '0') fold(`${mkh}|${loai}|I:${indexId}`, r);
+    // Kèm THÁNG (YYYY-MM của EndDate) vào khóa: BillId/IndexId (=MIN MHHDVu, số nhỏ) KHÔNG
+    // duy nhất giữa các kỳ → nếu không kèm tháng sẽ gộp nhầm hóa đơn khác kỳ trùng IndexId,
+    // dời sản lượng sang tháng khác (vd KCNTH-002: 18 kWh 02/2023 bị hút sang 01/2026).
+    // Các khoảng đổi giá của CÙNG kỳ vẫn chung BillId/IndexId + cùng tháng → vẫn gộp đúng.
+    const mth = end.slice(0, 7);
+    if (billId && billId !== '0')       fold(`${mkh}|${loai}|B:${billId}|${mth}`, r);
+    else if (indexId && indexId !== '0') fold(`${mkh}|${loai}|I:${indexId}|${mth}`, r);
     else                                 fold(`${mkh}|${loai}|${(r.SCT || '').trim()}|${end}`, r);
   });
 
