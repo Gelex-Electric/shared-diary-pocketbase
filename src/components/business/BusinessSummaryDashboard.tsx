@@ -41,7 +41,7 @@ function FilterChip({ on, label, onToggle }: { on: boolean; label: string; onTog
 
 export default function BusinessSummaryDashboard() {
   const endYear = new Date().getFullYear();
-  const { bills, records, meterIndex, loading, error, reload } = useInvoices({ endYear, yearsBack: 2, lockToArea: false });
+  const { bills, records, meterIndex, loading, error, reload } = useInvoices({ allYears: true, lockToArea: false });
   const { rows: pmaxRows, loading: pmaxLoading } = usePmaxDaily();
 
   /* Năm: TÍCH CHỌN NHIỀU (checkbox), mặc định BẬT HẾT. KCN: tích chọn (ẩn/hiện). */

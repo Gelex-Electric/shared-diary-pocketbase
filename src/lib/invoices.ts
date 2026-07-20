@@ -249,12 +249,14 @@ export interface UseInvoicesOpts {
   endYear?: number;
   /** How many years back to load for trend comparison (default: 2 → 3 years total). */
   yearsBack?: number;
+  /** Nạp TOÀN BỘ hóa đơn (bỏ qua giới hạn năm). Ưu tiên hơn endYear/yearsBack. */
+  allYears?: boolean;
   /** Lock to the signed-in user's zone (operations role). Admin/business: false. */
   lockToArea?: boolean;
 }
 
 export function useInvoices(opts: UseInvoicesOpts = {}) {
-  const { endYear = new Date().getFullYear(), yearsBack = 2, lockToArea = false } = opts;
+  const { endYear = new Date().getFullYear(), yearsBack = 2, allYears = false, lockToArea = false } = opts;
   const [records, setRecords] = useState<InvoiceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -272,7 +274,8 @@ export function useInvoices(opts: UseInvoicesOpts = {}) {
       const start = `${startYear}-01-01`;
       const nextStart = `${endYear + 1}-01-01`;
       const list = await pb.collection('invoice').getFullList<InvoiceRecord>({
-        filter: pb.filter('EndDate >= {:start} && EndDate < {:nextStart}', { start, nextStart }),
+        // allYears: nạp toàn bộ (không lọc năm); ngược lại giới hạn cửa sổ [startYear, endYear].
+        ...(allYears ? {} : { filter: pb.filter('EndDate >= {:start} && EndDate < {:nextStart}', { start, nextStart }) }),
         sort: '-EndDate',
         requestKey: null,
       });
@@ -282,7 +285,7 @@ export function useInvoices(opts: UseInvoicesOpts = {}) {
     } finally {
       setLoading(false);
     }
-  }, [endYear, yearsBack]);
+  }, [endYear, yearsBack, allYears]);
 
   useEffect(() => { load(); }, [load]);
 
