@@ -136,11 +136,11 @@ const fmtDate = (s?: string) => {
   return d && m && y ? `${d}/${m}/${y}` : s;
 };
 
-// Hiển thị gọn thời gian lấy chỉ số từ câu NKy → "HH:MM DD/MM/YYYY" ('' nếu chưa có)
+// Hiển thị thời gian lấy chỉ số từ câu NKy → chỉ giờ "HH:MM" ('' nếu chưa có)
 const fmtNKy = (s?: string): string => {
   const { date, time } = parseNKySentence(s);
   if (!date) return '';
-  return `${time} ${fmtDate(date)}`;
+  return time;
 };
 
 // Màu phân biệt theo khu công nghiệp (dùng inline style — tránh Tailwind purge class động)
