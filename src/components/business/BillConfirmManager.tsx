@@ -5,7 +5,7 @@ import { DatePicker, TimePicker, MonthPicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
-import { zoneFromArea, zoneOf } from '../../lib/invoices';
+import { zoneFromArea, zoneOf, ZONE_MAP } from '../../lib/invoices';
 import PizZip from 'pizzip';
 import {
   FileCheck2, Save, Gauge, Building2, Users,
@@ -135,6 +135,23 @@ const fmtDate = (s?: string) => {
   const [y, m, d] = datePart.split('-');
   return d && m && y ? `${d}/${m}/${y}` : s;
 };
+
+// Hiển thị thời gian lấy chỉ số từ câu NKy → chỉ giờ "HH:MM" ('' nếu chưa có)
+const fmtNKy = (s?: string): string => {
+  const { date, time } = parseNKySentence(s);
+  if (!date) return '';
+  return time;
+};
+
+// Màu phân biệt theo khu công nghiệp (dùng inline style — tránh Tailwind purge class động)
+const ZONE_COLOR: Record<string, string> = {
+  KCNTH: '#0ea5e9',  // sky
+  KCNPĐ: '#10b981',  // emerald
+  KCNTTI: '#8b5cf6', // violet
+  KCNYM: '#f59e0b',  // amber
+  KCN03: '#f43f5e',  // rose
+};
+const zoneColor = (mkh: string) => ZONE_COLOR[zoneOf(mkh)] || '#94a3b8';
 
 // Gộp nhiều khoảng đổi giá của cùng công tơ thành 1 bản ghi biên bản liên tục:
 // đầu kỳ = chỉ số đầu của khoảng sớm nhất, cuối kỳ = chỉ số cuối của khoảng muộn nhất,
@@ -498,55 +515,63 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
   }, [filteredRecords]);
 
   /* ── Đồng bộ thời gian lấy chỉ số: gọi API HES (0h–23h59 ngày cuối kỳ),
-     so khớp BT/CD/TD của biên bản với dữ liệu trả về, điền giờ/ngày vào NKy.
-     Bỏ qua các biên bản đã có NKy. ── */
+     so khớp CHỈ SỐ TỔNG (BT+CĐ+TĐ) của biên bản với dữ liệu trả về, lấy mốc
+     thời gian có tổng GẦN NHẤT rồi điền vào NKy. Dùng tổng vì nó tăng đơn điệu
+     → mốc thời gian là DUY NHẤT; nếu so từng biểu thì biểu phẳng cả ngày (vd CĐ)
+     sẽ khớp nhầm 00:00. Luôn gọi API kể cả khi đã có NKy (ghi đè). ── */
   const syncNKyTimes = async () => {
     const token = hesAccount?.Token;
     if (!token) { showToast('Chưa có Token HES — hãy bấm "Lấy Token" trước.', 'error'); return; }
+    // B1: chỉ đồng bộ các công tơ đã được tích chọn
+    const targets = mergedRows.filter(row => selectedIds.has(row.key));
+    if (targets.length === 0) { showToast('Hãy tích chọn công tơ cần đồng bộ trước.', 'warning'); return; }
     setIsSyncing(true);
-    setSyncProgress({ done: 0, total: mergedRows.length });
-    let updated = 0, skipped = 0, notFound = 0;
+    setSyncProgress({ done: 0, total: targets.length });
+    let updated = 0, notFound = 0;
     try {
-      for (let i = 0; i < mergedRows.length; i++) {
-        const row = mergedRows[i];
+      for (let i = 0; i < targets.length; i++) {
+        const row = targets[i];
         const r = row.data; // chỉ số đã gộp (cuối kỳ = khoảng muộn nhất)
-        if ((r.NKy || '').trim()) { skipped++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
         const day = dateOnly(r.EndDate);
-        if (!r.SCT || !day) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
+        if (!r.SCT || !day) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
         const start = toHesDateStr(day, '00', '00');
         const end = toHesDateStr(day, '23', '59');
         const url = `/hes/api/GetMeterDataByDate?MeterNo=${r.SCT}&StartDate=${start}&EndDate=${end}&Token=${token}`;
         const res = await fetch(url);
-        if (!res.ok) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
+        if (!res.ok) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
         const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
+        if (!Array.isArray(data) || data.length === 0) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
 
-        const EPS = 0.05;
-        const match = (data as DataMetter[]).find(d => {
-          const bt = parseFloat(d.ACTIVE_KW_INDICATE_RATE1);
-          const cd = parseFloat(d.ACTIVE_KW_INDICATE_RATE2);
-          const td = parseFloat(d.ACTIVE_KW_INDICATE_RATE3);
-          return (Number.isFinite(bt) && Math.abs(bt - num(r.BT_cuoi)) < EPS) ||
-                 (Number.isFinite(cd) && Math.abs(cd - num(r.CD_cuoi)) < EPS) ||
-                 (Number.isFinite(td) && Math.abs(td - num(r.TD_cuoi)) < EPS);
-        });
-        if (!match) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
+        // Chỉ số tổng cuối kỳ của biên bản = BT + CĐ + TĐ (khớp ACTIVE_KW_INDICATE_TOTAL)
+        const invTotal = num(r.BT_cuoi) + num(r.CD_cuoi) + num(r.TD_cuoi);
+        let match: DataMetter | null = null;
+        let bestDiff = Infinity;
+        if (invTotal > 0) {
+          for (const d of data as DataMetter[]) {
+            const tot = parseFloat(d.ACTIVE_KW_INDICATE_TOTAL);
+            if (!Number.isFinite(tot)) continue;
+            const diff = Math.abs(tot - invTotal);
+            if (diff < bestDiff) { bestDiff = diff; match = d; }
+          }
+        }
+        // Chốt chỉ số luôn rơi đúng mốc 30′ → tổng khớp gần như tuyệt đối (diff ~0).
+        // Chênh > 1 kWh coi như không khớp (dữ liệu khác ngày / công tơ reset).
+        if (!match || bestDiff > 1) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
 
         const dt = new Date(match.DATE_TIME);
-        if (isNaN(dt.getTime())) { notFound++; setSyncProgress({ done: i + 1, total: mergedRows.length }); continue; }
+        if (isNaN(dt.getTime())) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
         const nKySentence = `${pad2(dt.getHours())} giờ ${pad2(dt.getMinutes())} phút ngày ${pad2(dt.getDate())} tháng ${pad2(dt.getMonth() + 1)} năm ${dt.getFullYear()}`;
         // Ghi NKy cho mọi khoảng của hóa đơn (kể cả khi đổi giá tách nhiều bản ghi)
         await Promise.all(row.ids.map(id => pb.collection('invoice').update(id, { NKy: nKySentence })));
         updated++;
-        setSyncProgress({ done: i + 1, total: mergedRows.length });
+        setSyncProgress({ done: i + 1, total: targets.length });
       }
       await loadRecords(monthFilterDate);
 
-      const attempted = mergedRows.length - skipped;
-      if (attempted > 0 && updated === 0) {
+      if (targets.length > 0 && updated === 0) {
         showToast(`Không công tơ nào lấy được dữ liệu — Token HES có thể đã hết hạn, hãy bấm "Lấy Token" lại.`, 'error');
       } else {
-        showToast(`Đồng bộ xong: ${updated} cập nhật, ${skipped} đã có NKy, ${notFound} không tìm thấy dữ liệu`, 'success');
+        showToast(`Đồng bộ xong: ${updated} cập nhật, ${notFound} không khớp dữ liệu`, 'success');
       }
     } catch (err: any) {
       showToast(`Lỗi đồng bộ: ${err?.message || ''}`, 'error');
@@ -566,16 +591,21 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
       map.get(name)!.push(row);
     });
     const groups = Array.from(map.entries()).map(([name, items]) => {
-      const mkhList = Array.from(new Set(items.map(it => (it.data.MKHang || '').trim()).filter(Boolean))).sort();
+      const mkhList = Array.from(new Set(items.map(it => (it.data.MKHang || '').trim()).filter(Boolean)))
+        .sort((x, y) => x.localeCompare(y, 'vi', { numeric: true }));
+      const mkhSort = mkhList[0] || '';
       return {
         name,
         mkh: mkhList.join(', '),
-        mkhSort: mkhList[0] || '',
+        mkhSort,
+        zone: zoneOf(mkhSort),
         items: items.sort((a, b) =>
           dateOnly(b.data.EndDate).localeCompare(dateOnly(a.data.EndDate))),
       };
     });
-    groups.sort((a, b) => a.mkhSort.localeCompare(b.mkhSort, 'vi') || a.name.localeCompare(b.name, 'vi'));
+    // Sắp xếp theo MKH tăng dần (từ 001), so sánh số học để 001,002,…,010 đúng thứ tự
+    groups.sort((a, b) =>
+      a.mkhSort.localeCompare(b.mkhSort, 'vi', { numeric: true }) || a.name.localeCompare(b.name, 'vi'));
     return groups;
   }, [mergedRows]);
 
@@ -713,11 +743,14 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
           </button>
           <button
             onClick={syncNKyTimes}
-            disabled={isSyncing || !hesAccount?.Token}
+            disabled={isSyncing || !hesAccount?.Token || selectedIds.size === 0}
+            title={selectedIds.size === 0 ? 'Hãy tích chọn công tơ cần đồng bộ' : `Đồng bộ ${selectedIds.size} công tơ đã chọn`}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-white bg-accent hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
           >
             {isSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            {isSyncing ? `Đang đồng bộ... ${syncProgress ? `${syncProgress.done}/${syncProgress.total}` : ''}` : 'Đồng bộ thời gian lấy chỉ số'}
+            {isSyncing
+              ? `Đang đồng bộ... ${syncProgress ? `${syncProgress.done}/${syncProgress.total}` : ''}`
+              : `Đồng bộ thời gian lấy chỉ số${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
           </button>
           </>)}
           <button
@@ -760,14 +793,20 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
           {groupedByCustomer.map(group => {
             const open = !!expandedGroups[group.name];
             const groupSelected = group.items.length > 0 && group.items.every(it => selectedIds.has(it.key));
+            const zColor = zoneColor(group.mkhSort);
+            const zLabel = ZONE_MAP[group.zone] || group.zone;
             return (
-              <div key={group.name} className={`vl-accordion-item ${open ? 'is-open' : ''}`}>
+              <div
+                key={group.name}
+                className={`vl-accordion-item ${open ? 'is-open' : ''}`}
+                style={{ borderLeft: `4px solid ${zColor}` }}
+              >
                 {/* Group header */}
                 <div
                   onClick={() => toggleGroup(group.name)}
                   className="vl-accordion-header"
                 >
-                  <div className="p-2 bg-surface rounded shadow-xs text-accent shrink-0">
+                  <div className="p-2 rounded shadow-xs shrink-0" style={{ backgroundColor: `${zColor}1a`, color: zColor }}>
                     <Users className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
@@ -776,6 +815,11 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                       <span>{group.items.length} biên bản</span>
                       {group.mkh && (
                         <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent font-bold">MKH: {group.mkh}</span>
+                      )}
+                      {zLabel && (
+                        <span className="px-1.5 py-0.5 rounded font-bold" style={{ backgroundColor: `${zColor}1a`, color: zColor }}>
+                          {zLabel}
+                        </span>
                       )}
                     </p>
                   </div>
@@ -802,13 +846,14 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                       className="overflow-hidden vl-accordion-body"
                     >
                       <div className="overflow-x-auto">
-                        <table className="vl-table w-full text-left border-collapse min-w-[760px]">
+                        <table className="vl-table w-full text-left border-collapse min-w-[900px]">
                           <thead>
                             <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
                               <th className="py-3 px-4">Số công tơ</th>
                               <th className="py-3 px-4">Kỳ</th>
                               <th className="py-3 px-4 text-right">Sản lượng Tổng</th>
                               <th className="py-3 px-4 text-center">Cosφ</th>
+                              <th className="py-3 px-4 text-center">Thời gian lấy chỉ số</th>
                               <th className="py-3 px-4 text-center w-[200px]">Thao tác</th>
                             </tr>
                           </thead>
@@ -833,6 +878,11 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                                   </td>
                                   <td className="py-3.5 px-4 text-right font-mono font-bold text-warn">{fmt(res.bieu[0].cuoi)}</td>
                                   <td className="py-3.5 px-4 text-center font-mono font-bold text-dim">{res.cosphi.toFixed(3)}</td>
+                                  <td className="py-3.5 px-4 text-center text-xs font-mono tabular-nums">
+                                    {fmtNKy(r.NKy)
+                                      ? <span className="text-ok font-semibold">{fmtNKy(r.NKy)}</span>
+                                      : <span className="text-faint">Chưa đồng bộ</span>}
+                                  </td>
                                   <td className="py-3.5 px-4">
                                     <div className="flex items-center justify-end gap-1.5">
                                       {/* Hóa đơn đổi giá (gộp nhiều khoảng) không sửa tay được — ẩn nút Sửa */}

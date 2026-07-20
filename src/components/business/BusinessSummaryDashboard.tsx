@@ -10,7 +10,7 @@ import { Select } from '../ui/Select';
 import { StatTile, Panel, ChartTooltip, EmptyState, CHART, ZONE_BARS, CustomerZoneCard } from '../ui/dashboard';
 import { setLocalNotification, clearLocalNotification } from '../ui/NotificationBell';
 import {
-  useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, fmtVNDShort, num, ZONE_MAP, ZONE_ORDER,
+  useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, ZONE_MAP, ZONE_ORDER,
 } from '../../lib/invoices';
 import { usePmaxDaily } from '../../lib/pmax';
 
@@ -100,7 +100,7 @@ export default function BusinessSummaryDashboard() {
       setLocalNotification({
         id: 'unpaid-invoices',
         title: 'Công nợ chưa thu',
-        message: `Có ${fmtInt(kpis.unpaid)} hóa đơn chưa thanh toán (${fmtVNDShort(kpis.vndDebt)} ₫) trong năm ${yearsLabel}.`,
+        message: `Còn ${fmtInt(kpis.unpaid)} hóa đơn chưa thanh toán trong kỳ hiện tại.`,
         type: 'warning',
       });
     } else {
@@ -303,7 +303,6 @@ export default function BusinessSummaryDashboard() {
 
   const busy = loading || pmaxLoading;
   const thousand = (v: number) => fmtInt(Math.round(v / 1000));
-  const collectPct = Math.round(kpis.collectRate * 100);
 
   /* Màu cố định theo KCN — DÙNG CHO CỘT BIỂU ĐỒ (để phân biệt các KCN). Chip chọn dùng màu accent chung. */
   const zoneColor = useMemo(
@@ -445,14 +444,9 @@ export default function BusinessSummaryDashboard() {
               <span className="text-sm text-soft font-medium">đồng</span>
             </div>
           )}
-          <div className="space-y-1.5">
-            <div className="h-1.5 rounded-full bg-subtle overflow-hidden">
-              <div className="h-full rounded-full bg-ok transition-all" style={{ width: `${collectPct}%` }} />
-            </div>
-            <div className="flex items-center justify-between text-[11px] font-semibold tabular-nums">
-              <span className="text-ok flex items-center gap-1"><Wallet className="w-3 h-3" /> {collectPct}% đã thu</span>
-              <span className="text-bad">{fmtInt(kpis.unpaid)} hóa đơn nợ</span>
-            </div>
+          <div className="flex items-center gap-1 text-[11px] font-semibold tabular-nums">
+            <Wallet className="w-3 h-3 text-bad" />
+            <span className="text-bad">{fmtInt(kpis.unpaid)} hóa đơn nợ</span>
           </div>
         </div>
       </div>
