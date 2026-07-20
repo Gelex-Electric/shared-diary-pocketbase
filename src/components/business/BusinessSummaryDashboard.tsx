@@ -62,11 +62,11 @@ export default function BusinessSummaryDashboard() {
     return arr.length ? arr : [endYear];
   }, [bills, pmaxRows, endYear]);
 
-  /* Mặc định lần đầu: BẬT HẾT tất cả các năm có dữ liệu (sau đó user tự tích chọn). */
+  /* Mặc định lần đầu: BẬT 3 NĂM GẦN NHẤT (years sắp giảm dần → slice 3 đầu). */
   const yearsInited = useRef(false);
   useEffect(() => {
     if (!yearsInited.current && years.length) {
-      setSelectedYears(new Set(years));
+      setSelectedYears(new Set(years.slice(0, 3)));
       yearsInited.current = true;
     }
   }, [years]);
@@ -246,7 +246,7 @@ export default function BusinessSummaryDashboard() {
     const curMonths = new Set(yearsSorted.map(y => `${y}-${pad2(tableMonthIdx)}`));
     const prevMonths = new Set(yearsSorted.map(y => tableMonthIdx === 1 ? `${y - 1}-12` : `${y}-${pad2(tableMonthIdx - 1)}`));
     interface Meter { sct: string; addr: string; curKwh: number; prevKwh: number; curVnd: number; }
-    interface Cust { mkh: string; name: string; zone: string; curKwh: number; prevKwh: number; curVnd: number; meters: Map<string, Meter>; }
+    interface Cust { mkh: string; name: string; zone: string; curKwh: number; prevKwh: number; curVnd: number; bt: number; cd: number; td: number; meters: Map<string, Meter>; }
     const map = new Map<string, Cust>();
     records.forEach(r => {
       const mkh = (r.MKHang || '').trim();
@@ -258,13 +258,16 @@ export default function BusinessSummaryDashboard() {
       if (!isCur && !isPrev) return;
       const kwh = num(r.TongSL_HC), vnd = num(r.ThTien_HC) + num(r.ThTien_PK);
       let c = map.get(mkh);
-      if (!c) { c = { mkh, name: r.NMua || mkh, zone, curKwh: 0, prevKwh: 0, curVnd: 0, meters: new Map() }; map.set(mkh, c); }
+      if (!c) { c = { mkh, name: r.NMua || mkh, zone, curKwh: 0, prevKwh: 0, curVnd: 0, bt: 0, cd: 0, td: 0, meters: new Map() }; map.set(mkh, c); }
       if (r.NMua && (!c.name || c.name === mkh)) c.name = r.NMua;
       const sct = (r.SCT || '—').trim();
       let mt = c.meters.get(sct);
       if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), curKwh: 0, prevKwh: 0, curVnd: 0 }; c.meters.set(sct, mt); }
       if (r.DChiNMua && !mt.addr) mt.addr = (r.DChiNMua || '').trim();
-      if (isCur) { c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd; }
+      if (isCur) {
+        c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd;
+        c.bt += num(r.SL_BT); c.cd += num(r.SL_CD); c.td += num(r.SL_TD);   // khung giờ
+      }
       else if (isPrev) { c.prevKwh += kwh; mt.prevKwh += kwh; }
     });
     const delta = (a: number, b: number) => (b > 0 ? (a - b) / b : null);
@@ -272,6 +275,7 @@ export default function BusinessSummaryDashboard() {
       .filter(c => c.curKwh > 0 || c.curVnd > 0)
       .map(c => ({
         mkh: c.mkh, name: c.name, zone: c.zone, curKwh: c.curKwh, curVnd: c.curVnd,
+        bt: c.bt, cd: c.cd, td: c.td,
         delta: delta(c.curKwh, c.prevKwh),
         meterList: Array.from(c.meters.values())
           .filter(m => m.curKwh > 0 || m.prevKwh > 0 || m.curVnd > 0)
@@ -604,6 +608,7 @@ export default function BusinessSummaryDashboard() {
                 kwh={z.kwh}
                 vnd={z.vnd}
                 rows={z.rows}
+                showTariff
                 collapsed={!!collapsedZones[z.code]}
                 onToggleCollapse={() => setCollapsedZones(c => ({ ...c, [z.code]: !c[z.code] }))}
                 expandedRows={expanded}
