@@ -22,7 +22,7 @@ import {
   TrendingDown,
   ZapOff,
 } from 'lucide-react';
-import { pb, ID_TO_AREA } from '../lib/pocketbase';
+import { pb, ID_TO_AREA, AREAS } from '../lib/pocketbase';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { DatePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
@@ -204,7 +204,14 @@ function ChartLegend({ hasOutages }: { hasOutages: boolean }) {
 /* ================================================================
    COMPONENT
 ================================================================ */
-export default function VoltagePowerDashboard() {
+interface VoltagePowerDashboardProps {
+  /** Khối Văn phòng: lọc theo 1 KCN ('' = tất cả). Khi undefined → dùng KCN của user (hành vi Vận hành). */
+  zoneFilter?: string;
+  /** Khi có → hiện bộ chọn KCN trên header (dùng cho khối Văn phòng). */
+  onZoneFilterChange?: (zone: string) => void;
+}
+
+export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }: VoltagePowerDashboardProps = {}) {
   /* ---- CSV ---- */
   const [csvContent, setCsvContent] = useState<string>(_meterCsvCache ?? '');
   const [csvError, setCsvError] = useState<string>('');
@@ -255,7 +262,11 @@ export default function VoltagePowerDashboard() {
   // customerId -> CustomerInfo (gồm danh sách công tơ của khách), lọc theo khu vực (KCN)
   const customerInfoMap = useMemo(() => {
     const map = new Map<string, CustomerInfo>();
-    const allowed = userAreas.length > 0 ? new Set(userAreas) : null;
+    // Khối Văn phòng (zoneFilter khác undefined) ưu tiên bộ chọn KCN: '' = tất cả, ngược lại lọc 1 KCN.
+    // Khối Vận hành (zoneFilter undefined) giữ lọc theo KCN của user.
+    const allowed = zoneFilter !== undefined
+      ? (zoneFilter ? new Set([normArea(zoneFilter)]) : null)
+      : (userAreas.length > 0 ? new Set(userAreas) : null);
     for (const r of meterRows) {
       if (allowed && !allowed.has(normArea(r.ADDRESS))) continue;
       const cid = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
@@ -271,7 +282,7 @@ export default function VoltagePowerDashboard() {
       map.get(cid)!.meters.push({ meterNo: r.METER_NO, line: r.LINE_NAME || '' });
     }
     return map;
-  }, [meterRows, userAreas]);
+  }, [meterRows, userAreas, zoneFilter]);
 
   /* ---- Phân tích CSV → chỉ mục theo công tơ / ngày (giữ nguyên thời điểm) ---- */
   const { readingIndex, dateKeys } = useMemo(() => {
@@ -645,19 +656,32 @@ export default function VoltagePowerDashboard() {
           </p>
         </div>
 
-        {/* Date selector */}
-        <div className="shrink-0">
-          <DatePicker
-            value={selectedDate}
-            onChange={setSelectedDate}
-            label="Ngày hiển thị"
-            className="w-[200px]"
-          />
-          {dateKeys.length > 0 && (
-            <p className="text-[11px] text-faint mt-1.5 font-medium">
-              Có dữ liệu: {fmtDateVN(dateKeys[0])} – {fmtDateVN(dateKeys[dateKeys.length - 1])}
-            </p>
+        {/* Bộ chọn KCN (khối Văn phòng) + Date selector */}
+        <div className="shrink-0 flex flex-wrap items-start gap-3">
+          {onZoneFilterChange && (
+            <div className="w-[190px]">
+              <label className="block text-[11px] font-semibold text-faint uppercase tracking-wider mb-1">Khu công nghiệp</label>
+              <Select
+                value={zoneFilter ?? ''}
+                onChange={onZoneFilterChange}
+                options={[{ value: '', label: 'Tất cả KCN' }, ...AREAS.map(a => ({ value: a, label: a }))]}
+                className="w-full"
+              />
+            </div>
           )}
+          <div>
+            <DatePicker
+              value={selectedDate}
+              onChange={setSelectedDate}
+              label="Ngày hiển thị"
+              className="w-[200px]"
+            />
+            {dateKeys.length > 0 && (
+              <p className="text-[11px] text-faint mt-1.5 font-medium">
+                Có dữ liệu: {fmtDateVN(dateKeys[0])} – {fmtDateVN(dateKeys[dateKeys.length - 1])}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

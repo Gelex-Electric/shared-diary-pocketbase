@@ -9,11 +9,11 @@ import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
 import QuickImportManager from './QuickImportManager';
 import CustomerDebtManager from './CustomerDebtManager';
-import CustomerManager from '../CustomerManager';
-import HesReadingManager from '../hes/HesReadingManager';
-import VoltagePowerDashboard from '../VoltagePowerDashboard';
+import OfficeCustomerManager from './OfficeCustomerManager';
+import OfficeHesReadingManager from './OfficeHesReadingManager';
+import OfficeVoltagePowerDashboard from './OfficeVoltagePowerDashboard';
 import TransformerLossManager from '../TransformerLossManager';
-import SldPage from '../sld/SldPage';
+import OfficeSldPage from './OfficeSldPage';
 import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
 
@@ -370,16 +370,16 @@ export default function BusinessDashboard() {
             ) : topTab === 'customer-debt' ? (
               <CustomerDebtManager />
             ) : topTab === 'operating' ? (
-              <CustomerManager />
+              <OfficeCustomerManager />
             ) : topTab === 'hes' ? (
-              <HesReadingManager />
+              <OfficeHesReadingManager />
             ) : topTab === 'opchart' ? (
-              <VoltagePowerDashboard />
+              <OfficeVoltagePowerDashboard />
             ) : topTab === 'loss' ? (
               <TransformerLossManager />
             ) : topTab === 'sld' ? (
               <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
-                <SldPage />
+                <OfficeSldPage />
               </div>
             ) : (
               <BillConfirmManager />
