@@ -515,8 +515,10 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
   }, [filteredRecords]);
 
   /* ── Đồng bộ thời gian lấy chỉ số: gọi API HES (0h–23h59 ngày cuối kỳ),
-     so khớp BT/CD/TD của biên bản với dữ liệu trả về, điền giờ/ngày vào NKy.
-     Bỏ qua các biên bản đã có NKy. ── */
+     so khớp CHỈ SỐ TỔNG (BT+CĐ+TĐ) của biên bản với dữ liệu trả về, lấy mốc
+     thời gian có tổng GẦN NHẤT rồi điền vào NKy. Dùng tổng vì nó tăng đơn điệu
+     → mốc thời gian là DUY NHẤT; nếu so từng biểu thì biểu phẳng cả ngày (vd CĐ)
+     sẽ khớp nhầm 00:00. Luôn gọi API kể cả khi đã có NKy (ghi đè). ── */
   const syncNKyTimes = async () => {
     const token = hesAccount?.Token;
     if (!token) { showToast('Chưa có Token HES — hãy bấm "Lấy Token" trước.', 'error'); return; }
@@ -525,12 +527,11 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     if (targets.length === 0) { showToast('Hãy tích chọn công tơ cần đồng bộ trước.', 'warning'); return; }
     setIsSyncing(true);
     setSyncProgress({ done: 0, total: targets.length });
-    let updated = 0, skipped = 0, notFound = 0;
+    let updated = 0, notFound = 0;
     try {
       for (let i = 0; i < targets.length; i++) {
         const row = targets[i];
         const r = row.data; // chỉ số đã gộp (cuối kỳ = khoảng muộn nhất)
-        if ((r.NKy || '').trim()) { skipped++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
         const day = dateOnly(r.EndDate);
         if (!r.SCT || !day) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
         const start = toHesDateStr(day, '00', '00');
@@ -541,16 +542,21 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
         const data = await res.json();
         if (!Array.isArray(data) || data.length === 0) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
 
-        const EPS = 0.05;
-        const match = (data as DataMetter[]).find(d => {
-          const bt = parseFloat(d.ACTIVE_KW_INDICATE_RATE1);
-          const cd = parseFloat(d.ACTIVE_KW_INDICATE_RATE2);
-          const td = parseFloat(d.ACTIVE_KW_INDICATE_RATE3);
-          return (Number.isFinite(bt) && Math.abs(bt - num(r.BT_cuoi)) < EPS) ||
-                 (Number.isFinite(cd) && Math.abs(cd - num(r.CD_cuoi)) < EPS) ||
-                 (Number.isFinite(td) && Math.abs(td - num(r.TD_cuoi)) < EPS);
-        });
-        if (!match) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
+        // Chỉ số tổng cuối kỳ của biên bản = BT + CĐ + TĐ (khớp ACTIVE_KW_INDICATE_TOTAL)
+        const invTotal = num(r.BT_cuoi) + num(r.CD_cuoi) + num(r.TD_cuoi);
+        let match: DataMetter | null = null;
+        let bestDiff = Infinity;
+        if (invTotal > 0) {
+          for (const d of data as DataMetter[]) {
+            const tot = parseFloat(d.ACTIVE_KW_INDICATE_TOTAL);
+            if (!Number.isFinite(tot)) continue;
+            const diff = Math.abs(tot - invTotal);
+            if (diff < bestDiff) { bestDiff = diff; match = d; }
+          }
+        }
+        // Chốt chỉ số luôn rơi đúng mốc 30′ → tổng khớp gần như tuyệt đối (diff ~0).
+        // Chênh > 1 kWh coi như không khớp (dữ liệu khác ngày / công tơ reset).
+        if (!match || bestDiff > 1) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
 
         const dt = new Date(match.DATE_TIME);
         if (isNaN(dt.getTime())) { notFound++; setSyncProgress({ done: i + 1, total: targets.length }); continue; }
@@ -562,11 +568,10 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
       }
       await loadRecords(monthFilterDate);
 
-      const attempted = targets.length - skipped;
-      if (attempted > 0 && updated === 0) {
+      if (targets.length > 0 && updated === 0) {
         showToast(`Không công tơ nào lấy được dữ liệu — Token HES có thể đã hết hạn, hãy bấm "Lấy Token" lại.`, 'error');
       } else {
-        showToast(`Đồng bộ xong: ${updated} cập nhật, ${skipped} đã có NKy, ${notFound} không tìm thấy dữ liệu`, 'success');
+        showToast(`Đồng bộ xong: ${updated} cập nhật, ${notFound} không khớp dữ liệu`, 'success');
       }
     } catch (err: any) {
       showToast(`Lỗi đồng bộ: ${err?.message || ''}`, 'error');
