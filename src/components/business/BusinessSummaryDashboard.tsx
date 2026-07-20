@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart, LabelList,
@@ -44,8 +44,8 @@ export default function BusinessSummaryDashboard() {
   const { bills, records, meterIndex, loading, error, reload } = useInvoices({ endYear, yearsBack: 2, lockToArea: false });
   const { rows: pmaxRows, loading: pmaxLoading } = usePmaxDaily();
 
-  /* Năm: TÍCH CHỌN NHIỀU (checkbox). KCN: tích chọn (ẩn/hiện). */
-  const [selectedYears, setSelectedYears] = useState<Set<number>>(new Set([endYear]));
+  /* Năm: TÍCH CHỌN NHIỀU (checkbox), mặc định BẬT HẾT. KCN: tích chọn (ẩn/hiện). */
+  const [selectedYears, setSelectedYears] = useState<Set<number>>(new Set());
   const [tableMonthIdx, setTableMonthIdx] = useState<number>(new Date().getMonth() + 1);
   const [custA, setCustA] = useState('');
   const [custB, setCustB] = useState('');
@@ -62,12 +62,14 @@ export default function BusinessSummaryDashboard() {
     return arr.length ? arr : [endYear];
   }, [bills, pmaxRows, endYear]);
 
-  /* Nếu năm mặc định không có dữ liệu → chọn năm mới nhất có dữ liệu. */
+  /* Mặc định lần đầu: BẬT HẾT tất cả các năm có dữ liệu (sau đó user tự tích chọn). */
+  const yearsInited = useRef(false);
   useEffect(() => {
-    if (years.length && ![...selectedYears].some(y => years.includes(y))) {
-      setSelectedYears(new Set([years[0]]));
+    if (!yearsInited.current && years.length) {
+      setSelectedYears(new Set(years));
+      yearsInited.current = true;
     }
-  }, [years]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [years]);
 
   const toggleYear = (y: number) =>
     setSelectedYears(prev => {
@@ -128,10 +130,16 @@ export default function BusinessSummaryDashboard() {
     };
   }, [filteredBills, yearsSorted]);
 
-  /* ── Sản lượng theo KCN — các tháng của NĂM đang chọn, chỉ KCN đang bật ── */
+  /* ── Sản lượng theo KCN — 12 tháng tính từ tháng có dữ liệu GẦN NHẤT (trong phạm vi
+        bộ chọn KCN + năm). Vẫn tuân theo bộ chọn: dữ liệu lấy từ filteredBills. ── */
   const stackByZone = useMemo(() => {
     const zonesPresent = zoneCatalog.filter(z => zoneOn(z));
-    const buckets = Array.from(new Set(filteredBills.map(b => b.month).filter(Boolean))).sort();
+    const months = filteredBills.map(b => b.month).filter(Boolean);
+    if (!months.length) return { data: [] as any[], zones: zonesPresent };
+    const newest = months.slice().sort()[months.length - 1];
+    const [ny, nm] = newest.split('-').map(Number);
+    const buckets: string[] = [];
+    for (let i = 11; i >= 0; i--) { let m = nm - i, y = ny; while (m <= 0) { m += 12; y--; } buckets.push(`${y}-${pad2(m)}`); }
     const idx = new Map(buckets.map((mk, i) => [mk, i]));
     const rows = buckets.map(mk => {
       const row: Record<string, any> = { label: `${Number(mk.slice(5))}/${mk.slice(2, 4)}` };
@@ -506,7 +514,7 @@ export default function BusinessSummaryDashboard() {
       {/* Row 3 — stacked kWh theo KCN + tần suất khung giờ theo KCN, 3:1 */}
       {zoneCatalog.length > 0 && (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-          <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub={`Năm ${yearsLabel} · lọc theo bộ chọn KCN`} icon={Layers}>
+          <Panel className="xl:col-span-3" title="Sản lượng theo khu công nghiệp" sub="12 tháng gần nhất · lọc theo bộ chọn KCN &amp; năm" icon={Layers}>
             <div className="h-[300px] xl:h-[380px] px-3 py-4">
               {stackByZone.zones.length === 0 || stackByZone.data.length === 0 ? (
                 <EmptyState icon={Layers} title="Không có dữ liệu" hint="Bật lại KCN hoặc chọn năm có dữ liệu." />
