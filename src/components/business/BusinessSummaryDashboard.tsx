@@ -297,7 +297,7 @@ export default function BusinessSummaryDashboard() {
       const ia = ZONE_ORDER.indexOf(a.code), ib = ZONE_ORDER.indexOf(b.code);
       return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     });
-    zones.forEach(z => z.rows.sort((a, b) => b.curKwh - a.curKwh));
+    zones.forEach(z => z.rows.sort((a, b) => a.mkh.localeCompare(b.mkh, undefined, { numeric: true })));
     return { zones, tblYear };
   }, [records, selectedYears, tableMonthIdx, hiddenZones]); // eslint-disable-line react-hooks/exhaustive-deps
 
