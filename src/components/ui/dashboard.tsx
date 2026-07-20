@@ -151,6 +151,10 @@ export interface ZoneMeterRow {
   curKwh: number;
   curVnd: number;
   delta: number | null;
+  /** Sản lượng theo khung giờ (kWh) — chỉ dùng khi bảng bật showTariff. */
+  bt?: number;
+  cd?: number;
+  td?: number;
 }
 export interface ZoneCustomerRow {
   mkh: string;
@@ -269,7 +273,15 @@ export function CustomerZoneCard({
             className="overflow-hidden"
           >
             <div className="overflow-x-auto">
-              <table className="vl-table w-full text-left border-collapse">
+              {/* table-fixed + colgroup: mọi thẻ KCN có độ rộng cột BẰNG NHAU (không co giãn theo nội dung). */}
+              <table className="vl-table w-full text-left border-collapse table-fixed" style={{ minWidth: showTariff ? 760 : 560 }}>
+                <colgroup>
+                  <col style={{ width: showTariff ? '28%' : '40%' }} />
+                  <col style={{ width: showTariff ? '16%' : '22%' }} />
+                  <col style={{ width: showTariff ? '12%' : '16%' }} />
+                  <col style={{ width: showTariff ? '20%' : '22%' }} />
+                  {showTariff && <col style={{ width: '24%' }} />}
+                </colgroup>
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
                     <th className="py-3.5 px-4">Khách hàng</th>
@@ -331,7 +343,9 @@ export function CustomerZoneCard({
                             <td className="py-3 px-4 text-right font-semibold text-dim tabular-nums border-l border-[var(--border)]">{fmtInt(m.curKwh)}</td>
                             <td className="py-3 px-4 text-center"><DeltaBadge d={m.delta} /></td>
                             <td className="py-3 px-4 text-right text-soft tabular-nums">{fmtInt(m.curVnd)}</td>
-                            {showTariff && <td className="border-l border-[var(--border)]" />}
+                            {showTariff && (
+                              <td className="py-3 px-4 border-l border-[var(--border)]"><TariffBar bt={m.bt} cd={m.cd} td={m.td} /></td>
+                            )}
                           </tr>
                         ))}
                       </Fragment>

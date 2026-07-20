@@ -158,7 +158,7 @@ export default function SummaryDashboard() {
   const detail = useMemo(() => {
     const cur = `${year}-${pad2(tableMonthIdx)}`;
     const prev = tableMonthIdx === 1 ? `${year - 1}-12` : `${year}-${pad2(tableMonthIdx - 1)}`;
-    interface Meter { sct: string; addr: string; curKwh: number; prevKwh: number; curVnd: number; }
+    interface Meter { sct: string; addr: string; curKwh: number; prevKwh: number; curVnd: number; bt: number; cd: number; td: number; }
     interface Cust { mkh: string; name: string; curKwh: number; prevKwh: number; curVnd: number; bt: number; cd: number; td: number; meters: Map<string, Meter>; }
     const map = new Map<string, Cust>();
     if (cur) {
@@ -174,11 +174,13 @@ export default function SummaryDashboard() {
         if (r.NMua && (!c.name || c.name === mkh)) c.name = r.NMua;
         const sct = (r.SCT || '—').trim();
         let mt = c.meters.get(sct);
-        if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), curKwh: 0, prevKwh: 0, curVnd: 0 }; c.meters.set(sct, mt); }
+        if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), curKwh: 0, prevKwh: 0, curVnd: 0, bt: 0, cd: 0, td: 0 }; c.meters.set(sct, mt); }
         if (r.DChiNMua && !mt.addr) mt.addr = (r.DChiNMua || '').trim();
         if (month === cur) {
           c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd;
-          c.bt += num(r.SL_BT); c.cd += num(r.SL_CD); c.td += num(r.SL_TD);   // khung giờ
+          const bt = num(r.SL_BT), cd = num(r.SL_CD), td = num(r.SL_TD);   // khung giờ
+          c.bt += bt; c.cd += cd; c.td += td;
+          mt.bt += bt; mt.cd += cd; mt.td += td;
         }
         else if (month === prev) { c.prevKwh += kwh; mt.prevKwh += kwh; }
       });

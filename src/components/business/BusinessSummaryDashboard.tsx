@@ -244,9 +244,11 @@ export default function BusinessSummaryDashboard() {
 
   /* ── Bảng KH theo KCN, cho tháng đã chọn — cộng gộp các NĂM đang chọn, chỉ KCN đang bật ── */
   const detail = useMemo(() => {
-    const curMonths = new Set(yearsSorted.map(y => `${y}-${pad2(tableMonthIdx)}`));
-    const prevMonths = new Set(yearsSorted.map(y => tableMonthIdx === 1 ? `${y - 1}-12` : `${y}-${pad2(tableMonthIdx - 1)}`));
-    interface Meter { sct: string; addr: string; curKwh: number; prevKwh: number; curVnd: number; }
+    // Bảng LUÔN dùng NĂM MỚI NHẤT trong các năm đã chọn (không cộng gộp nhiều năm).
+    const tblYear = yearsSorted[yearsSorted.length - 1] ?? new Date().getFullYear();
+    const cur = `${tblYear}-${pad2(tableMonthIdx)}`;
+    const prev = tableMonthIdx === 1 ? `${tblYear - 1}-12` : `${tblYear}-${pad2(tableMonthIdx - 1)}`;
+    interface Meter { sct: string; addr: string; curKwh: number; prevKwh: number; curVnd: number; bt: number; cd: number; td: number; }
     interface Cust { mkh: string; name: string; zone: string; curKwh: number; prevKwh: number; curVnd: number; bt: number; cd: number; td: number; meters: Map<string, Meter>; }
     const map = new Map<string, Cust>();
     records.forEach(r => {
@@ -255,7 +257,7 @@ export default function BusinessSummaryDashboard() {
       const zone = mkh.split('-')[0] || 'Khác';
       if (!zoneOn(zone)) return;
       const month = dateOnly(r.EndDate).slice(0, 7);
-      const isCur = curMonths.has(month), isPrev = prevMonths.has(month);
+      const isCur = month === cur, isPrev = month === prev;
       if (!isCur && !isPrev) return;
       const kwh = num(r.TongSL_HC), vnd = num(r.ThTien_HC) + num(r.ThTien_PK);
       let c = map.get(mkh);
@@ -263,11 +265,13 @@ export default function BusinessSummaryDashboard() {
       if (r.NMua && (!c.name || c.name === mkh)) c.name = r.NMua;
       const sct = (r.SCT || '—').trim();
       let mt = c.meters.get(sct);
-      if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), curKwh: 0, prevKwh: 0, curVnd: 0 }; c.meters.set(sct, mt); }
+      if (!mt) { mt = { sct, addr: (r.DChiNMua || '').trim(), curKwh: 0, prevKwh: 0, curVnd: 0, bt: 0, cd: 0, td: 0 }; c.meters.set(sct, mt); }
       if (r.DChiNMua && !mt.addr) mt.addr = (r.DChiNMua || '').trim();
       if (isCur) {
         c.curKwh += kwh; c.curVnd += vnd; mt.curKwh += kwh; mt.curVnd += vnd;
-        c.bt += num(r.SL_BT); c.cd += num(r.SL_CD); c.td += num(r.SL_TD);   // khung giờ
+        const bt = num(r.SL_BT), cd = num(r.SL_CD), td = num(r.SL_TD);   // khung giờ
+        c.bt += bt; c.cd += cd; c.td += td;
+        mt.bt += bt; mt.cd += cd; mt.td += td;
       }
       else if (isPrev) { c.prevKwh += kwh; mt.prevKwh += kwh; }
     });
@@ -294,7 +298,7 @@ export default function BusinessSummaryDashboard() {
       return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     });
     zones.forEach(z => z.rows.sort((a, b) => b.curKwh - a.curKwh));
-    return { zones };
+    return { zones, tblYear };
   }, [records, selectedYears, tableMonthIdx, hiddenZones]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const busy = loading || pmaxLoading;
@@ -591,7 +595,7 @@ export default function BusinessSummaryDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-bold text-ink flex items-center gap-2"><TrendingUp className="w-4 h-4 text-accent" /> Sản lượng & doanh thu theo khách hàng</h3>
-            <p className="text-[11px] text-faint mt-0.5">Tháng {tableMonthIdx} · năm {yearsLabel} · so tháng liền trước · tách theo KCN · bấm KH để xem công tơ</p>
+            <p className="text-[11px] text-faint mt-0.5">Tháng {tableMonthIdx}/{detail.tblYear} · so tháng liền trước · tách theo KCN · bấm KH để xem công tơ</p>
           </div>
           <Select value={String(tableMonthIdx)} onChange={v => setTableMonthIdx(Number(v))} options={MONTH_OPTS} className="w-[130px]" />
         </div>
