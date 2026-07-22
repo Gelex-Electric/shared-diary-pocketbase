@@ -29,6 +29,9 @@ export interface InvoiceRecord {
   NTToan?: string;
   LoaiHD?: string;
   HSN?: number;
+  ThTien?: number;     // tiền trước thuế (gộp HC+PK)
+  VAT?: number;        // thuế suất (0.08)
+  ThTienVAT?: number;  // tiền sau thuế
   [key: string]: any;
 }
 
@@ -44,8 +47,10 @@ export interface Bill {
   ids: string[];
   slHC: number;      // kWh
   slVC: number;      // kVarh
-  dtHC: number;      // VND
-  dtVC: number;      // VND
+  dtHC: number;      // VND TRƯỚC thuế (Σ ThTien; đã gộp HC+PK). dtVC giữ 0 (tương thích cũ).
+  dtVC: number;      // VND (không dùng — luôn 0 sau khi gộp ThTien)
+  dtVAT: number;     // VND SAU thuế (Σ ThTienVAT)
+  vat: number;       // thuế suất đại diện của kỳ (0.08 / 0)
   slBT: number;      // kWh bình thường
   slCD: number;      // kWh cao điểm
   slTD: number;      // kWh thấp điểm
@@ -126,15 +131,18 @@ export function mergeBills(records: InvoiceRecord[]): Bill[] {
       b = {
         key, mkh: (r.MKHang || '').trim(), nMua: r.NMua || '', zone: zoneOf((r.MKHang || '').trim()),
         endDate: end, month, year: Number(end.slice(0, 4)) || 0, ids: [],
-        slHC: 0, slVC: 0, dtHC: 0, dtVC: 0, slBT: 0, slCD: 0, slTD: 0, cosFi: 0, paid: false,
+        slHC: 0, slVC: 0, dtHC: 0, dtVC: 0, dtVAT: 0, vat: 0, slBT: 0, slCD: 0, slTD: 0, cosFi: 0, paid: false,
       };
       map.set(key, b);
     }
     b.ids.push(r.id);
     b.slHC += num(r.TongSL_HC);
     b.slVC += num(r.TongSL_PK);
-    b.dtHC += num(r.ThTien_HC);
-    b.dtVC += num(r.ThTien_PK);
+    // ThTien = tiền TRƯỚC thuế (đã gộp HC+PK); fallback cộng 2 trường cũ nếu bản ghi chưa có ThTien.
+    const thtien = num(r.ThTien) || (num(r.ThTien_HC) + num(r.ThTien_PK));
+    b.dtHC += thtien;
+    b.dtVAT += num(r.ThTienVAT) || Math.round(thtien * (1 + num(r.VAT)));
+    if (num(r.VAT) > 0) b.vat = num(r.VAT);
     b.slBT += num(r.SL_BT);
     b.slCD += num(r.SL_CD);
     b.slTD += num(r.SL_TD);

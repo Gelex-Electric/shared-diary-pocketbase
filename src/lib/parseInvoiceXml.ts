@@ -38,6 +38,10 @@ export interface MeterPeriodRow {
   ThTien_PK: number;
   CosFi: number;
   KCosFi: number;
+  // Gộp: ThTien = ThTien_HC + ThTien_PK (trước thuế). VAT = thuế suất (0.08). ThTienVAT = sau thuế.
+  ThTien: number;
+  VAT: number;
+  ThTienVAT: number;
 }
 
 export interface ParsedInvoice {
@@ -52,6 +56,13 @@ const toNum = (v: string | null | undefined): number => {
   if (!v) return 0;
   const n = parseFloat(v.toString().trim());
   return Number.isFinite(n) ? n : 0;
+};
+
+// "8%" → 0.08 (hệ số thuế suất). Rỗng/không hợp lệ → 0.
+const toPct = (v: string | null | undefined): number => {
+  if (!v) return 0;
+  const n = parseFloat(v.toString().replace('%', '').trim());
+  return Number.isFinite(n) ? n / 100 : 0;
 };
 
 const toDate = (v: string | null | undefined): string =>
@@ -94,6 +105,7 @@ const emptyRow = (SCT: string, StartDate: string, EndDate: string): MeterPeriodR
   SCT, HSN: 0, StartDate, EndDate, indexId: '', pointAddress: '',
   bieu: { BT: emptyBieu(), CD: emptyBieu(), TD: emptyBieu(), VC: emptyBieu() },
   TongSL_HC: 0, TongSL_PK: 0, ThTien_HC: 0, ThTien_PK: 0, CosFi: 0, KCosFi: 0,
+  ThTien: 0, VAT: 0, ThTienVAT: 0,
 });
 
 export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
@@ -182,6 +194,11 @@ export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
     const row = rowMap.get(ref.key);
     if (!row) continue;
 
+    // Thuế suất VAT đọc TRỰC TIẾP từ tag <TSuat> của dòng tính tiền ("8%" → 0.08).
+    // Đồng nhất trong 1 hóa đơn nên lấy giá trị > 0 gần nhất cho mỗi công tơ.
+    const ts = toPct(childText(h, 'TSuat'));
+    if (ts > 0) row.VAT = ts;
+
     if (/CSPK/i.test(mhh)) {
       // Hóa đơn phản kháng: CHỈ lấy số liệu vô công. Hữu công (TongSL_HC/ThTien_HC)
       // của hóa đơn VC luôn = 0 (giữ giá trị mặc định, không đọc từ XML).
@@ -198,6 +215,13 @@ export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
       row.ThTien_HC += toNum(childText(h, 'ThTien'));
     }
   }
+
+  // Gộp thành tiền trước thuế + tính sau thuế theo TỪNG công tơ.
+  // ThTien = ThTien_HC + ThTien_PK (hóa đơn HC không có PK & ngược lại). ThTienVAT = ThTien×(1+VAT).
+  rowMap.forEach(row => {
+    row.ThTien = Math.round(row.ThTien_HC + row.ThTien_PK);
+    row.ThTienVAT = Math.round(row.ThTien * (1 + row.VAT));
+  });
 
   return { billId: finalBillId, loaiHD, nban, nmua, rows: Array.from(rowMap.values()) };
 }

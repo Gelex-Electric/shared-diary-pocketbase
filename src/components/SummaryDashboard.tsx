@@ -171,7 +171,7 @@ export default function SummaryDashboard() {
         if (zoneLock && (r.MKHang || '').split('-')[0] !== zoneLock) return;
         const month = dateOnly(r.EndDate).slice(0, 7);
         if (month !== cur && month !== prev) return;
-        const kwh = num(r.TongSL_HC), vnd = num(r.ThTien_HC) + num(r.ThTien_PK);
+        const kwh = num(r.TongSL_HC), vnd = num(r.ThTien) || (num(r.ThTien_HC) + num(r.ThTien_PK));
         let c = map.get(mkh);
         if (!c) { c = { mkh, name: r.NMua || mkh, curKwh: 0, prevKwh: 0, curVnd: 0, bt: 0, cd: 0, td: 0, meters: new Map() }; map.set(mkh, c); }
         if (r.NMua && (!c.name || c.name === mkh)) c.name = r.NMua;

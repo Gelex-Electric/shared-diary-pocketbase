@@ -401,18 +401,18 @@ export default function QuickImportManager() {
       phu_TD: r.bieu.TD.phuTru, phu_VC: r.bieu.VC.phuTru,
       SL_BT: r.bieu.BT.sluong, SL_CD: r.bieu.CD.sluong, SL_TD: r.bieu.TD.sluong,
       TongSL_HC: r.TongSL_HC, TongSL_PK: r.TongSL_PK,
-      ThTien_HC: r.ThTien_HC, ThTien_PK: r.ThTien_PK,
+      // Gộp thành tiền: ThTien (trước thuế) = HC + PK; VAT (0.08) + ThTienVAT (sau thuế) đọc/tính từ XML.
+      ThTien: r.ThTien, VAT: r.VAT, ThTienVAT: r.ThTienVAT,
       CosFi: r.CosFi, KCosFi: r.KCosFi,
     };
     if (inv.loaiHD === 'VC') {
-      // Hóa đơn phản kháng: hữu công luôn = 0 → KHÔNG ghi TongSL_HC/ThTien_HC để
-      // không nuốt số liệu hữu công đã nạp từ hóa đơn HC; cũng không ghi đơn giá hữu công.
-      delete data.TongSL_HC; delete data.ThTien_HC;
+      // Hóa đơn phản kháng: hữu công luôn = 0 → KHÔNG ghi TongSL_HC (giữ số hữu công từ hóa đơn HC);
+      // cũng không ghi đơn giá hữu công.
+      delete data.TongSL_HC;
       delete data.SL_BT; delete data.SL_CD; delete data.SL_TD;
     } else {
-      // Hóa đơn hữu công: giữ TongSL_HC/ThTien_HC (đọc trực tiếp từ XML) + đơn giá;
-      // không ghi số liệu phản kháng để khỏi nuốt dữ liệu từ hóa đơn VC.
-      delete data.TongSL_PK; delete data.ThTien_PK;
+      // Hóa đơn hữu công: không ghi số liệu phản kháng để khỏi nuốt dữ liệu từ hóa đơn VC.
+      delete data.TongSL_PK;
       delete data.CosFi; delete data.KCosFi;
     }
     return data;
@@ -705,7 +705,7 @@ export default function QuickImportManager() {
                             ))}
                             <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-warn">{fmt(tongSL)}</td>
                             <td className="py-2.5 px-3 text-right font-mono font-bold text-ink">
-                              {isVC ? <span className="text-violet-600">{fmt(r.ThTien_PK)}</span> : fmt(r.ThTien_HC)}
+                              {isVC ? <span className="text-violet-600">{fmt(r.ThTien)}</span> : fmt(r.ThTien)}
                             </td>
                             <td className="py-2.5 px-3 text-center">
                               <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${exists ? 'bg-amber-100 text-warn' : 'bg-sky-100 text-sky-700'}`}>

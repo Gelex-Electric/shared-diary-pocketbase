@@ -50,8 +50,10 @@ interface DebtInvoiceRecord {
 interface Totals {
   slHC: number;   // sản lượng hữu công (kWh)
   slVC: number;   // sản lượng vô công (kVarh)
-  dtHC: number;   // doanh thu hữu công
-  dtVC: number;   // doanh thu vô công (phản kháng)
+  dtHC: number;   // doanh thu TRƯỚC thuế (ThTien; đã gộp HC+PK). dtVC giữ 0.
+  dtVC: number;   // không dùng (0 sau gộp)
+  dtVAT: number;  // doanh thu SAU thuế (ThTienVAT)
+  vat: number;    // thuế suất đại diện (0.08 / 0)
 }
 
 interface KyGroup extends Totals {
@@ -76,9 +78,10 @@ interface ZoneGroup extends Totals {
   unpaidCount: number;
 }
 
-const emptyTotals = (): Totals => ({ slHC: 0, slVC: 0, dtHC: 0, dtVC: 0 });
+const emptyTotals = (): Totals => ({ slHC: 0, slVC: 0, dtHC: 0, dtVC: 0, dtVAT: 0, vat: 0 });
 const addTotals = (a: Totals, b: Totals) => {
-  a.slHC += b.slHC; a.slVC += b.slVC; a.dtHC += b.dtHC; a.dtVC += b.dtVC;
+  a.slHC += b.slHC; a.slVC += b.slVC; a.dtHC += b.dtHC; a.dtVC += b.dtVC; a.dtVAT += b.dtVAT;
+  if (b.vat > 0) a.vat = b.vat;
 };
 
 /* Khu công nghiệp suy từ tiền tố MKHang (vd "KCNTH-002" → "KCNTH"). */
@@ -120,11 +123,15 @@ const currentYearMonth = () => {
 // Sản lượng & doanh thu của 1 bản ghi — đọc TRỰC TIẾP từ trường đã lưu (nạp thẳng từ XML).
 // Hữu công: TongSL_HC (kWh) / ThTien_HC. Vô công (phản kháng): TongSL_PK (kVarh) / ThTien_PK.
 function computeRecordTotals(r: DebtInvoiceRecord): Totals {
+  const dt = num(r.ThTien) || (num(r.ThTien_HC) + num(r.ThTien_PK)); // trước thuế (gộp)
+  const vat = num(r.VAT);
   return {
     slHC: num(r.TongSL_HC),
     slVC: num(r.TongSL_PK),
-    dtHC: num(r.ThTien_HC),
-    dtVC: num(r.ThTien_PK),
+    dtHC: dt,
+    dtVC: 0,
+    dtVAT: num(r.ThTienVAT) || Math.round(dt * (1 + vat)),
+    vat,
   };
 }
 
@@ -302,6 +309,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
     slVC: effectiveCustomers.reduce((s, c) => s + c.slVC, 0),
     dtHC: effectiveCustomers.reduce((s, c) => s + c.dtHC, 0),
     dtVC: effectiveCustomers.reduce((s, c) => s + c.dtVC, 0),
+    dtVAT: effectiveCustomers.reduce((s, c) => s + c.dtVAT, 0),
   }), [effectiveCustomers]);
 
   /* ── lọc theo tìm kiếm + trạng thái thanh toán ── */
@@ -438,6 +446,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
           </td>
           <td className="py-3.5 px-4 text-right font-mono text-xs">
             <div className="text-ink font-bold">{fmtVND(c.dtHC + c.dtVC)}</div>
+            <div className="text-[10px] text-accent font-bold">{fmtVND(c.dtVAT)} <span className="text-[8px] text-faint font-normal">sau thuế</span></div>
           </td>
           <td className="py-3.5 px-4 text-center">
             {c.isPaid ? (
@@ -520,6 +529,8 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
               </td>
               <td className="py-3 px-4 text-right font-mono text-[11px]">
                 <div className="text-dim font-bold">{fmtVND(ky.dtHC + ky.dtVC)}</div>
+                <div className="text-[9px] text-faint font-semibold">VAT {Math.round(ky.vat * 100)}%</div>
+                <div className="text-[10px] text-accent font-bold">{fmtVND(ky.dtVAT)} <span className="text-[8px] text-faint font-normal">sau thuế</span></div>
               </td>
               <td className="py-3 px-4 text-center">
                 {ky.nTToan ? (
@@ -615,6 +626,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
             </div>
           </div>
           <h3 className="text-2xl font-black text-ink tracking-tight leading-none font-mono">{fmtVND(kpis.dtHC + kpis.dtVC)}</h3>
+          <p className="text-[11px] font-bold text-accent mt-1 font-mono">{fmtVND(kpis.dtVAT)} <span className="text-[9px] text-faint font-semibold">sau thuế</span></p>
         </div>
       </div>
 
@@ -766,7 +778,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono text-accent">
                       <div>{fmtVND(zone.dtHC + zone.dtVC)}</div>
-                      {zone.dtVC > 0 && <div className="text-[10px] text-soft font-bold">VC: {fmtVND(zone.dtVC)}</div>}
+                      <div className="text-[10px] text-soft font-bold">{fmtVND(zone.dtVAT)} sau thuế</div>
                     </td>
                     <td className="py-3.5 px-4" />
                   </tr>
