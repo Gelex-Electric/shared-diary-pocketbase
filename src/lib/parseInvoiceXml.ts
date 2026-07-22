@@ -50,6 +50,7 @@ export interface ParsedInvoice {
   nban: { ten: string; dchi: string };
   nmua: { ten: string; mst: string; dchi: string; mkhang: string };
   rows: MeterPeriodRow[];
+  tgTTTBSo: number; // tổng tiền thanh toán SAU thuế (quyết toán chính xác từ XML)
 }
 
 const toNum = (v: string | null | undefined): number => {
@@ -218,10 +219,26 @@ export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
 
   // Gộp thành tiền trước thuế + tính sau thuế theo TỪNG công tơ.
   // ThTien = ThTien_HC + ThTien_PK (hóa đơn HC không có PK & ngược lại). ThTienVAT = ThTien×(1+VAT).
-  rowMap.forEach(row => {
+  const rows = Array.from(rowMap.values());
+  rows.forEach(row => {
     row.ThTien = Math.round(row.ThTien_HC + row.ThTien_PK);
     row.ThTienVAT = Math.round(row.ThTien * (1 + row.VAT));
   });
 
-  return { billId: finalBillId, loaiHD, nban, nmua, rows: Array.from(rowMap.values()) };
+  // TgTTTBSo (khối <TToan>) = TỔNG SAU THUẾ QUYẾT TOÁN chính xác của hóa đơn. Do làm tròn
+  // từng công tơ, Σ ThTienVAT có thể lệch vài đồng → DỒN phần chênh vào công tơ có tiền lớn
+  // nhất để Σ ThTienVAT = ĐÚNG TgTTTBSo.
+  const tToanEl = ndhdon.getElementsByTagName('TToan')[0] || null;
+  const tgTTTBSo = Math.round(toNum(childText(tToanEl, 'TgTTTBSo')));
+  if (tgTTTBSo > 0 && rows.length > 0) {
+    const sum = rows.reduce((s, r) => s + r.ThTienVAT, 0);
+    const residual = tgTTTBSo - sum;
+    if (residual !== 0) {
+      let idx = 0;
+      for (let i = 1; i < rows.length; i++) if (rows[i].ThTien > rows[idx].ThTien) idx = i;
+      rows[idx].ThTienVAT += residual;
+    }
+  }
+
+  return { billId: finalBillId, loaiHD, nban, nmua, rows, tgTTTBSo };
 }
