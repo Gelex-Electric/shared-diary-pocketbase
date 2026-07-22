@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  BarChart, Bar, Line, PieChart, Pie, Cell, ComposedChart, LabelList,
+  BarChart, Bar, PieChart, Pie, Cell, LabelList,
 } from 'recharts';
 import {
   Zap, TrendingUp, TrendingDown, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw, Users,
@@ -24,7 +24,6 @@ const YEAR_BARS = ['var(--text-4)', '#22b8c4', 'var(--accent)'];
 const PIE_COLORS = [CHART.bt, CHART.cd, CHART.td];
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const axisNum = (v: number) => new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(v);
-const fmtKw = (v: number) => fmtInt(Math.round(v)) + ' kW';
 const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
 
 export default function SummaryDashboard() {
@@ -120,13 +119,6 @@ export default function SummaryDashboard() {
     return { day, yearPeak };
   }, [pmaxRows, year, inZone, meterIndex]);
 
-  const monthlyPmaxOf = (mkh: string): number[] => {
-    const d = pmaxByCustomer.day.get(mkh);
-    const out = Array(12).fill(0);
-    if (d) d.forEach((sum, date) => { const mi = Number(date.slice(5, 7)) - 1; if (mi >= 0 && mi < 12) out[mi] = Math.max(out[mi], sum); });
-    return out.map(v => Math.round(v));
-  };
-
   /* ── Customers: list + default representatives ── */
   const custByKwh = useMemo(() => rollupByCustomer(yearBills).sort((a, b) => b.kwh - a.kwh), [yearBills]);
   const custOptions = useMemo(
@@ -145,14 +137,25 @@ export default function SummaryDashboard() {
   const effA = custA || repA;
   const effB = custB || repB;
 
+  /* Sản lượng theo THÁNG × NĂM cho 1 khách hàng (giống load3y — vẽ cột nhóm theo năm) */
   const seriesFor = (mkh: string) => {
-    const kwh = Array(12).fill(0);
-    yearBills.filter(b => b.mkh === mkh).forEach(b => { const mi = Number(b.month.slice(5, 7)) - 1; if (mi >= 0 && mi < 12) kwh[mi] += b.slHC; });
-    const pmax = monthlyPmaxOf(mkh);
-    return MONTHS.map((label, i) => ({ label, kwh: Math.round(kwh[i]), pmax: pmax[i] }));
+    const last3 = load3y.years;
+    const byYear = new Map<number, number[]>(last3.map(y => [y, Array(12).fill(0)]));
+    bills.forEach(b => {
+      if (b.mkh !== mkh) return;
+      const arr = byYear.get(b.year);
+      if (!arr) return;
+      const mi = Number(b.month.slice(5, 7)) - 1;
+      if (mi >= 0 && mi < 12) arr[mi] += b.slHC;
+    });
+    return MONTHS.map((label, i) => {
+      const row: Record<string, any> = { label };
+      last3.forEach(y => { row[String(y)] = Math.round(byYear.get(y)![i]); });
+      return row;
+    });
   };
-  const dataA = useMemo(() => (effA ? seriesFor(effA) : []), [effA, yearBills, pmaxByCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
-  const dataB = useMemo(() => (effB ? seriesFor(effB) : []), [effB, yearBills, pmaxByCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dataA = useMemo(() => (effA ? seriesFor(effA) : []), [effA, bills, load3y.years]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dataB = useMemo(() => (effB ? seriesFor(effB) : []), [effB, bills, load3y.years]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Row 5: per-customer table cho tháng đã chọn, so với tháng liền trước ── */
   const detail = useMemo(() => {
@@ -206,10 +209,10 @@ export default function SummaryDashboard() {
   const thousand = (v: number) => fmtInt(Math.round(v / 1000));
 
   /* Số trên đỉnh mỗi cột năm — ẩn nếu < 10% giá trị năm cao nhất trong cùng tháng */
-  const renderYearBarLabel = (props: any) => {
+  const makeYearBarLabel = (dataArr: any[]) => (props: any) => {
     const { x, y: py, width, value, index } = props;
     if (value == null || width == null) return null;
-    const row = load3y.data[index];
+    const row = dataArr[index];
     const max = Math.max(0, ...load3y.years.map(yr => row[String(yr)] || 0));
     if (max <= 0 || value < max * 0.1) return null;
     return (
@@ -237,21 +240,26 @@ export default function SummaryDashboard() {
   const renderCustomerChart = (value: string, onChange: (v: string) => void, data: any[]) => (
     <div className="p-4 space-y-3">
       <Select value={value} onChange={onChange} options={custOptions} searchable icon={Users} className="w-full" placeholder="Chọn khách hàng…" />
-      <div className="h-[250px]">
+      <div className="h-[320px]">
         {data.length === 0 ? (
           <EmptyState icon={Activity} title="Chưa có dữ liệu khách hàng" />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 16, right: 8, left: 8, bottom: 4 }}>
+            <BarChart data={data} margin={{ top: 16, right: 12, left: 8, bottom: 4 }} barGap={2} barCategoryGap="18%">
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 10 }} />
-              <YAxis yAxisId="kwh" tickFormatter={axisNum} tickLine={false} axisLine={false} stroke="var(--accent)" width={44} style={{ fontSize: 10 }} />
-              <YAxis yAxisId="pmax" orientation="right" tickFormatter={axisNum} tickLine={false} axisLine={false} stroke={CHART.cd} width={40} style={{ fontSize: 10 }} />
-              <Tooltip content={<ChartTooltip fmt={(v, n) => (n === 'Pmax' ? fmtKw(v) : fmtInt(v) + ' kWh')} />} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} stroke="var(--text-4)" style={{ fontSize: 11 }} />
+              <YAxis
+                tickFormatter={thousand} tickLine={false} axisLine={false} stroke="var(--text-4)" width={58} style={{ fontSize: 10 }}
+                label={{ value: 'Sản lượng (nghìn kWh)', angle: -90, position: 'insideLeft', offset: 8, style: { fill: 'var(--text-4)', fontSize: 10, textAnchor: 'middle' } }}
+              />
+              <Tooltip cursor={{ fill: 'var(--accent-soft)' }} content={<ChartTooltip fmt={v => fmtInt(v) + ' kWh'} />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar yAxisId="kwh" dataKey="kwh" name="Sản lượng" fill={CHART.accent} radius={[4, 4, 0, 0]} maxBarSize={26} />
-              <Line yAxisId="pmax" type="monotone" dataKey="pmax" name="Pmax" stroke={CHART.cd} strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
-            </ComposedChart>
+              {load3y.years.map((y, i) => (
+                <Bar key={y} dataKey={String(y)} name={String(y)} fill={YEAR_BARS[i % YEAR_BARS.length]} radius={[3, 3, 0, 0]} maxBarSize={28}>
+                  <LabelList dataKey={String(y)} content={makeYearBarLabel(data)} />
+                </Bar>
+              ))}
+            </BarChart>
           </ResponsiveContainer>
         )}
       </div>
@@ -311,7 +319,7 @@ export default function SummaryDashboard() {
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   {load3y.years.map((y, i) => (
                     <Bar key={y} dataKey={String(y)} name={String(y)} fill={YEAR_BARS[i % YEAR_BARS.length]} radius={[3, 3, 0, 0]} maxBarSize={28}>
-                      <LabelList dataKey={String(y)} content={renderYearBarLabel} />
+                      <LabelList dataKey={String(y)} content={makeYearBarLabel(load3y.data)} />
                     </Bar>
                   ))}
                 </BarChart>
@@ -357,10 +365,10 @@ export default function SummaryDashboard() {
 
       {/* Row 4 — two customer charts with selectors */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Panel title="Biểu đồ sản lượng & công suất khách hàng" sub={`Sản lượng (kWh) & Pmax (kW) · năm ${year}`} icon={Zap}>
+        <Panel title="Biểu đồ sản lượng khách hàng" sub={`So sánh ${load3y.years.length} năm gần nhất · sản lượng (kWh)`} icon={Zap}>
           {renderCustomerChart(effA, setCustA, dataA)}
         </Panel>
-        <Panel title="Biểu đồ sản lượng & công suất khách hàng" sub={`Sản lượng (kWh) & Pmax (kW) · năm ${year}`} icon={Gauge}>
+        <Panel title="Biểu đồ sản lượng khách hàng" sub={`So sánh ${load3y.years.length} năm gần nhất · sản lượng (kWh)`} icon={Gauge}>
           {renderCustomerChart(effB, setCustB, dataB)}
         </Panel>
       </div>
