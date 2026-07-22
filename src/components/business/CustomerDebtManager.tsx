@@ -445,8 +445,11 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
             )}
           </td>
           <td className="py-3.5 px-4 text-right font-mono text-xs">
-            <div className="text-ink font-bold">{fmtVND(c.dtHC + c.dtVC)}</div>
-            <div className="text-[10px] text-accent font-bold">{fmtVND(c.dtVAT)} <span className="text-[8px] text-faint font-normal">sau thuế</span></div>
+            <div className="text-dim font-bold">{fmtVND(c.dtHC + c.dtVC)}</div>
+          </td>
+          <td className="py-3.5 px-4 text-right font-mono text-xs">
+            <div className="text-ink font-bold">{fmtVND(c.dtVAT)}</div>
+            {c.vat > 0 && <div className="text-[9px] text-faint font-semibold">VAT {Math.round(c.vat * 100)}%</div>}
           </td>
           <td className="py-3.5 px-4 text-center">
             {c.isPaid ? (
@@ -529,8 +532,10 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
               </td>
               <td className="py-3 px-4 text-right font-mono text-[11px]">
                 <div className="text-dim font-bold">{fmtVND(ky.dtHC + ky.dtVC)}</div>
-                <div className="text-[9px] text-faint font-semibold">VAT {Math.round(ky.vat * 100)}%</div>
-                <div className="text-[10px] text-accent font-bold">{fmtVND(ky.dtVAT)} <span className="text-[8px] text-faint font-normal">sau thuế</span></div>
+              </td>
+              <td className="py-3 px-4 text-right font-mono text-[11px]">
+                <div className="text-accent font-bold">{fmtVND(ky.dtVAT)}</div>
+                {ky.vat > 0 && <div className="text-[9px] text-faint font-semibold">VAT {Math.round(ky.vat * 100)}%</div>}
               </td>
               <td className="py-3 px-4 text-center">
                 {ky.nTToan ? (
@@ -755,13 +760,14 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                     <table className="vl-table w-full text-left border-collapse table-fixed min-w-[850px]">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
-                    <th className="py-3.5 px-4 w-[150px]">Mã khách hàng</th>
-                    <th className="py-3.5 px-4 w-[28%]">Tên doanh nghiệp</th>
-                    <th className="py-3.5 px-4 w-[14%] text-center">Ngày chốt chỉ số</th>
-                    <th className="py-3.5 px-4 w-[18%] text-center">Ngày thanh toán</th>
-                    <th className="py-3.5 px-4 w-[12%] text-right">Sản lượng điện</th>
-                    <th className="py-3.5 px-4 w-[14%] text-right">Số tiền hóa đơn</th>
-                    <th className="py-3.5 px-4 text-center w-[14%]">Trạng thái</th>
+                    <th className="py-3.5 px-4 w-[120px]">Mã khách hàng</th>
+                    <th className="py-3.5 px-4 w-[19%]">Tên doanh nghiệp</th>
+                    <th className="py-3.5 px-4 w-[11%] text-center">Ngày chốt chỉ số</th>
+                    <th className="py-3.5 px-4 w-[15%] text-center">Ngày thanh toán</th>
+                    <th className="py-3.5 px-4 w-[10%] text-right">Sản lượng điện</th>
+                    <th className="py-3.5 px-4 w-[13%] text-right">Số tiền trước thuế</th>
+                    <th className="py-3.5 px-4 w-[13%] text-right">Số tiền sau thuế</th>
+                    <th className="py-3.5 px-4 text-center w-[12%]">Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
@@ -776,10 +782,8 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                       <div>{fmtKWh(zone.slHC)} <span className="text-[9px] text-warn/60">kWh</span></div>
                       {zone.slVC > 0 && <div className="text-[10px] text-soft font-bold">{fmtKWh(zone.slVC)} kVarh</div>}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono text-accent">
-                      <div>{fmtVND(zone.dtHC + zone.dtVC)}</div>
-                      <div className="text-[10px] text-soft font-bold">{fmtVND(zone.dtVAT)} sau thuế</div>
-                    </td>
+                    <td className="py-3.5 px-4 text-right font-mono text-dim">{fmtVND(zone.dtHC + zone.dtVC)}</td>
+                    <td className="py-3.5 px-4 text-right font-mono text-accent">{fmtVND(zone.dtVAT)}</td>
                     <td className="py-3.5 px-4" />
                   </tr>
                 </tfoot>

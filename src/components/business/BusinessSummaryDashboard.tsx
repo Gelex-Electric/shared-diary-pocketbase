@@ -432,8 +432,8 @@ export default function BusinessSummaryDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatTile label="Sản lượng hữu công" value={fmtInt(kpis.kwh)} unit="kWh" icon={Zap} tone="accent" loading={loading}
           sub={`${fmtInt(kpis.bills)} hóa đơn · ${fmtInt(kpis.customers)} khách hàng`} subTone="neutral" />
-        <StatTile label="Doanh thu" value={fmtInt(kpis.vnd)} unit="đồng" icon={TrendingUp} tone="neutral" loading={loading}
-          sub={`TB ${fmtInt(kpis.bills > 0 ? Math.round(kpis.vnd / kpis.bills) : 0)} đồng/hóa đơn`} subTone="neutral" />
+        <StatTile label="Doanh thu (trước thuế)" value={fmtInt(kpis.vnd)} unit="đồng" icon={TrendingUp} tone="neutral" loading={loading}
+          sub={`Sau thuế: ${fmtInt(kpis.vndVAT)} đồng`} subTone="neutral" />
 
         <div
           className="bg-surface border border-[var(--border)] rounded-[var(--radius)] p-4 flex flex-col gap-2.5"
@@ -441,16 +441,19 @@ export default function BusinessSummaryDashboard() {
         >
           <div className="flex items-center gap-2">
             <span className={`vl-lamp ${kpis.vndDebt > 0 ? 'trip' : 'on'}`} />
-            <span className="text-[10px] font-semibold tracking-[0.1em] uppercase text-soft flex-1 min-w-0 truncate">Công nợ</span>
+            <span className="text-[10px] font-semibold tracking-[0.1em] uppercase text-soft flex-1 min-w-0 truncate">Công nợ (trước thuế)</span>
             <AlertTriangle className="w-4 h-4 text-faint shrink-0" />
           </div>
           {loading ? (
             <div className="h-8 w-2/3 rounded bg-subtle animate-pulse" />
           ) : (
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[1.75rem] leading-none font-semibold text-ink tabular-nums tracking-tight">{fmtInt(kpis.vndDebt)}</span>
-              <span className="text-sm text-soft font-medium">đồng</span>
-            </div>
+            <>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[1.75rem] leading-none font-semibold text-ink tabular-nums tracking-tight">{fmtInt(kpis.vndDebt)}</span>
+                <span className="text-sm text-soft font-medium">đồng</span>
+              </div>
+              <div className="text-[11px] font-semibold text-soft tabular-nums">Sau thuế: {fmtInt(kpis.vndDebtVAT)} đồng</div>
+            </>
           )}
           <div className="flex items-center gap-1 text-[11px] font-semibold tabular-nums">
             <Wallet className="w-3 h-3 text-bad" />

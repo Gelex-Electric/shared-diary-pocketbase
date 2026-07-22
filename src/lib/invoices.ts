@@ -233,23 +233,24 @@ export function rollupByZone(bills: Bill[]): ZoneRollup[] {
 }
 
 export interface Kpis {
-  kwh: number; vnd: number; vndPaid: number; vndDebt: number;
+  kwh: number; vnd: number; vndVAT: number; vndPaid: number; vndDebt: number; vndDebtVAT: number;
   bills: number; unpaid: number; customers: number;
   collectRate: number;   // 0..1
   avgCosFi: number;      // kWh-weighted
   reactiveRatio: number; // kVarh / kWh
 }
 export function computeKpis(bills: Bill[]): Kpis {
-  let kwh = 0, vnd = 0, vndPaid = 0, vndDebt = 0, unpaid = 0, kvarh = 0, cfNum = 0, cfDen = 0;
+  let kwh = 0, vnd = 0, vndVAT = 0, vndPaid = 0, vndDebt = 0, vndDebtVAT = 0, unpaid = 0, kvarh = 0, cfNum = 0, cfDen = 0;
   const custs = new Set<string>();
   bills.forEach(b => {
-    const money = b.dtHC + b.dtVC;
-    kwh += b.slHC; vnd += money; kvarh += b.slVC; custs.add(b.mkh);
-    if (b.paid) vndPaid += money; else { vndDebt += money; unpaid += 1; }
+    const money = b.dtHC + b.dtVC;      // trước thuế
+    const moneyVAT = b.dtVAT;           // sau thuế
+    kwh += b.slHC; vnd += money; vndVAT += moneyVAT; kvarh += b.slVC; custs.add(b.mkh);
+    if (b.paid) vndPaid += money; else { vndDebt += money; vndDebtVAT += moneyVAT; unpaid += 1; }
     if (b.cosFi > 0 && b.slHC > 0) { cfNum += b.cosFi * b.slHC; cfDen += b.slHC; }
   });
   return {
-    kwh, vnd, vndPaid, vndDebt, bills: bills.length, unpaid, customers: custs.size,
+    kwh, vnd, vndVAT, vndPaid, vndDebt, vndDebtVAT, bills: bills.length, unpaid, customers: custs.size,
     collectRate: vnd > 0 ? vndPaid / vnd : 0,
     avgCosFi: cfDen > 0 ? cfNum / cfDen : 0,
     reactiveRatio: kwh > 0 ? kvarh / kwh : 0,
