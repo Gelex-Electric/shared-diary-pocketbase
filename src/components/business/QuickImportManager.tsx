@@ -679,7 +679,8 @@ export default function QuickImportManager() {
                           <th key={b} className="py-2.5 px-3 text-right">{BIEU_LABEL[b]}</th>
                         ))}
                         <th className="py-2.5 px-3 text-right">Tổng SL</th>
-                        <th className="py-2.5 px-3 text-right">Thành tiền</th>
+                        <th className="py-2.5 px-3 text-right">Trước thuế</th>
+                        <th className="py-2.5 px-3 text-right">Sau thuế</th>
                         <th className="py-2.5 px-3 text-center">Trạng thái</th>
                         <th className="py-2.5 px-3 text-center">Loại</th>
                       </tr>
@@ -704,8 +705,12 @@ export default function QuickImportManager() {
                               </td>
                             ))}
                             <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-warn">{fmt(tongSL)}</td>
-                            <td className="py-2.5 px-3 text-right font-mono font-bold text-ink">
+                            <td className="py-2.5 px-3 text-right font-mono font-bold text-dim">
                               {isVC ? <span className="text-violet-600">{fmt(r.ThTien)}</span> : fmt(r.ThTien)}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-bold text-ink">
+                              {fmt(r.ThTienVAT)}
+                              {r.VAT > 0 && <span className="text-[9px] text-faint font-normal ml-1">({Math.round(r.VAT * 100)}%)</span>}
                             </td>
                             <td className="py-2.5 px-3 text-center">
                               <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${exists ? 'bg-amber-100 text-warn' : 'bg-sky-100 text-sky-700'}`}>
