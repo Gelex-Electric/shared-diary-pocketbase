@@ -28,6 +28,8 @@ export default defineConfig(({ mode }) => {
             pdf: ['pdfmake'],
             xlsx: ['xlsx'],
             docx: ['docxtemplater', 'pizzip'],
+            flow: ['@xyflow/react'],
+            elk: ['elkjs'],
           },
         },
       },

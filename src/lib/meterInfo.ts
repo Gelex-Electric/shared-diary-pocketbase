@@ -1,3 +1,5 @@
+import { pb } from './pocketbase';
+
 export interface MeterInfoRow {
   METER_NO: string;
   METER_NAME: string;
@@ -10,6 +12,18 @@ export interface MeterInfoRow {
   CODE: string;
   ROLE: string;   // 'chinh' | 'phu'
   STATUS: string;
+  /** Optional — chỉ có khi nguồn là PocketBase station_map (record id để sửa role/hsn).
+   *  Nguồn CSV hiện tại không có → sơ đồ sẽ hiển thị chỉ-đọc (không đổi role tại chỗ). */
+  _id?: string;
+  ROLE_SOURCE?: string; // 'suggested' | 'manual'
+}
+
+/** True nếu tài khoản hiện tại được phép sửa role/hsn của công tơ (khớp updateRule PB theo KCN). */
+export function canEditMeter(customerCode: string): boolean {
+  const area2 = (pb.authStore.model as { area2?: string } | null)?.area2 ?? '';
+  if (!pb.authStore.isValid) return false;
+  if (area2 === '') return true;               // GETC/admin: sửa tất cả
+  return (customerCode || '').includes(area2); // chỉ KCN của tài khoản
 }
 
 /** Simple CSV line parser supporting quoted fields with commas. */
