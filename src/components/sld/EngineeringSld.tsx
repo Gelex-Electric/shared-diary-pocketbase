@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ReactFlow, Background, Controls, Handle, Position,
+  ReactFlow, Background, Controls, Handle, Position, useReactFlow,
   type Node, type Edge, type NodeProps,
 } from '@xyflow/react';
 import { ArrowUpCircle, ArrowDownCircle, Lock, Cable } from 'lucide-react';
@@ -450,8 +450,21 @@ export default function EngineeringSld({ stationKey, meters, busy, onToggle }: P
       nodesConnectable={false} edgesFocusable={false}
       proOptions={{ hideAttribution: true }}
     >
+      {/* ELK layout chạy bất đồng bộ -> node có SAU fitView đầu; refit khi node đổi. */}
+      <FitOnChange count={nodes.length} />
       <Background />
       <Controls showInteractive={false} />
     </ReactFlow>
   );
+}
+
+/** Gọi lại fitView mỗi khi số node thay đổi (sau khi ELK layout xong hoặc bảng đổi). */
+function FitOnChange({ count }: { count: number }) {
+  const rf = useReactFlow();
+  useEffect(() => {
+    if (count <= 0) return;
+    const t = setTimeout(() => rf.fitView({ padding: 0.15 }), 30);
+    return () => clearTimeout(t);
+  }, [count, rf]);
+  return null;
 }
