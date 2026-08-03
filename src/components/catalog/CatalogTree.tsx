@@ -19,6 +19,7 @@ import {
 import PointDetail from './PointDetail';
 import WarehousePanel from './WarehousePanel';
 import DropConfirmDialog, { type DropRequest } from './DropConfirmDialog';
+import BulkImportAssets from './BulkImportAssets';
 import { Draggable, Droppable, parseItem, parseTarget } from './dndParts';
 
 const EMPTY: CatalogData = {
@@ -43,6 +44,7 @@ export default function CatalogTree() {
   const [selected, setSelected] = useState<Point | null>(null);
   const [active, setActive] = useState<DragItem | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const editable = canEdit();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -322,7 +324,7 @@ export default function CatalogTree() {
             </div>
 
             <div className="space-y-5 xl:sticky xl:top-4">
-              <WarehousePanel data={data} active={active} canEditNow={editable} />
+              <WarehousePanel data={data} active={active} canEditNow={editable} onBulkImport={() => setBulkOpen(true)} />
               <PointDetail point={selected} data={data} />
             </div>
           </div>
@@ -338,6 +340,10 @@ export default function CatalogTree() {
           </div>
         )}
       </DragOverlay>
+
+      {bulkOpen && (
+        <BulkImportAssets data={data} onClose={() => setBulkOpen(false)} onDone={load} />
+      )}
 
       <DropConfirmDialog
         request={pending?.request ?? null}

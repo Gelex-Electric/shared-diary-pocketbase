@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Warehouse, Search, AlertTriangle, PackageOpen } from 'lucide-react';
+import { Warehouse, Search, AlertTriangle, PackageOpen, Upload } from 'lucide-react';
 import {
   type CatalogData, type Asset, ASSET_TYPE_LABEL, isOverdue,
 } from '../../lib/catalog';
@@ -10,8 +10,11 @@ const TYPES = ['CONGTO', 'TI', 'TU', 'GP03', 'KHAC'] as const;
 
 /** Ngăn kho: vật tư đang trong kho (kéo lên điểm đo) + là vùng thả để tháo về. */
 export default function WarehousePanel({
-  data, active, canEditNow,
-}: { data: CatalogData; active: DragItem | null; canEditNow: boolean }) {
+  data, active, canEditNow, onBulkImport,
+}: {
+  data: CatalogData; active: DragItem | null; canEditNow: boolean;
+  onBulkImport: () => void;
+}) {
   const [term, setTerm] = useState('');
   const [type, setType] = useState<string>('');
 
@@ -69,6 +72,15 @@ export default function WarehousePanel({
         <Warehouse className="w-4 h-4 text-accent" />
         <h3 className="font-bold text-ink flex-1">Kho vật tư</h3>
         <span className="text-xs text-faint">{inStock.length} món</span>
+        {canEditNow && (
+          <button
+            onClick={onBulkImport}
+            className="flex items-center gap-1 text-xs font-bold px-2 py-1 rounded border border-[var(--border)] text-soft hover:bg-subtle transition-colors"
+            title="Dán danh sách vật tư từ Excel"
+          >
+            <Upload className="w-3.5 h-3.5" />Nhập hàng loạt
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1">
@@ -130,7 +142,7 @@ export default function WarehousePanel({
 
       {data.assets.filter(a => a.type !== 'CONGTO').length === 0 && (
         <p className="text-[0.7rem] text-faint border-t border-[var(--border)] pt-2">
-          Chưa có TI / TU / GP-03 nào. Không nguồn dữ liệu nào có sẵn — phải nhập tay.
+          Chưa có TI / TU / GP-03 nào. Không nguồn dữ liệu nào có sẵn — dùng "Nhập hàng loạt" để dán từ Excel.
         </p>
       )}
     </div>
