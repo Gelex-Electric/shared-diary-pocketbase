@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .env
 .env.local
+
+# Backup PocketBase - chua du lieu khach hang + rule quyen. Repo dang PUBLIC.
+backup/
+pb-backup-*.json
