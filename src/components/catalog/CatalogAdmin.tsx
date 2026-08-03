@@ -7,7 +7,7 @@ import {
   fetchCatalog, type CatalogData, ASSET_TYPE_LABEL, ASSET_STATUS_LABEL,
   POINT_STATUS_LABEL,
 } from '../../lib/catalog';
-import { canEdit } from '../../lib/dnd';
+import { canEdit } from '../../lib/assign';
 import {
   type EntityKind, ENTITY_LABEL, deleteBlockers, assetHasLedger,
   createRecord, updateRecord, deleteRecord, liquidateAsset,
@@ -19,7 +19,8 @@ const EMPTY: CatalogData = {
   warehouses: [], assets: [], installs: [],
 };
 
-const TABS: EntityKind[] = ['zone', 'station', 'point', 'asset', 'warehouse'];
+// Bo tab Kho: moi KCN dung 1 kho, tao san boi script, khong can quan ly rieng
+const TABS: EntityKind[] = ['zone', 'station', 'point', 'asset'];
 
 /** Trang QUẢN LÝ DANH MỤC — thêm / sửa / xóa. Kéo thả nằm ở trang riêng. */
 export default function CatalogAdmin() {

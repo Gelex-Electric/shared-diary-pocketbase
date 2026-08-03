@@ -5,11 +5,19 @@ import {
   type CatalogData, type Point, POINT_STATUS_LABEL, viDate, periodsOfPoint,
   assetsAtPoint, isOverdue, ASSET_TYPE_LABEL,
 } from '../../lib/catalog';
-import { canEdit } from '../../lib/dnd';
-import { Draggable } from './dndParts';
+
 
 /** Bảng chi tiết một điểm đo: trạm, khách hàng theo kỳ, HSN, cảnh báo. */
-export default function PointDetail({ point, data }: { point: Point | null; data: CatalogData }) {
+export default function PointDetail({
+  point, data, canEditNow = false, picked, onPick,
+}: {
+  point: Point | null;
+  data: CatalogData;
+  canEditNow?: boolean;
+  /** Vật tư đang tích chọn (dùng chung với ngăn kho) */
+  picked?: Set<string>;
+  onPick?: (s: Set<string>) => void;
+}) {
   if (!point) {
     return (
       <div className="vl-card flex flex-col items-center justify-center py-20 text-faint h-full">
@@ -140,33 +148,38 @@ export default function PointDetail({ point, data }: { point: Point | null; data
       <section>
         <p className="vl-section-title flex items-center gap-2"><Package className="w-4 h-4" />Vật tư đang treo ({at.length})</p>
         {at.length === 0 ? (
-          <p className="mt-2 text-sm text-faint">Chưa có vật tư nào. Kéo từ ngăn kho sang điểm đo này.</p>
+          <p className="mt-2 text-sm text-faint">Chưa có vật tư nào. Tích chọn vật tư ở ngăn kho rồi bấm "Treo lên điểm đo".</p>
         ) : (
           <div className="mt-2 space-y-1.5">
             {at.map(({ install, asset }) => {
               if (!asset) return null;
               const overdue = isOverdue(asset);
+              const on = picked?.has(asset.id) ?? false;
               return (
-                <Draggable
-                  key={install.id}
-                  item={{ kind: 'asset', id: asset.id, fromPoint: point.id }}
-                  disabled={!canEdit()}
-                >
-                  <div className={`flex items-center gap-2 px-2 py-1.5 rounded border text-sm ${
-                    overdue ? 'border-[var(--danger)]/40 bg-[var(--danger-soft)]' : 'border-[var(--border)]'
+                <label key={install.id}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded border text-sm ${canEditNow ? 'cursor-pointer' : ''} ${
+                    on ? 'border-accent bg-accent-soft'
+                      : overdue ? 'border-[var(--danger)]/40 bg-[var(--danger-soft)]'
+                      : 'border-[var(--border)]'
                   }`}>
-                    <span className="font-mono text-xs font-bold text-accent shrink-0">{asset.serial}</span>
-                    <span className="text-[0.7rem] text-faint shrink-0">{ASSET_TYPE_LABEL[asset.type]}</span>
-                    {asset.ratio ? <span className="text-[0.7rem] text-soft shrink-0">tỷ số {asset.ratio}</span> : null}
-                    <span className="flex-1" />
-                    <span className="text-[0.7rem] text-faint shrink-0">từ {viDate(install.from_date)}</span>
-                    {overdue && (
-                      <span className="text-[0.65rem] font-bold text-bad shrink-0" title={`Hạn kiểm định ${asset.next_calibration?.slice(0, 10)}`}>
-                        quá hạn KĐ
-                      </span>
-                    )}
-                  </div>
-                </Draggable>
+                  {canEditNow && onPick && (
+                    <input type="checkbox" checked={on} className="w-3.5 h-3.5 shrink-0"
+                      onChange={() => {
+                        const n = new Set(picked ?? []);
+                        if (n.has(asset.id)) n.delete(asset.id); else n.add(asset.id);
+                        onPick(n);
+                      }} />
+                  )}
+                  <span className="font-mono text-xs font-bold text-accent shrink-0">{asset.serial}</span>
+                  <span className="text-[0.7rem] text-faint shrink-0">{ASSET_TYPE_LABEL[asset.type]}</span>
+                  {asset.ratio ? <span className="text-[0.7rem] text-soft shrink-0">tỷ số {asset.ratio}</span> : null}
+                  <span className="flex-1" />
+                  <span className="text-[0.7rem] text-faint shrink-0">từ {viDate(install.from_date)}</span>
+                  {overdue && (
+                    <span className="text-[0.65rem] font-bold text-bad shrink-0"
+                      title={`Hạn kiểm định ${asset.next_calibration?.slice(0, 10)}`}>quá hạn KĐ</span>
+                  )}
+                </label>
               );
             })}
           </div>

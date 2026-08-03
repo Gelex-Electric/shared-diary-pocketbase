@@ -31,11 +31,15 @@ import seed_catalog as sc
 
 SEED_NOTE = "KHOI TAO TU HES 2026-08-03 - khong phai su kien thuc dia"
 
-# 3 LINE_ID gia trong HES = kho cong to da thao
+# MOI KCN DUNG 1 KHO (user chot 03/08).
+# 3 kho dau suy tu LINE_ID gia trong HES (cong to da thao); 2 kho sau tao moi
+# vi KCN Phong Dien va Thuan Thanh I chua tung lo ra trong HES.
 WAREHOUSES = [
-    {"code": "809", "name": "Kho công tơ tháo xuống Tiền Hải", "zone": "KCNTH"},
-    {"code": "810", "name": "Kho công tơ tháo xuống KCN số 3", "zone": "KCN03"},
-    {"code": "857", "name": "Kho công tơ tháo xuống KCN Yên Mỹ", "zone": "KCNYM"},
+    {"code": "809", "name": "Kho vật tư KCN Tiền Hải", "zone": "KCNTH"},
+    {"code": "810", "name": "Kho vật tư KCN Số 3", "zone": "KCN03"},
+    {"code": "857", "name": "Kho vật tư KCN Yên Mỹ", "zone": "KCNYM"},
+    {"code": "KHO-KCNPD", "name": "Kho vật tư KCN Phong Điền", "zone": "KCNPĐ"},
+    {"code": "KHO-KCNTTI", "name": "Kho vật tư KCN Thuận Thành I", "zone": "KCNTTI"},
 ]
 
 
