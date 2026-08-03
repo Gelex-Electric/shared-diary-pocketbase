@@ -6,7 +6,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import { Select } from '../ui/Select';
 import { toast as notify } from '../../lib/toast';
 import {
   fetchCatalog, type CatalogData, type Point, currentCustomerOf, assetsAtPoint,
@@ -34,17 +33,22 @@ interface Pending {
   request: DropRequest;
 }
 
-/** Cây danh mục KCN → Trạm → (Chính/Phụ) → Điểm đo, có kéo thả (task 5 + 5b). */
-export default function CatalogTree() {
+/**
+ * Trang SẮP XẾP: kéo thả điểm đo vào trạm, đổi chính/phụ, treo/tháo vật tư.
+ * Mỗi khu công nghiệp một tab (user yêu cầu 03/08) — cây 92 trạm dồn một chỗ
+ * quá dài để thao tác kéo thả.
+ * Thêm/sửa/xóa bản ghi nằm ở trang "Quản lý danh mục".
+ */
+export default function CatalogAssign() {
   const [data, setData] = useState<CatalogData>(EMPTY);
   const [isLoading, setIsLoading] = useState(true);
-  const [zoneFilter, setZoneFilter] = useState('');
   const [term, setTerm] = useState('');
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Point | null>(null);
   const [active, setActive] = useState<DragItem | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [activeZone, setActiveZone] = useState('');
 
   const editable = canEdit();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -62,6 +66,11 @@ export default function CatalogTree() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Chọn KCN đầu tiên khi tải xong (chỉ khi chưa chọn gì)
+  useEffect(() => {
+    if (!activeZone && data.zones.length) setActiveZone(data.zones[0].id);
+  }, [data.zones, activeZone]);
+
   const toggle = (id: string) =>
     setOpenIds(prev => {
       const n = new Set(prev);
@@ -78,7 +87,7 @@ export default function CatalogTree() {
   }, [term, data]);
 
   const tree = useMemo(() => {
-    const zones = data.zones.filter(z => !zoneFilter || z.code === zoneFilter);
+    const zones = data.zones.filter(z => z.id === activeZone);
     return zones.map(z => {
       const stations = data.stations
         .filter(s => s.zone === z.id)
@@ -95,9 +104,12 @@ export default function CatalogTree() {
       const orphans = data.points.filter(p => p.zone === z.id && !p.station && matches(p));
       return { zone: z, stations, orphans };
     });
-  }, [data, zoneFilter, term, matches]);
+  }, [data, activeZone, term, matches]);
 
-  const totalOrphans = useMemo(() => data.points.filter(p => !p.station).length, [data.points]);
+  const totalOrphans = useMemo(
+    () => data.points.filter(p => !p.station && p.zone === activeZone).length,
+    [data.points, activeZone],
+  );
 
   /* ---------------- Kéo thả ---------------- */
 
@@ -189,7 +201,8 @@ export default function CatalogTree() {
           <div>
             <h2 className="text-2xl font-bold text-ink">Danh mục điểm đo</h2>
             <p className="text-soft text-sm mt-1">
-              Khu vực → Trạm → Điểm đo → Vật tư. Kéo điểm đo vào trạm, kéo vật tư từ kho lên điểm đo.
+              Kéo điểm đo vào trạm, kéo giữa nhóm Chính/Phụ, kéo vật tư từ kho lên điểm đo.
+              Thêm/sửa/xóa bản ghi ở trang <strong>Quản lý danh mục</strong>.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
@@ -201,26 +214,50 @@ export default function CatalogTree() {
                 className="w-full pl-10 pr-4 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none"
               />
             </div>
-            <Select
-              value={zoneFilter} onChange={setZoneFilter}
-              options={[{ value: '', label: 'Tất cả khu vực' }, ...data.zones.map(z => ({ value: z.code, label: z.name }))]}
-              className="min-w-[160px]"
-            />
             <button onClick={load} className="p-2 rounded border border-[var(--border)] text-soft hover:bg-subtle transition-colors" title="Tải lại">
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
 
+        {!isLoading && data.zones.length > 0 && (
+          <div className="flex flex-wrap gap-1 border-b border-[var(--border)]">
+            {data.zones.map(z => {
+              const nPoint = data.points.filter(p => p.zone === z.id).length;
+              const nOrphan = data.points.filter(p => p.zone === z.id && !p.station).length;
+              return (
+                <button
+                  key={z.id}
+                  onClick={() => { setActiveZone(z.id); setSelected(null); }}
+                  className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors flex items-center gap-2 ${
+                    activeZone === z.id ? 'border-accent text-accent' : 'border-transparent text-soft hover:text-dim'
+                  }`}
+                >
+                  {z.name}
+                  <span className="text-xs text-faint">{nPoint}</span>
+                  {nOrphan > 0 && (
+                    <span className="text-[0.65rem] font-bold px-1.5 py-0.5 rounded vl-badge-warning" title={`${nOrphan} điểm đo chưa gắn trạm`}>
+                      {nOrphan}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {!isLoading && (
           <div className="flex flex-wrap gap-2 text-xs items-center">
-            <span className="vl-badge-info font-bold px-2 py-1 rounded">{data.stations.length} trạm</span>
-            <span className="vl-badge-info font-bold px-2 py-1 rounded">{data.points.length} điểm đo</span>
-            <span className="vl-badge-info font-bold px-2 py-1 rounded">{data.customers.length} khách hàng</span>
-            <span className="vl-badge-info font-bold px-2 py-1 rounded">{data.assets.length} vật tư</span>
+            <span className="vl-badge-info font-bold px-2 py-1 rounded">
+              {data.stations.filter(s2 => s2.zone === activeZone).length} trạm
+            </span>
+            <span className="vl-badge-info font-bold px-2 py-1 rounded">
+              {data.points.filter(p => p.zone === activeZone).length} điểm đo
+            </span>
+            <span className="vl-badge-info font-bold px-2 py-1 rounded">{data.assets.length} vật tư (toàn hệ thống)</span>
             {totalOrphans > 0 && (
               <span className="vl-badge-warning font-bold px-2 py-1 rounded flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />{totalOrphans} điểm đo chưa gắn trạm
+                <AlertTriangle className="w-3 h-3" />{totalOrphans} điểm đo chưa gắn trạm ở KCN này
               </span>
             )}
             {!editable && (
@@ -241,23 +278,14 @@ export default function CatalogTree() {
             <div className="vl-card overflow-hidden">
               {tree.map(({ zone, stations, orphans }) => (
                 <div key={zone.id} className="border-b border-[var(--border)] last:border-b-0">
-                  <button
-                    onClick={() => toggle(zone.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-subtle transition-colors"
-                  >
-                    <ChevronRight className={`w-4 h-4 text-faint transition-transform ${openIds.has(zone.id) ? 'rotate-90' : ''}`} />
+                  <div className="flex items-center gap-3 px-4 py-2 bg-subtle">
                     <MapPin className="w-4 h-4 text-accent shrink-0" />
-                    <span className="font-bold text-ink flex-1 text-left">{zone.name}</span>
+                    <span className="font-bold text-ink flex-1">{zone.name}</span>
                     <span className="text-xs text-faint">{stations.length} trạm</span>
-                  </button>
+                  </div>
 
-                  <AnimatePresence initial={false}>
-                    {openIds.has(zone.id) && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                      >
+                  <div>
+                    <div>
                         {stations.map(({ station, chinh, phu, total }) => (
                           <div key={station.id}>
                             <Droppable target={{ kind: 'station', id: station.id }} active={active} data={data}>
@@ -316,9 +344,8 @@ export default function CatalogTree() {
                             </AnimatePresence>
                           </div>
                         )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
