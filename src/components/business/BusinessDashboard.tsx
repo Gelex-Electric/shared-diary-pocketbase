@@ -14,11 +14,12 @@ import OfficeHesReadingManager from './OfficeHesReadingManager';
 import OfficeVoltagePowerDashboard from './OfficeVoltagePowerDashboard';
 import TransformerLossManager from '../TransformerLossManager';
 import OfficeSldPage from './OfficeSldPage';
+import CatalogTree from '../catalog/CatalogTree';
 import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
-  | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt'
+  | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'catalog'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld';
 
 const TAB_LABEL: Record<Tab, string> = {
@@ -26,6 +27,7 @@ const TAB_LABEL: Record<Tab, string> = {
   'bill-confirm':  'Biên bản xác nhận chỉ số',
   'quick-import':  'Nạp dữ liệu nhanh',
   'customer-debt': 'Công nợ khách hàng',
+  catalog:         'Danh mục điểm đo',
   operating:       'Thông số vận hành',
   hes:             'Lấy chỉ số HES',
   opchart:         'Đồ thị điện áp & công suất',
@@ -34,7 +36,7 @@ const TAB_LABEL: Record<Tab, string> = {
 };
 
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
-const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt'];
+const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt', 'catalog'];
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
 
@@ -155,6 +157,19 @@ export default function BusinessDashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Nạp dữ liệu nhanh</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      id="nav-catalog-sub"
+                      onClick={() => { setTopTab('catalog'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'catalog' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Danh mục điểm đo</span>
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
@@ -369,6 +384,8 @@ export default function BusinessDashboard() {
               <QuickImportManager />
             ) : topTab === 'customer-debt' ? (
               <CustomerDebtManager />
+            ) : topTab === 'catalog' ? (
+              <CatalogTree />
             ) : topTab === 'operating' ? (
               <OfficeCustomerManager />
             ) : topTab === 'hes' ? (
