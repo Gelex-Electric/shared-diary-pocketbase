@@ -66,24 +66,98 @@ export interface PointCustomer {
   shared: boolean;
 }
 
+export type AssetType = 'CONGTO' | 'TI' | 'TU' | 'GP03' | 'KHAC';
+export type AssetStatus =
+  | 'kho' | 'dang_treo' | 'cho_kiem_dinh' | 'dang_kiem_dinh'
+  | 'dat' | 'khong_dat' | 'thanh_ly' | '';
+
+export interface Warehouse {
+  id: string;
+  code: string;
+  name: string;
+  zone: string;
+  active?: boolean;
+}
+
+export interface Asset {
+  id: string;
+  serial: string;
+  type: AssetType;
+  model_desc?: string;
+  manufacturer?: string;
+  ratio_primary?: number;
+  ratio_secondary?: number;
+  ratio?: number;
+  manufacture_year?: number;
+  calibration_date?: string;
+  next_calibration?: string;
+  current_status: AssetStatus;
+  current_warehouse: string;
+  current_point: string;
+  hes_seen?: boolean;
+  note?: string;
+}
+
+export interface Install {
+  id: string;
+  asset: string;
+  serial: string;
+  type: AssetType;
+  point: string;
+  phase?: 'A' | 'B' | 'C' | '';
+  from_date: string;
+  to_date: string;
+  is_current: boolean;
+  note?: string;
+}
+
 export interface CatalogData {
   zones: Zone[];
   stations: Station[];
   customers: Customer[];
   points: Point[];
   periods: PointCustomer[];
+  warehouses: Warehouse[];
+  assets: Asset[];
+  installs: Install[];
+}
+
+export const ASSET_TYPE_LABEL: Record<string, string> = {
+  CONGTO: 'Công tơ', TI: 'TI', TU: 'TU', GP03: 'GP-03', KHAC: 'Khác',
+};
+
+export const ASSET_STATUS_LABEL: Record<string, string> = {
+  kho: 'Trong kho', dang_treo: 'Đang treo', cho_kiem_dinh: 'Chờ kiểm định',
+  dang_kiem_dinh: 'Đang kiểm định', dat: 'Kiểm định đạt',
+  khong_dat: 'Kiểm định không đạt', thanh_ly: 'Đã thanh lý', '': '—',
+};
+
+/** Vật tư đang treo tại một điểm đo (kỳ `is_current`). */
+export function assetsAtPoint(data: CatalogData, pointId: string): Array<{ install: Install; asset?: Asset }> {
+  return data.installs
+    .filter(i => i.point === pointId && i.is_current)
+    .map(i => ({ install: i, asset: data.assets.find(a => a.id === i.asset) }));
+}
+
+/** Quá hạn kiểm định? GP-03 không kiểm định nên luôn false. */
+export function isOverdue(a: Asset, today = new Date()): boolean {
+  if (a.type === 'GP03' || !a.next_calibration) return false;
+  return a.next_calibration.slice(0, 10) < today.toISOString().slice(0, 10);
 }
 
 /** Nạp toàn bộ danh mục. Ném lỗi để component quyết định cách báo. */
 export async function fetchCatalog(): Promise<CatalogData> {
-  const [zones, stations, customers, points, periods] = await Promise.all([
+  const [zones, stations, customers, points, periods, warehouses, assets, installs] = await Promise.all([
     pb.collection('dm_zone').getFullList<Zone>({ sort: 'code' }),
     pb.collection('dm_station').getFullList<Station>({ sort: 'code' }),
     pb.collection('dm_customer').getFullList<Customer>({ sort: 'mkh' }),
     pb.collection('dm_point').getFullList<Point>({ sort: 'line_name' }),
     pb.collection('dm_point_customer').getFullList<PointCustomer>({ sort: '-from_date' }),
+    pb.collection('vt_warehouse').getFullList<Warehouse>({ sort: 'code' }),
+    pb.collection('vt_asset').getFullList<Asset>({ sort: 'serial' }),
+    pb.collection('vt_install').getFullList<Install>({ sort: '-from_date' }),
   ]);
-  return { zones, stations, customers, points, periods };
+  return { zones, stations, customers, points, periods, warehouses, assets, installs };
 }
 
 /** Nhãn tiếng Việt cho trạng thái điểm đo. */

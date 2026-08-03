@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { pb } from '../../lib/pocketbase';
 import {
   LogOut, X, Menu, ChevronDown,
@@ -14,7 +14,8 @@ import OfficeHesReadingManager from './OfficeHesReadingManager';
 import OfficeVoltagePowerDashboard from './OfficeVoltagePowerDashboard';
 import TransformerLossManager from '../TransformerLossManager';
 import OfficeSldPage from './OfficeSldPage';
-import CatalogTree from '../catalog/CatalogTree';
+// Tai cham: keo theo @dnd-kit, chi can khi mo tab Danh muc diem do
+const CatalogTree = lazy(() => import('../catalog/CatalogTree'));
 import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
 
@@ -385,7 +386,9 @@ export default function BusinessDashboard() {
             ) : topTab === 'customer-debt' ? (
               <CustomerDebtManager />
             ) : topTab === 'catalog' ? (
-              <CatalogTree />
+              <Suspense fallback={<div className="flex items-center justify-center py-20 text-faint">Đang tải danh mục...</div>}>
+                <CatalogTree />
+              </Suspense>
             ) : topTab === 'operating' ? (
               <OfficeCustomerManager />
             ) : topTab === 'hes' ? (

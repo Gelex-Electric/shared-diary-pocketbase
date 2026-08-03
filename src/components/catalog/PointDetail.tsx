@@ -1,9 +1,12 @@
 import {
-  Gauge, Building2, MapPin, User, History, AlertTriangle, Users,
+  Gauge, Building2, MapPin, User, History, AlertTriangle, Users, Package,
 } from 'lucide-react';
 import {
   type CatalogData, type Point, POINT_STATUS_LABEL, viDate, periodsOfPoint,
+  assetsAtPoint, isOverdue, ASSET_TYPE_LABEL,
 } from '../../lib/catalog';
+import { canEdit } from '../../lib/dnd';
+import { Draggable } from './dndParts';
 
 /** Bảng chi tiết một điểm đo: trạm, khách hàng theo kỳ, HSN, cảnh báo. */
 export default function PointDetail({ point, data }: { point: Point | null; data: CatalogData }) {
@@ -19,6 +22,7 @@ export default function PointDetail({ point, data }: { point: Point | null; data
   const station = data.stations.find(s => s.id === point.station);
   const zone = data.zones.find(z => z.id === point.zone);
   const periods = periodsOfPoint(data.periods, point.id);
+  const at = assetsAtPoint(data, point.id);
 
   // Điểm đo cùng trạm — để thấy ngay ca "1 trạm nhiều điểm đo, khác khách"
   const siblings = station
@@ -132,12 +136,51 @@ export default function PointDetail({ point, data }: { point: Point | null; data
         )}
       </section>
 
-      {/* Vật tư — task 6 */}
+      {/* Vật tư đang treo */}
       <section>
-        <p className="vl-section-title">Vật tư đang treo</p>
-        <p className="mt-2 text-sm text-faint">
-          Chưa có dữ liệu vật tư. Công tơ, TI, TU, GP-03 sẽ hiện ở đây sau khi nhập kho.
-        </p>
+        <p className="vl-section-title flex items-center gap-2"><Package className="w-4 h-4" />Vật tư đang treo ({at.length})</p>
+        {at.length === 0 ? (
+          <p className="mt-2 text-sm text-faint">Chưa có vật tư nào. Kéo từ ngăn kho sang điểm đo này.</p>
+        ) : (
+          <div className="mt-2 space-y-1.5">
+            {at.map(({ install, asset }) => {
+              if (!asset) return null;
+              const overdue = isOverdue(asset);
+              return (
+                <Draggable
+                  key={install.id}
+                  item={{ kind: 'asset', id: asset.id, fromPoint: point.id }}
+                  disabled={!canEdit()}
+                >
+                  <div className={`flex items-center gap-2 px-2 py-1.5 rounded border text-sm ${
+                    overdue ? 'border-[var(--danger)]/40 bg-[var(--danger-soft)]' : 'border-[var(--border)]'
+                  }`}>
+                    <span className="font-mono text-xs font-bold text-accent shrink-0">{asset.serial}</span>
+                    <span className="text-[0.7rem] text-faint shrink-0">{ASSET_TYPE_LABEL[asset.type]}</span>
+                    {asset.ratio ? <span className="text-[0.7rem] text-soft shrink-0">tỷ số {asset.ratio}</span> : null}
+                    <span className="flex-1" />
+                    <span className="text-[0.7rem] text-faint shrink-0">từ {viDate(install.from_date)}</span>
+                    {overdue && (
+                      <span className="text-[0.65rem] font-bold text-bad shrink-0" title={`Hạn kiểm định ${asset.next_calibration?.slice(0, 10)}`}>
+                        quá hạn KĐ
+                      </span>
+                    )}
+                  </div>
+                </Draggable>
+              );
+            })}
+          </div>
+        )}
+        {!at.some(x => x.asset?.type === 'CONGTO') && (
+          <p className="mt-2 text-xs text-warn flex items-start gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />Điểm đo chưa có công tơ.
+          </p>
+        )}
+        {!at.some(x => x.asset?.type === 'GP03') && (
+          <p className="mt-1 text-xs text-faint flex items-start gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />Chưa khai GP-03 (thiết bị thu thập dữ liệu).
+          </p>
+        )}
       </section>
     </div>
   );

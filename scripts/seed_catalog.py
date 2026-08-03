@@ -17,6 +17,7 @@ Cach dung:
 import argparse
 import csv
 import os
+import re
 import sys
 from collections import defaultdict
 
@@ -64,6 +65,31 @@ def read_meterinfo() -> list:
         return [ {k: (v or "").strip() for k, v in row.items()} for row in csv.DictReader(f) ]
 
 
+def _norm_code(s) -> str:
+    """Chuan hoa CODE de so khop: bo khoang trang, viet hoa.
+    GIONG HET daily_transformer_loss.py::_norm_code - phai khop, neu khong
+    hai noi se hieu khac nhau ve cung mot tram."""
+    return re.sub(r"\s+", "", str(s or "").strip().upper())
+
+
+def resolve_mba(code: str, mba: dict):
+    """Khop CODE cua HES voi mba_info: chuan hoa truoc, roi khop tien to.
+
+    Copy logic tu daily_transformer_loss.py::resolve_params. Can thiet vi ten
+    tram o HES va o mba_info.csv lech nhau 2 kieu (da gap that):
+      - khoang trang : '03.TMD.3000kVA'  vs '03.TMD.3000 KVA'
+      - hau to       : 'TTI.BQL.T1.630kVA XLNT' vs 'TTI.BQL.T1.630KVA'
+    Khop chinh xac tuyet doi se bao 'thieu thong so MBA' mot cach sai lam.
+    """
+    n = _norm_code(code)
+    if n in mba:
+        return mba[n]
+    cands = [k for k in mba if n.startswith(k) or k.startswith(n)]
+    if cands:
+        return mba[max(cands, key=len)]   # khop dai nhat cho chac
+    return None
+
+
 def read_mba() -> dict:
     """{code_chuan: {sdm_kva, p0_kw, pk_kw}}. File dung ';' va dau phay thap phan.
     P0/PK trong file don vi W -> chia 1000 ra kW (giong daily_transformer_loss.py)."""
@@ -87,7 +113,7 @@ def read_mba() -> dict:
                     return None
 
             sdm, p0, pk = num(row[1]), num(row[2]), num(row[3])
-            out[code.upper()] = {
+            out[_norm_code(code)] = {
                 "sdm_kva": sdm,
                 "p0_kw": (p0 / 1000) if p0 is not None else None,
                 "pk_kw": (pk / 1000) if pk is not None else None,
@@ -168,12 +194,17 @@ def build(token: str):
             z = zone_of_code(code)
             if not z:
                 warns.append(f"Tram '{code}': khong suy duoc KCN tu tien to")
-            m = mba.get(code.upper(), {})
+            m = resolve_mba(code, mba) or {}
             stations[code] = {
                 "code": code, "name": code, "zone": z,
                 "sdm_kva": m.get("sdm_kva"), "p0_kw": m.get("p0_kw"), "pk_kw": m.get("pk_kw"),
             }
-    no_mba = [c for c in stations if c.upper() not in mba]
+    # "thieu" = khong tim duoc dong nao, HOAC tim duoc nhung thieu so
+    no_mba = []
+    for c in stations:
+        m = resolve_mba(c, mba)
+        if not m or m.get("sdm_kva") is None or m.get("p0_kw") is None or m.get("pk_kw") is None:
+            no_mba.append(c)
 
     # ---- dm_point: tu LINE_ID/LINE_NAME (bo 3 kho) ----
     # Luot 1: khoa theo LINE_ID
@@ -379,6 +410,50 @@ def seed_one(token: str, coll: str, key: str, items: list, label: str) -> dict:
     return ids
 
 
+def update_station_mba(token: str, d: dict, dry_run: bool = False):
+    """Vá thông số MBA cho trạm ĐÃ TỒN TẠI (seed_one chỉ tạo mới, không sửa).
+
+    Can thiet sau khi sua cach khop ten (exact -> tien to): 4 tram truoc do bi
+    ghi thieu Sdm/P0/Pk mac du mba_info.csv co san so.
+    """
+    ids = existing_by(token, "dm_station", "code")
+    r = pb.req("GET",
+        f"{pb.PB_URL}/api/collections/dm_station/records",
+        params={"perPage": 500, "fields": "id,code,sdm_kva,p0_kw,pk_kw"},
+        headers=pb.headers(token), timeout=pb.TIMEOUT,
+    )
+    cur = {it["code"]: it for it in r.json()["items"]}
+
+    patched = []
+    for code, s in d["stations"].items():
+        old = cur.get(code)
+        if not old:
+            continue
+        body = {}
+        for k in ("sdm_kva", "p0_kw", "pk_kw"):
+            want = s.get(k)
+            if want is None:
+                continue
+            if abs(float(old.get(k) or 0) - float(want)) > 1e-9:
+                body[k] = want
+        if not body:
+            continue
+        patched.append((code, body))
+        if dry_run:
+            continue
+        rr = pb.req("PATCH",
+            f"{pb.PB_URL}/api/collections/dm_station/records/{ids[code]}",
+            json=body, headers=pb.headers(token), timeout=pb.TIMEOUT,
+        )
+        if not rr.ok:
+            sys.exit(f"Cap nhat tram '{code}' that bai: HTTP {rr.status_code}\n{rr.text[:400]}")
+
+    print(f"  {'cap nhat MBA':14} {'(dry-run) ' if dry_run else ''}{len(patched)} tram")
+    for code, body in patched:
+        print(f"      {code:34} {body}")
+    return patched
+
+
 def write(token: str, d: dict):
     print()
     print("=== GHI THAT LEN POCKETBASE ===")
@@ -411,6 +486,8 @@ def write(token: str, d: dict):
             body["hsn_invoice"] = p["hsn_invoice"]
         points.append({k: v for k, v in body.items() if v != ""} | {"line_id": p["line_id"]})
     seed_one(token, "dm_point", "line_id", points, "dm_point")
+
+    update_station_mba(token, d)
 
 
 def verify(token: str, d: dict):
