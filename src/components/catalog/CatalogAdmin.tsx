@@ -1,18 +1,16 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  RefreshCw, Plus, Pencil, Trash2, Search, Lock, AlertTriangle, Ban, Archive,
+  RefreshCw, Plus, Search, Lock, AlertTriangle, Ban, Archive, Save, Undo2,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
-import {
-  fetchCatalog, type CatalogData, ASSET_TYPE_LABEL, ASSET_STATUS_LABEL,
-  POINT_STATUS_LABEL,
-} from '../../lib/catalog';
+import { fetchCatalog, type CatalogData } from '../../lib/catalog';
 import { canEdit } from '../../lib/assign';
 import {
   type EntityKind, ENTITY_LABEL, deleteBlockers, assetHasLedger,
-  createRecord, updateRecord, deleteRecord, liquidateAsset,
+  createRecord, updateRecord, deleteRecord, liquidateAsset, columnsOf,
 } from '../../lib/catalogCrud';
 import RecordForm from './RecordForm';
+import EditableTable, { type Draft } from './EditableTable';
 
 const EMPTY: CatalogData = {
   zones: [], stations: [], customers: [], points: [], periods: [],
@@ -31,6 +29,7 @@ export default function CatalogAdmin() {
   const [editing, setEditing] = useState<{ kind: EntityKind; record: any | null } | null>(null);
   const [confirmDel, setConfirmDel] = useState<{ kind: EntityKind; record: any; blockers: string[]; ledger: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<Draft>({});
 
   const editable = canEdit();
 
@@ -43,84 +42,82 @@ export default function CatalogAdmin() {
 
   useEffect(() => { load(); }, [load]);
 
-  const zoneName = (id: string) => data.zones.find(z => z.id === id)?.code ?? '—';
-  const stationCode = (id: string) => data.stations.find(s => s.id === id)?.code ?? '—';
-  const whName = (id: string) => data.warehouses.find(w => w.id === id)?.code ?? '—';
+  const dirtyCount = Object.keys(draft).length;
 
-  /** Danh sách + cột hiển thị cho tab đang chọn. */
-  const view = useMemo(() => {
+  const onChange = (id: string, key: string, value: any) =>
+    setDraft(d => ({ ...d, [id]: { ...(d[id] ?? {}), [key]: value } }));
+
+  /** Lưu tất cả dòng đã sửa. Dòng nào lỗi thì giữ lại trong draft để sửa tiếp. */
+  const saveAll = async () => {
+    const ids = Object.keys(draft);
+    if (!ids.length) return;
+    setBusy(true);
+    let ok = 0;
+    const failed: Draft = {};
+    const errs: string[] = [];
+    for (const id of ids) {
+      const rec = (rowsRaw as any[]).find(r => r.id === id);
+      const patch: Record<string, any> = {};
+      for (const [k, v] of Object.entries(draft[id])) {
+        const col = columnsOf(tab).find(c => c.key === k);
+        if (!col || col.kind === 'readonly') continue;
+        patch[k] = col.kind === 'number' ? (v === '' || v == null ? null : Number(v)) : v;
+      }
+      // Tỷ số TI/TU phải tính lại từ giá trị SAU khi sửa, không lấy giá trị cũ
+      if (tab === 'asset' && rec) {
+        const merged = { ...rec, ...patch };
+        if (merged.type === 'TI' || merged.type === 'TU') {
+          const p = Number(merged.ratio_primary), q = Number(merged.ratio_secondary);
+          patch.ratio = p && q ? p / q : null;
+        } else if ('type' in patch) {
+          patch.ratio = null;
+        }
+      }
+      try {
+        await updateRecord(tab, id, patch);
+        ok++;
+      } catch (e: any) {
+        failed[id] = draft[id];
+        const detail = e?.response?.data
+          ? Object.entries(e.response.data).map(([k, x]: any) => `${k}: ${x?.message ?? x}`).join('; ')
+          : (e?.message || String(e));
+        errs.push(`${rec?.code ?? rec?.serial ?? rec?.line_id ?? id}: ${detail}`);
+      }
+    }
+    setDraft(failed);
+    setBusy(false);
+    if (ok) notify.show('success', 'Đã lưu', `${ok} dòng`);
+    if (errs.length) notify.show('error', `${errs.length} dòng lưu lỗi`, errs.slice(0, 3).join(' | '));
+    await load();
+  };
+
+  /** Bản ghi của tab đang chọn, đã lọc theo ô tìm kiếm. */
+  const rowsRaw = useMemo(() => {
     const t = term.trim().toLowerCase();
     const hit = (s: string) => !t || s.toLowerCase().includes(t);
-
     switch (tab) {
-      case 'zone':
-        return {
-          cols: ['Mã', 'Tên', 'Nhãn khu vực', 'Trạm', 'Điểm đo'],
-          rows: data.zones.filter(z => hit(`${z.code} ${z.name}`)).map(z => ({
-            rec: z,
-            cells: [z.code, z.name, z.area_label || '—',
-              String(data.stations.filter(s => s.zone === z.id).length),
-              String(data.points.filter(p => p.zone === z.id).length)],
-          })),
-        };
-      case 'station':
-        return {
-          cols: ['Mã trạm', 'KCN', 'Sdm (kVA)', 'P0 (kW)', 'Pk (kW)', 'Điểm đo'],
-          rows: data.stations.filter(s => hit(`${s.code} ${s.name}`)).map(s => ({
-            rec: s,
-            cells: [s.code, zoneName(s.zone),
-              s.sdm_kva ? String(s.sdm_kva) : '—',
-              s.p0_kw != null ? String(s.p0_kw) : '—',
-              s.pk_kw != null ? String(s.pk_kw) : '—',
-              String(data.points.filter(p => p.station === s.id).length)],
-            warn: !(s.sdm_kva && s.p0_kw && s.pk_kw) ? 'Thiếu thông số MBA — không tính được tổn thất' : '',
-          })),
-        };
-      case 'point':
-        return {
-          cols: ['Mã', 'Tên điểm đo', 'Trạm', 'KCN', 'Vai trò', 'Trạng thái', 'HSN hóa đơn'],
-          rows: data.points.filter(p => hit(`${p.line_id} ${p.line_name}`)).map(p => ({
-            rec: p,
-            cells: [p.line_id, p.line_name || '—',
-              p.station ? stationCode(p.station) : '—', zoneName(p.zone),
-              p.role === 'chinh' ? 'Chính' : p.role === 'phu' ? 'Phụ' : '—',
-              POINT_STATUS_LABEL[p.point_status] ?? p.point_status,
-              p.hsn_invoice != null ? String(p.hsn_invoice) : '—'],
-            warn: !p.station ? 'Chưa gắn trạm' : (p.hsn_invoice === 0 ? 'HSN hóa đơn = 0, bất thường' : ''),
-          })),
-        };
-      case 'asset':
-        return {
-          cols: ['Số hiệu', 'Loại', 'Tỷ số', 'Năm SX', 'Hạn KĐ', 'Trạng thái', 'Vị trí'],
-          rows: data.assets.filter(a => hit(`${a.serial} ${a.model_desc ?? ''}`)).map(a => {
-            const at = data.installs.find(i => i.asset === a.id && i.is_current);
-            const pt = at ? data.points.find(p => p.id === at.point) : undefined;
-            const overdue = a.type !== 'GP03' && a.next_calibration
-              && a.next_calibration.slice(0, 10) < new Date().toISOString().slice(0, 10);
-            return {
-              rec: a,
-              cells: [a.serial, ASSET_TYPE_LABEL[a.type] ?? a.type,
-                a.ratio ? `${a.ratio_primary}/${a.ratio_secondary}` : '—',
-                a.manufacture_year ? String(a.manufacture_year) : '—',
-                a.next_calibration?.slice(0, 10) ?? '—',
-                ASSET_STATUS_LABEL[a.current_status] ?? a.current_status,
-                pt ? `điểm đo ${pt.line_id}` : (a.current_warehouse ? whName(a.current_warehouse) : '—')],
-              warn: overdue ? 'Quá hạn kiểm định' : '',
-            };
-          }),
-        };
-      case 'warehouse':
-        return {
-          cols: ['Mã kho', 'Tên', 'KCN', 'Vật tư trong kho'],
-          rows: data.warehouses.filter(w => hit(`${w.code} ${w.name}`)).map(w => ({
-            rec: w,
-            cells: [w.code, w.name, zoneName(w.zone),
-              String(data.assets.filter(a => a.current_warehouse === w.id).length)],
-          })),
-        };
+      case 'zone': return data.zones.filter(z => hit(`${z.code} ${z.name}`));
+      case 'station': return data.stations.filter(s => hit(`${s.code} ${s.name ?? ''}`));
+      case 'point': return data.points.filter(p => hit(`${p.line_id} ${p.line_name}`));
+      case 'asset': return data.assets.filter(a => hit(`${a.serial} ${a.model_desc ?? ''}`));
+      case 'warehouse': return data.warehouses.filter(w => hit(`${w.code} ${w.name}`));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, data, term]);
+  }, [tab, data, term]) as any[];
+
+  const cols = useMemo(() => columnsOf(tab), [tab]);
+
+  /** Giá trị cho các cột tính toán (không sửa được). */
+  const computeCell = useCallback((rec: any, key: string): string => {
+    switch (key) {
+      case '_stations': return String(data.stations.filter(s => s.zone === rec.id).length);
+      case '_points':
+        return String(tab === 'zone'
+          ? data.points.filter(p => p.zone === rec.id).length
+          : data.points.filter(p => p.station === rec.id).length);
+      case '_assets': return String(data.installs.filter(i => i.point === rec.id && i.is_current).length);
+      default: return '';
+    }
+  }, [data, tab]);
 
   const askDelete = async (rec: any) => {
     const blockers = deleteBlockers(tab, rec.id, data);
@@ -186,9 +183,27 @@ export default function CatalogAdmin() {
             <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Tìm..."
               className="w-full pl-10 pr-4 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none" />
           </div>
-          <button onClick={load} className="p-2 rounded border border-[var(--border)] text-soft hover:bg-subtle transition-colors" title="Tải lại">
+          <button onClick={() => {
+              if (dirtyCount > 0 && !window.confirm(`Còn ${dirtyCount} dòng chưa lưu. Tải lại sẽ mất thay đổi. Tiếp tục?`)) return;
+              setDraft({}); load();
+            }}
+            className="p-2 rounded border border-[var(--border)] text-soft hover:bg-subtle transition-colors" title="Tải lại">
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
+          {editable && dirtyCount > 0 && (
+            <>
+              <button onClick={() => setDraft({})} disabled={busy}
+                className="flex items-center gap-1.5 px-3 py-2 rounded border border-[var(--border)] text-sm font-semibold text-soft hover:bg-subtle transition-colors disabled:opacity-50"
+                title="Bỏ mọi thay đổi chưa lưu">
+                <Undo2 className="w-4 h-4" />Hoàn tác
+              </button>
+              <button onClick={saveAll} disabled={busy}
+                className="flex items-center gap-1.5 px-3 py-2 rounded bg-[var(--success)] text-white text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50">
+                <Save className="w-4 h-4" />
+                {busy ? 'Đang lưu...' : `Lưu ${dirtyCount} dòng`}
+              </button>
+            </>
+          )}
           {editable && (
             <button onClick={() => setEditing({ kind: tab, record: null })}
               className="flex items-center gap-2 px-3 py-2 rounded bg-accent text-[var(--on-accent)] text-sm font-bold hover:opacity-90 transition-opacity">
@@ -204,9 +219,19 @@ export default function CatalogAdmin() {
         </p>
       )}
 
+      {editable && dirtyCount > 0 && (
+        <p className="text-xs bg-[var(--warning-soft)] text-warn font-bold px-3 py-2 rounded flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5" />
+          {dirtyCount} dòng đã sửa nhưng CHƯA lưu lên máy chủ. Ô nền vàng là ô vừa đổi.
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-1 border-b border-[var(--border)]">
         {TABS.map(t => (
-          <button key={t} onClick={() => { setTab(t); setTerm(''); }}
+          <button key={t} onClick={() => {
+            if (dirtyCount > 0 && !window.confirm(`Còn ${dirtyCount} dòng chưa lưu. Rời tab sẽ mất thay đổi. Tiếp tục?`)) return;
+            setTab(t); setTerm(''); setDraft({});
+          }}
             className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
               tab === t ? 'border-accent text-accent' : 'border-transparent text-soft hover:text-dim'
             }`}>
@@ -225,48 +250,11 @@ export default function CatalogAdmin() {
           <RefreshCw className="w-10 h-10 animate-spin mb-4" /><p>Đang tải...</p>
         </div>
       ) : (
-        <div className="vl-card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-subtle">
-              <tr className="text-left text-xs text-soft">
-                {view!.cols.map(c => <th key={c} className="px-3 py-2 whitespace-nowrap">{c}</th>)}
-                <th className="px-3 py-2 w-24"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {view!.rows.length === 0 ? (
-                <tr><td colSpan={view!.cols.length + 1} className="px-3 py-8 text-center text-faint">Không có dữ liệu</td></tr>
-              ) : view!.rows.map(({ rec, cells, warn }: any) => (
-                <tr key={rec.id} className="hover:bg-subtle transition-colors">
-                  {cells.map((c: string, i: number) => (
-                    <td key={i} className={`px-3 py-2 whitespace-nowrap ${i === 0 ? 'font-mono text-xs font-bold text-accent' : 'text-dim'}`}>
-                      {c}
-                      {i === cells.length - 1 && warn && (
-                        <span className="ml-2 text-[0.65rem] text-warn inline-flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />{warn}
-                        </span>
-                      )}
-                    </td>
-                  ))}
-                  <td className="px-3 py-2">
-                    {editable && (
-                      <div className="flex items-center gap-1 justify-end">
-                        <button onClick={() => setEditing({ kind: tab, record: rec })}
-                          className="p-1.5 rounded text-soft hover:bg-accent-soft hover:text-accent transition-colors" title="Sửa">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => askDelete(rec)}
-                          className="p-1.5 rounded text-soft hover:bg-[var(--danger-soft)] hover:text-bad transition-colors" title="Xóa">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <EditableTable
+          kind={tab} cols={cols} rows={rowsRaw} data={data} draft={draft}
+          editable={editable} onChange={onChange} onDelete={askDelete}
+          computeCell={computeCell}
+        />
       )}
 
       {editing && (

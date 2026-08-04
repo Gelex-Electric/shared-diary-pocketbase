@@ -16,6 +16,7 @@ import {
 import PointDetail from './PointDetail';
 import WarehousePanel from './WarehousePanel';
 import ActionConfirmDialog, { type ActionRequest } from './ActionConfirmDialog';
+import { RoleTag, PointStatusTag } from './tags';
 
 const EMPTY: CatalogData = {
   zones: [], stations: [], customers: [], points: [], periods: [],
@@ -322,6 +323,7 @@ export default function CatalogAssign() {
                   <Th k="line_name">Tên điểm đo</Th>
                   <Th k="station">Trạm</Th>
                   <Th k="role">Vai trò</Th>
+                  <th className="px-2 py-2 whitespace-nowrap">Trạng thái</th>
                   <Th k="customer">Khách hàng</Th>
                   <Th k="assets">Vật tư</Th>
                   <th className="px-2 py-2">Cảnh báo</th>
@@ -329,7 +331,7 @@ export default function CatalogAssign() {
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
                 {rows.length === 0 ? (
-                  <tr><td colSpan={8} className="px-3 py-10 text-center text-faint">Không có điểm đo nào khớp</td></tr>
+                  <tr><td colSpan={9} className="px-3 py-10 text-center text-faint">Không có điểm đo nào khớp</td></tr>
                 ) : rows.map(p => {
                   const cur = currentCustomerOf(data.periods, data.customers, p.id);
                   const at = assetsAtPoint(data, p.id);
@@ -354,13 +356,8 @@ export default function CatalogAssign() {
                       <td className={`px-2 py-2 whitespace-nowrap ${p.station ? 'text-dim' : 'text-warn font-semibold'}`}>
                         {p.station ? stationCode(p.station) : 'chưa gắn'}
                       </td>
-                      <td className="px-2 py-2">
-                        <span className={`text-[0.7rem] font-bold px-1.5 py-0.5 rounded ${
-                          p.role === 'chinh' ? 'vl-badge-primary' : 'bg-subtle text-faint'
-                        }`}>
-                          {p.role === 'chinh' ? 'Chính' : p.role === 'phu' ? 'Phụ' : '—'}
-                        </span>
-                      </td>
+                      <td className="px-2 py-2"><RoleTag role={p.role} /></td>
+                      <td className="px-2 py-2"><PointStatusTag status={p.point_status} /></td>
                       <td className="px-2 py-2 font-mono text-xs text-soft whitespace-nowrap">{cur?.period.mkh ?? '—'}</td>
                       <td className="px-2 py-2 text-dim">{at.length || '—'}</td>
                       <td className="px-2 py-2">

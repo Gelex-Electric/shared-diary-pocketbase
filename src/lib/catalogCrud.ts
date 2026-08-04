@@ -205,6 +205,83 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Cột của bảng sửa trực tiếp (kiểu Excel)                             */
+/* ------------------------------------------------------------------ */
+
+export type TagKind = 'zone' | 'role' | 'point_status' | 'asset_type' | 'asset_status' | 'location';
+
+export interface ColumnDef {
+  key: string;
+  label: string;
+  /** 'readonly' = ô tính toán, không sửa được (VD số điểm đo của trạm). */
+  kind: 'text' | 'number' | 'date' | 'select' | 'rel' | 'readonly';
+  options?: Array<{ value: string; label: string }>;
+  relFrom?: 'zone' | 'station' | 'warehouse';
+  /** Hiện dưới dạng tag màu thay vì chữ thường. */
+  tag?: TagKind;
+  required?: boolean;
+  width?: string;
+  hint?: string;
+}
+
+const F = fieldsOf;
+
+export function columnsOf(kind: EntityKind): ColumnDef[] {
+  const f = (name: string) => F(kind).find(x => x.name === name)!;
+  const asCol = (name: string, extra: Partial<ColumnDef> = {}): ColumnDef => {
+    const d = f(name);
+    return {
+      key: d.name, label: d.label, kind: d.type as ColumnDef['kind'],
+      options: d.options, relFrom: d.relFrom, required: d.required, hint: d.hint,
+      ...extra,
+    };
+  };
+
+  switch (kind) {
+    case 'zone':
+      return [
+        asCol('code', { width: 'w-28' }), asCol('name'), asCol('area_label'),
+        { key: '_stations', label: 'Trạm', kind: 'readonly', width: 'w-16' },
+        { key: '_points', label: 'Điểm đo', kind: 'readonly', width: 'w-16' },
+      ];
+    case 'station':
+      return [
+        asCol('code', { width: 'w-56' }),
+        asCol('zone', { tag: 'zone', width: 'w-28' }),
+        asCol('sdm_kva', { width: 'w-24' }), asCol('p0_kw', { width: 'w-24' }), asCol('pk_kw', { width: 'w-24' }),
+        { key: '_points', label: 'Điểm đo', kind: 'readonly', width: 'w-16' },
+        asCol('note'),
+      ];
+    case 'point':
+      return [
+        asCol('line_id', { width: 'w-20' }),
+        asCol('line_name', { width: 'w-56' }),
+        asCol('station', { relFrom: 'station', width: 'w-48' }),
+        asCol('zone', { tag: 'zone', width: 'w-28' }),
+        asCol('role', { tag: 'role', width: 'w-24' }),
+        asCol('point_status', { tag: 'point_status', width: 'w-32' }),
+        asCol('voltage_level', { width: 'w-24' }),
+        asCol('hsn_invoice', { width: 'w-24' }),
+        { key: '_assets', label: 'Vật tư', kind: 'readonly', width: 'w-16' },
+      ];
+    case 'asset':
+      return [
+        asCol('serial', { width: 'w-36' }),
+        { key: '_type_tag', label: 'Loại', kind: 'readonly', tag: 'asset_type', width: 'w-24' },
+        asCol('type', { width: 'w-28' }),
+        asCol('model_desc', { width: 'w-28' }),
+        asCol('ratio_primary', { width: 'w-20' }), asCol('ratio_secondary', { width: 'w-20' }),
+        asCol('manufacture_year', { width: 'w-20' }),
+        asCol('next_calibration', { width: 'w-32' }),
+        asCol('current_status', { tag: 'asset_status', width: 'w-36' }),
+        { key: '_location', label: 'Vị trí', kind: 'readonly', tag: 'location', width: 'w-28' },
+      ];
+    case 'warehouse':
+      return [asCol('code'), asCol('name'), asCol('zone', { tag: 'zone' })];
+  }
+}
+
 /** Tỷ số tự tính khi lưu TI/TU — không bắt người dùng tự nhân chia. */
 export function withDerived(kind: EntityKind, v: Record<string, any>): Record<string, any> {
   if (kind !== 'asset') return v;
