@@ -1,5 +1,5 @@
 import { useState, Fragment } from 'react';
-import { ChevronRight, Trash2, Package } from 'lucide-react';
+import { ChevronRight, Trash2, Package, History } from 'lucide-react';
 import { KCN_COLOR } from '../../lib/kcnColors';
 import {
   type CatalogData, assetsAtPoint, viDate, ASSET_TYPE_LABEL,
@@ -22,7 +22,7 @@ export type Draft = Record<string, Record<string, any>>;
  *  - Bảng điểm đo mở rộng được để xem vật tư bên trong.
  */
 export default function EditableTable({
-  kind, cols, rows, data, draft, editable, onChange, onDelete, computeCell,
+  kind, cols, rows, data, draft, editable, onChange, onDelete, computeCell, onOpenLifecycle,
 }: {
   kind: EntityKind;
   cols: ColumnDef[];
@@ -33,6 +33,8 @@ export default function EditableTable({
   onChange: (id: string, key: string, value: any) => void;
   onDelete: (rec: any) => void;
   computeCell: (rec: any, key: string) => string;
+  /** Chỉ dùng cho bảng vật tư: mở màn hình vòng đời + sổ cái. */
+  onOpenLifecycle?: (rec: any) => void;
 }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const expandable = kind === 'point';
@@ -161,33 +163,33 @@ export default function EditableTable({
 
   return (
     <div className="vl-card overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
-        <thead className="bg-subtle text-xs text-soft">
-          <tr className="text-left">
-            <th className="w-1 p-0" />
-            {expandable && <th className="w-8 px-1 py-2" />}
+      <table className="vl-table vl-table-compact w-full text-left border-collapse">
+        <thead>
+          <tr>
+            <th className="w-1 !p-0" />
+            {expandable && <th className="w-8" />}
             {cols.map(c => (
-              <th key={c.key} className={`px-2 py-2.5 font-semibold whitespace-nowrap ${c.width ?? ''}`} title={c.hint}>
+              <th key={c.key} className={`whitespace-nowrap ${c.width ?? ''}`} title={c.hint}>
                 {c.label}{c.required && <span className="text-bad"> *</span>}
               </th>
             ))}
-            <th className="px-2 py-2 w-10" />
+            <th className="w-16" />
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={cols.length + 3} className="px-3 py-12 text-center text-faint">Không có dữ liệu</td></tr>
+            <tr><td colSpan={cols.length + 3} className="py-12 text-center text-faint">Không có dữ liệu</td></tr>
           ) : rows.map((rec, i) => {
             const at = expandable ? assetsAtPoint(data, rec.id) : [];
             const isOpen = open.has(rec.id);
             return (
               <Fragment key={rec.id}>
-                <tr className={`border-t border-[var(--border)] transition-colors ${
+                <tr className={`transition-colors ${
                   draft[rec.id] ? 'bg-amber-50/60 dark:bg-amber-500/10'
-                    : i % 2 ? 'bg-subtle/30' : ''
+                    : i % 2 ? 'bg-subtle/40' : ''
                 }`}>
                   {/* Dải màu KCN đầu dòng */}
-                  <td className="w-1 p-0"><div className={`w-1 h-full min-h-[2.25rem] ${zoneStripe(rec)}`} /></td>
+                  <td className="w-1 !p-0"><div className={`w-1 h-full min-h-[2.1rem] ${zoneStripe(rec)}`} /></td>
 
                   {expandable && (
                     <td className="px-1">
@@ -200,10 +202,17 @@ export default function EditableTable({
                   )}
 
                   {cols.map(c => (
-                    <td key={c.key} className={`px-1 py-0.5 align-middle ${c.width ?? ''}`}>{cell(rec, c)}</td>
+                    <td key={c.key} className={`align-middle ${c.width ?? ''}`}>{cell(rec, c)}</td>
                   ))}
 
-                  <td className="px-2 py-0.5 text-right">
+                  <td className="text-right whitespace-nowrap">
+                    {kind === 'asset' && onOpenLifecycle && (
+                      <button onClick={() => onOpenLifecycle(rec)}
+                        className="p-1.5 rounded text-faint hover:bg-accent-soft hover:text-accent transition-colors"
+                        title="Vòng đời & sổ cái">
+                        <History className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {editable && (
                       <button onClick={() => onDelete(rec)}
                         className="p-1.5 rounded text-faint hover:bg-[var(--danger-soft)] hover:text-bad transition-colors"
@@ -216,10 +225,10 @@ export default function EditableTable({
 
                 {/* Dòng mở rộng: vật tư đang treo tại điểm đo */}
                 {expandable && isOpen && (
-                  <tr className="border-t border-[var(--border)] bg-subtle/50">
-                    <td className={`w-1 p-0 ${zoneStripe(rec)}`} />
+                  <tr className="bg-subtle/60">
+                    <td className={`w-1 !p-0 ${zoneStripe(rec)}`} />
                     <td />
-                    <td colSpan={cols.length + 1} className="px-3 py-2">
+                    <td colSpan={cols.length + 1} className="!py-3">
                       {at.length === 0 ? (
                         <p className="text-xs text-faint flex items-center gap-1.5">
                           <Package className="w-3.5 h-3.5" />Chưa có vật tư nào treo tại điểm đo này.

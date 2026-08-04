@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, Plus, Search, Lock, AlertTriangle, Ban, Archive, Save, Undo2,
+  MapPin, Building2, Gauge, Package,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
 import { fetchCatalog, type CatalogData, hasRatio } from '../../lib/catalog';
@@ -9,8 +10,10 @@ import {
   type EntityKind, ENTITY_LABEL, deleteBlockers, assetHasLedger,
   createRecord, updateRecord, deleteRecord, liquidateAsset, columnsOf, parseRatioText,
 } from '../../lib/catalogCrud';
+import { Tabs } from '../ui/Tabs';
 import RecordForm from './RecordForm';
 import EditableTable, { type Draft } from './EditableTable';
+import AssetLifecycle from './AssetLifecycle';
 
 const EMPTY: CatalogData = {
   zones: [], stations: [], customers: [], points: [], periods: [],
@@ -19,6 +22,7 @@ const EMPTY: CatalogData = {
 
 // Bo tab Kho: moi KCN dung 1 kho, tao san boi script, khong can quan ly rieng
 const TABS: EntityKind[] = ['zone', 'station', 'point', 'asset'];
+const TAB_ICON = { zone: MapPin, station: Building2, point: Gauge, asset: Package } as const;
 
 /** Trang QUẢN LÝ DANH MỤC — thêm / sửa / xóa. Kéo thả nằm ở trang riêng. */
 export default function CatalogAdmin() {
@@ -30,6 +34,9 @@ export default function CatalogAdmin() {
   const [confirmDel, setConfirmDel] = useState<{ kind: EntityKind; record: any; blockers: string[]; ledger: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<Draft>({});
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(50);
+  const [lifecycle, setLifecycle] = useState<any | null>(null);
 
   const editable = canEdit();
 
@@ -41,6 +48,9 @@ export default function CatalogAdmin() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Đổi tab hoặc gõ tìm kiếm ⇒ về trang 1, tránh đứng ở trang trống
+  useEffect(() => { setPage(1); }, [tab, term, perPage]);
 
   const dirtyCount = Object.keys(draft).length;
 
@@ -112,6 +122,12 @@ export default function CatalogAdmin() {
   }, [tab, data, term]) as any[];
 
   const cols = useMemo(() => columnsOf(tab), [tab]);
+
+  const totalPages = Math.max(1, Math.ceil(rowsRaw.length / perPage));
+  const pageRows = useMemo(
+    () => rowsRaw.slice((page - 1) * perPage, page * perPage),
+    [rowsRaw, page, perPage],
+  );
 
   /** Giá trị cho các cột tính toán (không sửa được). */
   const computeCell = useCallback((rec: any, key: string): string => {
@@ -233,24 +249,21 @@ export default function CatalogAdmin() {
         </p>
       )}
 
-      <div className="flex flex-wrap gap-1 border-b border-[var(--border)]">
-        {TABS.map(t => (
-          <button key={t} onClick={() => {
-            if (dirtyCount > 0 && !window.confirm(`Còn ${dirtyCount} dòng chưa lưu. Rời tab sẽ mất thay đổi. Tiếp tục?`)) return;
-            setTab(t); setTerm(''); setDraft({});
-          }}
-            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
-              tab === t ? 'border-accent text-accent' : 'border-transparent text-soft hover:text-dim'
-            }`}>
-            {ENTITY_LABEL[t]}
-            <span className="ml-1.5 text-xs text-faint">
-              {t === 'zone' ? data.zones.length : t === 'station' ? data.stations.length
-                : t === 'point' ? data.points.length : t === 'asset' ? data.assets.length
-                : data.warehouses.length}
-            </span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        tabs={TABS.map(t => ({
+          id: t,
+          label: `${ENTITY_LABEL[t]} (${
+            t === 'zone' ? data.zones.length : t === 'station' ? data.stations.length
+              : t === 'point' ? data.points.length : data.assets.length
+          })`,
+          icon: TAB_ICON[t],
+        }))}
+        value={tab}
+        onChange={t => {
+          if (dirtyCount > 0 && !window.confirm(`Còn ${dirtyCount} dòng chưa lưu. Rời tab sẽ mất thay đổi. Tiếp tục?`)) return;
+          setTab(t); setTerm(''); setDraft({});
+        }}
+      />
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 text-faint">
@@ -258,9 +271,45 @@ export default function CatalogAdmin() {
         </div>
       ) : (
         <EditableTable
-          kind={tab} cols={cols} rows={rowsRaw} data={data} draft={draft}
+          kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
           editable={editable} onChange={onChange} onDelete={askDelete}
           computeCell={computeCell}
+          onOpenLifecycle={rec => setLifecycle(rec)}
+        />
+      )}
+
+      {!isLoading && rowsRaw.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <span className="text-soft">
+            Hiện <strong className="text-ink">{(page - 1) * perPage + 1}–{Math.min(page * perPage, rowsRaw.length)}</strong>
+            {' '}trên <strong className="text-ink">{rowsRaw.length}</strong> {ENTITY_LABEL[tab].toLowerCase()}
+            {dirtyCount > 0 && <span className="text-warn"> · {dirtyCount} dòng chưa lưu (giữ nguyên khi đổi trang)</span>}
+          </span>
+          <div className="flex items-center gap-2">
+            <select value={perPage} onChange={e => setPerPage(Number(e.target.value))}
+              className="px-2 py-1.5 bg-surface border border-[var(--border)] rounded text-sm outline-none focus:ring-2 focus:ring-accent">
+              {[25, 50, 100, 200].map(n => <option key={n} value={n}>{n} dòng/trang</option>)}
+            </select>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(1)} disabled={page === 1}
+                className="px-2 py-1.5 rounded border border-[var(--border)] text-soft hover:bg-subtle disabled:opacity-40 transition-colors">«</button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-2 py-1.5 rounded border border-[var(--border)] text-soft hover:bg-subtle disabled:opacity-40 transition-colors">‹</button>
+              <span className="px-3 text-soft">Trang <strong className="text-ink">{page}</strong>/{totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                className="px-2 py-1.5 rounded border border-[var(--border)] text-soft hover:bg-subtle disabled:opacity-40 transition-colors">›</button>
+              <button onClick={() => setPage(totalPages)} disabled={page >= totalPages}
+                className="px-2 py-1.5 rounded border border-[var(--border)] text-soft hover:bg-subtle disabled:opacity-40 transition-colors">»</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {lifecycle && (
+        <AssetLifecycle
+          asset={lifecycle} data={data} canEditNow={editable}
+          onClose={() => setLifecycle(null)}
+          onChanged={async () => { await load(); setLifecycle(null); }}
         />
       )}
 

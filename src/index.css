@@ -272,6 +272,13 @@ p { text-wrap: pretty; }
 }
 .vl-table tbody tr:hover { background-color: var(--surface-3); }
 
+/* Biến thể DÀY ĐẶC cho bảng sửa trực tiếp (danh mục): giữ nguyên ngôn ngữ
+   thị giác của .vl-table (tiêu đề chữ hoa nhỏ, viền, hover) nhưng thu gọn
+   padding vì mỗi ô là một control và bảng có thể tới ~700 dòng. */
+.vl-table-compact thead th { padding: 0.55rem 0.5rem; }
+.vl-table-compact tbody td { padding: 0.2rem 0.3rem; }
+.vl-table-compact tbody tr:hover { background-color: transparent; }
+
 /* ============================================================
    Badges / tags
    ============================================================ */
