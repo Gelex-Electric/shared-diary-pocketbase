@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import { Warehouse, Search, AlertTriangle, Upload } from 'lucide-react';
 import {
-  type CatalogData, type Asset, ASSET_TYPE_LABEL, isOverdue,
+  type CatalogData, type Asset, ASSET_TYPE_LABEL, ASSET_TYPES, isOverdue, isMeter,
 } from '../../lib/catalog';
 import BulkImportAssets from './BulkImportAssets';
 
-const TYPES = ['CONGTO', 'TI', 'TU', 'GP03', 'KHAC'] as const;
+
 
 /**
  * Ngăn kho của MỘT khu công nghiệp (mỗi KCN đúng 1 kho — user chốt 03/08).
@@ -112,7 +112,7 @@ export default function WarehousePanel({
           className={`text-[0.7rem] font-bold px-2 py-1 rounded ${!type ? 'bg-accent text-[var(--on-accent)]' : 'bg-subtle text-soft'}`}>
           Tất cả
         </button>
-        {TYPES.map(t => (
+        {ASSET_TYPES.map(t => (
           <button key={t} onClick={() => setType(t === type ? '' : t)}
             className={`text-[0.7rem] font-bold px-2 py-1 rounded ${type === t ? 'bg-accent text-[var(--on-accent)]' : 'bg-subtle text-soft'}`}>
             {ASSET_TYPE_LABEL[t]} {countByType[t] ?? 0}
@@ -132,7 +132,7 @@ export default function WarehousePanel({
           : inStock.map(a => <AssetRow key={a.id} a={a} />)}
       </div>
 
-      {data.assets.filter(a => a.type !== 'CONGTO').length === 0 && (
+      {data.assets.filter(a => !isMeter(a.type)).length === 0 && (
         <p className="text-[0.7rem] text-faint border-t border-[var(--border)] pt-2">
           Chưa có TI / TU / GP-03 nào — dùng "Nhập hàng loạt" để dán từ Excel.
         </p>

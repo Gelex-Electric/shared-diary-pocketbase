@@ -9,7 +9,7 @@
  * hiệu luôn nói được vì sao.
  */
 import { pb } from './pocketbase';
-import { type CatalogData, type Asset, type Point, assetsAtPoint, isOverdue } from './catalog';
+import { type CatalogData, type Asset, type Point, assetsAtPoint, isOverdue, isMeter } from './catalog';
 
 export interface Check { ok: boolean; reason?: string }
 
@@ -56,10 +56,10 @@ export function checkHang(
   }
 
   const at = assetsAtPoint(d, point.id);
-  if (asset.type === 'CONGTO') {
-    const cur = at.find(x => x.asset?.type === 'CONGTO')?.asset;
+  if (isMeter(asset.type)) {
+    const cur = at.find(x => x.asset && isMeter(x.asset.type))?.asset;
     if (cur) return { ok: false, reason: `Điểm đo đã có công tơ ${cur.serial}` };
-    const dup = alsoHanging.find(a => a.id !== asset.id && a.type === 'CONGTO');
+    const dup = alsoHanging.find(a => a.id !== asset.id && isMeter(a.type));
     if (dup) return { ok: false, reason: `Chọn cùng lúc 2 công tơ (${dup.serial}) — mỗi điểm đo chỉ 1` };
   }
   if (asset.type === 'TI') {

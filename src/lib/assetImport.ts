@@ -5,7 +5,7 @@
  * từng form là không khả thi. Đây là tầng thuần logic, không đụng React, để
  * quy tắc kiểm tra nằm một chỗ và soi được.
  */
-import type { AssetType, CatalogData } from './catalog';
+import { type AssetType, type CatalogData, isMeter, hasRatio, needsCalibration, calibrationSpan } from './catalog';
 
 export const IMPORT_COLUMNS = [
   'so_hieu', 'loai', 'so_cap', 'thu_cap', 'hang_sx',
@@ -37,8 +37,10 @@ const HEADER_ALIAS: Record<string, ImportColumn> = {
 };
 
 const TYPE_ALIAS: Record<string, AssetType> = {
-  congto: 'CONGTO', 'cong_to': 'CONGTO', congtơ: 'CONGTO', meter: 'CONGTO',
-  ti: 'TI', tu: 'TU', gp03: 'GP03', 'gp-03': 'GP03', gp3: 'GP03', 'gp-3': 'GP03',
+  me41: 'ME41', me_41: 'ME41', me42: 'ME42', me_42: 'ME42',
+  dts27: 'DTS27', dst27: 'DTS27',           // user hay gõ nhầm DST
+  ti: 'TI', tu: 'TU', sim: 'SIM',
+  gp03: 'GP03', gp_03: 'GP03', gp3: 'GP03', gp_3: 'GP03',
   khac: 'KHAC',
 };
 
@@ -89,8 +91,8 @@ export function yearFromSerial(serial: string): number | null {
 
 /** Công tơ 3 năm, TI/TU 5 năm, GP-03 không kiểm định (user chốt 03/08). */
 export function calcNextCalibration(year: number | undefined, type: AssetType): string | undefined {
-  if (type === 'GP03' || !year) return undefined;
-  const span = type === 'CONGTO' ? 3 : 5;
+  const span = calibrationSpan(type);
+  if (!span || !year) return undefined;
   return `${year + span}-01-01`;
 }
 
@@ -138,7 +140,7 @@ export function parseAssets(text: string, data: CatalogData): ParsedRow[] {
     /* ---- Bắt buộc ---- */
     if (!row.serial) row.errors.push('Thiếu số hiệu');
     if (!row.type) {
-      row.errors.push(raw.loai ? `Loại "${raw.loai}" không hợp lệ (CONGTO/TI/TU/GP03/KHAC)` : 'Thiếu loại vật tư');
+      row.errors.push(raw.loai ? `Loại "${raw.loai}" không hợp lệ (ME41/ME42/DTS27/TI/TU/SIM/GP03/KHAC)` : 'Thiếu loại vật tư');
     }
 
     /* ---- Trùng lặp ---- */
@@ -152,7 +154,7 @@ export function parseAssets(text: string, data: CatalogData): ParsedRow[] {
     /* ---- Tỷ số cho TI/TU ---- */
     row.ratio_primary = num(raw.so_cap || '');
     row.ratio_secondary = num(raw.thu_cap || '');
-    if (row.type === 'TI' || row.type === 'TU') {
+    if (hasRatio(row.type)) {
       if (row.ratio_primary === undefined || row.ratio_secondary === undefined) {
         row.errors.push('TI/TU phải có cả sơ cấp và thứ cấp (VD 800 và 5)');
       } else if (row.ratio_secondary === 0) {
@@ -172,7 +174,7 @@ export function parseAssets(text: string, data: CatalogData): ParsedRow[] {
       const now = new Date().getFullYear();
       if (yRaw < 1980 || yRaw > now) row.errors.push(`Năm SX ${yRaw} không hợp lệ`);
       else row.manufacture_year = yRaw;
-    } else if (row.type === 'CONGTO' && row.serial) {
+    } else if (isMeter(row.type) && row.serial) {
       const y = yearFromSerial(row.serial);
       if (y) {
         row.manufacture_year = y;
@@ -180,7 +182,7 @@ export function parseAssets(text: string, data: CatalogData): ParsedRow[] {
       } else {
         row.errors.push('Không suy được năm SX từ số hiệu — phải nhập cột nam_sx');
       }
-    } else if (row.type && row.type !== 'GP03') {
+    } else if (row.type && needsCalibration(row.type)) {
       row.errors.push('Thiếu năm SX (cần để tính hạn kiểm định)');
     }
 
@@ -191,8 +193,8 @@ export function parseAssets(text: string, data: CatalogData): ParsedRow[] {
       else {
         row.calibration_date = cal;
         // Đã kiểm định thì hạn tính TỪ NGÀY KIỂM ĐỊNH, không tính lại từ năm SX
-        const span = row.type === 'CONGTO' ? 3 : 5;
-        if (row.type !== 'GP03') {
+        const span = calibrationSpan(row.type) ?? 0;
+        if (span) {
           const d = new Date(cal); d.setFullYear(d.getFullYear() + span);
           row.next_calibration = d.toISOString().slice(0, 10);
         }
@@ -229,10 +231,11 @@ export function parseAssets(text: string, data: CatalogData): ParsedRow[] {
 export function templateCsv(): string {
   const head = IMPORT_COLUMNS.join(',');
   const rows = [
-    '2610123456,CONGTO,,,EMIC,ME-41,0.5S,,,809,vi du cong to',
+    '2610123456,ME41,,,EMIC,,0.5S,,,809,vi du cong to',
     'TI-2026-001,TI,800,5,EMIC,,0.5,2026,,809,vi du TI 800/5',
     'TU-2026-001,TU,22000,220,EMIC,,0.5,2026,,809,vi du TU trung the',
     'GP03-000123,GP03,,,VIETTEL,,,2026,,809,thiet bi thu thap du lieu',
+    'SIM-0912345678,SIM,,,VIETTEL,,,2026,,809,sim truyen du lieu',
   ];
   return [head, ...rows].join('\n');
 }

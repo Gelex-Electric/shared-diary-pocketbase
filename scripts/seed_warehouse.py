@@ -24,7 +24,7 @@ Cach dung:
 import argparse
 import datetime as dt
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 import pb_client as pb
 import seed_catalog as sc
@@ -61,11 +61,27 @@ def manufacture_year(serial: str):
     return y, ""
 
 
+METER_TYPES = {"ME41", "ME42", "DTS27"}
+NO_CALIBRATION = {"GP03", "SIM"}
+
+
+def meter_type(model_desc: str) -> str:
+    """Suy loai cong to tu model. Khop voi ASSET_TYPES trong catalog_schema."""
+    m = (model_desc or "").upper().replace("-", "").replace(" ", "")
+    if "ME41" in m:
+        return "ME41"
+    if "ME42" in m:
+        return "ME42"
+    if "DTS27" in m:
+        return "DTS27"
+    return "KHAC"
+
+
 def next_calibration(year: int, asset_type: str):
-    """Cong to 3 nam, TI/TU 5 nam, GP03 khong kiem dinh (user chot 03/08)."""
-    if asset_type == "GP03" or year is None:
+    """Cong to 3 nam, TI/TU 5 nam, GP03/SIM khong kiem dinh (user chot 03/08)."""
+    if asset_type in NO_CALIBRATION or year is None:
         return None
-    span = 3 if asset_type == "CONGTO" else 5
+    span = 3 if asset_type in METER_TYPES else 5
     return f"{year + span}-01-01"
 
 
@@ -129,11 +145,12 @@ def build(token: str):
         if year is None:
             no_year.append((serial, why))
 
+        atype = meter_type(r.get("METER_MODEL_DESC", ""))
         a = {
-            "serial": serial, "type": "CONGTO",
+            "serial": serial, "type": atype,
             "model_desc": r.get("METER_MODEL_DESC", ""),
             "manufacture_year": year,
-            "next_calibration": next_calibration(year, "CONGTO"),
+            "next_calibration": next_calibration(year, atype),
             "hes_seen": True,
             "_warehouse": "", "_point": "",
         }
@@ -178,7 +195,7 @@ def report(d: dict):
     print()
     print("=== SO LUONG SE TAO ===")
     print(f"  vt_warehouse : {len(WAREHOUSES)}")
-    print(f"  vt_asset     : {len(a)}  (tat ca type=CONGTO)")
+    print(f"  vt_asset     : {len(a)}  " + str(dict(Counter(x['type'] for x in a.values()))))
     print(f"  vt_install   : {len(d['installs'])}  (cong to dang treo tren diem do)")
     print(f"  vt_event     : {len(a)}  (DUNG 1 event khoi tao / cong to)")
     print(f"  Trang thai   : {dict(by_status)}")
@@ -251,7 +268,7 @@ def write(token: str, d: dict):
         if not (pid and aid):
             continue
         sc.create(token, "vt_install", {
-            "asset": aid, "serial": ins["serial"], "type": "CONGTO",
+            "asset": aid, "serial": ins["serial"], "type": d["assets"][ins["serial"]]["type"],
             "point": pid, "from_date": ins["from_date"], "is_current": True,
             "note": SEED_NOTE + (" - ngay treo UOC LUONG" if ins["estimated"] else " - ngay theo hoa don som nhat"),
         })
@@ -314,7 +331,7 @@ def verify(token: str, d: dict):
 
     # Moi diem do chi duoc co 1 cong to is_current (rang buoc LOI #1)
     r = pb.req("GET", f"{pb.PB_URL}/api/collections/vt_install/records",
-               params={"perPage": 500, "filter": 'is_current=true && type="CONGTO"',
+               params={"perPage": 500, "filter": 'is_current=true && (type="ME41" || type="ME42" || type="DTS27")',
                        "fields": "point,serial"},
                headers=pb.headers(token), timeout=pb.TIMEOUT)
     per = defaultdict(list)

@@ -9,7 +9,8 @@
  *    `vt_event` append-only; xóa vật tư sẽ làm sổ cái trỏ vào hư không.
  */
 import { pb } from './pocketbase';
-import type { CatalogData } from './catalog';
+export { parseRatioText, ratioText } from './ratio';
+import { type CatalogData, ASSET_TYPES, ASSET_TYPE_LABEL, hasRatio } from './catalog';
 
 export type EntityKind = 'zone' | 'station' | 'point' | 'asset' | 'warehouse';
 
@@ -168,14 +169,13 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
         { name: 'serial', label: 'Số hiệu', type: 'text', required: true },
         {
           name: 'type', label: 'Loại', type: 'select', required: true,
-          options: [
-            { value: 'CONGTO', label: 'Công tơ' }, { value: 'TI', label: 'TI' },
-            { value: 'TU', label: 'TU' }, { value: 'GP03', label: 'GP-03' },
-            { value: 'KHAC', label: 'Khác' },
-          ],
+          options: ASSET_TYPES.map(t => ({ value: t, label: ASSET_TYPE_LABEL[t] })),
         },
-        { name: 'ratio_primary', label: 'Tỷ số sơ cấp', type: 'number', showIf: v => v.type === 'TI' || v.type === 'TU' },
-        { name: 'ratio_secondary', label: 'Tỷ số thứ cấp', type: 'number', showIf: v => v.type === 'TI' || v.type === 'TU' },
+        {
+          name: 'ratio_text', label: 'Tỷ số', type: 'text',
+          hint: 'Dạng 2000/5 — hệ thống tự tách sơ cấp / thứ cấp',
+          showIf: v => hasRatio(v.type),
+        },
         { name: 'model_desc', label: 'Model', type: 'text' },
         { name: 'manufacturer', label: 'Hãng sản xuất', type: 'text' },
         { name: 'accuracy_class', label: 'Cấp chính xác', type: 'text' },
@@ -248,7 +248,7 @@ export function columnsOf(kind: EntityKind): ColumnDef[] {
     case 'station':
       return [
         asCol('code', { width: 'w-56' }),
-        asCol('zone', { tag: 'zone', width: 'w-28' }),
+        asCol('zone', { width: 'w-32' }),
         asCol('sdm_kva', { width: 'w-24' }), asCol('p0_kw', { width: 'w-24' }), asCol('pk_kw', { width: 'w-24' }),
         { key: '_points', label: 'Điểm đo', kind: 'readonly', width: 'w-16' },
         asCol('note'),
@@ -258,9 +258,9 @@ export function columnsOf(kind: EntityKind): ColumnDef[] {
         asCol('line_id', { width: 'w-20' }),
         asCol('line_name', { width: 'w-56' }),
         asCol('station', { relFrom: 'station', width: 'w-48' }),
-        asCol('zone', { tag: 'zone', width: 'w-28' }),
-        asCol('role', { tag: 'role', width: 'w-24' }),
-        asCol('point_status', { tag: 'point_status', width: 'w-32' }),
+        asCol('zone', { width: 'w-32' }),
+        asCol('role', { tag: 'role', width: 'w-28' }),
+        asCol('point_status', { tag: 'point_status', width: 'w-36' }),
         asCol('voltage_level', { width: 'w-24' }),
         asCol('hsn_invoice', { width: 'w-24' }),
         { key: '_assets', label: 'Vật tư', kind: 'readonly', width: 'w-16' },
@@ -268,17 +268,16 @@ export function columnsOf(kind: EntityKind): ColumnDef[] {
     case 'asset':
       return [
         asCol('serial', { width: 'w-36' }),
-        { key: '_type_tag', label: 'Loại', kind: 'readonly', tag: 'asset_type', width: 'w-24' },
-        asCol('type', { width: 'w-28' }),
-        asCol('model_desc', { width: 'w-28' }),
-        asCol('ratio_primary', { width: 'w-20' }), asCol('ratio_secondary', { width: 'w-20' }),
+        asCol('type', { tag: 'asset_type', width: 'w-28' }),
+        asCol('ratio_text', { width: 'w-24' }),
+        asCol('model_desc', { width: 'w-24' }),
         asCol('manufacture_year', { width: 'w-20' }),
         asCol('next_calibration', { width: 'w-32' }),
         asCol('current_status', { tag: 'asset_status', width: 'w-36' }),
-        { key: '_location', label: 'Vị trí', kind: 'readonly', tag: 'location', width: 'w-28' },
+        { key: '_location', label: 'Vị trí', kind: 'readonly', tag: 'location', width: 'w-32' },
       ];
     case 'warehouse':
-      return [asCol('code'), asCol('name'), asCol('zone', { tag: 'zone' })];
+      return [asCol('code'), asCol('name'), asCol('zone')];
   }
 }
 

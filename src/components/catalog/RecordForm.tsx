@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { CatalogData } from '../../lib/catalog';
 import {
-  type EntityKind, type FieldDef, fieldsOf, ENTITY_LABEL, withDerived,
+  type EntityKind, type FieldDef, fieldsOf, ENTITY_LABEL, parseRatioText,
 } from '../../lib/catalogCrud';
 
 /** Form thêm/sửa dựng từ mô tả trường trong catalogCrud.fieldsOf(). */
@@ -54,7 +54,13 @@ export default function RecordForm({
         else if (f.type === 'bool') body[f.name] = !!raw;
         else body[f.name] = raw ?? '';
       }
-      await onSave(withDerived(kind, body));
+      if (kind === 'asset' && 'ratio_text' in body) {
+        const parsed = parseRatioText(String(body.ratio_text ?? ''));
+        if (!parsed) { setErr('Tỷ số phải dạng 2000/5'); setBusy(false); return; }
+        delete body.ratio_text;
+        Object.assign(body, parsed);
+      }
+      await onSave(body);
     } catch (e: any) {
       // PocketBase trả lỗi field-level -> hiện nguyên văn, đừng nuốt
       const detail = e?.response?.data

@@ -3,11 +3,11 @@ import {
   RefreshCw, Plus, Search, Lock, AlertTriangle, Ban, Archive, Save, Undo2,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
-import { fetchCatalog, type CatalogData } from '../../lib/catalog';
+import { fetchCatalog, type CatalogData, hasRatio } from '../../lib/catalog';
 import { canEdit } from '../../lib/assign';
 import {
   type EntityKind, ENTITY_LABEL, deleteBlockers, assetHasLedger,
-  createRecord, updateRecord, deleteRecord, liquidateAsset, columnsOf,
+  createRecord, updateRecord, deleteRecord, liquidateAsset, columnsOf, parseRatioText,
 } from '../../lib/catalogCrud';
 import RecordForm from './RecordForm';
 import EditableTable, { type Draft } from './EditableTable';
@@ -58,20 +58,27 @@ export default function CatalogAdmin() {
     for (const id of ids) {
       const rec = (rowsRaw as any[]).find(r => r.id === id);
       const patch: Record<string, any> = {};
+      let ratioBad = false;
       for (const [k, v] of Object.entries(draft[id])) {
         const col = columnsOf(tab).find(c => c.key === k);
         if (!col || col.kind === 'readonly') continue;
+        if (k === 'ratio_text') {
+          // Ô tỷ số gộp: "2000/5" -> sơ cấp / thứ cấp / tỷ số
+          const parsed = parseRatioText(String(v));
+          if (!parsed) { ratioBad = true; continue; }
+          Object.assign(patch, parsed);
+          continue;
+        }
         patch[k] = col.kind === 'number' ? (v === '' || v == null ? null : Number(v)) : v;
       }
-      // Tỷ số TI/TU phải tính lại từ giá trị SAU khi sửa, không lấy giá trị cũ
-      if (tab === 'asset' && rec) {
-        const merged = { ...rec, ...patch };
-        if (merged.type === 'TI' || merged.type === 'TU') {
-          const p = Number(merged.ratio_primary), q = Number(merged.ratio_secondary);
-          patch.ratio = p && q ? p / q : null;
-        } else if ('type' in patch) {
-          patch.ratio = null;
-        }
+      if (ratioBad) {
+        failed[id] = draft[id];
+        errs.push(`${rec?.serial ?? id}: tỷ số phải dạng 2000/5`);
+        continue;
+      }
+      // Đổi loại sang thứ không có tỷ số ⇒ xoá tỷ số cũ, tránh HSN tính nhầm
+      if (tab === 'asset' && 'type' in patch && !hasRatio(String(patch.type))) {
+        patch.ratio_primary = null; patch.ratio_secondary = null; patch.ratio = null;
       }
       try {
         await updateRecord(tab, id, patch);

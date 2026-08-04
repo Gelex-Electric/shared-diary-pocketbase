@@ -18,7 +18,8 @@ R_WRITE = '@request.auth.id != "" && @request.auth.area = ""'
 # 5 KCN - PHAI khop users.area2 thi filter phan quyen moi join duoc
 ZONE_CODES = ["KCNTH", "KCNPĐ", "KCNTTI", "KCNYM", "KCN03"]
 
-ASSET_TYPES = ["CONGTO", "TI", "TU", "GP03", "KHAC"]
+# Loai o muc MODEL (user chot 03/08): cong to tach ME41/ME42/DTS27
+ASSET_TYPES = ["ME41", "ME42", "DTS27", "TI", "TU", "SIM", "GP03", "KHAC"]
 ASSET_STATUS = ["kho", "dang_treo", "cho_kiem_dinh", "dang_kiem_dinh", "dat", "khong_dat", "thanh_ly"]
 EVENT_TYPES = ["nhap_kho", "dieu_chuyen", "treo", "thao", "gui_kiem_dinh", "ket_qua_kiem_dinh", "thanh_ly"]
 POINT_STATUS = ["du_kien", "active", "sub_meter", "dismounted"]

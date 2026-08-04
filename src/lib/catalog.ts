@@ -66,7 +66,23 @@ export interface PointCustomer {
   shared: boolean;
 }
 
-export type AssetType = 'CONGTO' | 'TI' | 'TU' | 'GP03' | 'KHAC';
+export type AssetType = 'ME41' | 'ME42' | 'DTS27' | 'TI' | 'TU' | 'SIM' | 'GP03' | 'KHAC';
+
+/** Loại là CÔNG TƠ — thay cho việc so `type === 'CONGTO'` cũ. */
+export const METER_TYPES: AssetType[] = ['ME41', 'ME42', 'DTS27'];
+export const isMeter = (t: string) => METER_TYPES.includes(t as AssetType);
+
+/** Loại có tỷ số biến đổi (tham gia công thức HSN). */
+export const RATIO_TYPES: AssetType[] = ['TI', 'TU'];
+export const hasRatio = (t: string) => RATIO_TYPES.includes(t as AssetType);
+
+/** GP-03 và SIM là thiết bị truyền dữ liệu — không kiểm định. */
+export const NO_CALIBRATION: AssetType[] = ['GP03', 'SIM'];
+export const needsCalibration = (t: string) => !NO_CALIBRATION.includes(t as AssetType);
+
+/** Số năm giữa 2 lần kiểm định: công tơ 3 năm, TI/TU 5 năm (user chốt 03/08). */
+export const calibrationSpan = (t: string): number | null =>
+  !needsCalibration(t) ? null : isMeter(t) ? 3 : 5;
 export type AssetStatus =
   | 'kho' | 'dang_treo' | 'cho_kiem_dinh' | 'dang_kiem_dinh'
   | 'dat' | 'khong_dat' | 'thanh_ly' | '';
@@ -123,8 +139,12 @@ export interface CatalogData {
 }
 
 export const ASSET_TYPE_LABEL: Record<string, string> = {
-  CONGTO: 'Công tơ', TI: 'TI', TU: 'TU', GP03: 'GP-03', KHAC: 'Khác',
+  ME41: 'ME-41', ME42: 'ME-42', DTS27: 'DTS27',
+  TI: 'TI', TU: 'TU', SIM: 'SIM', GP03: 'GP-03', KHAC: 'Khác',
 };
+
+/** Thứ tự hiển thị trong bộ lọc / bộ chọn. */
+export const ASSET_TYPES: AssetType[] = ['ME41', 'ME42', 'DTS27', 'TI', 'TU', 'SIM', 'GP03', 'KHAC'];
 
 export const ASSET_STATUS_LABEL: Record<string, string> = {
   kho: 'Trong kho', dang_treo: 'Đang treo', cho_kiem_dinh: 'Chờ kiểm định',
@@ -139,9 +159,9 @@ export function assetsAtPoint(data: CatalogData, pointId: string): Array<{ insta
     .map(i => ({ install: i, asset: data.assets.find(a => a.id === i.asset) }));
 }
 
-/** Quá hạn kiểm định? GP-03 không kiểm định nên luôn false. */
+/** Quá hạn kiểm định? GP-03 và SIM không kiểm định nên luôn false. */
 export function isOverdue(a: Asset, today = new Date()): boolean {
-  if (a.type === 'GP03' || !a.next_calibration) return false;
+  if (!needsCalibration(a.type) || !a.next_calibration) return false;
   return a.next_calibration.slice(0, 10) < today.toISOString().slice(0, 10);
 }
 

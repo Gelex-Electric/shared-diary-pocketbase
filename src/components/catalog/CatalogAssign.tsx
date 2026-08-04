@@ -6,7 +6,7 @@ import {
 import { toast as notify } from '../../lib/toast';
 import {
   fetchCatalog, type CatalogData, type Point, type Asset,
-  currentCustomerOf, assetsAtPoint,
+  currentCustomerOf, assetsAtPoint, isMeter,
 } from '../../lib/catalog';
 import {
   canEdit, checkAssignStation, checkChangeRole, checkHang, checkRemove,
@@ -86,7 +86,7 @@ export default function CatalogAssign() {
     const at = assetsAtPoint(data, p.id);
     switch (f) {
       case 'no_station': return !p.station;
-      case 'no_meter': return !at.some(x => x.asset?.type === 'CONGTO');
+      case 'no_meter': return !at.some(x => x.asset && isMeter(x.asset.type));
       case 'no_customer': return !cur;
       case 'phu': return p.role === 'phu';
       case 'hsn_bad': return p.hsn_invoice === 0 || (p.hsn_invoice ?? 0) > 100000;
@@ -335,7 +335,7 @@ export default function CatalogAssign() {
                 ) : rows.map(p => {
                   const cur = currentCustomerOf(data.periods, data.customers, p.id);
                   const at = assetsAtPoint(data, p.id);
-                  const noMeter = !at.some(x => x.asset?.type === 'CONGTO');
+                  const noMeter = !at.some(x => x.asset && isMeter(x.asset.type));
                   const hsnBad = p.hsn_invoice === 0 || (p.hsn_invoice ?? 0) > 100000;
                   return (
                     <tr key={p.id} onClick={() => setSelected(p)}

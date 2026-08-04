@@ -3,7 +3,7 @@ import {
 } from 'lucide-react';
 import {
   type CatalogData, type Point, POINT_STATUS_LABEL, viDate, periodsOfPoint,
-  assetsAtPoint, isOverdue, ASSET_TYPE_LABEL,
+  assetsAtPoint, isOverdue, ASSET_TYPE_LABEL, isMeter,
 } from '../../lib/catalog';
 
 
@@ -184,7 +184,7 @@ export default function PointDetail({
             })}
           </div>
         )}
-        {!at.some(x => x.asset?.type === 'CONGTO') && (
+        {!at.some(x => x.asset && isMeter(x.asset.type)) && (
           <p className="mt-2 text-xs text-warn flex items-start gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />Điểm đo chưa có công tơ.
           </p>
