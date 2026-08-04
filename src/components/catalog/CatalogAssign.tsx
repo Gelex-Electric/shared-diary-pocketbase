@@ -14,6 +14,7 @@ import {
   type EventPayload,
 } from '../../lib/assign';
 import { Tabs } from '../ui/Tabs';
+import { Select } from '../ui/Select';
 import PointDetail from './PointDetail';
 import WarehousePanel from './WarehousePanel';
 import ActionConfirmDialog, { type ActionRequest } from './ActionConfirmDialog';
@@ -256,7 +257,7 @@ export default function CatalogAssign() {
             <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Tìm điểm đo, trạm, khách..."
               className="w-full pl-10 pr-4 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none" />
           </div>
-          <button onClick={load} className="p-2 rounded border border-[var(--border)] text-soft hover:bg-subtle transition-colors" title="Tải lại">
+          <button onClick={load} className="vl-btn vl-btn-secondary vl-btn-sm !px-2" title="Tải lại">
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>
@@ -385,18 +386,17 @@ export default function CatalogAssign() {
       {editable && checked.size > 0 && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 vl-card shadow-lg px-4 py-3 flex flex-wrap items-center gap-3">
           <span className="text-sm font-bold text-ink">Đã chọn {checked.size} điểm đo</span>
-          <select defaultValue=""
-            onChange={e => { if (e.target.value) { doAssignStation(e.target.value); e.target.value = ''; } }}
-            className="px-3 py-1.5 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none">
-            <option value="">Gắn vào trạm…</option>
-            {zoneStations.map(s => <option key={s.id} value={s.id}>{s.code}</option>)}
-          </select>
+          <Select
+            value="" onChange={v => { if (v) doAssignStation(v); }}
+            options={zoneStations.map(s => ({ value: s.id, label: s.code }))}
+            placeholder="Gắn vào trạm…" searchable className="w-[250px]"
+          />
           <button onClick={() => doChangeRole('chinh')}
-            className="px-3 py-1.5 rounded text-sm font-semibold border border-[var(--border)] text-soft hover:bg-subtle transition-colors">
+            className="vl-btn vl-btn-secondary vl-btn-sm">
             Đổi thành Chính
           </button>
           <button onClick={() => doChangeRole('phu')}
-            className="px-3 py-1.5 rounded text-sm font-semibold border border-[var(--border)] text-soft hover:bg-subtle transition-colors">
+            className="vl-btn vl-btn-secondary vl-btn-sm">
             Đổi thành Phụ
           </button>
           <button onClick={() => setChecked(new Set())} className="text-faint hover:text-ink transition-colors" title="Bỏ chọn">
@@ -414,11 +414,11 @@ export default function CatalogAssign() {
             {selected ? `Điểm đo đang chọn: ${selected.line_id}` : 'Bấm một dòng điểm đo để chọn nơi treo'}
           </span>
           <button onClick={doHang} disabled={!selected}
-            className="px-3 py-1.5 rounded text-sm font-bold bg-accent text-[var(--on-accent)] hover:opacity-90 transition-opacity disabled:opacity-40">
+            className="vl-btn vl-btn-primary vl-btn-sm">
             Treo lên điểm đo
           </button>
           <button onClick={doRemove}
-            className="px-3 py-1.5 rounded text-sm font-semibold border border-[var(--border)] text-soft hover:bg-subtle transition-colors">
+            className="vl-btn vl-btn-secondary vl-btn-sm">
             Tháo về kho
           </button>
           <button onClick={() => setAssetPick(new Set())} className="text-faint hover:text-ink transition-colors" title="Bỏ chọn">

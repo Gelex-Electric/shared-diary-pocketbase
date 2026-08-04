@@ -102,12 +102,12 @@ export default function ActionConfirmDialog({
 
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onCancel} disabled={busy}
-            className="px-4 py-2 rounded text-sm font-semibold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50">
+            className="vl-btn vl-btn-secondary">
             Hủy
           </button>
           <button onClick={() => { setBusy(true); onConfirm({ date, documentNo, note }); }}
             disabled={busy || future}
-            className="px-4 py-2 rounded text-sm font-bold bg-accent text-[var(--on-accent)] hover:opacity-90 transition-opacity disabled:opacity-50">
+            className="vl-btn vl-btn-primary">
             {busy ? 'Đang ghi...' : 'Xác nhận'}
           </button>
         </div>

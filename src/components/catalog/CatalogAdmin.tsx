@@ -12,6 +12,7 @@ import {
 } from '../../lib/catalogCrud';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tabs } from '../ui/Tabs';
+import { Select } from '../ui/Select';
 import RecordForm from './RecordForm';
 import EditableTable, { type Draft } from './EditableTable';
 import AssetLifecycle from './AssetLifecycle';
@@ -231,18 +232,18 @@ export default function CatalogAdmin() {
               if (dirtyCount > 0 && !window.confirm(`Còn ${dirtyCount} dòng chưa lưu. Tải lại sẽ mất thay đổi. Tiếp tục?`)) return;
               setDraft({}); load();
             }}
-            className="p-2 rounded border border-[var(--border)] text-soft hover:bg-subtle transition-colors" title="Tải lại">
+            className="vl-btn vl-btn-secondary vl-btn-sm !px-2" title="Tải lại">
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
           {editable && dirtyCount > 0 && (
             <>
               <button onClick={() => setDraft({})} disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-2 rounded border border-[var(--border)] text-sm font-semibold text-soft hover:bg-subtle transition-colors disabled:opacity-50"
+                className="vl-btn vl-btn-secondary vl-btn-sm"
                 title="Bỏ mọi thay đổi chưa lưu">
                 <Undo2 className="w-4 h-4" />Hoàn tác
               </button>
               <button onClick={saveAll} disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-2 rounded bg-[var(--success)] text-white text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50">
+                className="vl-btn vl-btn-success vl-btn-sm">
                 <Save className="w-4 h-4" />
                 {busy ? 'Đang lưu...' : `Lưu ${dirtyCount} dòng`}
               </button>
@@ -250,7 +251,7 @@ export default function CatalogAdmin() {
           )}
           {editable && (
             <button onClick={() => setEditing({ kind: tab, record: null })}
-              className="flex items-center gap-2 px-3 py-2 rounded bg-accent text-[var(--on-accent)] text-sm font-bold hover:opacity-90 transition-opacity">
+              className="vl-btn vl-btn-primary vl-btn-sm">
               <Plus className="w-4 h-4" />Thêm {ENTITY_LABEL[tab].toLowerCase()}
             </button>
           )}
@@ -377,20 +378,21 @@ export default function CatalogAdmin() {
             {dirtyCount > 0 && <span className="text-warn"> · {dirtyCount} dòng chưa lưu (giữ nguyên khi đổi trang)</span>}
           </span>
           <div className="flex items-center gap-2">
-            <select value={perPage} onChange={e => setPerPage(Number(e.target.value))}
-              className="px-2 py-1.5 bg-surface border border-[var(--border)] rounded text-sm outline-none focus:ring-2 focus:ring-accent">
-              {[25, 50, 100, 200].map(n => <option key={n} value={n}>{n} dòng/trang</option>)}
-            </select>
+            <Select
+              value={String(perPage)} onChange={v => setPerPage(Number(v))}
+              options={[25, 50, 100, 200].map(n => ({ value: String(n), label: `${n} dòng/trang` }))}
+              className="w-[152px]"
+            />
             <div className="flex items-center gap-1">
               <button onClick={() => setPage(1)} disabled={page === 1}
-                className="px-2 py-1.5 rounded border border-[var(--border)] text-soft hover:bg-subtle disabled:opacity-40 transition-colors">«</button>
+                className="vl-btn vl-btn-secondary vl-btn-sm !px-2.5">«</button>
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                className="px-2 py-1.5 rounded border border-[var(--border)] text-soft hover:bg-subtle disabled:opacity-40 transition-colors">‹</button>
+                className="vl-btn vl-btn-secondary vl-btn-sm !px-2.5">‹</button>
               <span className="px-3 text-soft">Trang <strong className="text-ink">{page}</strong>/{totalPages}</span>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-                className="px-2 py-1.5 rounded border border-[var(--border)] text-soft hover:bg-subtle disabled:opacity-40 transition-colors">›</button>
+                className="vl-btn vl-btn-secondary vl-btn-sm !px-2.5">›</button>
               <button onClick={() => setPage(totalPages)} disabled={page >= totalPages}
-                className="px-2 py-1.5 rounded border border-[var(--border)] text-soft hover:bg-subtle disabled:opacity-40 transition-colors">»</button>
+                className="vl-btn vl-btn-secondary vl-btn-sm !px-2.5">»</button>
             </div>
           </div>
         </div>
@@ -445,7 +447,7 @@ export default function CatalogAdmin() {
                   </div>
                   {isAsset && confirmDel.record.current_status !== 'thanh_ly' && (
                     <button onClick={doLiquidate} disabled={busy}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded text-sm font-bold border border-[var(--border)] text-soft hover:bg-subtle transition-colors disabled:opacity-50">
+                      className="vl-btn vl-btn-secondary w-full justify-center">
                       <Archive className="w-4 h-4" />
                       {busy ? 'Đang ghi...' : 'Thanh lý vật tư này thay vì xóa'}
                     </button>
@@ -457,12 +459,12 @@ export default function CatalogAdmin() {
 
               <div className="flex justify-end gap-2">
                 <button onClick={() => setConfirmDel(null)} disabled={busy}
-                  className="px-4 py-2 rounded text-sm font-semibold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50">
+                  className="vl-btn vl-btn-secondary">
                   Đóng
                 </button>
                 {!blocked && (
                   <button onClick={doDelete} disabled={busy}
-                    className="px-4 py-2 rounded text-sm font-bold bg-[var(--danger)] text-white hover:opacity-90 transition-opacity disabled:opacity-50">
+                    className="vl-btn vl-btn-danger">
                     {busy ? 'Đang xóa...' : 'Xóa'}
                   </button>
                 )}

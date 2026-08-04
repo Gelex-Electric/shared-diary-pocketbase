@@ -93,7 +93,7 @@ export default function WarehousePanel({
         <span className="text-xs text-faint">{inStock.length} món</span>
         {canEditNow && (
           <button onClick={() => setBulkOpen(true)}
-            className="flex items-center gap-1 text-xs font-bold px-2 py-1 rounded border border-[var(--border)] text-soft hover:bg-subtle transition-colors"
+            className="vl-btn vl-btn-secondary vl-btn-sm"
             title="Dán danh sách vật tư từ Excel">
             <Upload className="w-3.5 h-3.5" />Nhập hàng loạt
           </button>
@@ -107,15 +107,19 @@ export default function WarehousePanel({
         </p>
       )}
 
-      <div className="flex flex-wrap gap-1">
+      <div className="inline-flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-subtle p-1">
         <button onClick={() => setType('')}
-          className={`text-[0.7rem] font-bold px-2 py-1 rounded ${!type ? 'bg-accent text-[var(--on-accent)]' : 'bg-subtle text-soft'}`}>
+          className={`text-[0.7rem] font-semibold px-2.5 py-1 rounded-lg transition-colors ${
+            !type ? 'bg-surface text-accent shadow-[var(--shadow-card)]' : 'text-soft hover:text-dim'
+          }`}>
           Tất cả
         </button>
         {ASSET_TYPES.map(t => (
           <button key={t} onClick={() => setType(t === type ? '' : t)}
-            className={`text-[0.7rem] font-bold px-2 py-1 rounded ${type === t ? 'bg-accent text-[var(--on-accent)]' : 'bg-subtle text-soft'}`}>
-            {ASSET_TYPE_LABEL[t]} {countByType[t] ?? 0}
+            className={`text-[0.7rem] font-semibold px-2.5 py-1 rounded-lg transition-colors ${
+              type === t ? 'bg-surface text-accent shadow-[var(--shadow-card)]' : 'text-soft hover:text-dim'
+            }`}>
+            {ASSET_TYPE_LABEL[t]} <span className="opacity-70">{countByType[t] ?? 0}</span>
           </button>
         ))}
       </div>

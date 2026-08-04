@@ -131,8 +131,9 @@ export default function EditableTable({
       const opts = c.kind === 'rel' ? relOptions(c) : (c.options ?? []);
       return (
         <select value={v ?? ''} onChange={e => onChange(rec.id, c.key, e.target.value)}
-          className={`w-full px-1.5 py-1 rounded border text-xs font-semibold outline-none cursor-pointer
-            focus:ring-2 focus:ring-accent transition-colors ${selectTone(c, String(v))} ${ring}`}>
+          className={`w-full px-2 py-1.5 rounded-lg border text-xs font-bold outline-none cursor-pointer
+            transition-all hover:border-accent/50 focus:ring-2 focus:ring-accent focus:border-accent
+            ${selectTone(c, String(v))} ${ring}`}>
           <option value="">—</option>
           {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -145,8 +146,8 @@ export default function EditableTable({
         value={v ?? ''}
         onChange={e => onChange(rec.id, c.key, e.target.value)}
         placeholder={c.key === 'ratio_text' ? '2000/5' : ''}
-        className={`w-full bg-transparent px-2 py-1.5 rounded text-sm outline-none transition-colors
-          hover:bg-subtle focus:bg-surface focus:ring-2 focus:ring-accent
+        className={`w-full bg-transparent px-2 py-1.5 rounded-lg border border-transparent text-sm outline-none
+          transition-all hover:border-[var(--border)] focus:bg-surface focus:ring-2 focus:ring-accent focus:border-accent
           ${dirty ? 'bg-amber-100 dark:bg-amber-500/20 font-semibold' : ''} ${ring}`}
       />
     );

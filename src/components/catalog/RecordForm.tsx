@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { CatalogData } from '../../lib/catalog';
+import { Select } from '../ui/Select';
 import {
   type EntityKind, type FieldDef, fieldsOf, ENTITY_LABEL, parseRatioText,
 } from '../../lib/catalogCrud';
@@ -101,15 +102,15 @@ export default function RecordForm({
                     />
                   </div>
                 ) : f.type === 'select' || f.type === 'rel' ? (
-                  <select
-                    value={v[f.name] ?? ''} onChange={e => setV({ ...v, [f.name]: e.target.value })}
-                    className={common}
-                  >
-                    <option value="">—</option>
-                    {(f.type === 'rel' ? relOptions(f) : f.options ?? []).map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                  <div className="mt-1">
+                    <Select
+                      value={v[f.name] ?? ''}
+                      onChange={val => setV({ ...v, [f.name]: val })}
+                      options={f.type === 'rel' ? relOptions(f) : (f.options ?? [])}
+                      placeholder="— chọn —"
+                      searchable={(f.type === 'rel' ? relOptions(f) : (f.options ?? [])).length > 8}
+                    />
+                  </div>
                 ) : (
                   <input
                     type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
@@ -128,11 +129,11 @@ export default function RecordForm({
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} disabled={busy}
-            className="px-4 py-2 rounded text-sm font-semibold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50">
+            className="vl-btn vl-btn-secondary">
             Hủy
           </button>
           <button onClick={submit} disabled={busy}
-            className="px-4 py-2 rounded text-sm font-bold bg-accent text-[var(--on-accent)] hover:opacity-90 transition-opacity disabled:opacity-50">
+            className="vl-btn vl-btn-primary">
             {busy ? 'Đang lưu...' : 'Lưu'}
           </button>
         </div>

@@ -9,6 +9,7 @@ import {
   fetchLedger, actionsFor, noActionReason, applyLifecycle, EVENT_LABEL,
   type ActionDef, type ActionId, type LedgerEvent,
 } from '../../lib/lifecycle';
+import { Select } from '../ui/Select';
 import { AssetTypeTag, AssetStatusTag, LocationTag, OverdueTag } from './tags';
 
 const EVENT_ICON: Record<string, typeof Info> = {
@@ -118,10 +119,8 @@ export default function AssetLifecycle({
             <div className="mt-2 flex flex-wrap gap-2">
               {actions.map(a => (
                 <button key={a.id} onClick={() => setAct(a)}
-                  className={`px-3 py-2 rounded text-sm font-semibold border transition-colors ${
-                    a.danger
-                      ? 'border-[var(--danger)]/40 text-bad hover:bg-[var(--danger-soft)]'
-                      : 'border-[var(--border)] text-soft hover:bg-subtle'
+                  className={`vl-btn vl-btn-sm ${
+                    a.danger ? 'vl-btn-danger' : 'vl-btn-secondary'
                   } ${act?.id === a.id ? 'ring-2 ring-accent' : ''}`}>
                   {a.label}
                 </button>
@@ -148,11 +147,13 @@ export default function AssetLifecycle({
                     <span className="text-xs font-semibold text-soft">
                       {act.id === 'ket_qua_dat' ? 'Kho nhận về *' : 'Kho đích *'}
                     </span>
-                    <select value={whId} onChange={e => setWhId(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 bg-surface border border-[var(--border)] rounded text-sm outline-none focus:ring-2 focus:ring-accent">
-                      <option value="">— chọn kho —</option>
-                      {data.warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                    </select>
+                    <div className="mt-1">
+                      <Select
+                        value={whId} onChange={setWhId}
+                        options={data.warehouses.map(w => ({ value: w.id, label: w.name }))}
+                        placeholder="— chọn kho —"
+                      />
+                    </div>
                   </label>
                 )}
               </div>
@@ -172,11 +173,11 @@ export default function AssetLifecycle({
 
               <div className="flex justify-end gap-2">
                 <button onClick={() => setAct(null)} disabled={busy}
-                  className="px-4 py-2 rounded text-sm font-semibold text-soft border border-[var(--border)] hover:bg-surface transition-colors disabled:opacity-50">
+                  className="vl-btn vl-btn-secondary">
                   Hủy
                 </button>
                 <button onClick={run} disabled={busy || date > today || (act.needsWarehouse && !whId)}
-                  className="px-4 py-2 rounded text-sm font-bold bg-accent text-[var(--on-accent)] hover:opacity-90 transition-opacity disabled:opacity-40">
+                  className="vl-btn vl-btn-primary">
                   {busy ? 'Đang ghi...' : 'Xác nhận'}
                 </button>
               </div>

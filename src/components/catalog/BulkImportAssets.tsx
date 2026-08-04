@@ -115,7 +115,7 @@ export default function BulkImportAssets({
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
-          <button onClick={downloadTemplate} className="flex items-center gap-2 px-3 py-2 rounded border border-[var(--border)] text-sm font-semibold text-soft hover:bg-subtle transition-colors">
+          <button onClick={downloadTemplate} className="vl-btn vl-btn-secondary vl-btn-sm">
             <Download className="w-4 h-4" />Tải file mẫu
           </button>
           <label className="block">
@@ -182,11 +182,11 @@ export default function BulkImportAssets({
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} disabled={busy}
-            className="px-4 py-2 rounded text-sm font-semibold text-soft border border-[var(--border)] hover:bg-subtle transition-colors disabled:opacity-50">
+            className="vl-btn vl-btn-secondary">
             Đóng
           </button>
           <button onClick={doImport} disabled={busy || good.length === 0 || date > today}
-            className="px-4 py-2 rounded text-sm font-bold bg-accent text-[var(--on-accent)] hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2">
+            className="vl-btn vl-btn-primary">
             <Upload className="w-4 h-4" />
             {busy ? 'Đang ghi...' : `Nhập kho ${good.length} vật tư`}
           </button>
