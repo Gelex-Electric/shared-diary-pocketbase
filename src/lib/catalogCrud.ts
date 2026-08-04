@@ -225,9 +225,20 @@ export interface ColumnDef {
 const F = fieldsOf;
 
 export function columnsOf(kind: EntityKind): ColumnDef[] {
+  return columnsOfRaw(kind).filter((c): c is ColumnDef => c !== null);
+}
+
+function columnsOfRaw(kind: EntityKind): Array<ColumnDef | null> {
   const f = (name: string) => F(kind).find(x => x.name === name)!;
-  const asCol = (name: string, extra: Partial<ColumnDef> = {}): ColumnDef => {
+  const asCol = (name: string, extra: Partial<ColumnDef> = {}): ColumnDef | null => {
     const d = f(name);
+    if (!d) {
+      // Chốt chặn: trước đây cột trỏ tới trường đã xóa khỏi fieldsOf làm
+      // `d.name` ném lỗi và TRẮNG CẢ TRANG (dấu `!` khiến tsc không bắt được).
+      // Giờ chỉ mất một cột và báo rõ ở console.
+      console.error(`[catalogCrud] Cột "${name}" không có trong fieldsOf('${kind}') — bỏ qua cột này.`);
+      return null;
+    }
     return {
       key: d.name, label: d.label, kind: d.type as ColumnDef['kind'],
       options: d.options, relFrom: d.relFrom, required: d.required, hint: d.hint,
@@ -252,16 +263,15 @@ export function columnsOf(kind: EntityKind): ColumnDef[] {
         asCol('note', { width: 'w-[36%]' }),
       ];
     case 'point':
+      // KHÔNG có cột KCN: bảng đã nhóm theo KCN, header nhóm mang thông tin đó
       return [
-        asCol('line_id', { width: 'w-20' }),
-        asCol('line_name', { width: 'w-56' }),
-        asCol('station', { relFrom: 'station', width: 'w-48' }),
-        asCol('zone', { width: 'w-32' }),
-        asCol('role', { tag: 'role', width: 'w-28' }),
-        asCol('point_status', { tag: 'point_status', width: 'w-36' }),
-        asCol('voltage_level', { width: 'w-24' }),
-        asCol('hsn_invoice', { width: 'w-24' }),
-        { key: '_assets', label: 'Vật tư', kind: 'readonly', width: 'w-16' },
+        asCol('line_id', { width: 'w-[8%]' }),
+        asCol('line_name', { width: 'w-[26%]' }),
+        asCol('station', { relFrom: 'station', width: 'w-[22%]' }),
+        asCol('role', { tag: 'role', width: 'w-[12%]' }),
+        asCol('point_status', { tag: 'point_status', width: 'w-[15%]' }),
+        asCol('hsn_invoice', { width: 'w-[9%]' }),
+        { key: '_assets', label: 'Vật tư', kind: 'readonly', width: 'w-[8%]' },
       ];
     case 'asset':
       return [
