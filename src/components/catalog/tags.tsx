@@ -48,8 +48,8 @@ export function RoleTag({ role }: { role: string }) {
 
 const POINT_STATUS_TAG: Record<string, { cls: string; label: string }> = {
   du_kien: { label: 'Dự kiến', cls: 'bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/40' },
+  chua_van_hanh: { label: 'Chưa vận hành', cls: 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/40' },
   active: { label: 'Vận hành', cls: 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/40' },
-  sub_meter: { label: 'Đo phụ', cls: GRAY },
   dismounted: { label: 'ĐÃ THÁO', cls: 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/40' },
 };
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, Plus, Search, Lock, AlertTriangle, Ban, Archive, Save, Undo2,
-  MapPin, Building2, Gauge, Package,
+  MapPin, Building2, Gauge, Package, ChevronDown,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
 import { fetchCatalog, type CatalogData, hasRatio } from '../../lib/catalog';
@@ -10,6 +10,7 @@ import {
   type EntityKind, ENTITY_LABEL, deleteBlockers, assetHasLedger,
   createRecord, updateRecord, deleteRecord, liquidateAsset, columnsOf, parseRatioText,
 } from '../../lib/catalogCrud';
+import { motion, AnimatePresence } from 'motion/react';
 import { Tabs } from '../ui/Tabs';
 import RecordForm from './RecordForm';
 import EditableTable, { type Draft } from './EditableTable';
@@ -37,6 +38,7 @@ export default function CatalogAdmin() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const [lifecycle, setLifecycle] = useState<any | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const editable = canEdit();
 
@@ -122,6 +124,25 @@ export default function CatalogAdmin() {
   }, [tab, data, term]) as any[];
 
   const cols = useMemo(() => columnsOf(tab), [tab]);
+
+  /**
+   * Trạm và Điểm đo chia MỖI KCN MỘT BẢNG (giống trang Công nợ khách hàng).
+   * Mỗi nhóm nhiều nhất ~45 dòng nên không cần phân trang; KCN và Vật tư vẫn
+   * dùng bảng phẳng + phân trang vì có thể tới ~700 dòng.
+   */
+  const grouped = tab === 'station' || tab === 'point';
+
+  const zoneGroups = useMemo(() => {
+    if (!grouped) return [];
+    return data.zones
+      .map(z => ({ zone: z, rows: rowsRaw.filter((r: any) => r.zone === z.id) }))
+      .filter(g => g.rows.length > 0 || !term.trim());
+  }, [grouped, data.zones, rowsRaw, term]);
+
+  const orphanRows = useMemo(
+    () => (grouped ? rowsRaw.filter((r: any) => !r.zone) : []),
+    [grouped, rowsRaw],
+  );
 
   const totalPages = Math.max(1, Math.ceil(rowsRaw.length / perPage));
   const pageRows = useMemo(
@@ -269,16 +290,86 @@ export default function CatalogAdmin() {
         <div className="flex flex-col items-center justify-center py-20 text-faint">
           <RefreshCw className="w-10 h-10 animate-spin mb-4" /><p>Đang tải...</p>
         </div>
+      ) : grouped ? (
+        <div className="space-y-4">
+          {zoneGroups.map(({ zone, rows }) => {
+            const isOpen = !collapsed[zone.id];
+            const dirtyHere = rows.filter((r: any) => draft[r.id]).length;
+            return (
+              <div key={zone.id} className="vl-card overflow-hidden">
+                <div
+                  onClick={() => setCollapsed(c => ({ ...c, [zone.id]: !c[zone.id] }))}
+                  className="bg-accent px-5 py-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-3 text-[var(--on-accent)] min-w-0">
+                    <div className="p-2 bg-white/20 rounded-xl shrink-0">
+                      {tab === 'station' ? <Building2 className="w-5 h-5" /> : <Gauge className="w-5 h-5" />}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-black tracking-tight leading-tight truncate">{zone.name}</h3>
+                      <p className="text-[11px] font-semibold opacity-80">
+                        {rows.length} {ENTITY_LABEL[tab].toLowerCase()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {dirtyHere > 0 && (
+                      <span className="px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[11px] font-black">
+                        {dirtyHere} chưa lưu
+                      </span>
+                    )}
+                    <ChevronDown className={`w-5 h-5 text-[var(--on-accent)] transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`} />
+                  </div>
+                </div>
+
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <EditableTable
+                        kind={tab} cols={cols} rows={rows} data={data} draft={draft}
+                        editable={editable} onChange={onChange} onDelete={askDelete}
+                        computeCell={computeCell}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+
+          {orphanRows.length > 0 && (
+            <div className="vl-card overflow-hidden">
+              <div className="bg-[var(--warning)] px-5 py-3.5 flex items-center gap-3 text-white">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                <div>
+                  <h3 className="text-base font-black tracking-tight">Chưa gán khu công nghiệp</h3>
+                  <p className="text-[11px] font-semibold opacity-90">{orphanRows.length} bản ghi — cần chọn KCN</p>
+                </div>
+              </div>
+              <EditableTable
+                kind={tab} cols={cols} rows={orphanRows} data={data} draft={draft}
+                editable={editable} onChange={onChange} onDelete={askDelete}
+                computeCell={computeCell}
+              />
+            </div>
+          )}
+        </div>
       ) : (
-        <EditableTable
-          kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
-          editable={editable} onChange={onChange} onDelete={askDelete}
-          computeCell={computeCell}
-          onOpenLifecycle={rec => setLifecycle(rec)}
-        />
+        <div className="vl-card overflow-hidden">
+          <EditableTable
+            kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
+            editable={editable} onChange={onChange} onDelete={askDelete}
+            computeCell={computeCell}
+            onOpenLifecycle={rec => setLifecycle(rec)}
+          />
+        </div>
       )}
 
-      {!isLoading && rowsRaw.length > 0 && (
+      {!isLoading && !grouped && rowsRaw.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
           <span className="text-soft">
             Hiện <strong className="text-ink">{(page - 1) * perPage + 1}–{Math.min(page * perPage, rowsRaw.length)}</strong>

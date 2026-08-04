@@ -1,9 +1,6 @@
-import { useState, Fragment } from 'react';
-import { ChevronRight, Trash2, Package, History } from 'lucide-react';
+import { Trash2, History } from 'lucide-react';
 import { KCN_COLOR } from '../../lib/kcnColors';
-import {
-  type CatalogData, assetsAtPoint, viDate, ASSET_TYPE_LABEL,
-} from '../../lib/catalog';
+import type { CatalogData } from '../../lib/catalog';
 import { type ColumnDef, type EntityKind, ratioText } from '../../lib/catalogCrud';
 import {
   ZoneTag, RoleTag, PointStatusTag, AssetTypeTag, AssetStatusTag, LocationTag, OverdueTag,
@@ -19,7 +16,6 @@ export type Draft = Record<string, Record<string, any>>;
  *  - MỖI Ô CHỈ MỘT THỨ: đã có ô chọn thì không hiện thêm tag cùng nội dung.
  *    Ô chọn tự mang màu của giá trị đang chọn.
  *  - Màu KCN nằm ở DẢI ĐẦU DÒNG, không lặp lại trong ô.
- *  - Bảng điểm đo mở rộng được để xem vật tư bên trong.
  */
 export default function EditableTable({
   kind, cols, rows, data, draft, editable, onChange, onDelete, computeCell, onOpenLifecycle,
@@ -36,8 +32,6 @@ export default function EditableTable({
   /** Chỉ dùng cho bảng vật tư: mở màn hình vòng đời + sổ cái. */
   onOpenLifecycle?: (rec: any) => void;
 }) {
-  const [open, setOpen] = useState<Set<string>>(new Set());
-  const expandable = kind === 'point';
 
   const val = (rec: any, key: string) => {
     if (draft[rec.id] && key in draft[rec.id]) return draft[rec.id][key];
@@ -158,16 +152,12 @@ export default function EditableTable({
     );
   };
 
-  const toggle = (id: string) =>
-    setOpen(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-
   return (
-    <div className="vl-card overflow-x-auto">
+    <div className="overflow-x-auto">
       <table className="vl-table vl-table-compact w-full text-left border-collapse">
         <thead>
           <tr>
             <th className="w-1 !p-0" />
-            {expandable && <th className="w-8" />}
             {cols.map(c => (
               <th key={c.key} className={`whitespace-nowrap ${c.width ?? ''}`} title={c.hint}>
                 {c.label}{c.required && <span className="text-bad"> *</span>}
@@ -178,93 +168,36 @@ export default function EditableTable({
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={cols.length + 3} className="py-12 text-center text-faint">Không có dữ liệu</td></tr>
-          ) : rows.map((rec, i) => {
-            const at = expandable ? assetsAtPoint(data, rec.id) : [];
-            const isOpen = open.has(rec.id);
-            return (
-              <Fragment key={rec.id}>
-                <tr className={`transition-colors ${
-                  draft[rec.id] ? 'bg-amber-50/60 dark:bg-amber-500/10'
-                    : i % 2 ? 'bg-subtle/40' : ''
-                }`}>
-                  {/* Dải màu KCN đầu dòng */}
-                  <td className="w-1 !p-0"><div className={`w-1 h-full min-h-[2.1rem] ${zoneStripe(rec)}`} /></td>
+            <tr><td colSpan={cols.length + 2} className="py-12 text-center text-faint">Không có dữ liệu</td></tr>
+          ) : rows.map((rec, i) => (
+            <tr key={rec.id} className={`transition-colors ${
+              draft[rec.id] ? 'bg-amber-50/60 dark:bg-amber-500/10' : i % 2 ? 'bg-subtle/40' : ''
+            }`}>
+              {/* Dải màu KCN đầu dòng */}
+              <td className="w-1 !p-0"><div className={`w-1 h-full min-h-[2.1rem] ${zoneStripe(rec)}`} /></td>
 
-                  {expandable && (
-                    <td className="px-1">
-                      <button onClick={() => toggle(rec.id)}
-                        className="p-1 rounded text-faint hover:text-accent hover:bg-accent-soft transition-colors"
-                        title={`${at.length} vật tư đang treo`}>
-                        <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                      </button>
-                    </td>
-                  )}
+              {cols.map(c => (
+                <td key={c.key} className={`align-middle ${c.width ?? ''}`}>{cell(rec, c)}</td>
+              ))}
 
-                  {cols.map(c => (
-                    <td key={c.key} className={`align-middle ${c.width ?? ''}`}>{cell(rec, c)}</td>
-                  ))}
-
-                  <td className="text-right whitespace-nowrap">
-                    {kind === 'asset' && onOpenLifecycle && (
-                      <button onClick={() => onOpenLifecycle(rec)}
-                        className="p-1.5 rounded text-faint hover:bg-accent-soft hover:text-accent transition-colors"
-                        title="Vòng đời & sổ cái">
-                        <History className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    {editable && (
-                      <button onClick={() => onDelete(rec)}
-                        className="p-1.5 rounded text-faint hover:bg-[var(--danger-soft)] hover:text-bad transition-colors"
-                        title="Xóa">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-
-                {/* Dòng mở rộng: vật tư đang treo tại điểm đo */}
-                {expandable && isOpen && (
-                  <tr className="bg-subtle/60">
-                    <td className={`w-1 !p-0 ${zoneStripe(rec)}`} />
-                    <td />
-                    <td colSpan={cols.length + 1} className="!py-3">
-                      {at.length === 0 ? (
-                        <p className="text-xs text-faint flex items-center gap-1.5">
-                          <Package className="w-3.5 h-3.5" />Chưa có vật tư nào treo tại điểm đo này.
-                        </p>
-                      ) : (
-                        <div className="space-y-1">
-                          <p className="text-[0.7rem] font-bold text-soft uppercase tracking-wide">
-                            {at.length} vật tư đang treo
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {at.map(({ install, asset }) => asset && (
-                              <span key={install.id}
-                                className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-[var(--border)] bg-surface text-xs">
-                                <AssetTypeTag asset={{ type: asset.type }} />
-                                <span className="font-mono font-bold text-accent">{asset.serial}</span>
-                                {asset.ratio ? <span className="text-soft">{asset.ratio_primary}/{asset.ratio_secondary}</span> : null}
-                                <span className="text-faint">từ {viDate(install.from_date)}</span>
-                                <OverdueTag asset={asset} />
-                              </span>
-                            ))}
-                          </div>
-                          <p className="text-[0.7rem] text-faint">
-                            Thiếu: {['ME41/ME42 (công tơ)', 'TI', 'TU', 'GP03']
-                              .filter(x => !at.some(y => y.asset && (
-                                x.startsWith('ME') ? ['ME41', 'ME42', 'DTS27'].includes(y.asset.type) : y.asset.type === x
-                              )))
-                              .map(x => ASSET_TYPE_LABEL[x] ?? x).join(', ') || 'không thiếu gì'}
-                          </p>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
+              <td className="text-right whitespace-nowrap">
+                {kind === 'asset' && onOpenLifecycle && (
+                  <button onClick={() => onOpenLifecycle(rec)}
+                    className="p-1.5 rounded text-faint hover:bg-accent-soft hover:text-accent transition-colors"
+                    title="Vòng đời & sổ cái">
+                    <History className="w-3.5 h-3.5" />
+                  </button>
                 )}
-              </Fragment>
-            );
-          })}
+                {editable && (
+                  <button onClick={() => onDelete(rec)}
+                    className="p-1.5 rounded text-faint hover:bg-[var(--danger-soft)] hover:text-bad transition-colors"
+                    title="Xóa">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

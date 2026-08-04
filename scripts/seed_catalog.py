@@ -246,7 +246,7 @@ def build(token: str):
     for p in points.values():
         st = p.pop("_status")
         if "Yes" in st:
-            p["point_status"] = "sub_meter" if p["role"] == "phu" else "active"
+            p["point_status"] = "active"   # vai tro phu nam o cot `role`, khong nhet vao trang thai
         else:
             p["point_status"] = "dismounted"
 

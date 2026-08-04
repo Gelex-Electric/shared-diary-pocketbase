@@ -151,14 +151,12 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
           hint: 'Chỉ điểm đo CHÍNH được tính vào tổn thất MBA',
         },
         {
-          name: 'voltage_level', label: 'Cấp điện áp', type: 'select',
-          options: [{ value: 'LV', label: 'Hạ thế (LV)' }, { value: 'MV', label: 'Trung thế (MV)' }],
-        },
-        {
           name: 'point_status', label: 'Trạng thái', type: 'select',
           options: [
-            { value: 'du_kien', label: 'Dự kiến' }, { value: 'active', label: 'Đang vận hành' },
-            { value: 'sub_meter', label: 'Điểm đo phụ' }, { value: 'dismounted', label: 'Đã tháo' },
+            { value: 'du_kien', label: 'Dự kiến' },
+            { value: 'chua_van_hanh', label: 'Chưa vận hành' },
+            { value: 'active', label: 'Đang vận hành' },
+            { value: 'dismounted', label: 'Đã tháo' },
           ],
         },
         { name: 'hsn_invoice', label: 'HSN theo hóa đơn', type: 'number', hint: 'Chỉ để đối chứng' },
@@ -246,11 +244,12 @@ export function columnsOf(kind: EntityKind): ColumnDef[] {
       ];
     case 'station':
       return [
-        asCol('code', { width: 'w-56' }),
-        asCol('zone', { width: 'w-32' }),
-        asCol('sdm_kva', { width: 'w-24' }), asCol('p0_kw', { width: 'w-24' }), asCol('pk_kw', { width: 'w-24' }),
-        { key: '_points', label: 'Điểm đo', kind: 'readonly', width: 'w-16' },
-        asCol('note'),
+        asCol('code', { width: 'w-[26%]' }),
+        asCol('sdm_kva', { width: 'w-[10%]' }),
+        asCol('p0_kw', { width: 'w-[10%]' }),
+        asCol('pk_kw', { width: 'w-[10%]' }),
+        { key: '_points', label: 'Điểm đo', kind: 'readonly', width: 'w-[8%]' },
+        asCol('note', { width: 'w-[36%]' }),
       ];
     case 'point':
       return [

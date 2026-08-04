@@ -11,7 +11,7 @@
 import { pb } from './pocketbase';
 
 export type PointRole = 'chinh' | 'phu' | '';
-export type PointStatus = 'du_kien' | 'active' | 'sub_meter' | 'dismounted' | '';
+export type PointStatus = 'du_kien' | 'chua_van_hanh' | 'active' | 'dismounted' | '';
 
 export interface Zone {
   id: string;
@@ -183,8 +183,8 @@ export async function fetchCatalog(): Promise<CatalogData> {
 /** Nhãn tiếng Việt cho trạng thái điểm đo. */
 export const POINT_STATUS_LABEL: Record<string, string> = {
   du_kien: 'Dự kiến',
+  chua_van_hanh: 'Chưa vận hành',
   active: 'Đang vận hành',
-  sub_meter: 'Điểm đo phụ',
   dismounted: 'Đã tháo',
   '': '—',
 };
