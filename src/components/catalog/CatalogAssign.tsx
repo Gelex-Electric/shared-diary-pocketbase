@@ -19,6 +19,7 @@ import PointDetail from './PointDetail';
 import WarehousePanel from './WarehousePanel';
 import ActionConfirmDialog, { type ActionRequest } from './ActionConfirmDialog';
 import { RoleTag, PointStatusTag } from './tags';
+import { assignCustomer } from '../../lib/pointCustomer';
 
 const EMPTY: CatalogData = {
   zones: [], stations: [], customers: [], points: [], periods: [],
@@ -171,6 +172,29 @@ export default function CatalogAssign() {
       },
       run: async () => { await changeRole(ok.map(p => p.id), role); },
     });
+  };
+
+  /** Danh sách khách của KCN đang mở — không cho gắn khách KCN khác. */
+  const cusOptions = useMemo(() => [
+    { value: '', label: '— chưa gắn —' },
+    ...data.customers
+      .filter(c => c.zone === activeZone)
+      .map(c => ({ value: c.id, label: `${c.mkh} · ${c.name}` })),
+  ], [data.customers, activeZone]);
+
+  /**
+   * Gắn / đổi khách hàng của một điểm đo. Ghi luôn, không qua hộp xác nhận:
+   * đây là việc sửa danh mục, đảo lại được ngay, khác với treo/tháo vật tư
+   * (ghi sổ cái, không xoá được).
+   */
+  const doAssignCustomer = async (p: Point, customerId: string) => {
+    try {
+      const msg = await assignCustomer(data, p.id, customerId);
+      notify.show('success', 'Đã cập nhật khách hàng', msg);
+      await load();
+    } catch (e: any) {
+      notify.show('error', 'Không lưu được', e?.message || String(e));
+    }
   };
 
   const doHang = () => {
@@ -337,7 +361,23 @@ export default function CatalogAssign() {
                       </td>
                       <td><RoleTag role={p.role} /></td>
                       <td><PointStatusTag status={p.point_status} /></td>
-                      <td className=" font-mono text-xs text-soft whitespace-nowrap">{cur?.period.mkh ?? '—'}</td>
+                      {/* Chọn MKH ngay tại ô (user chốt 05/08 — gọn hơn tab riêng).
+                          stopPropagation để bấm vào bộ chọn không kéo theo chọn dòng. */}
+                      <td onClick={e => e.stopPropagation()}>
+                        {editable ? (
+                          <Select
+                            value={cur?.period.customer ?? ''}
+                            onChange={v => doAssignCustomer(p, v)}
+                            options={cusOptions}
+                            placeholder="— chưa gắn —" searchable variant="bare"
+                            className="w-full px-2 py-1.5 rounded-none border-0 text-xs font-bold font-mono"
+                          />
+                        ) : (
+                          <span className="px-2 font-mono text-xs text-soft whitespace-nowrap">
+                            {cur?.period.mkh ?? '—'}
+                          </span>
+                        )}
+                      </td>
                       <td className=" text-dim">{at.length || '—'}</td>
                       <td>
                         <div className="flex flex-wrap gap-1">

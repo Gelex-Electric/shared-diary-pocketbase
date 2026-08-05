@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, Plus, Search, Lock, AlertTriangle, Ban, Archive, Save, Undo2,
-  MapPin, Building2, Gauge, Package, ChevronDown, Upload, Users, UserPlus,
+  MapPin, Building2, Gauge, Package, ChevronDown, Upload, Users,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
 import { fetchCatalog, isAbortError, type CatalogData, hasRatio, viDate } from '../../lib/catalog';
@@ -19,7 +19,6 @@ import RecordForm from './RecordForm';
 import EditableTable, { type Draft } from './EditableTable';
 import AssetLifecycle from './AssetLifecycle';
 import BulkImportAssets from './BulkImportAssets';
-import CustomerAssignTable from './CustomerAssignTable';
 import ValidationBar from './ValidationBar';
 
 const EMPTY: CatalogData = {
@@ -30,25 +29,22 @@ const EMPTY: CatalogData = {
 // Bo tab Kho: moi KCN dung 1 kho, tao san boi script, khong can quan ly rieng
 /** 'mkh' KHONG phai EntityKind: no gan khach hang vao diem do (ghi
     dm_point_customer), khong phai CRUD mot bang. */
-type TabKey = EntityKind | 'mkh';
-const TABS: TabKey[] = ['zone', 'station', 'point', 'asset', 'customer', 'mkh'];
-const TAB_LABEL: Record<TabKey, string> = {
+const TABS: EntityKind[] = ['zone', 'station', 'point', 'asset', 'customer'];
+const TAB_LABEL: Record<EntityKind, string> = {
   zone: 'Khu công nghiệp', station: 'Trạm', point: 'Điểm đo', asset: 'Vật tư',
-  warehouse: 'Kho', customer: 'Khách hàng', mkh: 'Gắn khách hàng',
+  warehouse: 'Kho', customer: 'Khách hàng',
 };
-const TAB_ICON: Record<TabKey, any> = {
+const TAB_ICON: Record<EntityKind, any> = {
   zone: MapPin, station: Building2, point: Gauge, asset: Package,
-  warehouse: Package, customer: Users, mkh: UserPlus,
+  warehouse: Package, customer: Users,
 };
 
 /** Trang QUẢN LÝ DANH MỤC — thêm / sửa / xóa. Kéo thả nằm ở trang riêng. */
 export default function CatalogAdmin() {
   const [data, setData] = useState<CatalogData>(EMPTY);
   const [isLoading, setIsLoading] = useState(true);
-  const [tab, setTab] = useState<TabKey>('zone');
-  /** Tab 'mkh' khong phai mot bang CRUD; quy ve 'point' cho cac ham dung chung
-      (chung chi chay khi tab !== 'mkh' vi nhanh render tach rieng). */
-  const kind: EntityKind = tab === 'mkh' ? 'point' : tab;
+  const [tab, setTab] = useState<EntityKind>('zone');
+  const kind: EntityKind = tab;
   const [term, setTerm] = useState('');
   const [editing, setEditing] = useState<{ kind: EntityKind; record: any | null } | null>(null);
   const [confirmDel, setConfirmDel] = useState<{ kind: EntityKind; record: any; blockers: string[]; ledger: number } | null>(null);
@@ -153,7 +149,6 @@ export default function CatalogAdmin() {
       case 'asset': return data.assets.filter(a => hit(`${a.serial} ${a.model_desc ?? ''}`));
       case 'warehouse': return data.warehouses.filter(w => hit(`${w.code} ${w.name}`));
       case 'customer': return data.customers.filter(c => hit(`${c.mkh} ${c.name} ${c.address ?? ''}`));
-      case 'mkh': return [];   // tab nay co bang rieng, xem CustomerAssignTable
     }
   }, [tab, data, term]) as any[];
 
@@ -277,13 +272,11 @@ export default function CatalogAdmin() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {tab !== 'mkh' && (
           <div className="relative w-56">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
             <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Tìm..."
               className="w-full pl-10 pr-4 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none" />
           </div>
-          )}
           <button onClick={() => {
               if (dirtyCount > 0 && !window.confirm(`Còn ${dirtyCount} dòng chưa lưu. Tải lại sẽ mất thay đổi. Tiếp tục?`)) return;
               setDraft({}); load();
@@ -311,9 +304,7 @@ export default function CatalogAdmin() {
               <Upload className="w-4 h-4" />Thêm hàng loạt
             </button>
           )}
-          {/* Tab "Gắn khách hàng" không thêm bản ghi nào — nó chỉ nối điểm đo
-              với khách có sẵn, và có ô tìm + nút Lưu riêng của nó. */}
-          {editable && tab !== 'mkh' && (
+          {editable && (
             <button onClick={() => setEditing({ kind, record: null })}
               className="vl-btn vl-btn-primary vl-btn-sm">
               <Plus className="w-4 h-4" />Thêm {ENTITY_LABEL[kind].toLowerCase()}
@@ -361,8 +352,6 @@ export default function CatalogAdmin() {
         <div className="flex flex-col items-center justify-center py-20 text-faint">
           <RefreshCw className="w-10 h-10 animate-spin mb-4" /><p>Đang tải...</p>
         </div>
-      ) : tab === 'mkh' ? (
-        <CustomerAssignTable data={data} editable={editable} onSaved={load} />
       ) : grouped ? (
         <div className="space-y-4">
           {zoneGroups.map(({ zone, rows }) => {
