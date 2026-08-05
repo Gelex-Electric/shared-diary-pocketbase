@@ -11,7 +11,7 @@ Chia lam 4 nhom:
   GAN GIONG- can NGUOI xac nhan tung cap
   MOI      - chi co o Excel, khong giong ai => diem do that su moi
 
-    python scripts/excel_step3_match_points.py --out ../..\/plans/doi-chieu-diem-do.md
+    python scripts/excel_step3_match_points.py --out <duong-dan>.md
 """
 import argparse
 import difflib
