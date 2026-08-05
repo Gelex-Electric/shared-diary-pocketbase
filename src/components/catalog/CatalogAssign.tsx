@@ -264,7 +264,7 @@ export default function CatalogAssign() {
             <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Tìm điểm đo, trạm, khách..."
               className="w-full pl-10 pr-4 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none" />
           </div>
-          <button onClick={load} className="vl-btn vl-btn-secondary vl-btn-sm !px-2" title="Tải lại">
+          <button onClick={load} className="vl-btn vl-btn-secondary vl-btn-sm px-2!" title="Tải lại">
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>

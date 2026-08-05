@@ -239,7 +239,7 @@ export default function CatalogAdmin() {
               if (dirtyCount > 0 && !window.confirm(`Còn ${dirtyCount} dòng chưa lưu. Tải lại sẽ mất thay đổi. Tiếp tục?`)) return;
               setDraft({}); load();
             }}
-            className="vl-btn vl-btn-secondary vl-btn-sm !px-2" title="Tải lại">
+            className="vl-btn vl-btn-secondary vl-btn-sm px-2!" title="Tải lại">
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
           {editable && dirtyCount > 0 && (
@@ -392,14 +392,14 @@ export default function CatalogAdmin() {
             />
             <div className="flex items-center gap-1">
               <button onClick={() => setPage(1)} disabled={page === 1}
-                className="vl-btn vl-btn-secondary vl-btn-sm !px-2.5">«</button>
+                className="vl-btn vl-btn-secondary vl-btn-sm px-2.5!">«</button>
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                className="vl-btn vl-btn-secondary vl-btn-sm !px-2.5">‹</button>
+                className="vl-btn vl-btn-secondary vl-btn-sm px-2.5!">‹</button>
               <span className="px-3 text-soft">Trang <strong className="text-ink">{page}</strong>/{totalPages}</span>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-                className="vl-btn vl-btn-secondary vl-btn-sm !px-2.5">›</button>
+                className="vl-btn vl-btn-secondary vl-btn-sm px-2.5!">›</button>
               <button onClick={() => setPage(totalPages)} disabled={page >= totalPages}
-                className="vl-btn vl-btn-secondary vl-btn-sm !px-2.5">»</button>
+                className="vl-btn vl-btn-secondary vl-btn-sm px-2.5!">»</button>
             </div>
           </div>
         </div>
