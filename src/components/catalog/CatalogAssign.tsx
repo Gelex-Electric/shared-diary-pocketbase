@@ -305,7 +305,7 @@ export default function CatalogAssign() {
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[3fr_1fr] gap-4 items-start">
-          <div className="overflow-x-auto bg-surface">
+          <div className="vl-card overflow-x-auto mb-0!">
             <table className="vl-table vl-table-grid w-full text-left border-collapse">
               <thead>
                 <tr>
@@ -360,7 +360,7 @@ export default function CatalogAssign() {
             {/* Thao tac cua diem do dang chon - truoc day nam o thanh noi duoi
                 man hinh, user chot 05/08 dua han vao the ben phai. */}
             {editable && selected && (
-              <div className="bg-surface border border-[var(--border-strong)] p-4 space-y-3">
+              <div className="vl-card p-4 space-y-3 mb-0!">
                 <p className="vl-section-title">Thao tác với điểm đo đang chọn</p>
                 <p className="text-xs font-mono font-bold text-accent break-words">{selected.line_name}</p>
 

@@ -16,7 +16,7 @@ export default function ValidationBar({ result }: { result: ValidateResult }) {
 
   if (total === 0) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 text-xs font-bold
+      <div className="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-[var(--radius)]
         bg-[var(--success-soft)] text-[var(--success)] border border-[var(--success)]/30">
         <CheckCircle2 className="w-4 h-4" />Dữ liệu không có lỗi ràng buộc nào.
       </div>
@@ -28,7 +28,7 @@ export default function ValidationBar({ result }: { result: ValidateResult }) {
     : 'bg-[var(--warning-soft)] border-[var(--warning)]/40';
 
   return (
-    <div className={`border ${tone}`}>
+    <div className={`border rounded-[var(--radius)] overflow-hidden ${tone}`}>
       <button onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-3 px-3 py-2 text-left">
         <ShieldAlert className={`w-4 h-4 shrink-0 ${errors.length ? 'text-bad' : 'text-warn'}`} />

@@ -340,7 +340,7 @@ export default function CatalogAdmin() {
             const isOpen = !collapsed[zone.id];
             const dirtyHere = rows.filter((r: any) => draft[r.id]).length;
             return (
-              <div key={zone.id} className="overflow-hidden bg-surface">
+              <div key={zone.id} className="vl-card overflow-hidden mb-0!">
                 <div
                   onClick={() => setCollapsed(c => ({ ...c, [zone.id]: !c[zone.id] }))}
                   className="bg-accent px-5 py-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
@@ -386,7 +386,7 @@ export default function CatalogAdmin() {
           })}
 
           {orphanRows.length > 0 && (
-            <div className="overflow-hidden bg-surface">
+            <div className="vl-card overflow-hidden mb-0!">
               <div className="bg-[var(--warning)] px-5 py-3.5 flex items-center gap-3 text-white">
                 <AlertTriangle className="w-5 h-5 shrink-0" />
                 <div>
@@ -411,7 +411,7 @@ export default function CatalogAdmin() {
         <div className={tab === 'asset' && lifecycleAsset
           ? 'grid grid-cols-1 xl:grid-cols-[3fr_1fr] gap-4 items-start'
           : ''}>
-          <div className="overflow-hidden bg-surface min-w-0">
+          <div className="vl-card overflow-hidden mb-0! min-w-0">
             <EditableTable
               kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
               editable={editable} onChange={onChange} onDelete={askDelete}

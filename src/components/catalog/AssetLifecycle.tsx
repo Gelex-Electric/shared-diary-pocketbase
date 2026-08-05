@@ -291,8 +291,7 @@ function Frame({
 }) {
   if (inline) {
     return (
-      <div className="bg-surface border border-[var(--border-strong)]
-        max-h-[calc(100vh-2rem)] overflow-y-auto p-5 space-y-5">
+      <div className="vl-card mb-0! max-h-[calc(100vh-2rem)] overflow-y-auto p-5 space-y-5">
         {children}
       </div>
     );

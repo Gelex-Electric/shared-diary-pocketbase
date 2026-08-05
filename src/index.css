@@ -282,8 +282,9 @@ p { text-wrap: pretty; }
 .vl-table-compact tbody td { padding: 0; }
 .vl-table-compact tbody tr:hover { background-color: transparent; }
 
-/* Kieu BANG TINH (Excel): vien o day du, KHONG bo goc. User chot 03/08. */
-.vl-table-grid { border: 1px solid var(--border-strong); }
+/* Kieu BANG TINH (Excel): ke o day du BEN TRONG.
+   KHONG co vien ngoai - bang luon nam trong .vl-card, vien cua card lam mep;
+   de ca hai se thanh duong ke doi 2px (user chot 05/08). */
 .vl-table-grid th,
 .vl-table-grid td { border-right: 1px solid var(--border); }
 .vl-table-grid th:last-child,
