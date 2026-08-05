@@ -35,7 +35,7 @@ const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: 'hsn_bad', label: 'HSN bất thường' },
 ];
 
-type SortKey = 'line_id' | 'line_name' | 'station' | 'role' | 'customer' | 'assets';
+type SortKey = 'line_name' | 'station' | 'role' | 'customer' | 'assets';
 
 interface Pending {
   request: ActionRequest;
@@ -55,7 +55,7 @@ export default function CatalogAssign() {
   const [activeZone, setActiveZone] = useState('');
   const [term, setTerm] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
-  const [sort, setSort] = useState<{ key: SortKey; asc: boolean }>({ key: 'line_id', asc: true });
+  const [sort, setSort] = useState<{ key: SortKey; asc: boolean }>({ key: 'line_name', asc: true });
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Point | null>(null);
   const [assetPick, setAssetPick] = useState<Set<string>>(new Set());
@@ -117,7 +117,6 @@ export default function CatalogAssign() {
     const val = (p: Point): string => {
       const cur = currentCustomerOf(data.periods, data.customers, p.id);
       switch (sort.key) {
-        case 'line_id': return p.line_id.padStart(8, '0');
         case 'line_name': return p.line_name || '';
         case 'station': return stationCode(p.station) || 'zzz';
         case 'role': return p.role || 'zzz';
@@ -146,7 +145,7 @@ export default function CatalogAssign() {
     const ok: Point[] = [], skip: string[] = [];
     for (const p of checkedPoints) {
       const c = checkAssignStation(p, stationId, data);
-      if (c.ok) ok.push(p); else skip.push(`${p.line_id}: ${c.reason}`);
+      if (c.ok) ok.push(p); else skip.push(`${p.line_name}: ${c.reason}`);
     }
     if (!ok.length) { notify.show('warning', 'Không gắn được', skip[0] ?? 'Không có dòng hợp lệ'); return; }
     setPending({
@@ -164,7 +163,7 @@ export default function CatalogAssign() {
     const ok: Point[] = [], skip: string[] = [];
     for (const p of checkedPoints) {
       const c = checkChangeRole(p, role);
-      if (c.ok) ok.push(p); else skip.push(`${p.line_id}: ${c.reason}`);
+      if (c.ok) ok.push(p); else skip.push(`${p.line_name}: ${c.reason}`);
     }
     if (!ok.length) { notify.show('warning', 'Không đổi được', skip[0] ?? ''); return; }
     setPending({
@@ -192,7 +191,8 @@ export default function CatalogAssign() {
     setPending({
       request: {
         title: 'Treo vật tư lên điểm đo',
-        detail: `${ok.map(a => a.serial).join(', ')}\n→ điểm đo ${selected.line_id} — ${selected.line_name || '—'}`,
+        detail: `${ok.map(a => a.serial).join(', ')}
+→ điểm đo ${selected.line_name}`,
         needsDate: true, irreversible: true,
         warnings: skip.length ? [`${skip.length} vật tư bị bỏ qua:`, ...skip.slice(0, 5)] : undefined,
       },
@@ -313,8 +313,8 @@ export default function CatalogAssign() {
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-4 items-start">
-          <div className="vl-card overflow-x-auto">
-            <table className="vl-table w-full text-left border-collapse">
+          <div className="overflow-x-auto">
+            <table className="vl-table vl-table-grid w-full text-left border-collapse">
               <thead>
                 <tr>
                   <th className="w-8">
@@ -322,8 +322,7 @@ export default function CatalogAssign() {
                       checked={rows.length > 0 && checked.size === rows.length}
                       onChange={toggleAll} className="w-3.5 h-3.5" />
                   </th>
-                  <Th k="line_id">Mã</Th>
-                  <Th k="line_name">Tên điểm đo</Th>
+                  <Th k="line_name">Mã điểm đo</Th>
                   <Th k="station">Trạm</Th>
                   <Th k="role">Vai trò</Th>
                   <th className="whitespace-nowrap">Trạng thái</th>
@@ -334,7 +333,7 @@ export default function CatalogAssign() {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={9} className="py-10 text-center text-faint">Không có điểm đo nào khớp</td></tr>
+                  <tr><td colSpan={8} className="py-10 text-center text-faint">Không có điểm đo nào khớp</td></tr>
                 ) : rows.map(p => {
                   const cur = currentCustomerOf(data.periods, data.customers, p.id);
                   const at = assetsAtPoint(data, p.id);
@@ -354,8 +353,7 @@ export default function CatalogAssign() {
                           })}
                           className="w-3.5 h-3.5" />
                       </td>
-                      <td className=" font-mono text-xs font-bold text-accent whitespace-nowrap">{p.line_id}</td>
-                      <td className=" text-dim max-w-[220px] truncate" title={p.line_name}>{p.line_name || '—'}</td>
+                      <td className="font-mono text-xs font-bold text-accent max-w-[280px] truncate" title={p.line_name}>{p.line_name || '—'}</td>
                       <td className={`px-2 py-2 whitespace-nowrap ${p.station ? 'text-dim' : 'text-warn font-semibold'}`}>
                         {p.station ? stationCode(p.station) : 'chưa gắn'}
                       </td>
@@ -418,7 +416,7 @@ export default function CatalogAssign() {
           <Package className="w-4 h-4 text-accent" />
           <span className="text-sm font-bold text-ink">Đã chọn {assetPick.size} vật tư</span>
           <span className="text-xs text-soft">
-            {selected ? `Điểm đo đang chọn: ${selected.line_id}` : 'Bấm một dòng điểm đo để chọn nơi treo'}
+            {selected ? `Điểm đo đang chọn: ${selected.line_name}` : 'Bấm một dòng điểm đo để chọn nơi treo'}
           </span>
           <button onClick={doHang} disabled={!selected}
             className="vl-btn vl-btn-primary vl-btn-sm">

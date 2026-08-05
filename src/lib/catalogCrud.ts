@@ -144,8 +144,10 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
       ];
     case 'point':
       return [
-        { name: 'line_id', label: 'Mã điểm đo', type: 'text', required: true },
-        { name: 'line_name', label: 'Tên điểm đo', type: 'text' },
+        { name: 'line_name', label: 'Mã điểm đo', type: 'text', required: true,
+          hint: 'Định danh nhìn thấy, gắn với mã trạm — VD YM.TITAN.NX5.400KVA.JEN YAW' },
+        { name: 'line_id', label: 'Mã HES (nội bộ)', type: 'text', required: true,
+          hint: 'Khoá khớp với hệ thống HES, không dùng để tra cứu thủ công' },
         { name: 'zone', label: 'Khu công nghiệp', type: 'rel', relFrom: 'zone', required: true },
         { name: 'station', label: 'Trạm', type: 'rel', relFrom: 'station', hint: 'Để trống nếu chưa xác định' },
         {
@@ -213,6 +215,7 @@ export type TagKind = 'zone' | 'role' | 'point_status' | 'asset_type' | 'asset_s
 
 export interface ColumnDef {
   key: string;
+  /** Nhãn cột — có thể khác nhãn trong form (VD line_name hiện là "Mã điểm đo"). */
   label: string;
   /** 'readonly' = ô tính toán, không sửa được (VD số điểm đo của trạm). */
   kind: 'text' | 'number' | 'date' | 'select' | 'rel' | 'readonly';
@@ -266,11 +269,13 @@ function columnsOfRaw(kind: EntityKind): Array<ColumnDef | null> {
         asCol('note', { width: 'w-[36%]' }),
       ];
     case 'point':
-      // KHÔNG có cột KCN: bảng đã nhóm theo KCN, header nhóm mang thông tin đó
+      // KHÔNG có cột KCN: bảng đã nhóm theo KCN, header nhóm mang thông tin đó.
+      // KHÔNG có cột line_id: user chốt 03/08 — số đó không dùng vào việc gì,
+      // định danh nhìn thấy là TÊN điểm đo (vì nó gắn với mã trạm).
+      // `line_id` vẫn giữ trong CSDL: là khoá unique và là khoá khớp với HES.
       return [
-        asCol('line_id', { width: 'w-[8%]' }),
-        asCol('line_name', { width: 'w-[26%]' }),
-        asCol('station', { relFrom: 'station', width: 'w-[22%]' }),
+        asCol('line_name', { label: 'Mã điểm đo', width: 'w-[34%]' }),
+        asCol('station', { relFrom: 'station', width: 'w-[24%]' }),
         asCol('role', { tag: 'role', width: 'w-[12%]' }),
         asCol('point_status', { tag: 'point_status', width: 'w-[15%]' }),
         asCol('hsn_invoice', { width: 'w-[9%]' }),

@@ -81,7 +81,7 @@ export default function AssetLifecycle({
   const whName = (id: string) => data.warehouses.find(w => w.id === id)?.name ?? '';
   const ptName = (id: string) => {
     const p = data.points.find(x => x.id === id);
-    return p ? `điểm đo ${p.line_id}` : '';
+    return p ? `điểm đo ${p.line_name}` : '';
   };
 
   return (

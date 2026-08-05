@@ -108,7 +108,7 @@ export default function CatalogAdmin() {
         const detail = e?.response?.data
           ? Object.entries(e.response.data).map(([k, x]: any) => `${k}: ${x?.message ?? x}`).join('; ')
           : (e?.message || String(e));
-        errs.push(`${rec?.code ?? rec?.serial ?? rec?.line_id ?? id}: ${detail}`);
+        errs.push(`${rec?.code ?? rec?.serial ?? rec?.line_name ?? id}: ${detail}`);
       }
     }
     setDraft(failed);
@@ -186,7 +186,7 @@ export default function CatalogAdmin() {
     setBusy(true);
     try {
       await deleteRecord(confirmDel.kind, confirmDel.record.id);
-      notify.show('success', 'Đã xóa', `${ENTITY_LABEL[confirmDel.kind]} ${confirmDel.record.code ?? confirmDel.record.serial ?? confirmDel.record.line_id}`);
+      notify.show('success', 'Đã xóa', `${ENTITY_LABEL[confirmDel.kind]} ${confirmDel.record.code ?? confirmDel.record.serial ?? confirmDel.record.line_name}`);
       setConfirmDel(null);
       await load();
     } catch (err: any) {
@@ -304,7 +304,7 @@ export default function CatalogAdmin() {
             const isOpen = !collapsed[zone.id];
             const dirtyHere = rows.filter((r: any) => draft[r.id]).length;
             return (
-              <div key={zone.id} className="vl-card overflow-hidden !rounded-none">
+              <div key={zone.id} className="overflow-hidden border border-[var(--border-strong)]">
                 <div
                   onClick={() => setCollapsed(c => ({ ...c, [zone.id]: !c[zone.id] }))}
                   className="bg-accent px-5 py-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
@@ -350,7 +350,7 @@ export default function CatalogAdmin() {
           })}
 
           {orphanRows.length > 0 && (
-            <div className="vl-card overflow-hidden !rounded-none">
+            <div className="overflow-hidden border border-[var(--border-strong)]">
               <div className="bg-[var(--warning)] px-5 py-3.5 flex items-center gap-3 text-white">
                 <AlertTriangle className="w-5 h-5 shrink-0" />
                 <div>
@@ -367,7 +367,7 @@ export default function CatalogAdmin() {
           )}
         </div>
       ) : (
-        <div className="vl-card overflow-hidden !rounded-none">
+        <div className="overflow-hidden">
           <EditableTable
             kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
             editable={editable} onChange={onChange} onDelete={askDelete}
@@ -423,7 +423,7 @@ export default function CatalogAdmin() {
         const isAsset = confirmDel.kind === 'asset';
         const hasLedger = isAsset && confirmDel.ledger !== 0;
         const blocked = confirmDel.blockers.length > 0 || hasLedger;
-        const name = confirmDel.record.code ?? confirmDel.record.serial ?? confirmDel.record.line_id;
+        const name = confirmDel.record.code ?? confirmDel.record.serial ?? confirmDel.record.line_name;
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !busy && setConfirmDel(null)}>
             <div className="vl-card w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>

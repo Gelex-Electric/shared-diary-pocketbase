@@ -99,7 +99,7 @@ export function LocationTag({ asset, data }: { asset: Asset; data: CatalogData }
     return (
       <Tag className="bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/40"
         title={pt.line_name}>
-        đo {pt.line_id}
+        <span className="max-w-[9rem] truncate">{pt.line_name}</span>
       </Tag>
     );
   }

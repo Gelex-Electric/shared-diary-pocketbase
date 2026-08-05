@@ -44,10 +44,7 @@ export default function PointDetail({
 
       {/* Tiêu đề */}
       <div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono text-xs font-bold text-soft bg-subtle px-2 py-0.5 rounded">{point.line_id}</span>
-          <h3 className="text-lg font-bold text-ink">{point.line_name || '—'}</h3>
-        </div>
+        <h3 className="text-lg font-bold text-ink break-words">{point.line_name || '—'}</h3>
         <div className="flex items-center gap-2 flex-wrap mt-2">
           <span className={`text-xs font-bold px-2 py-0.5 rounded ${point.role === 'chinh' ? 'vl-badge-primary' : 'bg-subtle text-faint'}`}>
             {point.role === 'chinh' ? 'Điểm đo chính' : point.role === 'phu' ? 'Điểm đo phụ' : '—'}
@@ -76,7 +73,7 @@ export default function PointDetail({
             </p>
             {siblings.length > 0 && (
               <p className="text-xs text-faint mt-2">
-                Trạm này còn {siblings.length} điểm đo khác: {siblings.map(s => s.line_id).join(', ')}
+                Trạm này còn {siblings.length} điểm đo khác: {siblings.map(s => s.line_name).join(', ')}
               </p>
             )}
           </div>
