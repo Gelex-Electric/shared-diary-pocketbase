@@ -38,10 +38,12 @@ export default function CatalogAdmin() {
   const [draft, setDraft] = useState<Draft>({});
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
-  const [lifecycle, setLifecycle] = useState<any | null>(null);
+  const [lifecycleId, setLifecycleId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const editable = canEdit();
+
+  const lifecycleAsset = lifecycleId ? data.assets.find(a => a.id === lifecycleId) ?? null : null;
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -372,7 +374,9 @@ export default function CatalogAdmin() {
             kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
             editable={editable} onChange={onChange} onDelete={askDelete}
             computeCell={computeCell}
-            onOpenLifecycle={rec => setLifecycle(rec)}
+            onOpenLifecycle={rec => setLifecycleId(rec.id)}
+            onEditRecord={rec => setEditing({ kind: tab, record: rec })}
+            selectedId={lifecycleId}
           />
         </div>
       )}
@@ -405,11 +409,11 @@ export default function CatalogAdmin() {
         </div>
       )}
 
-      {lifecycle && (
+      {lifecycleAsset && (
         <AssetLifecycle
-          asset={lifecycle} data={data} canEditNow={editable}
-          onClose={() => setLifecycle(null)}
-          onChanged={async () => { await load(); setLifecycle(null); }}
+          asset={lifecycleAsset} data={data} canEditNow={editable}
+          onClose={() => setLifecycleId(null)}
+          onChanged={load}
         />
       )}
 

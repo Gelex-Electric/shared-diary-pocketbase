@@ -85,8 +85,15 @@ export default function AssetLifecycle({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !busy && onClose()}>
-      <div className="vl-card w-full max-w-3xl max-h-[90vh] overflow-y-auto p-5 space-y-5" onClick={e => e.stopPropagation()}>
+    /* NGĂN TRƯỢT BÊN PHẢI (user chốt 05/08): xem sổ cái mà vẫn thấy bảng vật
+       tư bên trái, không phải đóng/mở liên tục khi tra nhiều vật tư.
+       Nền mờ chỉ phủ phần còn lại và KHÔNG chặn thao tác đọc bảng. */
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => !busy && onClose()}>
+      <div
+        className="bg-surface border-l border-[var(--border-strong)] shadow-2xl
+          w-full max-w-xl h-full overflow-y-auto p-5 space-y-5
+          vl-drawer"
+        onClick={e => e.stopPropagation()}>
 
         {/* Tiêu đề + trạng thái */}
         <div className="flex items-start justify-between gap-3">

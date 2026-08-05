@@ -290,6 +290,16 @@ p { text-wrap: pretty; }
 .vl-table-grid td:last-child { border-right: none; }
 .vl-table-grid thead th { background-color: var(--surface-3); }
 
+/* Ngan truot ben phai (so cai vong doi vat tu).
+   KHONG dung `animate-in slide-in-from-right` cua tailwindcss-animate: plugin
+   do KHONG duoc cai trong du an nay nen cac class ay khong sinh CSS. */
+@keyframes vl-drawer-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.vl-drawer { animation: vl-drawer-in 0.18s ease-out; }
+@media (prefers-reduced-motion: reduce) { .vl-drawer { animation: none; } }
+
 /* ============================================================
    Badges / tags
    ============================================================ */

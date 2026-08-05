@@ -1,4 +1,4 @@
-import { Trash2, History } from 'lucide-react';
+import { Trash2, Pencil } from 'lucide-react';
 import { KCN_COLOR } from '../../lib/kcnColors';
 import type { CatalogData } from '../../lib/catalog';
 import { type ColumnDef, type EntityKind, ratioText } from '../../lib/catalogCrud';
@@ -20,6 +20,7 @@ export type Draft = Record<string, Record<string, any>>;
  */
 export default function EditableTable({
   kind, cols, rows, data, draft, editable, onChange, onDelete, computeCell, onOpenLifecycle,
+  onEditRecord, selectedId,
 }: {
   kind: EntityKind;
   cols: ColumnDef[];
@@ -32,6 +33,10 @@ export default function EditableTable({
   computeCell: (rec: any, key: string) => string;
   /** Chỉ dùng cho bảng vật tư: mở màn hình vòng đời + sổ cái. */
   onOpenLifecycle?: (rec: any) => void;
+  /** Mở form sửa cả bản ghi — nơi duy nhất sửa được mã vật tư. */
+  onEditRecord?: (rec: any) => void;
+  /** Vật tư đang mở ở ngăn sổ cái — tô sáng dòng cho khỏi lạc. */
+  selectedId?: string | null;
 }) {
 
   const val = (rec: any, key: string) => {
@@ -113,6 +118,20 @@ export default function EditableTable({
     const v = val(rec, c.key);
     const dirty = isDirty(rec, c.key);
 
+    // Mã vật tư KHÔNG gõ trực tiếp: bấm vào là mở sổ cái vòng đời (user chốt
+    // 05/08). Sửa mã sai thì qua nút bút chì -> RecordForm, tránh việc một ô
+    // vừa mở ngăn vừa nhận phím gõ.
+    if (kind === 'asset' && c.key === 'serial' && onOpenLifecycle) {
+      return (
+        <button onClick={() => onOpenLifecycle(rec)}
+          className="w-full text-left px-2 py-1.5 font-mono text-sm font-bold text-accent
+            hover:bg-accent-soft hover:underline transition-colors truncate"
+          title="Xem lịch sử luân chuyển & vị trí hiện tại">
+          {String(v || '—')}
+        </button>
+      );
+    }
+
     if (c.kind === 'readonly') {
       // Cột tính toán (_stations/_points/_assets): bản ghi KHÔNG có trường tên đó
       // nên trước đây readTag trả '—' rồi vẽ thêm số ⇒ hiện thành "—22".
@@ -180,7 +199,9 @@ export default function EditableTable({
             <tr><td colSpan={cols.length + 2} className="py-12 text-center text-faint">Không có dữ liệu</td></tr>
           ) : rows.map((rec, i) => (
             <tr key={rec.id} className={`transition-colors ${
-              draft[rec.id] ? 'bg-amber-50/60 dark:bg-amber-500/10' : i % 2 ? 'bg-subtle/40' : ''
+              selectedId === rec.id ? 'bg-accent-soft'
+                : draft[rec.id] ? 'bg-amber-50/60 dark:bg-amber-500/10'
+                : i % 2 ? 'bg-subtle/40' : ''
             }`}>
               {/* Dải màu KCN đầu dòng */}
               <td className="w-1 p-0!"><div className={`w-1 h-full min-h-[2.1rem] ${zoneStripe(rec)}`} /></td>
@@ -190,11 +211,11 @@ export default function EditableTable({
               ))}
 
               <td className="text-right whitespace-nowrap px-1 py-1">
-                {kind === 'asset' && onOpenLifecycle && (
-                  <button onClick={() => onOpenLifecycle(rec)}
+                {editable && onEditRecord && (
+                  <button onClick={() => onEditRecord(rec)}
                     className="p-1.5 rounded text-faint hover:bg-accent-soft hover:text-accent transition-colors"
-                    title="Vòng đời & sổ cái">
-                    <History className="w-3.5 h-3.5" />
+                    title="Sửa cả bản ghi">
+                    <Pencil className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {editable && (
