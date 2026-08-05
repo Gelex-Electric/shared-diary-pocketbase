@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import {
-  RefreshCw, Search, AlertTriangle, Lock, ArrowUpDown, X, Package, MapPin,
+  RefreshCw, Search, AlertTriangle, Lock, ArrowUpDown, Package, MapPin,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
 import {
@@ -56,7 +56,6 @@ export default function CatalogAssign() {
   const [term, setTerm] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<{ key: SortKey; asc: boolean }>({ key: 'line_name', asc: true });
-  const [checked, setChecked] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Point | null>(null);
   const [assetPick, setAssetPick] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Pending | null>(null);
@@ -82,8 +81,9 @@ export default function CatalogAssign() {
     if (!activeZone && data.zones.length) setActiveZone(data.zones[0].id);
   }, [data.zones, activeZone]);
 
-  // Đổi KCN / đổi bộ lọc ⇒ bỏ hết tích chọn, tránh thao tác lên dòng không còn thấy
-  useEffect(() => { setChecked(new Set()); setAssetPick(new Set()); }, [activeZone, filter]);
+  // Đổi KCN / đổi bộ lọc ⇒ bỏ dòng đang chọn và vật tư đã tích,
+  // tránh thao tác lên thứ không còn thấy trên bảng.
+  useEffect(() => { setSelected(null); setAssetPick(new Set()); }, [activeZone, filter]);
 
   const stationCode = useCallback(
     (id: string) => data.stations.find(s => s.id === id)?.code ?? '',
@@ -130,28 +130,23 @@ export default function CatalogAssign() {
     });
   }, [data, activeZone, term, filter, sort, matchFilter, stationCode]);
 
-  const checkedPoints = useMemo(() => data.points.filter(p => checked.has(p.id)), [data.points, checked]);
   const pickedAssets = useMemo(() => data.assets.filter(a => assetPick.has(a.id)), [data.assets, assetPick]);
 
   const toggleSort = (key: SortKey) =>
     setSort(s => (s.key === key ? { key, asc: !s.asc } : { key, asc: true }));
 
-  const toggleAll = () =>
-    setChecked(prev => (prev.size === rows.length ? new Set() : new Set(rows.map(r => r.id))));
-
-  /* ---------------- Thao tác hàng loạt ---------------- */
+  /* ---------------- Thao tác với điểm đo đang chọn ---------------- */
 
   const doAssignStation = (stationId: string) => {
-    const ok: Point[] = [], skip: string[] = [];
-    for (const p of checkedPoints) {
-      const c = checkAssignStation(p, stationId, data);
-      if (c.ok) ok.push(p); else skip.push(`${p.line_name}: ${c.reason}`);
-    }
-    if (!ok.length) { notify.show('warning', 'Không gắn được', skip[0] ?? 'Không có dòng hợp lệ'); return; }
+    if (!selected) return;
+    const c = checkAssignStation(selected, stationId, data);
+    if (!c.ok) { notify.show('warning', 'Không gắn được', c.reason); return; }
+    const ok = [selected], skip: string[] = [];
     setPending({
       request: {
         title: 'Gắn điểm đo vào trạm',
-        detail: `${ok.length} điểm đo → trạm ${stationCode(stationId)}`,
+        detail: `${selected.line_name}
+→ trạm ${stationCode(stationId)}`,
         needsDate: false, irreversible: false,
         warnings: skip.length ? [`${skip.length} dòng bị bỏ qua:`, ...skip.slice(0, 5)] : undefined,
       },
@@ -160,12 +155,10 @@ export default function CatalogAssign() {
   };
 
   const doChangeRole = (role: 'chinh' | 'phu') => {
-    const ok: Point[] = [], skip: string[] = [];
-    for (const p of checkedPoints) {
-      const c = checkChangeRole(p, role);
-      if (c.ok) ok.push(p); else skip.push(`${p.line_name}: ${c.reason}`);
-    }
-    if (!ok.length) { notify.show('warning', 'Không đổi được', skip[0] ?? ''); return; }
+    if (!selected) return;
+    const c = checkChangeRole(selected, role);
+    if (!c.ok) { notify.show('warning', 'Không đổi được', c.reason); return; }
+    const ok = [selected], skip: string[] = [];
     setPending({
       request: {
         title: 'Đổi vai trò điểm đo',
@@ -226,7 +219,6 @@ export default function CatalogAssign() {
       await pending.run(p);
       notify.show('success', 'Đã ghi', pending.request.title);
       setPending(null);
-      setChecked(new Set());
       setAssetPick(new Set());
       await load();
     } catch (err: any) {
@@ -317,11 +309,6 @@ export default function CatalogAssign() {
             <table className="vl-table vl-table-grid w-full text-left border-collapse">
               <thead>
                 <tr>
-                  <th className="w-8">
-                    <input type="checkbox" disabled={!editable || rows.length === 0}
-                      checked={rows.length > 0 && checked.size === rows.length}
-                      onChange={toggleAll} className="w-3.5 h-3.5" />
-                  </th>
                   <Th k="line_name">Mã điểm đo</Th>
                   <Th k="station">Trạm</Th>
                   <Th k="role">Vai trò</Th>
@@ -333,7 +320,7 @@ export default function CatalogAssign() {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={8} className="py-10 text-center text-faint">Không có điểm đo nào khớp</td></tr>
+                  <tr><td colSpan={7} className="py-10 text-center text-faint">Không có điểm đo nào khớp</td></tr>
                 ) : rows.map(p => {
                   const cur = currentCustomerOf(data.periods, data.customers, p.id);
                   const at = assetsAtPoint(data, p.id);
@@ -344,15 +331,6 @@ export default function CatalogAssign() {
                       className={`cursor-pointer transition-colors ${
                         selected?.id === p.id ? 'bg-accent-soft' : 'hover:bg-subtle'
                       }`}>
-                      <td onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" disabled={!editable} checked={checked.has(p.id)}
-                          onChange={() => setChecked(prev => {
-                            const n = new Set(prev);
-                            if (n.has(p.id)) n.delete(p.id); else n.add(p.id);
-                            return n;
-                          })}
-                          className="w-3.5 h-3.5" />
-                      </td>
                       <td className="font-mono text-xs font-bold text-accent max-w-[280px] truncate" title={p.line_name}>{p.line_name || '—'}</td>
                       <td className={`px-2 py-2 whitespace-nowrap ${p.station ? 'text-dim' : 'text-warn font-semibold'}`}>
                         {p.station ? stationCode(p.station) : 'chưa gắn'}
@@ -379,6 +357,46 @@ export default function CatalogAssign() {
               data={data} zoneId={activeZone} canEditNow={editable}
               picked={assetPick} onPick={setAssetPick}
             />
+            {/* Thao tac cua diem do dang chon - truoc day nam o thanh noi duoi
+                man hinh, user chot 05/08 dua han vao the ben phai. */}
+            {editable && selected && (
+              <div className="bg-surface border border-[var(--border-strong)] p-4 space-y-3">
+                <p className="vl-section-title">Thao tác với điểm đo đang chọn</p>
+                <p className="text-xs font-mono font-bold text-accent break-words">{selected.line_name}</p>
+
+                <Select
+                  value={selected.station || ''}
+                  onChange={v => { if (v) doAssignStation(v); }}
+                  options={zoneStations.map(st => ({ value: st.id, label: st.code }))}
+                  placeholder="Gắn vào trạm…" searchable label="Trạm" className="w-full"
+                />
+
+                <div className="flex gap-2">
+                  <button onClick={() => doChangeRole('chinh')}
+                    disabled={selected.role === 'chinh'}
+                    className="vl-btn vl-btn-secondary vl-btn-sm flex-1">Đổi thành Chính</button>
+                  <button onClick={() => doChangeRole('phu')}
+                    disabled={selected.role === 'phu'}
+                    className="vl-btn vl-btn-secondary vl-btn-sm flex-1">Đổi thành Phụ</button>
+                </div>
+
+                <div className="border-t border-[var(--border)] pt-3 space-y-2">
+                  <p className="text-xs text-soft flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5" />
+                    {assetPick.size > 0
+                      ? `Đã chọn ${assetPick.size} vật tư`
+                      : 'Tích chọn vật tư ở ngăn kho hoặc ở danh sách đang treo bên dưới'}
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={doHang} disabled={assetPick.size === 0}
+                      className="vl-btn vl-btn-primary vl-btn-sm flex-1">Treo lên điểm đo</button>
+                    <button onClick={doRemove} disabled={assetPick.size === 0}
+                      className="vl-btn vl-btn-secondary vl-btn-sm flex-1">Tháo về kho</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <PointDetail
               point={selected} data={data} canEditNow={editable}
               picked={assetPick} onPick={setAssetPick}
@@ -387,57 +405,12 @@ export default function CatalogAssign() {
         </div>
       )}
 
-      {/* Thanh thao tác: điểm đo */}
-      {editable && checked.size > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 vl-card shadow-lg px-4 py-3 flex flex-wrap items-center gap-3">
-          <span className="text-sm font-bold text-ink">Đã chọn {checked.size} điểm đo</span>
-          <Select
-            value="" onChange={v => { if (v) doAssignStation(v); }}
-            options={zoneStations.map(s => ({ value: s.id, label: s.code }))}
-            placeholder="Gắn vào trạm…" searchable className="w-[250px]"
-          />
-          <button onClick={() => doChangeRole('chinh')}
-            className="vl-btn vl-btn-secondary vl-btn-sm">
-            Đổi thành Chính
-          </button>
-          <button onClick={() => doChangeRole('phu')}
-            className="vl-btn vl-btn-secondary vl-btn-sm">
-            Đổi thành Phụ
-          </button>
-          <button onClick={() => setChecked(new Set())} className="text-faint hover:text-ink transition-colors" title="Bỏ chọn">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Thanh thao tác: vật tư */}
-      {editable && assetPick.size > 0 && checked.size === 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 vl-card shadow-lg px-4 py-3 flex flex-wrap items-center gap-3">
-          <Package className="w-4 h-4 text-accent" />
-          <span className="text-sm font-bold text-ink">Đã chọn {assetPick.size} vật tư</span>
-          <span className="text-xs text-soft">
-            {selected ? `Điểm đo đang chọn: ${selected.line_name}` : 'Bấm một dòng điểm đo để chọn nơi treo'}
-          </span>
-          <button onClick={doHang} disabled={!selected}
-            className="vl-btn vl-btn-primary vl-btn-sm">
-            Treo lên điểm đo
-          </button>
-          <button onClick={doRemove}
-            className="vl-btn vl-btn-secondary vl-btn-sm">
-            Tháo về kho
-          </button>
-          <button onClick={() => setAssetPick(new Set())} className="text-faint hover:text-ink transition-colors" title="Bỏ chọn">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       <ActionConfirmDialog request={pending?.request ?? null} onCancel={() => setPending(null)} onConfirm={confirm} />
 
       {!isLoading && rows.length > 0 && (
         <p className="text-xs text-faint flex items-center gap-1.5">
           <AlertTriangle className="w-3 h-3" />
-          Hiện {rows.length} điểm đo. Bấm tiêu đề cột để sắp xếp; bấm một dòng để xem chi tiết bên phải.
+          Hiện {rows.length} điểm đo. Bấm tiêu đề cột để sắp xếp; bấm một dòng rồi thao tác ở thẻ bên phải.
         </p>
       )}
     </div>

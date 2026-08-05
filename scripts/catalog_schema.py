@@ -110,8 +110,10 @@ SCHEMA = [
     {
         "name": "dm_point",
         "fields": [
-            txt("line_id", required=True, presentable=True),
-            txt("line_name"),
+            # `line_name` moi la thu hien trong giao dien quan tri PB - day so
+            # line_id nhin khong doan duoc la diem do nao (user chot 05/08).
+            txt("line_id", required=True),
+            txt("line_name", presentable=True),
             rel("station", "dm_station"),
             rel("zone", "dm_zone"),
             sel("role", ["chinh", "phu"]),
