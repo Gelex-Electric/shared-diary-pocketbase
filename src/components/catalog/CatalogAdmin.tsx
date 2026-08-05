@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, Plus, Search, Lock, AlertTriangle, Ban, Archive, Save, Undo2,
-  MapPin, Building2, Gauge, Package, ChevronDown, Upload,
+  MapPin, Building2, Gauge, Package, ChevronDown, Upload, Users, UserPlus,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
 import { fetchCatalog, isAbortError, type CatalogData, hasRatio, viDate } from '../../lib/catalog';
@@ -19,6 +19,7 @@ import RecordForm from './RecordForm';
 import EditableTable, { type Draft } from './EditableTable';
 import AssetLifecycle from './AssetLifecycle';
 import BulkImportAssets from './BulkImportAssets';
+import CustomerAssignTable from './CustomerAssignTable';
 import ValidationBar from './ValidationBar';
 
 const EMPTY: CatalogData = {
@@ -27,14 +28,27 @@ const EMPTY: CatalogData = {
 };
 
 // Bo tab Kho: moi KCN dung 1 kho, tao san boi script, khong can quan ly rieng
-const TABS: EntityKind[] = ['zone', 'station', 'point', 'asset'];
-const TAB_ICON = { zone: MapPin, station: Building2, point: Gauge, asset: Package } as const;
+/** 'mkh' KHONG phai EntityKind: no gan khach hang vao diem do (ghi
+    dm_point_customer), khong phai CRUD mot bang. */
+type TabKey = EntityKind | 'mkh';
+const TABS: TabKey[] = ['zone', 'station', 'point', 'asset', 'customer', 'mkh'];
+const TAB_LABEL: Record<TabKey, string> = {
+  zone: 'Khu công nghiệp', station: 'Trạm', point: 'Điểm đo', asset: 'Vật tư',
+  warehouse: 'Kho', customer: 'Khách hàng', mkh: 'Gắn khách hàng',
+};
+const TAB_ICON: Record<TabKey, any> = {
+  zone: MapPin, station: Building2, point: Gauge, asset: Package,
+  warehouse: Package, customer: Users, mkh: UserPlus,
+};
 
 /** Trang QUẢN LÝ DANH MỤC — thêm / sửa / xóa. Kéo thả nằm ở trang riêng. */
 export default function CatalogAdmin() {
   const [data, setData] = useState<CatalogData>(EMPTY);
   const [isLoading, setIsLoading] = useState(true);
-  const [tab, setTab] = useState<EntityKind>('zone');
+  const [tab, setTab] = useState<TabKey>('zone');
+  /** Tab 'mkh' khong phai mot bang CRUD; quy ve 'point' cho cac ham dung chung
+      (chung chi chay khi tab !== 'mkh' vi nhanh render tach rieng). */
+  const kind: EntityKind = tab === 'mkh' ? 'point' : tab;
   const [term, setTerm] = useState('');
   const [editing, setEditing] = useState<{ kind: EntityKind; record: any | null } | null>(null);
   const [confirmDel, setConfirmDel] = useState<{ kind: EntityKind; record: any; blockers: string[]; ledger: number } | null>(null);
@@ -90,7 +104,7 @@ export default function CatalogAdmin() {
       const patch: Record<string, any> = {};
       let ratioBad = false;
       for (const [k, v] of Object.entries(draft[id])) {
-        const col = columnsOf(tab).find(c => c.key === k);
+        const col = columnsOf(kind).find(c => c.key === k);
         if (!col || col.kind === 'readonly') continue;
         if (k === 'ratio_text') {
           // Ô tỷ số gộp: "2000/5" -> sơ cấp / thứ cấp / tỷ số
@@ -111,7 +125,7 @@ export default function CatalogAdmin() {
         patch.ratio_primary = null; patch.ratio_secondary = null; patch.ratio = null;
       }
       try {
-        await updateRecord(tab, id, patch);
+        await updateRecord(kind, id, patch);
         ok++;
       } catch (e: any) {
         failed[id] = draft[id];
@@ -138,17 +152,19 @@ export default function CatalogAdmin() {
       case 'point': return data.points.filter(p => hit(`${p.line_id} ${p.line_name}`));
       case 'asset': return data.assets.filter(a => hit(`${a.serial} ${a.model_desc ?? ''}`));
       case 'warehouse': return data.warehouses.filter(w => hit(`${w.code} ${w.name}`));
+      case 'customer': return data.customers.filter(c => hit(`${c.mkh} ${c.name} ${c.address ?? ''}`));
+      case 'mkh': return [];   // tab nay co bang rieng, xem CustomerAssignTable
     }
   }, [tab, data, term]) as any[];
 
-  const cols = useMemo(() => columnsOf(tab), [tab]);
+  const cols = useMemo(() => columnsOf(kind), [kind]);
 
   /**
    * Trạm và Điểm đo chia MỖI KCN MỘT BẢNG (giống trang Công nợ khách hàng).
    * Mỗi nhóm nhiều nhất ~45 dòng nên không cần phân trang; KCN và Vật tư vẫn
    * dùng bảng phẳng + phân trang vì có thể tới ~700 dòng.
    */
-  const grouped = tab === 'station' || tab === 'point';
+  const grouped = tab === 'station' || tab === 'point' || tab === 'customer';
 
   const zoneGroups = useMemo(() => {
     if (!grouped) return [];
@@ -175,8 +191,11 @@ export default function CatalogAdmin() {
       case '_points':
         return String(tab === 'zone'
           ? data.points.filter(p => p.zone === rec.id).length
-          : data.points.filter(p => p.station === rec.id).length);
+          : tab === 'customer'
+            ? data.periods.filter(k => k.customer === rec.id && k.is_current).length
+            : data.points.filter(p => p.station === rec.id).length);
       case '_assets': return String(data.installs.filter(i => i.point === rec.id && i.is_current).length);
+
 
       // HSN suy từ TI/TU đang treo — KHÔNG lấy số gõ tay (user chốt 05/08).
       case '_hsn_calc': {
@@ -200,13 +219,13 @@ export default function CatalogAdmin() {
   }, [data, tab]);
 
   const askDelete = async (rec: any) => {
-    const blockers = deleteBlockers(tab, rec.id, data);
+    const blockers = deleteBlockers(kind, rec.id, data);
     let ledger = 0;
     if (tab === 'asset') {
       try { ledger = await assetHasLedger(rec.id); }
       catch { ledger = -1; }   // không đọc được ⇒ coi như có, chặn cho an toàn
     }
-    setConfirmDel({ kind: tab, record: rec, blockers, ledger });
+    setConfirmDel({ kind, record: rec, blockers, ledger });
   };
 
   const doDelete = async () => {
@@ -291,7 +310,7 @@ export default function CatalogAdmin() {
             </button>
           )}
           {editable && (
-            <button onClick={() => setEditing({ kind: tab, record: null })}
+            <button onClick={() => setEditing({ kind, record: null })}
               className="vl-btn vl-btn-primary vl-btn-sm">
               <Plus className="w-4 h-4" />Thêm {ENTITY_LABEL[tab].toLowerCase()}
             </button>
@@ -317,10 +336,14 @@ export default function CatalogAdmin() {
       <Tabs
         tabs={TABS.map(t => ({
           id: t,
-          label: `${ENTITY_LABEL[t]} (${
-            t === 'zone' ? data.zones.length : t === 'station' ? data.stations.length
-              : t === 'point' ? data.points.length : data.assets.length
-          })`,
+          label: `${TAB_LABEL[t]}${
+            t === 'zone' ? ` (${data.zones.length})`
+              : t === 'station' ? ` (${data.stations.length})`
+              : t === 'point' ? ` (${data.points.length})`
+              : t === 'asset' ? ` (${data.assets.length})`
+              : t === 'customer' ? ` (${data.customers.length})`
+              : ''
+          }`,
           icon: TAB_ICON[t],
         }))}
         value={tab}
@@ -334,6 +357,8 @@ export default function CatalogAdmin() {
         <div className="flex flex-col items-center justify-center py-20 text-faint">
           <RefreshCw className="w-10 h-10 animate-spin mb-4" /><p>Đang tải...</p>
         </div>
+      ) : tab === 'mkh' ? (
+        <CustomerAssignTable data={data} editable={editable} onSaved={load} />
       ) : grouped ? (
         <div className="space-y-4">
           {zoneGroups.map(({ zone, rows }) => {
@@ -413,11 +438,11 @@ export default function CatalogAdmin() {
           : ''}>
           <div className="vl-card overflow-hidden mb-0! min-w-0">
             <EditableTable
-              kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
+              kind={kind} cols={cols} rows={pageRows} data={data} draft={draft}
               editable={editable} onChange={onChange} onDelete={askDelete}
               computeCell={computeCell}
               onOpenLifecycle={tab === 'asset' ? rec => setLifecycleId(rec.id) : undefined}
-              onEditRecord={rec => setEditing({ kind: tab, record: rec })}
+              onEditRecord={rec => setEditing({ kind, record: rec })}
               selectedId={lifecycleId}
             />
           </div>

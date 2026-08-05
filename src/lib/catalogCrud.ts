@@ -12,16 +12,16 @@ import { pb } from './pocketbase';
 export { parseRatioText, ratioText } from './ratio';
 import { type CatalogData, ASSET_TYPES, ASSET_TYPE_LABEL, hasRatio } from './catalog';
 
-export type EntityKind = 'zone' | 'station' | 'point' | 'asset' | 'warehouse';
+export type EntityKind = 'zone' | 'station' | 'point' | 'asset' | 'warehouse' | 'customer';
 
 export const COLLECTION: Record<EntityKind, string> = {
   zone: 'dm_zone', station: 'dm_station', point: 'dm_point',
-  asset: 'vt_asset', warehouse: 'vt_warehouse',
+  asset: 'vt_asset', warehouse: 'vt_warehouse', customer: 'dm_customer',
 };
 
 export const ENTITY_LABEL: Record<EntityKind, string> = {
   zone: 'Khu công nghiệp', station: 'Trạm', point: 'Điểm đo',
-  asset: 'Vật tư', warehouse: 'Kho',
+  asset: 'Vật tư', warehouse: 'Kho', customer: 'Khách hàng',
 };
 
 /**
@@ -30,6 +30,11 @@ export const ENTITY_LABEL: Record<EntityKind, string> = {
  */
 export function deleteBlockers(kind: EntityKind, id: string, d: CatalogData): string[] {
   const out: string[] = [];
+
+  if (kind === 'customer') {
+    const ky = d.periods.filter(x => x.customer === id).length;
+    if (ky) out.push(`còn ${ky} kỳ gắn với điểm đo`);
+  }
 
   if (kind === 'zone') {
     const st = d.stations.filter(x => x.zone === id).length;
@@ -201,6 +206,16 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
         { name: 'current_warehouse', label: 'Kho', type: 'rel', relFrom: 'warehouse' },
         { name: 'note', label: 'Ghi chú', type: 'text' },
       ];
+    case 'customer':
+      return [
+        { name: 'mkh', label: 'Mã khách hàng', type: 'text', required: true,
+          hint: 'Mã trên hóa đơn CCIS, VD KCNTH-001' },
+        { name: 'name', label: 'Tên khách hàng', type: 'text', required: true },
+        { name: 'zone', label: 'Khu công nghiệp', type: 'rel', relFrom: 'zone', required: true },
+        { name: 'tax_code', label: 'Mã số thuế', type: 'text' },
+        { name: 'address', label: 'Địa chỉ', type: 'text' },
+        { name: 'active', label: 'Đang hoạt động', type: 'bool' },
+      ];
     case 'warehouse':
       return [
         { name: 'code', label: 'Mã kho', type: 'text', required: true },
@@ -309,6 +324,15 @@ function columnsOfRaw(kind: EntityKind): Array<ColumnDef | null> {
           key: '_mounted', label: 'Ngày treo/tháo', kind: 'readonly', width: 'w-32',
           hint: 'Ngày treo của lần đang treo, hoặc ngày tháo của lần treo gần nhất',
         },
+      ];
+    case 'customer':
+      // Bảng đã nhóm theo KCN nên KHÔNG lặp lại cột KCN trong từng dòng.
+      return [
+        asCol('mkh', { width: 'w-40' }),
+        asCol('name', { width: 'w-[38%]' }),
+        asCol('tax_code', { width: 'w-32' }),
+        asCol('address', { width: 'w-[28%]' }),
+        { key: '_points', label: 'Điểm đo', kind: 'readonly', width: 'w-20' },
       ];
     case 'warehouse':
       return [asCol('code'), asCol('name'), asCol('zone')];
