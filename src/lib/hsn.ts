@@ -13,8 +13,8 @@
  *
  * Không import PocketBase để chạy được ngoài Vite khi kiểm thử.
  */
-import type { Asset, CatalogData } from './catalog';
-import { hasRatio } from './catalog';
+import type { Asset, AssetType, CatalogData } from './catalog';
+import { hasRatio, RATIO_TYPES } from './catalog';
 
 export interface HsnResult {
   /** null = chưa suy ra được (chưa có TI/TU nào treo). */
@@ -23,6 +23,8 @@ export interface HsnResult {
   parts: Asset[];
   /** TI/TU đang treo nhưng THIẾU tỷ số ⇒ con số suy ra không đáng tin. */
   missingRatio: Asset[];
+  /** Loại có NHIỀU tỷ số khác nhau cùng treo ⇒ lắp sai hoặc khai sai. */
+  conflicts: AssetType[];
 }
 
 /** TI/TU đang treo tại điểm đo, kèm HSN nhân được. */
@@ -38,12 +40,25 @@ export function hsnOfPoint(data: CatalogData, pointId: string): HsnResult {
     else parts.push(a);
   }
 
-  if (parts.length === 0) return { value: null, parts, missingRatio };
+  if (parts.length === 0) return { value: null, parts, missingRatio, conflicts: [] };
 
-  const raw = parts.reduce((acc, a) => acc * (a.ratio as number), 1);
+  // MỘT BỘ BA PHA CHỈ TÍNH MỘT LẦN. Điểm đo hạ thế thường có 3 TI giống hệt
+  // nhau, mỗi pha một cái — đó là MỘT lần biến đổi, không phải ba. Nhân cả ba
+  // sẽ ra 500 × 500 × 500 = 125.000.000 thay vì 500.
+  // (Lỗi này lộ ra khi user gửi ảnh thật 3 TI 2500/5 ngày 05/08.)
+  const conflicts: AssetType[] = [];
+  let raw = 1;
+  for (const t of RATIO_TYPES) {
+    const rs = [...new Set(parts.filter(a => a.type === t).map(a => a.ratio as number))];
+    if (rs.length === 0) continue;
+    // Nhiều tỷ số KHÁC NHAU cùng loại ⇒ dữ liệu sai hoặc lắp sai, không đoán bừa.
+    if (rs.length > 1) conflicts.push(t);
+    raw *= rs[0];
+  }
+
   // Làm tròn 6 chữ số: tỷ số là phép chia nên tích hay ra đuôi nhị phân
   // (VD 2000/5 × 22000/100 = 88000.00000000001).
-  return { value: Math.round(raw * 1e6) / 1e6, parts, missingRatio };
+  return { value: Math.round(raw * 1e6) / 1e6, parts, missingRatio, conflicts };
 }
 
 /** Chênh giữa HSN suy ra và HSN theo hóa đơn. null = chưa đủ dữ liệu để so. */
@@ -56,9 +71,17 @@ export function hsnMismatch(calc: number | null, invoice?: number): boolean | nu
 /** Diễn giải phép nhân để hiện trong tooltip: "2000/5 × 22000/100 = 88000". */
 export function hsnExplain(r: HsnResult): string {
   if (r.value == null) return 'Chưa treo TI/TU nào — không suy ra được hệ số nhân.';
-  const terms = r.parts.map(a => `${a.serial} ${a.ratio_primary}/${a.ratio_secondary}`);
+  // Gộp theo loại: 3 TI cùng bộ chỉ hiện MỘT số hạng, kèm số lượng.
+  const terms = RATIO_TYPES.flatMap(t => {
+    const g = r.parts.filter(a => a.type === t);
+    if (!g.length) return [];
+    const n = g.length;
+    return [`${t} ${g[0].ratio_primary}/${g[0].ratio_secondary}${n > 1 ? ` (bộ ${n} cái)` : ''}`];
+  });
   const s = `${terms.join(' × ')} = ${r.value}`;
-  return r.missingRatio.length
-    ? `${s}\n⚠ ${r.missingRatio.map(a => a.serial).join(', ')} chưa khai tỷ số.`
-    : s;
+  const warn = [
+    r.missingRatio.length ? `${r.missingRatio.map(a => a.serial).join(', ')} chưa khai tỷ số.` : '',
+    r.conflicts.length ? `${r.conflicts.join(', ')} có nhiều tỷ số khác nhau cùng treo — kiểm tra lại.` : '',
+  ].filter(Boolean);
+  return warn.length ? `${s}\n⚠ ${warn.join(' ')}` : s;
 }
