@@ -277,11 +277,13 @@ export default function CatalogAdmin() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {tab !== 'mkh' && (
           <div className="relative w-56">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
             <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Tìm..."
               className="w-full pl-10 pr-4 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none" />
           </div>
+          )}
           <button onClick={() => {
               if (dirtyCount > 0 && !window.confirm(`Còn ${dirtyCount} dòng chưa lưu. Tải lại sẽ mất thay đổi. Tiếp tục?`)) return;
               setDraft({}); load();
@@ -309,10 +311,12 @@ export default function CatalogAdmin() {
               <Upload className="w-4 h-4" />Thêm hàng loạt
             </button>
           )}
-          {editable && (
+          {/* Tab "Gắn khách hàng" không thêm bản ghi nào — nó chỉ nối điểm đo
+              với khách có sẵn, và có ô tìm + nút Lưu riêng của nó. */}
+          {editable && tab !== 'mkh' && (
             <button onClick={() => setEditing({ kind, record: null })}
               className="vl-btn vl-btn-primary vl-btn-sm">
-              <Plus className="w-4 h-4" />Thêm {ENTITY_LABEL[tab].toLowerCase()}
+              <Plus className="w-4 h-4" />Thêm {ENTITY_LABEL[kind].toLowerCase()}
             </button>
           )}
         </div>
@@ -377,7 +381,7 @@ export default function CatalogAdmin() {
                     <div className="min-w-0">
                       <h3 className="text-base font-black tracking-tight leading-tight truncate">{zone.name}</h3>
                       <p className="text-[11px] font-semibold opacity-80">
-                        {rows.length} {ENTITY_LABEL[tab].toLowerCase()}
+                        {rows.length} {ENTITY_LABEL[kind].toLowerCase()}
                       </p>
                     </div>
                   </div>
@@ -466,7 +470,7 @@ export default function CatalogAdmin() {
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
           <span className="text-soft">
             Hiện <strong className="text-ink">{(page - 1) * perPage + 1}–{Math.min(page * perPage, rowsRaw.length)}</strong>
-            {' '}trên <strong className="text-ink">{rowsRaw.length}</strong> {ENTITY_LABEL[tab].toLowerCase()}
+            {' '}trên <strong className="text-ink">{rowsRaw.length}</strong> {ENTITY_LABEL[kind].toLowerCase()}
             {dirtyCount > 0 && <span className="text-warn"> · {dirtyCount} dòng chưa lưu (giữ nguyên khi đổi trang)</span>}
           </span>
           <div className="flex items-center gap-2">
