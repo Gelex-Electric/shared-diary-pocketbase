@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, Plus, Search, Lock, AlertTriangle, Ban, Archive, Save, Undo2,
-  MapPin, Building2, Gauge, Package, ChevronDown,
+  MapPin, Building2, Gauge, Package, ChevronDown, Upload,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
 import { fetchCatalog, isAbortError, type CatalogData, hasRatio, viDate } from '../../lib/catalog';
@@ -17,6 +17,7 @@ import { Select } from '../ui/Select';
 import RecordForm from './RecordForm';
 import EditableTable, { type Draft } from './EditableTable';
 import AssetLifecycle from './AssetLifecycle';
+import BulkImportAssets from './BulkImportAssets';
 
 const EMPTY: CatalogData = {
   zones: [], stations: [], customers: [], points: [], periods: [],
@@ -40,6 +41,7 @@ export default function CatalogAdmin() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const [lifecycleId, setLifecycleId] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const editable = canEdit();
@@ -277,6 +279,12 @@ export default function CatalogAdmin() {
               </button>
             </>
           )}
+          {editable && tab === 'asset' && (
+            <button onClick={() => setBulkOpen(true)}
+              className="vl-btn vl-btn-secondary vl-btn-sm">
+              <Upload className="w-4 h-4" />Thêm hàng loạt
+            </button>
+          )}
           {editable && (
             <button onClick={() => setEditing({ kind: tab, record: null })}
               className="vl-btn vl-btn-primary vl-btn-sm">
@@ -446,6 +454,11 @@ export default function CatalogAdmin() {
       )}
 
 
+
+      {bulkOpen && (
+        <BulkImportAssets data={data} onClose={() => setBulkOpen(false)}
+          onDone={load} />
+      )}
 
       {editing && (
         <RecordForm kind={editing.kind} record={editing.record} data={data}
