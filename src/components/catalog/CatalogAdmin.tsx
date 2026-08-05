@@ -406,8 +406,10 @@ export default function CatalogAdmin() {
         /* Tab Vật tư: bảng bên trái + thẻ vòng đời bên phải, cùng bố cục với
            trang Sắp xếp điểm đo (user chốt 05/08). Các tab khác vẫn full chiều
            ngang vì không có thẻ chi tiết đi kèm. */
+        /* Ty le 3/4 - 1/4 (user chot 05/08): bang la thu lam viec chinh, the chi
+           tiet chi de tra cuu nen khong can rong bang do. */
         <div className={tab === 'asset' && lifecycleAsset
-          ? 'grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-4 items-start'
+          ? 'grid grid-cols-1 xl:grid-cols-[3fr_1fr] gap-4 items-start'
           : ''}>
           <div className="overflow-hidden bg-surface min-w-0">
             <EditableTable

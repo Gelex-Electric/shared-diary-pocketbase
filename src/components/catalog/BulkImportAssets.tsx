@@ -4,6 +4,8 @@ import { pb } from '../../lib/pocketbase';
 import { toast as notify } from '../../lib/toast';
 import { type CatalogData, ASSET_TYPES, ASSET_TYPE_LABEL } from '../../lib/catalog';
 import { parseAssets, type ParsedRow } from '../../lib/assetImport';
+import { parseRatioText } from '../../lib/ratio';
+import { DatePicker } from '../ui/DateTimePickers';
 import { Select } from '../ui/Select';
 
 /**
@@ -21,8 +23,9 @@ import { Select } from '../ui/Select';
 const GRID_COLS = [
   { key: 'so_hieu', label: 'Số hiệu *', w: 'w-40' },
   { key: 'loai', label: 'Loại *', w: 'w-28' },
-  { key: 'so_cap', label: 'Sơ cấp', w: 'w-24' },
-  { key: 'thu_cap', label: 'Thứ cấp', w: 'w-20' },
+  // MOT o ty so dang 2500/5 (user chot 05/08) - giong o Ty so cua bang vat tu,
+  // khong bat nguoi dung tach so cap / thu cap ra hai o.
+  { key: 'ty_so', label: 'Tỷ số', w: 'w-28' },
   { key: 'hang_sx', label: 'Hãng SX', w: 'w-28' },
   { key: 'cap_chinh_xac', label: 'Cấp CX', w: 'w-20' },
   { key: 'nam_sx', label: 'Năm SX', w: 'w-20' },
@@ -38,7 +41,19 @@ const TSV_ORDER = [
 ];
 
 type Row = Record<string, string>;
-const emptyRow = (): Row => Object.fromEntries(TSV_ORDER.map(k => [k, '']));
+const emptyRow = (): Row =>
+  ({ ...Object.fromEntries(TSV_ORDER.map(k => [k, ''])), ty_so: '' });
+
+/** `2500/5` -> hai o so_cap / thu_cap ma `parseAssets` dang cho doi. */
+function withRatio(r: Row): Row {
+  const t = (r.ty_so || '').trim();
+  if (!t) return r;
+  const p = parseRatioText(t);
+  // Go sai dinh dang: de nguyen vao so_cap de parseAssets bao loi thieu thu cap
+  // thay vi im lang bo qua.
+  if (!p || p.ratio_primary == null) return { ...r, so_cap: t, thu_cap: '' };
+  return { ...r, so_cap: String(p.ratio_primary), thu_cap: String(p.ratio_secondary) };
+}
 
 export default function BulkImportAssets({
   data, onClose, onDone,
@@ -48,7 +63,6 @@ export default function BulkImportAssets({
   const [docNo, setDocNo] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ made: number; failed: number } | null>(null);
-  const today = new Date().toISOString().slice(0, 10);
 
   /** Dòng có ít nhất một ô có chữ — dòng trống hoàn toàn thì bỏ qua. */
   const filled = useMemo(
@@ -59,7 +73,10 @@ export default function BulkImportAssets({
   /** Kiểm bằng chính `parseAssets`: ghép về TSV không tiêu đề, giữ ánh xạ dòng. */
   const parsed = useMemo(() => {
     if (filled.length === 0) return [] as ParsedRow[];
-    const tsv = filled.map(({ r }) => TSV_ORDER.map(c => r[c] ?? '').join('\t')).join('\n');
+    const tsv = filled.map(({ r }) => {
+      const w = withRatio(r);
+      return TSV_ORDER.map(c => w[c] ?? '').join('\t');
+    }).join('\n');
     return parseAssets(tsv, data);
   }, [filled, data]);
 
@@ -180,15 +197,13 @@ export default function BulkImportAssets({
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
-          <label className="block">
-            <span className="text-xs font-semibold text-soft">Ngày nhập kho *</span>
-            <input type="date" value={date} max={today} onChange={e => setDate(e.target.value)}
-              className="mt-1 block px-3 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none" />
-          </label>
+          <DatePicker value={date} onChange={setDate}
+            label="Ngày nhập kho *" className="w-[150px]" usePortal />
           <label className="block">
             <span className="text-xs font-semibold text-soft">Số biên bản / phiếu nhập</span>
             <input type="text" value={docNo} onChange={e => setDocNo(e.target.value)} placeholder="VD: PN-2026-07"
-              className="mt-1 block px-3 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none" />
+              className="mt-1 block px-3 py-2 border border-[var(--border)] bg-surface rounded text-dim text-sm
+                focus:outline-none focus:ring-1 focus:ring-accent w-[180px]" />
           </label>
         </div>
 
@@ -232,13 +247,17 @@ export default function BulkImportAssets({
                             placeholder="—" variant="bare" searchable={data.warehouses.length > 8}
                             className="w-full px-2 py-1.5 rounded-none border-0 text-xs font-bold"
                           />
+                        ) : c.key === 'ngay_kiem_dinh' ? (
+                          <DatePicker value={r.ngay_kiem_dinh ?? ''}
+                            onChange={v => setCell(i, 'ngay_kiem_dinh', v)}
+                            className="w-full" usePortal />
                         ) : (
                           <input
-                            type={c.key === 'ngay_kiem_dinh' ? 'date' : 'text'}
+                            type="text"
                             value={r[c.key] ?? ''}
                             onChange={e => setCell(i, c.key, e.target.value)}
                             onPaste={e => onPaste(e, i, ci)}
-                            placeholder={c.key === 'so_cap' ? '2500' : c.key === 'thu_cap' ? '5' : ''}
+                            placeholder={c.key === 'ty_so' ? '2500/5' : ''}
                             className={cellCls}
                           />
                         )}

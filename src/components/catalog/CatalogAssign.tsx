@@ -312,7 +312,7 @@ export default function CatalogAssign() {
           <RefreshCw className="w-10 h-10 animate-spin mb-4" /><p>Đang tải...</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-4 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-[3fr_1fr] gap-4 items-start">
           <div className="overflow-x-auto bg-surface">
             <table className="vl-table vl-table-grid w-full text-left border-collapse">
               <thead>
