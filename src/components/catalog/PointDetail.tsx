@@ -1,6 +1,7 @@
 import {
   Gauge, Building2, MapPin, User, History, AlertTriangle, Users, Package,
 } from 'lucide-react';
+import { hsnOfPoint, hsnExplain } from '../../lib/hsn';
 import {
   type CatalogData, type Point, POINT_STATUS_LABEL, viDate, periodsOfPoint,
   assetsAtPoint, isOverdue, ASSET_TYPE_LABEL, isMeter,
@@ -37,6 +38,7 @@ export default function PointDetail({
     ? data.points.filter(p => p.station === station.id && p.id !== point.id)
     : [];
 
+  const hsn = hsnOfPoint(data, point.id);
   const hsnBad = point.hsn_invoice === 0 || (point.hsn_invoice ?? 0) > 100000;
 
   return (
@@ -97,7 +99,9 @@ export default function PointDetail({
           </div>
           <div>
             <p className="text-xs text-faint">Suy từ TI × TU</p>
-            <p className="font-mono font-bold text-faint">{point.hsn_calc ?? 'chưa có'}</p>
+            <p className="font-mono font-bold text-faint" title={hsnExplain(hsn)}>
+              {hsn.value ?? 'chưa có'}{hsn.missingRatio.length ? ' ⚠' : ''}
+            </p>
           </div>
         </div>
         {hsnBad && (

@@ -122,6 +122,8 @@ export interface FieldDef {
   hint?: string;
   /** Chỉ hiện khi hàm này trả true (VD tỷ số chỉ cho TI/TU) */
   showIf?: (v: Record<string, any>) => boolean;
+  /** Chỉ đọc: hiện để đối chứng nhưng không cho sửa (VD HSN theo hóa đơn). */
+  readOnly?: boolean;
 }
 
 export function fieldsOf(kind: EntityKind): FieldDef[] {
@@ -164,7 +166,10 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
             { value: 'dismounted', label: 'Đã tháo' },
           ],
         },
-        { name: 'hsn_invoice', label: 'HSN theo hóa đơn', type: 'number', hint: 'Chỉ để đối chứng' },
+        {
+          name: 'hsn_invoice', label: 'HSN theo hóa đơn', type: 'number', readOnly: true,
+          hint: 'Lấy từ hóa đơn CCIS để đối chứng — hệ số nhân dùng thật được suy từ TI/TU đang treo',
+        },
         { name: 'note', label: 'Ghi chú', type: 'text' },
       ];
     case 'asset':
@@ -278,7 +283,17 @@ function columnsOfRaw(kind: EntityKind): Array<ColumnDef | null> {
         asCol('station', { relFrom: 'station', width: 'w-[24%]' }),
         asCol('role', { tag: 'role', width: 'w-[12%]' }),
         asCol('point_status', { tag: 'point_status', width: 'w-[15%]' }),
-        asCol('hsn_invoice', { width: 'w-[9%]' }),
+        // HSN KHÔNG cho gõ tay (user chốt 05/08): suy từ TI/TU đang treo.
+        // `hsn_invoice` giữ lại làm ĐỐI CHỨNG với hóa đơn, cũng chỉ đọc vì nó
+        // là dữ liệu lấy về từ CCIS chứ không phải thứ tự khai.
+        {
+          key: '_hsn_calc', label: 'HSN suy ra', kind: 'readonly', width: 'w-[11%]',
+          hint: 'Tích tỷ số của TI và TU đang treo. Dấu ⚠ = có TI/TU chưa khai tỷ số nên số này chưa đủ.',
+        },
+        {
+          key: 'hsn_invoice', label: 'HSN hóa đơn', kind: 'readonly', width: 'w-[10%]',
+          hint: 'Lấy từ hóa đơn CCIS, chỉ để đối chứng',
+        },
         { key: '_assets', label: 'Vật tư', kind: 'readonly', width: 'w-[8%]' },
       ];
     case 'asset':
@@ -290,6 +305,10 @@ function columnsOfRaw(kind: EntityKind): Array<ColumnDef | null> {
         asCol('next_calibration', { width: 'w-32' }),
         asCol('current_status', { tag: 'asset_status', width: 'w-36' }),
         { key: '_location', label: 'Vị trí', kind: 'readonly', tag: 'location', width: 'w-32' },
+        {
+          key: '_mounted', label: 'Ngày treo/tháo', kind: 'readonly', width: 'w-32',
+          hint: 'Ngày treo của lần đang treo, hoặc ngày tháo của lần treo gần nhất',
+        },
       ];
     case 'warehouse':
       return [asCol('code'), asCol('name'), asCol('zone')];

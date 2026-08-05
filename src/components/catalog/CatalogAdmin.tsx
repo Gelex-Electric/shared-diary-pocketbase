@@ -4,7 +4,8 @@ import {
   MapPin, Building2, Gauge, Package, ChevronDown,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
-import { fetchCatalog, isAbortError, type CatalogData, hasRatio } from '../../lib/catalog';
+import { fetchCatalog, isAbortError, type CatalogData, hasRatio, viDate } from '../../lib/catalog';
+import { hsnOfPoint } from '../../lib/hsn';
 import { canEdit } from '../../lib/assign';
 import {
   type EntityKind, ENTITY_LABEL, deleteBlockers, assetHasLedger,
@@ -169,6 +170,24 @@ export default function CatalogAdmin() {
           ? data.points.filter(p => p.zone === rec.id).length
           : data.points.filter(p => p.station === rec.id).length);
       case '_assets': return String(data.installs.filter(i => i.point === rec.id && i.is_current).length);
+
+      // HSN suy từ TI/TU đang treo — KHÔNG lấy số gõ tay (user chốt 05/08).
+      case '_hsn_calc': {
+        const r = hsnOfPoint(data, rec.id);
+        if (r.value == null) return '—';
+        return r.missingRatio.length ? `${r.value} ⚠` : String(r.value);
+      }
+
+      // Ngày treo hiện tại, hoặc ngày tháo của lần treo gần nhất.
+      case '_mounted': {
+        const cur = data.installs.find(i => i.asset === rec.id && i.is_current);
+        if (cur) return `treo ${viDate(cur.from_date)}`;
+        const past = data.installs
+          .filter(i => i.asset === rec.id && i.to_date)
+          .sort((x, y) => String(y.to_date).localeCompare(String(x.to_date)))[0];
+        return past ? `tháo ${viDate(past.to_date)}` : '—';
+      }
+
       default: return '';
     }
   }, [data, tab]);

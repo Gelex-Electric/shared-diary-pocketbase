@@ -116,7 +116,8 @@ export default function RecordForm({
                     type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                     value={v[f.name] ?? ''}
                     onChange={e => setV({ ...v, [f.name]: e.target.value })}
-                    className={common}
+                    readOnly={f.readOnly}
+                    className={`${common} ${f.readOnly ? 'bg-subtle text-faint cursor-not-allowed' : ''}`}
                   />
                 )}
                 {f.hint && <span className="text-[0.7rem] text-faint">{f.hint}</span>}
