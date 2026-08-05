@@ -3,6 +3,7 @@ import { KCN_COLOR } from '../../lib/kcnColors';
 import type { CatalogData } from '../../lib/catalog';
 import { type ColumnDef, type EntityKind, ratioText } from '../../lib/catalogCrud';
 import { Select } from '../ui/Select';
+import { DatePicker } from '../ui/DateTimePickers';
 import {
   ZoneTag, RoleTag, PointStatusTag, AssetTypeTag, AssetStatusTag, LocationTag, OverdueTag,
 } from './tags';
@@ -153,9 +154,17 @@ export default function EditableTable({
       );
     }
 
+    if (c.kind === 'date') {
+      return (
+        <DatePicker value={String(v ?? '').slice(0, 10)}
+          onChange={val => onChange(rec.id, c.key, val)}
+          bare usePortal className={`w-full ${ring}`} />
+      );
+    }
+
     return (
       <input
-        type={c.kind === 'number' ? 'number' : c.kind === 'date' ? 'date' : 'text'}
+        type={c.kind === 'number' ? 'number' : 'text'}
         value={v ?? ''}
         onChange={e => onChange(rec.id, c.key, e.target.value)}
         placeholder={c.key === 'ratio_text' ? '2000/5' : ''}

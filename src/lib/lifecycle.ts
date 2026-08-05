@@ -192,3 +192,65 @@ export async function applyLifecycle(
     }
   }
 }
+
+/**
+ * Sửa NGÀY của một sự kiện trong sổ cái (user chốt 05/08).
+ *
+ * Sổ cái vốn bất biến. Mở đường sửa vì nhập sai ngày là chuyện xảy ra thật, mà
+ * không sửa được thì người dùng sẽ ghi thêm một sự kiện "bù" cho đủ — sổ cái có
+ * hai dòng mâu thuẫn còn tệ hơn. Bù lại:
+ *   - KHÔNG xóa được sự kiện (`deleteRule` vẫn khóa).
+ *   - Mỗi lần sửa để lại MỘT DÒNG VẾT trong `note`, không ghi đè nội dung cũ.
+ *   - Ngày bị nhân bản ở nơi khác (vt_install, hạn kiểm định) được sửa THEO,
+ *     nếu không thì sổ cái nói một đằng, bảng vật tư nói một nẻo.
+ */
+export async function editEventDate(
+  ev: LedgerEvent, newDate: string, asset: Asset,
+): Promise<string> {
+  const oldDate = (ev.at || '').slice(0, 10);
+  const nd = newDate.slice(0, 10);
+  if (!nd) throw new Error('Chưa chọn ngày');
+  if (nd === oldDate) return 'Ngày không đổi';
+  if (nd > new Date().toISOString().slice(0, 10)) throw new Error('Không đặt ngày ở tương lai');
+
+  const vi = (d: string) => d.split('-').reverse().join('/');
+  const trail = `[sửa ngày ${vi(oldDate)} → ${vi(nd)}]`;
+  await pb.collection('vt_event').update(ev.id, {
+    at: nd,
+    note: ev.note ? `${ev.note} ${trail}` : trail,
+  });
+
+  const theoSau: string[] = [];
+
+  // Ngày treo / tháo còn nằm ở vt_install — phải sửa theo, nếu không thì cột
+  // "Ngày treo/tháo" ở bảng vật tư vẫn hiện ngày cũ.
+  if (ev.event === 'treo' || ev.event === 'thao') {
+    const field = ev.event === 'treo' ? 'from_date' : 'to_date';
+    const list = await pb.collection('vt_install').getFullList<{ id: string }>({
+      filter: `asset="${ev.asset}" && ${field}>="${oldDate} 00:00:00" && ${field}<="${oldDate} 23:59:59"`,
+      requestKey: null,
+    });
+    for (const it of list) {
+      await pb.collection('vt_install').update(it.id, { [field]: nd });
+      theoSau.push('lần treo/tháo');
+    }
+  }
+
+  // Kết quả kiểm định ĐẠT: hạn kiểm định tính TỪ ngày này nên phải tính lại.
+  if (ev.event === 'ket_qua_kiem_dinh' && ev.result === 'dat'
+      && (asset.calibration_date || '').slice(0, 10) === oldDate) {
+    const span = calibrationSpan(asset.type);
+    const patch: Record<string, unknown> = { calibration_date: nd };
+    if (span) {
+      const nx = new Date(nd);
+      nx.setFullYear(nx.getFullYear() + span);
+      patch.next_calibration = nx.toISOString().slice(0, 10);
+    }
+    await pb.collection('vt_asset').update(asset.id, patch);
+    theoSau.push(span ? `hạn kiểm định → ${String(patch.next_calibration)}` : 'ngày kiểm định');
+  }
+
+  return theoSau.length
+    ? `Đã sửa ${vi(oldDate)} → ${vi(nd)}, cập nhật theo: ${theoSau.join(', ')}`
+    : `Đã sửa ${vi(oldDate)} → ${vi(nd)}`;
+}

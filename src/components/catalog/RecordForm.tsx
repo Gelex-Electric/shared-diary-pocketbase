@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { CatalogData } from '../../lib/catalog';
 import { Select } from '../ui/Select';
+import { DatePicker } from '../ui/DateTimePickers';
 import {
   type EntityKind, type FieldDef, fieldsOf, ENTITY_LABEL, parseRatioText,
 } from '../../lib/catalogCrud';
@@ -111,9 +112,15 @@ export default function RecordForm({
                       searchable={(f.type === 'rel' ? relOptions(f) : (f.options ?? [])).length > 8}
                     />
                   </div>
+                ) : f.type === 'date' ? (
+                  <div className="mt-1">
+                    <DatePicker value={String(v[f.name] ?? '').slice(0, 10)}
+                      onChange={val => setV({ ...v, [f.name]: val })}
+                      className="w-full" usePortal />
+                  </div>
                 ) : (
                   <input
-                    type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                    type={f.type === 'number' ? 'number' : 'text'}
                     value={v[f.name] ?? ''}
                     onChange={e => setV({ ...v, [f.name]: e.target.value })}
                     readOnly={f.readOnly}

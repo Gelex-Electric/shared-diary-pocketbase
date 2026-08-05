@@ -250,7 +250,7 @@ export default function BulkImportAssets({
                         ) : c.key === 'ngay_kiem_dinh' ? (
                           <DatePicker value={r.ngay_kiem_dinh ?? ''}
                             onChange={v => setCell(i, 'ngay_kiem_dinh', v)}
-                            className="w-full" usePortal />
+                            bare usePortal className="w-full" />
                         ) : (
                           <input
                             type="text"

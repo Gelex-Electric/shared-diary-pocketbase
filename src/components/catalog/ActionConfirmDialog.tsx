@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import type { EventPayload } from '../../lib/assign';
+import { DatePicker } from '../ui/DateTimePickers';
 
 export interface ActionRequest {
   title: string;
@@ -77,12 +78,11 @@ export default function ActionConfirmDialog({
 
         {request.needsDate && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-xs font-semibold text-soft">Ngày hiệu lực *</span>
-              <input type="date" value={date} max={today} onChange={e => setDate(e.target.value)}
-                className="mt-1 w-full px-3 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none" />
+            <div>
+              <DatePicker value={date} onChange={setDate}
+                label="Ngày hiệu lực *" className="w-full" usePortal />
               <span className="text-[0.7rem] text-faint">Ngày thao tác thật ngoài hiện trường</span>
-            </label>
+            </div>
             <label className="block">
               <span className="text-xs font-semibold text-soft">Số biên bản</span>
               <input type="text" value={documentNo} placeholder="VD: BB-2026-014"

@@ -42,9 +42,12 @@ interface DatePickerProps {
   /** Render dropdown qua portal (document.body) với position: fixed — dùng khi
    *  picker nằm trong card/bảng có overflow-hidden/overflow-auto khiến dropdown bị che. */
   usePortal?: boolean;
+  /** Không viền, không bo góc — dùng khi nằm trong ô của bảng sửa trực tiếp
+   *  (kiểu bảng tính). Mặc định false nên phần còn lại của app không đổi. */
+  bare?: boolean;
 }
 
-export function DatePicker({ value, onChange, label, className = '', usePortal = false }: DatePickerProps) {
+export function DatePicker({ value, onChange, label, className = '', usePortal = false, bare = false }: DatePickerProps) {
   const today = new Date();
 
   const parse = (v: string) => {
@@ -195,7 +198,7 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
   const displayVal = parsed ? `${p2(parsed.d)}/${p2(parsed.mo + 1)}/${parsed.y}` : '';
 
   return (
-    <div ref={wrapperRef} className={`space-y-1 relative ${className}`}>
+    <div ref={wrapperRef} className={`${bare ? "" : "space-y-1"} relative ${className}`}>
       {label && (
         <label className="text-[10px] font-bold text-faint uppercase flex items-center gap-1 select-none pointer-events-none">
           <Calendar className="w-3 h-3" /> {label}
@@ -205,11 +208,14 @@ export function DatePicker({ value, onChange, label, className = '', usePortal =
       {/* Trigger input — cho phép gõ tay dd/mm/yyyy */}
       <div
         ref={triggerRef}
-        className={`relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-surface border rounded-lg
-                    text-sm font-bold transition-all
-                    ${open
-                      ? 'ring-2 ring-accent border-accent'
-                      : 'border-[var(--border)] hover:border-accent/50 focus-within:ring-2 focus-within:ring-accent focus-within:border-accent'}`}
+        className={bare
+          ? `relative flex items-center gap-1.5 w-full px-2 py-1.5 border-0 rounded-none text-sm
+             ${open ? 'bg-accent-soft' : 'bg-transparent'}`
+          : `relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-surface border rounded-lg
+             text-sm font-bold transition-all
+             ${open
+               ? 'ring-2 ring-accent border-accent'
+               : 'border-[var(--border)] hover:border-accent/50 focus-within:ring-2 focus-within:ring-accent focus-within:border-accent'}`}
       >
         <Calendar
           onClick={() => setOpen(o => !o)}

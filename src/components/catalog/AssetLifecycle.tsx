@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   X, RefreshCw, AlertTriangle, PackagePlus, ArrowLeftRight, Gauge,
-  ArrowDownToLine, ArrowUpFromLine, ShieldCheck, Trash2, Info,
+  ArrowDownToLine, ArrowUpFromLine, ShieldCheck, Trash2, Info, Pencil,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
 import { type Asset, type CatalogData, viDate, ASSET_TYPE_LABEL, isAbortError } from '../../lib/catalog';
 import {
-  fetchLedger, actionsFor, noActionReason, applyLifecycle, EVENT_LABEL,
+  fetchLedger, actionsFor, noActionReason, applyLifecycle, editEventDate, EVENT_LABEL,
   type ActionDef, type ActionId, type LedgerEvent,
 } from '../../lib/lifecycle';
 import { Select } from '../ui/Select';
 import { AssetTypeTag, AssetStatusTag, LocationTag, OverdueTag } from './tags';
+import { DatePicker } from '../ui/DateTimePickers';
 
 const EVENT_ICON: Record<string, typeof Info> = {
   nhap_kho: PackagePlus, dieu_chuyen: ArrowLeftRight, treo: ArrowUpFromLine,
@@ -44,6 +45,8 @@ export default function AssetLifecycle({
   const [note, setNote] = useState('');
   const [whId, setWhId] = useState('');
   const [busy, setBusy] = useState(false);
+  /** Sự kiện đang sửa ngày — sổ cái bất biến nên đây là ngoại lệ có kiểm soát. */
+  const [editDate, setEditDate] = useState<{ id: string; val: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,6 +80,20 @@ export default function AssetLifecycle({
         ? Object.entries(e.response.data).map(([k, x]: any) => `${k}: ${x?.message ?? x}`).join('; ')
         : (e?.message || String(e));
       notify.show('error', 'Không ghi được', detail);
+    } finally { setBusy(false); }
+  };
+
+  const saveDate = async (ev: LedgerEvent) => {
+    if (!editDate) return;
+    setBusy(true);
+    try {
+      const msg = await editEventDate(ev, editDate.val, asset);
+      notify.show('success', 'Đã sửa ngày', msg);
+      setEditDate(null);
+      await load();
+      onChanged();
+    } catch (e: any) {
+      notify.show('error', 'Không sửa được', e?.message || String(e));
     } finally { setBusy(false); }
   };
 
@@ -140,11 +157,8 @@ export default function AssetLifecycle({
             <div className="mt-3 p-3 rounded border border-[var(--border)] bg-subtle space-y-3">
               <p className="text-sm font-bold text-ink">{act.label}</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <label className="block">
-                  <span className="text-xs font-semibold text-soft">Ngày hiệu lực *</span>
-                  <input type="date" value={date} max={today} onChange={e => setDate(e.target.value)}
-                    className="mt-1 w-full px-3 py-2 bg-surface border border-[var(--border)] rounded text-sm outline-none focus:ring-2 focus:ring-accent" />
-                </label>
+                <DatePicker value={date} onChange={setDate}
+                  label="Ngày hiệu lực *" className="w-full" usePortal />
                 <label className="block">
                   <span className="text-xs font-semibold text-soft">Số biên bản</span>
                   <input type="text" value={docNo} onChange={e => setDocNo(e.target.value)} placeholder="BB-2026-…"
@@ -225,7 +239,29 @@ export default function AssetLifecycle({
                             {ev.result === 'dat' ? 'ĐẠT' : 'KHÔNG ĐẠT'}
                           </span>
                         )}
-                        <span className="text-xs text-faint">{viDate(ev.at)}</span>
+                        {editDate?.id === ev.id ? (
+                          <span className="flex items-center gap-1.5">
+                            <DatePicker value={editDate.val}
+                              onChange={v => setEditDate({ id: ev.id, val: v })}
+                              className="w-[132px]" usePortal />
+                            <button onClick={() => saveDate(ev)} disabled={busy}
+                              className="vl-btn vl-btn-primary vl-btn-sm">Lưu</button>
+                            <button onClick={() => setEditDate(null)} disabled={busy}
+                              className="vl-btn vl-btn-secondary vl-btn-sm">Hủy</button>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-faint flex items-center gap-1">
+                            {viDate(ev.at)}
+                            {canEditNow && (
+                              <button
+                                onClick={() => setEditDate({ id: ev.id, val: (ev.at || '').slice(0, 10) })}
+                                className="p-0.5 text-faint hover:text-accent transition-colors"
+                                title="Sửa ngày (nhập sai)">
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+                          </span>
+                        )}
                         {ev.document_no && <span className="text-xs font-mono text-soft">{ev.document_no}</span>}
                       </div>
                       {(from || to) && (
