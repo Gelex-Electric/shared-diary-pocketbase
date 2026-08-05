@@ -29,6 +29,14 @@ XLSX = os.environ.get("KHO_XLSX") or (
     r"Tệp của Nguyen Tai Dung - 2. GETC - Hồ sơ lưu KT-VH/"
     r"9. Quản lý kho/Quản lý kho V2.xlsx")
 
+# CAM GHEP MO. Ba cap nay khac SO HIEU MAY / khac nha xuong nen may khong the
+# tu phan biet "viet tat khac nhau" voi "hai may khac nhau" (user chot 05/08).
+KHONG_GHEP = {
+    "TTI.DOVEY.T2.2500kVA",
+    "TTI.JOHNSON1.T1.2000kVA",
+    "YM.TITAN.NX8.5.MATIN",
+}
+
 KHO_PAT = re.compile(r"DỰ PHÒNG|THU HỒI|TRẢ|THANH LÝ|GETC", re.U)
 
 
@@ -54,6 +62,36 @@ def read_excel_points():
             "thanh_ly": r[4],
         })
     return out
+
+
+def build_alias(token, cutoff=0.80):
+    """Ten Excel -> ban ghi dm_point, theo DUNG cach ghep user da duyet o buoc 4.
+
+    Vi sao khong dua vao `ops_name`: mot ban ghi PB chi giu duoc MOT ten van
+    hanh, trong khi nhieu ten Excel co the tro ve cung mot diem do (VD
+    03.NHUABINHTHUAN.1250KVA -> 03.NHUABINHTHUAN.2000kVA). Dua vao ops_name se
+    tao diem do TRUNG.
+    """
+    import difflib
+    pts = pb.list_records(token, "dm_point")
+    by_norm = {}
+    for p in pts:
+        for nm in (p.get("line_name"), p.get("ops_name")):
+            if nm:
+                by_norm.setdefault(norm(nm), p)
+    alias = dict(by_norm)
+    for x in read_excel_points():
+        if KHO_PAT.search(x["ten"].upper()):
+            continue
+        if x["ten"] in KHONG_GHEP:
+            continue
+        n = norm(x["ten"])
+        if n in alias:
+            continue
+        m = difflib.get_close_matches(n, list(by_norm.keys()), n=1, cutoff=cutoff)
+        if m:
+            alias[n] = by_norm[m[0]]
+    return alias, pts
 
 
 def main():
