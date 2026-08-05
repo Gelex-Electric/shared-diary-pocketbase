@@ -6,6 +6,7 @@ import {
 import { toast as notify } from '../../lib/toast';
 import { fetchCatalog, isAbortError, type CatalogData, hasRatio, viDate } from '../../lib/catalog';
 import { hsnOfPoint } from '../../lib/hsn';
+import { validateCatalog } from '../../lib/validate';
 import { canEdit } from '../../lib/assign';
 import {
   type EntityKind, ENTITY_LABEL, deleteBlockers, assetHasLedger,
@@ -18,6 +19,7 @@ import RecordForm from './RecordForm';
 import EditableTable, { type Draft } from './EditableTable';
 import AssetLifecycle from './AssetLifecycle';
 import BulkImportAssets from './BulkImportAssets';
+import ValidationBar from './ValidationBar';
 
 const EMPTY: CatalogData = {
   zones: [], stations: [], customers: [], points: [], periods: [],
@@ -47,6 +49,9 @@ export default function CatalogAdmin() {
   const editable = canEdit();
 
   const lifecycleAsset = lifecycleId ? data.assets.find(a => a.id === lifecycleId) ?? null : null;
+
+  // Soat rang buoc ngay tren du lieu da nap - xem `src/lib/validate.ts`.
+  const validation = useMemo(() => validateCatalog(data), [data]);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -293,6 +298,8 @@ export default function CatalogAdmin() {
           )}
         </div>
       </div>
+
+      {!isLoading && <ValidationBar result={validation} />}
 
       {!editable && (
         <p className="text-xs bg-subtle text-soft font-bold px-3 py-2 rounded flex items-center gap-2">
