@@ -2,6 +2,7 @@ import { Trash2, History } from 'lucide-react';
 import { KCN_COLOR } from '../../lib/kcnColors';
 import type { CatalogData } from '../../lib/catalog';
 import { type ColumnDef, type EntityKind, ratioText } from '../../lib/catalogCrud';
+import { Select } from '../ui/Select';
 import {
   ZoneTag, RoleTag, PointStatusTag, AssetTypeTag, AssetStatusTag, LocationTag, OverdueTag,
 } from './tags';
@@ -113,10 +114,12 @@ export default function EditableTable({
     const dirty = isDirty(rec, c.key);
 
     if (c.kind === 'readonly') {
+      // Cột tính toán (_stations/_points/_assets): bản ghi KHÔNG có trường tên đó
+      // nên trước đây readTag trả '—' rồi vẽ thêm số ⇒ hiện thành "—22".
+      // Giờ: có tag thì vẽ tag, không thì CHỈ vẽ giá trị tính được.
       return (
         <div className="px-2 py-1.5 flex items-center gap-1.5">
-          {readTag(rec, c.tag ? c : { ...c, tag: undefined })}
-          {c.tag ? null : <span className="text-dim">{computeCell(rec, c.key)}</span>}
+          {c.tag ? readTag(rec, c) : <span className="text-dim">{computeCell(rec, c.key) || '—'}</span>}
           {kind === 'asset' && c.key === '_location' && <OverdueTag asset={rec} />}
         </div>
       );
@@ -129,14 +132,19 @@ export default function EditableTable({
 
     if (c.kind === 'select' || c.kind === 'rel') {
       const opts = c.kind === 'rel' ? relOptions(c) : (c.options ?? []);
+      // Dùng <Select> của app (có ô tìm kiếm khi danh sách dài).
+      // variant="bare" để khung ngoài mang MÀU theo giá trị đang chọn.
       return (
-        <select value={v ?? ''} onChange={e => onChange(rec.id, c.key, e.target.value)}
-          className={`w-full px-2 py-1.5 rounded-lg border text-xs font-bold outline-none cursor-pointer
-            transition-all hover:border-accent/50 focus:ring-2 focus:ring-accent focus:border-accent
-            ${selectTone(c, String(v))} ${ring}`}>
-          <option value="">—</option>
-          {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        <Select
+          value={String(v ?? '')}
+          onChange={val => onChange(rec.id, c.key, val)}
+          options={opts}
+          placeholder="—"
+          searchable={opts.length > 8}
+          variant="bare"
+          className={`px-2 py-1 rounded-lg border text-xs font-bold cursor-pointer
+            transition-all hover:border-accent/50 ${selectTone(c, String(v))} ${ring}`}
+        />
       );
     }
 
@@ -155,7 +163,7 @@ export default function EditableTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="vl-table vl-table-compact w-full text-left border-collapse">
+      <table className="vl-table vl-table-compact vl-table-grid w-full text-left border-collapse">
         <thead>
           <tr>
             <th className="w-1 !p-0" />

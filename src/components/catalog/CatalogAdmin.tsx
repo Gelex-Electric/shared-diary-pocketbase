@@ -304,7 +304,7 @@ export default function CatalogAdmin() {
             const isOpen = !collapsed[zone.id];
             const dirtyHere = rows.filter((r: any) => draft[r.id]).length;
             return (
-              <div key={zone.id} className="vl-card overflow-hidden">
+              <div key={zone.id} className="vl-card overflow-hidden !rounded-none">
                 <div
                   onClick={() => setCollapsed(c => ({ ...c, [zone.id]: !c[zone.id] }))}
                   className="bg-accent px-5 py-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
@@ -350,7 +350,7 @@ export default function CatalogAdmin() {
           })}
 
           {orphanRows.length > 0 && (
-            <div className="vl-card overflow-hidden">
+            <div className="vl-card overflow-hidden !rounded-none">
               <div className="bg-[var(--warning)] px-5 py-3.5 flex items-center gap-3 text-white">
                 <AlertTriangle className="w-5 h-5 shrink-0" />
                 <div>
@@ -367,7 +367,7 @@ export default function CatalogAdmin() {
           )}
         </div>
       ) : (
-        <div className="vl-card overflow-hidden">
+        <div className="vl-card overflow-hidden !rounded-none">
           <EditableTable
             kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
             editable={editable} onChange={onChange} onDelete={askDelete}

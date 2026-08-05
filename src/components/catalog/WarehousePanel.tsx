@@ -27,25 +27,35 @@ export default function WarehousePanel({
 
   const warehouse = data.warehouses.find(w => w.zone === zoneId);
 
-  /** Vật tư trong kho của KCN này + vật tư chưa gán kho nào (để không bị mất dấu). */
+  /**
+   * CHỈ vật tư được nhập về ĐÚNG KHO của KCN này (user chốt 03/08).
+   * Vật tư chưa gán kho đếm riêng bên dưới để không bị mất dấu.
+   */
   const inStock = useMemo(() => {
     const t = term.trim().toLowerCase();
+    if (!warehouse) return [];
     return data.assets.filter(a => {
       if (a.current_status !== 'kho' && a.current_status !== 'dat') return false;
-      const mine = warehouse ? a.current_warehouse === warehouse.id : false;
-      if (!mine && a.current_warehouse) return false;   // thuộc kho KCN khác
+      if (a.current_warehouse !== warehouse.id) return false;
       if (type && a.type !== type) return false;
       if (t && !a.serial.toLowerCase().includes(t)) return false;
       return true;
     });
   }, [data.assets, warehouse, term, type]);
 
+  /** Vật tư trong kho nhưng chưa biết thuộc kho nào — cần gán. */
+  const noWarehouse = useMemo(
+    () => data.assets.filter(a =>
+      (a.current_status === 'kho' || a.current_status === 'dat') && !a.current_warehouse),
+    [data.assets],
+  );
+
   const countByType = useMemo(() => {
     const c: Record<string, number> = {};
+    if (!warehouse) return c;
     for (const a of data.assets) {
       if (a.current_status !== 'kho' && a.current_status !== 'dat') continue;
-      const mine = warehouse ? a.current_warehouse === warehouse.id : false;
-      if (!mine && a.current_warehouse) continue;
+      if (a.current_warehouse !== warehouse.id) continue;
       c[a.type] = (c[a.type] ?? 0) + 1;
     }
     return c;
@@ -59,7 +69,6 @@ export default function WarehousePanel({
 
   const AssetRow = ({ a }: { a: Asset }) => {
     const overdue = isOverdue(a);
-    const orphanWarehouse = !a.current_warehouse;
     return (
       <label className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm border cursor-pointer transition-colors ${
         picked.has(a.id) ? 'border-accent bg-accent-soft'
@@ -72,9 +81,6 @@ export default function WarehousePanel({
         <span className="text-[0.7rem] text-faint shrink-0">{ASSET_TYPE_LABEL[a.type]}</span>
         {a.ratio ? <span className="text-[0.7rem] text-soft shrink-0">tỷ số {a.ratio}</span> : null}
         <span className="flex-1" />
-        {orphanWarehouse && (
-          <span className="text-[0.65rem] text-warn shrink-0" title="Chưa gán kho nào">chưa rõ kho</span>
-        )}
         {overdue && (
           <span className="text-[0.65rem] font-bold text-bad flex items-center gap-1 shrink-0"
             title={`Hạn kiểm định ${a.next_calibration?.slice(0, 10)} — không treo lên điểm đo được`}>
@@ -132,9 +138,16 @@ export default function WarehousePanel({
 
       <div className="space-y-1 max-h-[40vh] overflow-y-auto">
         {inStock.length === 0
-          ? <p className="text-[0.7rem] text-faint py-2">Kho trống.</p>
+          ? <p className="text-[0.7rem] text-faint py-2">Kho này chưa có vật tư nào.</p>
           : inStock.map(a => <AssetRow key={a.id} a={a} />)}
       </div>
+
+      {noWarehouse.length > 0 && (
+        <p className="text-[0.7rem] text-warn border-t border-[var(--border)] pt-2 flex items-start gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          {noWarehouse.length} vật từ chưa gán kho nào — sửa ở trang <strong>Quản lý danh mục</strong> để chúng hiện ở đây.
+        </p>
+      )}
 
       {data.assets.filter(a => !isMeter(a.type)).length === 0 && (
         <p className="text-[0.7rem] text-faint border-t border-[var(--border)] pt-2">

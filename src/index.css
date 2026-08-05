@@ -279,6 +279,14 @@ p { text-wrap: pretty; }
 .vl-table-compact tbody td { padding: 0.2rem 0.3rem; }
 .vl-table-compact tbody tr:hover { background-color: transparent; }
 
+/* Kieu BANG TINH (Excel): vien o day du, KHONG bo goc. User chot 03/08. */
+.vl-table-grid { border: 1px solid var(--border-strong); }
+.vl-table-grid th,
+.vl-table-grid td { border-right: 1px solid var(--border); }
+.vl-table-grid th:last-child,
+.vl-table-grid td:last-child { border-right: none; }
+.vl-table-grid thead th { background-color: var(--surface-3); }
+
 /* ============================================================
    Badges / tags
    ============================================================ */
