@@ -142,8 +142,8 @@ export default function EditableTable({
           placeholder="—"
           searchable={opts.length > 8}
           variant="bare"
-          className={`px-2 py-1 rounded-lg border text-xs font-bold cursor-pointer
-            transition-all hover:border-accent/50 ${selectTone(c, String(v))} ${ring}`}
+          className={`w-full px-2 py-1.5 rounded-none border-0 text-xs font-bold cursor-pointer
+            ${selectTone(c, String(v))} ${ring}`}
         />
       );
     }
@@ -154,8 +154,8 @@ export default function EditableTable({
         value={v ?? ''}
         onChange={e => onChange(rec.id, c.key, e.target.value)}
         placeholder={c.key === 'ratio_text' ? '2000/5' : ''}
-        className={`w-full bg-transparent px-2 py-1.5 rounded-lg border border-transparent text-sm outline-none
-          transition-all hover:border-[var(--border)] focus:bg-surface focus:ring-2 focus:ring-accent focus:border-accent
+        className={`w-full bg-transparent px-2 py-1.5 rounded-none border-0 text-sm outline-none
+          focus:bg-accent-soft
           ${dirty ? 'bg-amber-100 dark:bg-amber-500/20 font-semibold' : ''} ${ring}`}
       />
     );
@@ -166,7 +166,7 @@ export default function EditableTable({
       <table className="vl-table vl-table-compact vl-table-grid w-full text-left border-collapse">
         <thead>
           <tr>
-            <th className="w-1 !p-0" />
+            <th className="w-1 p-0!" />
             {cols.map(c => (
               <th key={c.key} className={`whitespace-nowrap ${c.width ?? ''}`} title={c.hint}>
                 {c.label}{c.required && <span className="text-bad"> *</span>}
@@ -183,13 +183,13 @@ export default function EditableTable({
               draft[rec.id] ? 'bg-amber-50/60 dark:bg-amber-500/10' : i % 2 ? 'bg-subtle/40' : ''
             }`}>
               {/* Dải màu KCN đầu dòng */}
-              <td className="w-1 !p-0"><div className={`w-1 h-full min-h-[2.1rem] ${zoneStripe(rec)}`} /></td>
+              <td className="w-1 p-0!"><div className={`w-1 h-full min-h-[2.1rem] ${zoneStripe(rec)}`} /></td>
 
               {cols.map(c => (
                 <td key={c.key} className={`align-middle ${c.width ?? ''}`}>{cell(rec, c)}</td>
               ))}
 
-              <td className="text-right whitespace-nowrap">
+              <td className="text-right whitespace-nowrap px-1 py-1">
                 {kind === 'asset' && onOpenLifecycle && (
                   <button onClick={() => onOpenLifecycle(rec)}
                     className="p-1.5 rounded text-faint hover:bg-accent-soft hover:text-accent transition-colors"

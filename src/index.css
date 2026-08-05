@@ -276,7 +276,10 @@ p { text-wrap: pretty; }
    thị giác của .vl-table (tiêu đề chữ hoa nhỏ, viền, hover) nhưng thu gọn
    padding vì mỗi ô là một control và bảng có thể tới ~700 dòng. */
 .vl-table-compact thead th { padding: 0.55rem 0.5rem; }
-.vl-table-compact tbody td { padding: 0.2rem 0.3rem; }
+/* Padding = 0: moi o la mot control (input/select) tu phu kin cell nen
+   duong ke cua .vl-table-grid chinh la vien o, dung kieu BANG TINH.
+   O chi-doc tu ve padding bang <div class="px-2 py-1.5">. */
+.vl-table-compact tbody td { padding: 0; }
 .vl-table-compact tbody tr:hover { background-color: transparent; }
 
 /* Kieu BANG TINH (Excel): vien o day du, KHONG bo goc. User chot 03/08. */
