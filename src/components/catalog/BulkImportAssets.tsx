@@ -180,8 +180,8 @@ export default function BulkImportAssets({
   const cellCls = 'w-full px-2 py-1.5 bg-transparent border-0 rounded-none text-sm outline-none focus:bg-accent-soft';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !busy && onClose()}>
-      <div className="bg-surface border border-[var(--border-strong)] w-full max-w-6xl max-h-[90vh] overflow-y-auto p-5 space-y-4"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4" onClick={() => !busy && onClose()}>
+      <div className="bg-surface border border-[var(--border-strong)] w-full max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-5 space-y-4"
         onClick={e => e.stopPropagation()}>
 
         <div className="flex items-start justify-between gap-3">
@@ -207,8 +207,12 @@ export default function BulkImportAssets({
           </label>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="vl-table vl-table-compact vl-table-grid w-full text-left border-collapse">
+        {/* `w-full` lam trinh duyet NEN cot cho vua khung => noi dung bi cat va
+            khung ngoai khong bao gio cuon. `min-w-max` giu be rong tu nhien de
+            overflow-x-auto thuc su hoat dong tren man hinh nho (user bao 05/08).
+            `-mx-5 px-5` cho vung cuon trai rong het be ngang hop thoai. */}
+        <div className="overflow-x-auto -mx-4 px-4 sm:-mx-5 sm:px-5">
+          <table className="vl-table vl-table-compact vl-table-grid min-w-max text-left border-collapse">
             <thead>
               <tr>
                 <th className="w-10" />
