@@ -72,7 +72,10 @@ export function deleteBlockers(kind: EntityKind, id: string, d: CatalogData): st
 
 /** Vật tư có bản ghi nào trong sổ cái chưa? Quyết định "xóa được" hay "chỉ thanh lý". */
 export async function assetHasLedger(assetId: string): Promise<number> {
-  const res = await pb.collection('vt_event').getList(1, 1, { filter: `asset="${assetId}"` });
+  const res = await pb.collection('vt_event').getList(1, 1, {
+    filter: `asset="${assetId}"`,
+    requestKey: null,   // xem chu thich o catalog.ts::fetchCatalog
+  });
   return res.totalItems;
 }
 

@@ -4,7 +4,7 @@ import {
   MapPin, Building2, Gauge, Package, ChevronDown,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
-import { fetchCatalog, type CatalogData, hasRatio } from '../../lib/catalog';
+import { fetchCatalog, isAbortError, type CatalogData, hasRatio } from '../../lib/catalog';
 import { canEdit } from '../../lib/assign';
 import {
   type EntityKind, ENTITY_LABEL, deleteBlockers, assetHasLedger,
@@ -45,9 +45,16 @@ export default function CatalogAdmin() {
 
   const load = useCallback(async () => {
     setIsLoading(true);
-    try { setData(await fetchCatalog()); }
-    catch (err: any) { notify.show('error', 'Lỗi', 'Không tải được danh mục: ' + (err?.message || err)); }
-    finally { setIsLoading(false); }
+    try {
+      setData(await fetchCatalog());
+    } catch (err: any) {
+      // Request bị hủy (đổi trang, tải lại chồng nhau) không phải lỗi thật
+      if (!isAbortError(err)) {
+        notify.show('error', 'Lỗi', 'Không tải được danh mục: ' + (err?.message || err));
+      }
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);

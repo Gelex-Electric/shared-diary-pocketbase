@@ -4,7 +4,7 @@ import {
   ArrowDownToLine, ArrowUpFromLine, ShieldCheck, Trash2, Info,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
-import { type Asset, type CatalogData, viDate, ASSET_TYPE_LABEL } from '../../lib/catalog';
+import { type Asset, type CatalogData, viDate, ASSET_TYPE_LABEL, isAbortError } from '../../lib/catalog';
 import {
   fetchLedger, actionsFor, noActionReason, applyLifecycle, EVENT_LABEL,
   type ActionDef, type ActionId, type LedgerEvent,
@@ -45,9 +45,13 @@ export default function AssetLifecycle({
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setLedger(await fetchLedger(asset.id)); }
-    catch (e: any) { notify.show('error', 'Lỗi', 'Không đọc được sổ cái: ' + (e?.message || e)); }
-    finally { setLoading(false); }
+    try {
+      setLedger(await fetchLedger(asset.id));
+    } catch (e: any) {
+      if (!isAbortError(e)) notify.show('error', 'Lỗi', 'Không đọc được sổ cái: ' + (e?.message || e));
+    } finally {
+      setLoading(false);
+    }
   }, [asset.id]);
 
   useEffect(() => { load(); }, [load]);

@@ -45,6 +45,7 @@ export async function fetchLedger(assetId: string): Promise<LedgerEvent[]> {
   return pb.collection('vt_event').getFullList<LedgerEvent>({
     filter: `asset="${assetId}"`,
     sort: '-at,-created',
+    requestKey: null,   // xem chu thich o catalog.ts::fetchCatalog
   });
 }
 

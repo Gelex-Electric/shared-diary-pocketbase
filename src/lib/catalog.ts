@@ -166,18 +166,38 @@ export function isOverdue(a: Asset, today = new Date()): boolean {
 }
 
 /** Nạp toàn bộ danh mục. Ném lỗi để component quyết định cách báo. */
+/**
+ * `requestKey: null` = TAT tu huy request cua PocketBase SDK.
+ *
+ * SDK tu sinh khoa huy tu (method + collection); khi co request moi cung khoa,
+ * no HUY request cu dang bay va `await` nem loi "The request was aborted".
+ * Hai man hinh Quan ly danh muc / Sap xep diem do cung goi ham nay tren cung 8
+ * collection, nen chuyen qua lai giua 2 trang (hoac bam Tai lai khi lan truoc
+ * chua xong) la sinh loi gia. Day la cac GET doc thuan, chay trung nhau vo hai.
+ */
 export async function fetchCatalog(): Promise<CatalogData> {
+  const noCancel = { requestKey: null } as const;
   const [zones, stations, customers, points, periods, warehouses, assets, installs] = await Promise.all([
-    pb.collection('dm_zone').getFullList<Zone>({ sort: 'code' }),
-    pb.collection('dm_station').getFullList<Station>({ sort: 'code' }),
-    pb.collection('dm_customer').getFullList<Customer>({ sort: 'mkh' }),
-    pb.collection('dm_point').getFullList<Point>({ sort: 'line_name' }),
-    pb.collection('dm_point_customer').getFullList<PointCustomer>({ sort: '-from_date' }),
-    pb.collection('vt_warehouse').getFullList<Warehouse>({ sort: 'code' }),
-    pb.collection('vt_asset').getFullList<Asset>({ sort: 'serial' }),
-    pb.collection('vt_install').getFullList<Install>({ sort: '-from_date' }),
+    pb.collection('dm_zone').getFullList<Zone>({ sort: 'code', ...noCancel }),
+    pb.collection('dm_station').getFullList<Station>({ sort: 'code', ...noCancel }),
+    pb.collection('dm_customer').getFullList<Customer>({ sort: 'mkh', ...noCancel }),
+    pb.collection('dm_point').getFullList<Point>({ sort: 'line_name', ...noCancel }),
+    pb.collection('dm_point_customer').getFullList<PointCustomer>({ sort: '-from_date', ...noCancel }),
+    pb.collection('vt_warehouse').getFullList<Warehouse>({ sort: 'code', ...noCancel }),
+    pb.collection('vt_asset').getFullList<Asset>({ sort: 'serial', ...noCancel }),
+    pb.collection('vt_install').getFullList<Install>({ sort: '-from_date', ...noCancel }),
   ]);
   return { zones, stations, customers, points, periods, warehouses, assets, installs };
+}
+
+/**
+ * Loi do request bi HUY (doi trang, tai lai chong nhau) - KHONG phai loi that,
+ * nguoi dung khong lam gi duoc voi no nen dung hien thong bao do.
+ */
+export function isAbortError(e: any): boolean {
+  return e?.isAbort === true
+    || e?.name === 'AbortError'
+    || /aborted|autocancell?ed/i.test(String(e?.message ?? ''));
 }
 
 /** Nhãn tiếng Việt cho trạng thái điểm đo. */

@@ -6,7 +6,7 @@ import {
 import { toast as notify } from '../../lib/toast';
 import {
   fetchCatalog, type CatalogData, type Point, type Asset,
-  currentCustomerOf, assetsAtPoint, isMeter,
+  currentCustomerOf, assetsAtPoint, isMeter, isAbortError,
 } from '../../lib/catalog';
 import {
   canEdit, checkAssignStation, checkChangeRole, checkHang, checkRemove,
@@ -65,9 +65,16 @@ export default function CatalogAssign() {
 
   const load = useCallback(async () => {
     setIsLoading(true);
-    try { setData(await fetchCatalog()); }
-    catch (err: any) { notify.show('error', 'Lỗi', 'Không tải được danh mục: ' + (err?.message || err)); }
-    finally { setIsLoading(false); }
+    try {
+      setData(await fetchCatalog());
+    } catch (err: any) {
+      // Request bị hủy (đổi trang, tải lại chồng nhau) không phải lỗi thật
+      if (!isAbortError(err)) {
+        notify.show('error', 'Lỗi', 'Không tải được danh mục: ' + (err?.message || err));
+      }
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
