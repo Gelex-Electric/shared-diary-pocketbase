@@ -228,14 +228,3 @@ export function parseAssets(text: string, data: CatalogData): ParsedRow[] {
 }
 
 /** Nội dung file mẫu (TSV để dán thẳng vào Excel). */
-export function templateCsv(): string {
-  const head = IMPORT_COLUMNS.join(',');
-  const rows = [
-    '2610123456,ME41,,,EMIC,,0.5S,,,809,vi du cong to',
-    'TI-2026-001,TI,800,5,EMIC,,0.5,2026,,809,vi du TI 800/5',
-    'TU-2026-001,TU,22000,220,EMIC,,0.5,2026,,809,vi du TU trung the',
-    'GP03-000123,GP03,,,VIETTEL,,,2026,,809,thiet bi thu thap du lieu',
-    'SIM-0912345678,SIM,,,VIETTEL,,,2026,,809,sim truyen du lieu',
-  ];
-  return [head, ...rows].join('\n');
-}

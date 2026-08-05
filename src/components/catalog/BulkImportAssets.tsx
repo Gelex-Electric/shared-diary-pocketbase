@@ -1,37 +1,109 @@
 import { useState, useMemo } from 'react';
-import { X, Download, AlertTriangle, CheckCircle2, Upload } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle2, Plus, Trash2 } from 'lucide-react';
 import { pb } from '../../lib/pocketbase';
 import { toast as notify } from '../../lib/toast';
-import { type CatalogData, ASSET_TYPE_LABEL } from '../../lib/catalog';
-import { parseAssets, templateCsv, type ParsedRow } from '../../lib/assetImport';
+import { type CatalogData, ASSET_TYPES, ASSET_TYPE_LABEL } from '../../lib/catalog';
+import { parseAssets, type ParsedRow } from '../../lib/assetImport';
+import { Select } from '../ui/Select';
 
 /**
- * Nhập hàng loạt vật tư bằng cách dán từ Excel (task 8).
+ * Nhập hàng loạt vật tư bằng BẢNG gõ trực tiếp (user chốt 05/08).
  *
- * Chỉ ghi các dòng HỢP LỆ; dòng lỗi giữ nguyên trên màn hình kèm lý do theo
- * từng dòng để người dùng sửa rồi dán lại — không im lặng bỏ qua.
+ * Trước đây là ô dán văn bản + nút tải file mẫu. Bỏ cả hai: hàng tiêu đề của
+ * bảng CHÍNH LÀ file mẫu, không phải tải về rồi mở Excel rồi dán ngược lại.
+ * Vẫn dán được cả vùng từ Excel — dán vào một ô thì tự trải ra các ô còn lại.
+ *
+ * Kiểm tra dữ liệu vẫn dùng `parseAssets` như cũ: một nguồn luật duy nhất cho
+ * cả hai lối vào, tránh hai chỗ kiểm hai kiểu.
  */
+
+/** Cột hiện trên bảng. Bỏ `model` vì user đã yêu cầu bỏ cột đó ở bảng vật tư. */
+const GRID_COLS = [
+  { key: 'so_hieu', label: 'Số hiệu *', w: 'w-40' },
+  { key: 'loai', label: 'Loại *', w: 'w-28' },
+  { key: 'so_cap', label: 'Sơ cấp', w: 'w-24' },
+  { key: 'thu_cap', label: 'Thứ cấp', w: 'w-20' },
+  { key: 'hang_sx', label: 'Hãng SX', w: 'w-28' },
+  { key: 'cap_chinh_xac', label: 'Cấp CX', w: 'w-20' },
+  { key: 'nam_sx', label: 'Năm SX', w: 'w-20' },
+  { key: 'ngay_kiem_dinh', label: 'Ngày kiểm định', w: 'w-36' },
+  { key: 'kho', label: 'Kho', w: 'w-32' },
+  { key: 'ghi_chu', label: 'Ghi chú', w: 'w-40' },
+] as const;
+
+/** Thứ tự cột khi ghép về dạng văn bản cho `parseAssets` — phải có `model`. */
+const TSV_ORDER = [
+  'so_hieu', 'loai', 'so_cap', 'thu_cap', 'hang_sx',
+  'model', 'cap_chinh_xac', 'nam_sx', 'ngay_kiem_dinh', 'kho', 'ghi_chu',
+];
+
+type Row = Record<string, string>;
+const emptyRow = (): Row => Object.fromEntries(TSV_ORDER.map(k => [k, '']));
+
 export default function BulkImportAssets({
   data, onClose, onDone,
 }: { data: CatalogData; onClose: () => void; onDone: () => void }) {
-  const [text, setText] = useState('');
+  const [rows, setRows] = useState<Row[]>(() => Array.from({ length: 6 }, emptyRow));
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [docNo, setDocNo] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ made: number; failed: number } | null>(null);
-
-  const rows = useMemo(() => (text.trim() ? parseAssets(text, data) : []), [text, data]);
-  const good = rows.filter(r => r.errors.length === 0);
-  const bad = rows.filter(r => r.errors.length > 0);
   const today = new Date().toISOString().slice(0, 10);
 
-  const downloadTemplate = () => {
-    const blob = new Blob(['﻿' + templateCsv()], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'mau-nhap-vat-tu.csv';
-    a.click();
-    URL.revokeObjectURL(a.href);
+  /** Dòng có ít nhất một ô có chữ — dòng trống hoàn toàn thì bỏ qua. */
+  const filled = useMemo(
+    () => rows.map((r, i) => ({ r, i })).filter(({ r }) => Object.values(r).some(v => v.trim())),
+    [rows],
+  );
+
+  /** Kiểm bằng chính `parseAssets`: ghép về TSV không tiêu đề, giữ ánh xạ dòng. */
+  const parsed = useMemo(() => {
+    if (filled.length === 0) return [] as ParsedRow[];
+    const tsv = filled.map(({ r }) => TSV_ORDER.map(c => r[c] ?? '').join('\t')).join('\n');
+    return parseAssets(tsv, data);
+  }, [filled, data]);
+
+  /** Lỗi/cảnh báo theo CHỈ SỐ DÒNG TRÊN BẢNG, không theo số dòng văn bản. */
+  const byGridRow = useMemo(() => {
+    const m = new Map<number, ParsedRow>();
+    parsed.forEach((p, k) => { if (filled[k]) m.set(filled[k].i, p); });
+    return m;
+  }, [parsed, filled]);
+
+  const good = parsed.filter(r => r.errors.length === 0);
+  const bad = parsed.filter(r => r.errors.length > 0);
+
+  const setCell = (i: number, key: string, v: string) => {
+    setResult(null);
+    setRows(prev => {
+      const next = prev.map((r, k) => (k === i ? { ...r, [key]: v } : r));
+      // Gõ tới dòng cuối thì tự thêm dòng mới — khỏi phải bấm "Thêm dòng".
+      if (i === next.length - 1 && v.trim()) next.push(emptyRow());
+      return next;
+    });
+  };
+
+  /**
+   * Dán cả vùng từ Excel: trải theo hàng/cột bắt đầu từ ô đang đứng.
+   * Nếu chỉ dán một ô thì để trình duyệt xử lý như bình thường.
+   */
+  const onPaste = (e: React.ClipboardEvent, rowIdx: number, colIdx: number) => {
+    const text = e.clipboardData.getData('text/plain');
+    if (!text || (!text.includes('\t') && !text.includes('\n'))) return;
+    e.preventDefault();
+    setResult(null);
+    const grid = text.replace(/\r/g, '').split('\n').filter(l => l.length).map(l => l.split('\t'));
+    setRows(prev => {
+      const next = prev.map(r => ({ ...r }));
+      while (next.length < rowIdx + grid.length + 1) next.push(emptyRow());
+      grid.forEach((cells, dy) => {
+        cells.forEach((val, dx) => {
+          const c = GRID_COLS[colIdx + dx];
+          if (c) next[rowIdx + dy][c.key] = val.trim();
+        });
+      });
+      return next;
+    });
   };
 
   const doImport = async () => {
@@ -77,36 +149,29 @@ export default function BulkImportAssets({
     setResult({ made, failed });
     if (made > 0) {
       notify.show('success', 'Đã nhập kho', `${made} vật tư`);
+      // Dọn các dòng đã ghi xong, giữ lại dòng lỗi để sửa tiếp.
+      const okSerials = new Set(good.map(g => g.serial));
+      setRows(prev => {
+        const keep = prev.filter(r => !okSerials.has((r.so_hieu || '').trim()));
+        return keep.length ? keep : Array.from({ length: 6 }, emptyRow);
+      });
       onDone();
     }
     if (failed > 0) notify.show('error', 'Có dòng ghi lỗi', `${failed} dòng`);
   };
 
-  const RowLine = ({ r }: { r: ParsedRow }) => (
-    <tr className={r.errors.length ? 'bg-[var(--danger-soft)]' : ''}>
-      <td className="px-2 py-1 text-faint">{r.line}</td>
-      <td className="px-2 py-1 font-mono text-xs">{r.serial || '—'}</td>
-      <td className="px-2 py-1">{r.type ? ASSET_TYPE_LABEL[r.type] : '—'}</td>
-      <td className="px-2 py-1 font-mono text-xs">{r.ratio ? `${r.ratio_primary}/${r.ratio_secondary} = ${r.ratio}` : '—'}</td>
-      <td className="px-2 py-1">{r.manufacture_year ?? '—'}</td>
-      <td className="px-2 py-1 text-xs">{r.next_calibration ?? '—'}</td>
-      <td className="px-2 py-1">{r.warehouseCode ?? '—'}</td>
-      <td className="px-2 py-1 text-xs">
-        {r.errors.map((e, i) => <div key={i} className="text-bad">{e}</div>)}
-        {r.warnings.map((w, i) => <div key={i} className="text-warn">{w}</div>)}
-      </td>
-    </tr>
-  );
+  const cellCls = 'w-full px-2 py-1.5 bg-transparent border-0 rounded-none text-sm outline-none focus:bg-accent-soft';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !busy && onClose()}>
-      <div className="vl-card w-full max-w-5xl max-h-[90vh] overflow-y-auto p-5 space-y-4" onClick={e => e.stopPropagation()}>
+      <div className="bg-surface border border-[var(--border-strong)] w-full max-w-6xl max-h-[90vh] overflow-y-auto p-5 space-y-4"
+        onClick={e => e.stopPropagation()}>
 
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold text-ink">Nhập hàng loạt vật tư</h3>
             <p className="text-sm text-soft mt-1">
-              Dán trực tiếp từ Excel (mỗi dòng một vật tư). Chỉ những dòng hợp lệ mới được ghi.
+              Gõ thẳng vào bảng, hoặc dán cả vùng từ Excel vào một ô. Chỉ những dòng hợp lệ mới được ghi.
             </p>
           </div>
           <button onClick={onClose} disabled={busy} className="text-faint hover:text-ink transition-colors">
@@ -115,9 +180,6 @@ export default function BulkImportAssets({
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
-          <button onClick={downloadTemplate} className="vl-btn vl-btn-secondary vl-btn-sm">
-            <Download className="w-4 h-4" />Tải file mẫu
-          </button>
           <label className="block">
             <span className="text-xs font-semibold text-soft">Ngày nhập kho *</span>
             <input type="date" value={date} max={today} onChange={e => setDate(e.target.value)}
@@ -130,65 +192,116 @@ export default function BulkImportAssets({
           </label>
         </div>
 
-        <div>
-          <p className="text-xs text-faint mb-1">
-            Cột: <code className="font-mono">so_hieu, loai, so_cap, thu_cap, hang_sx, model, cap_chinh_xac, nam_sx, ngay_kiem_dinh, kho, ghi_chu</code>
-            {' '}— loại nhận CONGTO / TI / TU / GP03 / KHAC. Có hàng tiêu đề hay không đều được.
-          </p>
-          <textarea
-            value={text} onChange={e => { setText(e.target.value); setResult(null); }}
-            rows={7} placeholder={'TI-2026-001\tTI\t800\t5\tEMIC\t\t0.5\t2026\t\t809\t'}
-            className="w-full px-3 py-2 bg-surface border border-[var(--border)] rounded text-sm font-mono focus:ring-2 focus:ring-accent outline-none"
-          />
+        <div className="overflow-x-auto">
+          <table className="vl-table vl-table-compact vl-table-grid w-full text-left border-collapse">
+            <thead>
+              <tr>
+                <th className="w-10" />
+                {GRID_COLS.map(c => (
+                  <th key={c.key} className={`whitespace-nowrap ${c.w}`}>{c.label}</th>
+                ))}
+                <th className="w-56">Kiểm tra</th>
+                <th className="w-10" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const p = byGridRow.get(i);
+                const err = p?.errors ?? [];
+                const warn = p?.warnings ?? [];
+                return (
+                  <tr key={i} className={err.length ? 'bg-[var(--danger-soft)]' : ''}>
+                    <td className="text-center text-xs text-faint">{i + 1}</td>
+
+                    {GRID_COLS.map((c, ci) => (
+                      <td key={c.key} className={c.w}>
+                        {c.key === 'loai' ? (
+                          <Select
+                            value={r.loai ?? ''} onChange={v => setCell(i, 'loai', v)}
+                            options={ASSET_TYPES.map(t => ({ value: t, label: ASSET_TYPE_LABEL[t] }))}
+                            placeholder="—" variant="bare"
+                            className="w-full px-2 py-1.5 rounded-none border-0 text-xs font-bold"
+                          />
+                        ) : c.key === 'kho' ? (
+                          <Select
+                            value={r.kho ?? ''} onChange={v => setCell(i, 'kho', v)}
+                            options={data.warehouses.map(w => ({
+                              value: w.code,
+                              label: data.zones.find(z => z.id === w.zone)?.code ?? w.code,
+                            }))}
+                            placeholder="—" variant="bare" searchable={data.warehouses.length > 8}
+                            className="w-full px-2 py-1.5 rounded-none border-0 text-xs font-bold"
+                          />
+                        ) : (
+                          <input
+                            type={c.key === 'ngay_kiem_dinh' ? 'date' : 'text'}
+                            value={r[c.key] ?? ''}
+                            onChange={e => setCell(i, c.key, e.target.value)}
+                            onPaste={e => onPaste(e, i, ci)}
+                            placeholder={c.key === 'so_cap' ? '2500' : c.key === 'thu_cap' ? '5' : ''}
+                            className={cellCls}
+                          />
+                        )}
+                      </td>
+                    ))}
+
+                    <td className="px-2 py-1 text-xs">
+                      {err.map((e, k) => <div key={k} className="text-bad">{e}</div>)}
+                      {warn.map((w, k) => <div key={k} className="text-warn">{w}</div>)}
+                      {p && !err.length && !warn.length && (
+                        <span className="text-[var(--success)] flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />hợp lệ
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="text-center">
+                      {rows.length > 1 && (
+                        <button
+                          onClick={() => setRows(prev => prev.filter((_, k) => k !== i))}
+                          className="p-1 text-faint hover:text-bad transition-colors" title="Xóa dòng">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
 
-        {rows.length > 0 && (
-          <>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="vl-badge-success font-bold px-2 py-1 rounded flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={() => setRows(prev => [...prev, emptyRow()])}
+            className="vl-btn vl-btn-secondary vl-btn-sm">
+            <Plus className="w-4 h-4" />Thêm dòng
+          </button>
+          {parsed.length > 0 && (
+            <>
+              <span className="vl-badge-success text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />{good.length} dòng hợp lệ
               </span>
               {bad.length > 0 && (
-                <span className="vl-badge-warning font-bold px-2 py-1 rounded flex items-center gap-1">
+                <span className="vl-badge-warning text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3" />{bad.length} dòng lỗi — sẽ KHÔNG được ghi
                 </span>
               )}
-            </div>
-
-            <div className="border border-[var(--border)] rounded overflow-x-auto max-h-72 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-subtle sticky top-0">
-                  <tr className="text-left text-xs text-soft">
-                    <th className="px-2 py-1">Dòng</th><th className="px-2 py-1">Số hiệu</th>
-                    <th className="px-2 py-1">Loại</th><th className="px-2 py-1">Tỷ số</th>
-                    <th className="px-2 py-1">Năm SX</th><th className="px-2 py-1">Hạn KĐ</th>
-                    <th className="px-2 py-1">Kho</th><th className="px-2 py-1">Ghi chú kiểm tra</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border)]">
-                  {rows.map(r => <RowLine key={r.line} r={r} />)}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
 
         {result && (
-          <p className="text-sm text-dim">
+          <p className="text-sm text-soft">
             Đã ghi <strong className="text-ink">{result.made}</strong> vật tư
-            {result.failed > 0 && <> · <strong className="text-bad">{result.failed}</strong> dòng ghi lỗi</>}.
+            {result.failed > 0 && <> · <span className="text-bad">{result.failed} dòng lỗi</span></>}
           </p>
         )}
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} disabled={busy}
-            className="vl-btn vl-btn-secondary">
-            Đóng
-          </button>
-          <button onClick={doImport} disabled={busy || good.length === 0 || date > today}
+          <button onClick={onClose} disabled={busy} className="vl-btn vl-btn-secondary">Đóng</button>
+          <button onClick={doImport} disabled={busy || good.length === 0}
             className="vl-btn vl-btn-primary">
-            <Upload className="w-4 h-4" />
-            {busy ? 'Đang ghi...' : `Nhập kho ${good.length} vật tư`}
+            {busy ? 'Đang ghi...' : `Ghi ${good.length} vật tư vào kho`}
           </button>
         </div>
       </div>
