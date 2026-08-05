@@ -180,7 +180,7 @@ export default function BulkImportAssets({
   const cellCls = 'w-full px-2 py-1.5 bg-transparent border-0 rounded-none text-sm outline-none focus:bg-accent-soft';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4" onClick={() => !busy && onClose()}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-2 sm:p-4" onClick={() => !busy && onClose()}>
       <div className="vl-card mb-0! w-full max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-5 space-y-4"
         onClick={e => e.stopPropagation()}>
 

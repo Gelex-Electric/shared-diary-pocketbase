@@ -422,7 +422,10 @@ export default function CatalogAdmin() {
             />
           </div>
           {tab === 'asset' && lifecycleAsset && (
-            <div className="xl:sticky xl:top-4">
+            /* order-first duoi nguong xl: mot cot thi the phai nam TRUOC bang,
+               khong thi nguoi dung phai cuon qua ca tram dong moi thay (user
+               bao 05/08 "thu nho lai thi the phu khong xuat hien"). */
+            <div className="order-first xl:order-none xl:sticky xl:top-4">
               <AssetLifecycle
                 inline
                 asset={lifecycleAsset} data={data} canEditNow={editable}
@@ -481,7 +484,7 @@ export default function CatalogAdmin() {
         const blocked = confirmDel.blockers.length > 0 || hasLedger;
         const name = confirmDel.record.code ?? confirmDel.record.serial ?? confirmDel.record.line_name;
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !busy && setConfirmDel(null)}>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => !busy && setConfirmDel(null)}>
             <div className="vl-card w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-ink">
                 {blocked ? 'Không xóa được' : 'Xác nhận xóa'}

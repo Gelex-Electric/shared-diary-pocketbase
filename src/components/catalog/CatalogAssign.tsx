@@ -352,7 +352,7 @@ export default function CatalogAssign() {
             </table>
           </div>
 
-          <div className="space-y-4 xl:sticky xl:top-4">
+          <div className="space-y-4 order-first xl:order-none xl:sticky xl:top-4">
             <WarehousePanel
               data={data} zoneId={activeZone} canEditNow={editable}
               picked={assetPick} onPick={setAssetPick}

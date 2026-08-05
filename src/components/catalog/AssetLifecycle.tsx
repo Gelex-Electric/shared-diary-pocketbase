@@ -297,7 +297,7 @@ function Frame({
     );
   }
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => !busy && onClose()}>
+    <div className="fixed inset-0 z-[60] flex justify-end bg-black/30" onClick={() => !busy && onClose()}>
       <div
         className="bg-surface border-l border-[var(--border-strong)] shadow-2xl
           w-full max-w-xl h-full overflow-y-auto p-5 space-y-5 vl-drawer"
