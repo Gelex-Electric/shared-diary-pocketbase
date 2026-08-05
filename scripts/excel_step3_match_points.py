@@ -15,15 +15,19 @@ Chia lam 4 nhom:
 """
 import argparse
 import difflib
+import os
 import re
 import sys
 
 import openpyxl
 import pb_client as pb
 
-XLSX = (r"C:/Users/thang.nguyen-manh/OneDrive - GELEX/"
-        r"Tệp của Nguyen Tai Dung - 2. GETC - Hồ sơ lưu KT-VH/"
-        r"9. Quản lý kho/Quản lý kho V2.xlsx")
+# Duong dan file Excel. OneDrive hay khoa file khi user dang mo => cho phep
+# tro sang mot ban chep bang bien moi truong KHO_XLSX.
+XLSX = os.environ.get("KHO_XLSX") or (
+    r"C:/Users/thang.nguyen-manh/OneDrive - GELEX/"
+    r"Tệp của Nguyen Tai Dung - 2. GETC - Hồ sơ lưu KT-VH/"
+    r"9. Quản lý kho/Quản lý kho V2.xlsx")
 
 KHO_PAT = re.compile(r"DỰ PHÒNG|THU HỒI|TRẢ|THANH LÝ|GETC", re.U)
 
