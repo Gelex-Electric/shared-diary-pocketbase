@@ -25,13 +25,15 @@ const EVENT_ICON: Record<string, typeof Info> = {
  * "Sắp xếp điểm đo", tránh hai chỗ làm cùng một việc theo hai cách khác nhau.
  */
 export default function AssetLifecycle({
-  asset, data, canEditNow, onClose, onChanged,
+  asset, data, canEditNow, onClose, onChanged, inline = false,
 }: {
   asset: Asset;
   data: CatalogData;
   canEditNow: boolean;
   onClose: () => void;
   onChanged: () => void;
+  /** true = thẻ nằm cạnh bảng (như trang Sắp xếp điểm đo), không phải lớp phủ. */
+  inline?: boolean;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [ledger, setLedger] = useState<LedgerEvent[]>([]);
@@ -85,15 +87,10 @@ export default function AssetLifecycle({
   };
 
   return (
-    /* NGĂN TRƯỢT BÊN PHẢI (user chốt 05/08): xem sổ cái mà vẫn thấy bảng vật
-       tư bên trái, không phải đóng/mở liên tục khi tra nhiều vật tư.
-       Nền mờ chỉ phủ phần còn lại và KHÔNG chặn thao tác đọc bảng. */
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => !busy && onClose()}>
-      <div
-        className="bg-surface border-l border-[var(--border-strong)] shadow-2xl
-          w-full max-w-xl h-full overflow-y-auto p-5 space-y-5
-          vl-drawer"
-        onClick={e => e.stopPropagation()}>
+    /* THẺ CẠNH BẢNG (user chốt 05/08) — cùng bố cục với trang Sắp xếp điểm đo:
+       bấm một dòng thì thẻ bên phải đổi theo, xem liên tiếp nhiều vật tư mà
+       không phải đóng/mở. Giữ lại kiểu lớp phủ cho nơi khác gọi tới. */
+    <Frame busy={busy} onClose={onClose} inline={inline}>
 
         {/* Tiêu đề + trạng thái */}
         <div className="flex items-start justify-between gap-3">
@@ -246,6 +243,31 @@ export default function AssetLifecycle({
             </ol>
           )}
         </section>
+    </Frame>
+  );
+}
+
+/** Khung ngoài: thẻ nằm cạnh bảng, hoặc ngăn trượt phủ toàn màn hình. */
+function Frame({
+  inline, busy, onClose, children,
+}: {
+  inline: boolean; busy: boolean; onClose: () => void; children: React.ReactNode;
+}) {
+  if (inline) {
+    return (
+      <div className="bg-surface border border-[var(--border-strong)]
+        max-h-[calc(100vh-2rem)] overflow-y-auto p-5 space-y-5">
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => !busy && onClose()}>
+      <div
+        className="bg-surface border-l border-[var(--border-strong)] shadow-2xl
+          w-full max-w-xl h-full overflow-y-auto p-5 space-y-5 vl-drawer"
+        onClick={e => e.stopPropagation()}>
+        {children}
       </div>
     </div>
   );

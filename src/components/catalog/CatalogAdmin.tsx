@@ -369,15 +369,32 @@ export default function CatalogAdmin() {
           )}
         </div>
       ) : (
-        <div className="overflow-hidden bg-surface">
-          <EditableTable
-            kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
-            editable={editable} onChange={onChange} onDelete={askDelete}
-            computeCell={computeCell}
-            onOpenLifecycle={rec => setLifecycleId(rec.id)}
-            onEditRecord={rec => setEditing({ kind: tab, record: rec })}
-            selectedId={lifecycleId}
-          />
+        /* Tab Vật tư: bảng bên trái + thẻ vòng đời bên phải, cùng bố cục với
+           trang Sắp xếp điểm đo (user chốt 05/08). Các tab khác vẫn full chiều
+           ngang vì không có thẻ chi tiết đi kèm. */
+        <div className={tab === 'asset' && lifecycleAsset
+          ? 'grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-4 items-start'
+          : ''}>
+          <div className="overflow-hidden bg-surface min-w-0">
+            <EditableTable
+              kind={tab} cols={cols} rows={pageRows} data={data} draft={draft}
+              editable={editable} onChange={onChange} onDelete={askDelete}
+              computeCell={computeCell}
+              onOpenLifecycle={tab === 'asset' ? rec => setLifecycleId(rec.id) : undefined}
+              onEditRecord={rec => setEditing({ kind: tab, record: rec })}
+              selectedId={lifecycleId}
+            />
+          </div>
+          {tab === 'asset' && lifecycleAsset && (
+            <div className="xl:sticky xl:top-4">
+              <AssetLifecycle
+                inline
+                asset={lifecycleAsset} data={data} canEditNow={editable}
+                onClose={() => setLifecycleId(null)}
+                onChanged={load}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -409,13 +426,7 @@ export default function CatalogAdmin() {
         </div>
       )}
 
-      {lifecycleAsset && (
-        <AssetLifecycle
-          asset={lifecycleAsset} data={data} canEditNow={editable}
-          onClose={() => setLifecycleId(null)}
-          onChanged={load}
-        />
-      )}
+
 
       {editing && (
         <RecordForm kind={editing.kind} record={editing.record} data={data}

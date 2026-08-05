@@ -104,7 +104,12 @@ export function LocationTag({ asset, data }: { asset: Asset; data: CatalogData }
     );
   }
   const wh = data.warehouses.find(w => w.id === asset.current_warehouse);
-  if (wh) return <Tag className={GRAY} title={wh.name}>kho {wh.code}</Tag>;
+  if (wh) {
+    // Hien theo MA KCN (dm_zone.code) chu khong theo ma kho: ma kho 809/810/857
+    // von la LINE_ID cua HES, nhin vao khong doan duoc la khu nao (user 05/08).
+    const z = data.zones.find(x => x.id === wh.zone);
+    return <Tag className={GRAY} title={wh.name}>kho {z?.code ?? wh.code}</Tag>;
+  }
   return <Tag className="bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/40">chưa rõ</Tag>;
 }
 
