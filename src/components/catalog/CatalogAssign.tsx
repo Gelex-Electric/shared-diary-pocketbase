@@ -313,7 +313,7 @@ export default function CatalogAssign() {
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-4 items-start">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto bg-surface">
             <table className="vl-table vl-table-grid w-full text-left border-collapse">
               <thead>
                 <tr>
