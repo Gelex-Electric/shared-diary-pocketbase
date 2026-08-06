@@ -5,7 +5,7 @@ import { DatePicker, TimePicker, MonthPicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
-import { zoneFromArea, zoneOf, ZONE_MAP } from '../../lib/invoices';
+import { zoneFromArea, zoneOf, ZONE_MAP, fetchLatestInvoiceMonth } from '../../lib/invoices';
 import PizZip from 'pizzip';
 import {
   FileCheck2, Save, Gauge, Building2, Users,
@@ -217,7 +217,8 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
   const [records, setRecords] = useState<InvoiceRecord[]>([]);
   const [loadingList, setLoadingList] = useState(false);
   const [search, setSearch] = useState('');
-  const [monthFilterDate, setMonthFilterDate] = useState<string>(currentYearMonth());
+  // '' = chưa xác định; sẽ đặt = tháng có dữ liệu mới nhất khi mở trang
+  const [monthFilterDate, setMonthFilterDate] = useState<string>('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   /* ── chọn nhiều biên bản để tải hàng loạt ── */
@@ -280,6 +281,17 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
       setLoadingList(false);
     }
   }, [showToast]);
+
+  /* Mặc định = tháng có biên bản/hóa đơn MỚI NHẤT (bỏ hóa đơn VC, khớp bộ lọc danh
+     sách bên dưới) thay vì tháng hiện tại — đầu tháng chưa có dữ liệu thì danh sách rỗng. */
+  useEffect(() => {
+    let alive = true;
+    setLoadingList(true);
+    fetchLatestInvoiceMonth('LoaiHD != "VC"').then(ym => {
+      if (alive) setMonthFilterDate(ym || currentYearMonth());
+    });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => { loadRecords(monthFilterDate); }, [loadRecords, monthFilterDate]);
 
