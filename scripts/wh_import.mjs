@@ -38,7 +38,8 @@ function excelDate(v) {
   if (typeof v === 'string') return v.trim();
   return new Date(Math.round((v - 25569) * 86400000)).toISOString().slice(0, 10);
 }
-const s = (v) => String(v ?? '').trim();
+/** Gop nhieu dau cach lien tiep thanh mot — Excel goc co "Khong  hoat dong" (2 dau cach). */
+const s = (v) => String(v ?? '').replace(/\s+/g, ' ').trim();
 
 const rawKcn = sheet('Quản lý KCN').slice(1).filter(r => s(r[0]));
 const rawKh = sheet('Quản lý khách hàng').slice(1).filter(r => s(r[0]));
@@ -363,7 +364,148 @@ if (!COMMIT) {
 }
 
 // ==================== Ghi vao PocketBase ====================
-console.log('\nDang ghi vao PocketBase...');
-// (Task 4 — chi chay khi user duyet bao cao dry-run.)
-console.log('CHUA CAI DAT phan ghi — theo plan, task 4 moi thuc hien sau khi user duyet bao cao.');
-process.exit(0);
+
+/**
+ * MAC DINH chi ghi MASTER DATA: khach hang + diem do + thiet bi.
+ * KHONG ghi wh_movement, va KHONG ghi status/current_* cua thiet bi.
+ *
+ * Ly do (user chot 2026-08-06): lich su se duoc dung lai bang tay qua UI cho
+ * chac. Ghi san trang thai dan xuat trong khi so nhat ky con trong se pha vo
+ * nguyen tac "trang thai luon suy tu so" — thiet bi se co vi tri ma khong co
+ * but toan nao giai thich vi sao.
+ *
+ * Them --with-movements de ghi ca 1145 but toan suy dien (task 4 sau nay).
+ */
+const WITH_MOVEMENTS = process.argv.includes('--with-movements');
+
+async function api(token, path, opts = {}) {
+  const res = await fetch(`${PB_URL}/api${path}`, {
+    ...opts,
+    headers: { 'content-type': 'application/json', ...(token ? { Authorization: token } : {}), ...opts.headers },
+  });
+  const body = await res.text();
+  let json; try { json = JSON.parse(body); } catch { json = body; }
+  if (!res.ok) throw new Error(`${res.status} ${path}: ${typeof json === 'string' ? json : JSON.stringify(json)}`);
+  return json;
+}
+
+async function login() {
+  for (const coll of ['_superusers', 'users']) {
+    try {
+      const r = await api('', `/collections/${coll}/auth-with-password`, {
+        method: 'POST', body: JSON.stringify({ identity: PB_EMAIL, password: PB_PASS }),
+      });
+      if (r.token) return r.token;
+    } catch { /* thu tiep */ }
+  }
+  throw new Error('Dang nhap PocketBase that bai.');
+}
+
+/** Doc toan bo ban ghi cua 1 collection, tra ve map theo `key`. */
+async function loadAll(token, coll, key) {
+  const out = {};
+  for (let page = 1; ; page++) {
+    const r = await api(token, `/collections/${coll}/records?perPage=500&page=${page}`);
+    for (const it of r.items) out[it[key]] = it;
+    if (page >= r.totalPages) break;
+  }
+  return out;
+}
+
+/** Ghi song song co gioi han (PocketBase tat batch API -> phai ghi tung ban ghi). */
+async function writeAll(token, coll, rows, keyField, existing, label) {
+  let created = 0, skipped = 0, failed = 0;
+  const errs = [];
+  const queue = rows.slice();
+  const CONC = 8;
+  const idOfNew = {};
+
+  async function worker() {
+    while (queue.length) {
+      const row = queue.shift();
+      const k = row[keyField];
+      if (existing[k]) { skipped++; idOfNew[k] = existing[k].id; continue; }
+      try {
+        const rec = await api(token, `/collections/${coll}/records`, { method: 'POST', body: JSON.stringify(row) });
+        idOfNew[k] = rec.id; created++;
+      } catch (e) {
+        failed++;
+        if (errs.length < 5) errs.push(`${k}: ${e.message.slice(0, 160)}`);
+      }
+      const done = created + skipped + failed;
+      if (done % 100 === 0) process.stdout.write(`\r  ${label}: ${done}/${rows.length}`);
+    }
+  }
+  await Promise.all(Array.from({ length: CONC }, worker));
+  process.stdout.write(`\r  ${label}: them ${created}, da co ${skipped}, loi ${failed}${' '.repeat(20)}\n`);
+  for (const e of errs) console.log(`      ! ${e}`);
+  return { idOfNew, created, skipped, failed };
+}
+
+const token = await login();
+console.log(`\nGhi vao PocketBase: ${PB_URL}`);
+console.log(WITH_MOVEMENTS
+  ? 'Che do: MASTER DATA + LICH SU (1145 but toan)'
+  : 'Che do: CHI MASTER DATA — khong ghi lich su, khong ghi trang thai dan xuat.');
+
+// --- 1. Khach hang ---
+const exCustomers = await loadAll(token, 'wh_customer', 'mkh');
+const rCus = await writeAll(token, 'wh_customer',
+  customers.map(c => ({ mkh: c.mkh, ten: c.ten, tat: c.tat, zone: c.zone, trang_thai: c.trang_thai })),
+  'mkh', exCustomers, 'wh_customer');
+const customerId = { ...Object.fromEntries(Object.entries(exCustomers).map(([k, v]) => [k, v.id])), ...rCus.idOfNew };
+
+// --- 2. Diem do ---
+const exPoints = await loadAll(token, 'wh_point', 'point_code');
+const rPts = await writeAll(token, 'wh_point',
+  points.map(p => ({
+    point_code: p.point_code,
+    customer: customerId[p.mkh] || '',
+    zone: p.zone, mba: p.mba,
+    cong_suat_kva: p.cong_suat_kva ?? null,
+    ngay_dong_dien: p.ngay_dong_dien || '',
+    ngay_thanh_ly: p.ngay_thanh_ly || '',
+    trang_thai: p.trang_thai,
+  })),
+  'point_code', exPoints, 'wh_point');
+
+// --- 3. Thiet bi (KHONG kem status/current_* khi chua ghi lich su) ---
+const typeId = Object.fromEntries(
+  Object.entries(await loadAll(token, 'wh_device_type', 'code')).map(([k, v]) => [k, v.id]));
+const exDevices = await loadAll(token, 'wh_device', 'serial');
+const rDev = await writeAll(token, 'wh_device',
+  [...devices.values()].map(d => {
+    const row = {
+      serial: d.serial, type: typeId[d.type] || '', model: d.model || '',
+      spec: d.spec || '', calib_expiry: d.calib_expiry || '',
+      note: d.note || '', tu_dong_tao: !!d.tu_dong_tao,
+    };
+    if (WITH_MOVEMENTS) {
+      row.status = d.status || 'trong_kho';
+      row.nguon_goc = d.nguon_goc || '';
+    }
+    return row;
+  }),
+  'serial', exDevices, 'wh_device');
+
+// --- 4. Lich su (chi khi --with-movements) ---
+if (WITH_MOVEMENTS) {
+  console.log('  (phan ghi lich su se bo sung o task 4)');
+}
+
+// ==================== Kiem chung sau khi ghi ====================
+console.log('\n--- Kiem chung sau khi ghi ---');
+let ok = true;
+for (const [coll, want] of [['wh_customer', customers.length], ['wh_point', points.length], ['wh_device', devices.size]]) {
+  const r = await api(token, `/collections/${coll}/records?perPage=1`);
+  const good = r.totalItems === want;
+  console.log(`  ${good ? 'v' : 'X'} ${coll}: ${r.totalItems} ban ghi (mong doi ${want})`);
+  if (!good) ok = false;
+}
+if (!WITH_MOVEMENTS) {
+  const mv = await api(token, '/collections/wh_movement/records?perPage=1');
+  console.log(`  ${mv.totalItems === 0 ? 'v' : 'X'} wh_movement: ${mv.totalItems} ban ghi (mong doi 0 — lich su nhap tay qua UI)`);
+  if (mv.totalItems !== 0) ok = false;
+}
+console.log(ok ? '\nImport master data thanh cong.' : '\nCO LOI — xem dong danh dau X.');
+process.exit(ok ? 0 : 1);
