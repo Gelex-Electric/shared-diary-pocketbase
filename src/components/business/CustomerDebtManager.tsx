@@ -6,7 +6,7 @@ import { createNotification } from '../ui/NotificationBell';
 import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
-  RefreshCw, X, Loader2, Save,
+  RefreshCw, X, Loader2, Save, Banknote,
 } from 'lucide-react';
 
 /* ============================================================
@@ -21,7 +21,7 @@ import {
 ============================================================ */
 
 import { toast as notify } from '../../lib/toast';
-import { zoneFromArea } from '../../lib/invoices';
+import { zoneFromArea, fetchLatestInvoiceMonth } from '../../lib/invoices';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 type PaymentFilter = 'all' | 'paid' | 'unpaid';
@@ -84,6 +84,13 @@ const addTotals = (a: Totals, b: Totals) => {
   if (b.vat > 0) a.vat = b.vat;
 };
 
+/* Cộng dồn tổng của một danh sách kỳ (dùng khi lọc theo tab ở cấp kỳ). */
+const sumTotals = (list: Totals[]): Totals => {
+  const t = emptyTotals();
+  list.forEach(x => addTotals(t, x));
+  return t;
+};
+
 /* Khu công nghiệp suy từ tiền tố MKHang (vd "KCNTH-002" → "KCNTH"). */
 const ZONE_MAP: Record<string, string> = {
   KCNTH: 'KCN Tiền Hải',
@@ -115,10 +122,6 @@ const fmtDate = (s?: string) => {
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
-const currentYearMonth = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
-};
 
 // Sản lượng & doanh thu của 1 bản ghi — đọc TRỰC TIẾP từ trường đã lưu (nạp thẳng từ XML).
 // Hữu công: TongSL_HC (kWh) / ThTien_HC. Vô công (phản kháng): TongSL_PK (kVarh) / ThTien_PK.
@@ -143,7 +146,8 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
   );
   const [records, setRecords] = useState<DebtInvoiceRecord[]>([]);
   const [loading, setLoading] = useState(false);
-  const [monthFilter, setMonthFilter] = useState<string>(currentYearMonth());
+  // '' = chưa xác định tháng mặc định (đang hỏi tháng có dữ liệu mới nhất)
+  const [monthFilter, setMonthFilter] = useState<string>('');
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -159,6 +163,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
 
   /* ── load: chỉ tải theo tháng đang xem (server-side filter trên EndDate) ── */
   const loadRecords = useCallback(async (ym: string) => {
+    if (!ym) return; // chưa chốt tháng mặc định
     setLoading(true);
     try {
       let filter = '';
@@ -183,6 +188,19 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       setLoading(false);
     }
   }, [showToast]);
+
+  /* Mặc định = tháng có hóa đơn MỚI NHẤT (không phải tháng hiện tại — đầu tháng
+     thường chưa có dữ liệu nên sẽ ra bảng rỗng). Chỉ chạy 1 lần lúc mở trang. */
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetchLatestInvoiceMonth().then(ym => {
+      if (!alive) return;
+      const d = new Date();
+      setMonthFilter(ym || `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`);
+    });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => { loadRecords(monthFilter); }, [loadRecords, monthFilter]);
 
@@ -302,24 +320,43 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
     [pending, kyIndex],
   );
 
-  /* ── KPI tổng quan (theo phạm vi tháng đang chọn, không phụ thuộc tìm kiếm/lọc) ── */
-  const kpis = useMemo(() => ({
-    unpaidCustomers: effectiveCustomers.filter(c => !c.isPaid).length,
-    slHC: effectiveCustomers.reduce((s, c) => s + c.slHC, 0),
-    slVC: effectiveCustomers.reduce((s, c) => s + c.slVC, 0),
-    dtHC: effectiveCustomers.reduce((s, c) => s + c.dtHC, 0),
-    dtVC: effectiveCustomers.reduce((s, c) => s + c.dtVC, 0),
-    dtVAT: effectiveCustomers.reduce((s, c) => s + c.dtVAT, 0),
-  }), [effectiveCustomers]);
+  /* ── KPI tổng quan (theo phạm vi tháng đang chọn, không phụ thuộc tìm kiếm/lọc) ──
+     "Chưa thanh toán" tính ở CẤP KỲ: chỉ cộng các kỳ chưa có NTToan, nên khách trả
+     một phần chỉ góp phần tiền còn thiếu (không cộng cả các kỳ đã trả). */
+  const kpis = useMemo(() => {
+    const unpaidKy = effectiveCustomers.flatMap(c => c.kyList.filter(ky => !ky.nTToan));
+    const unpaid = sumTotals(unpaidKy);
+    return {
+      unpaidCustomers: effectiveCustomers.filter(c => !c.isPaid).length,
+      slHC: effectiveCustomers.reduce((s, c) => s + c.slHC, 0),
+      slVC: effectiveCustomers.reduce((s, c) => s + c.slVC, 0),
+      dtHC: effectiveCustomers.reduce((s, c) => s + c.dtHC, 0),
+      dtVC: effectiveCustomers.reduce((s, c) => s + c.dtVC, 0),
+      dtVAT: effectiveCustomers.reduce((s, c) => s + c.dtVAT, 0),
+      unpaidKyCount: unpaidKy.length,
+      unpaidPre: unpaid.dtHC + unpaid.dtVC,
+      unpaidVAT: unpaid.dtVAT,
+    };
+  }, [effectiveCustomers]);
 
-  /* ── lọc theo tìm kiếm + trạng thái thanh toán ── */
+  /* ── lọc theo tìm kiếm + trạng thái thanh toán ──
+     Lọc Ở CẤP KỲ: tab "Đã xong" chỉ giữ các kỳ đã có ngày thanh toán, tab "Còn nợ"
+     chỉ giữ các kỳ chưa trả; tổng của khách & của KCN được cộng lại từ đúng các kỳ
+     còn hiển thị, nên số tiền mỗi tab khớp với những gì đang thấy trên bảng. */
   const displayCustomers = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return effectiveCustomers.filter(c => {
-      const matchesSearch = !q || c.mkh.toLowerCase().includes(q) || c.nMua.toLowerCase().includes(q);
-      const matchesPayment = paymentFilter === 'all' ? true : paymentFilter === 'paid' ? c.isPaid : !c.isPaid;
-      return matchesSearch && matchesPayment;
+    const out: CustomerGroup[] = [];
+    effectiveCustomers.forEach(c => {
+      if (q && !c.mkh.toLowerCase().includes(q) && !c.nMua.toLowerCase().includes(q)) return;
+      if (paymentFilter === 'all') { out.push(c); return; }
+      const kyList = c.kyList.filter(ky => (paymentFilter === 'paid' ? !!ky.nTToan : !ky.nTToan));
+      if (kyList.length === 0) return;
+      const unpaidCount = kyList.filter(ky => !ky.nTToan).length;
+      out.push({
+        ...c, ...sumTotals(kyList), kyList, unpaidCount, isPaid: unpaidCount === 0,
+      });
     });
+    return out;
   }, [effectiveCustomers, search, paymentFilter]);
 
   /* ── tách theo Khu công nghiệp ── */
@@ -593,7 +630,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="vl-card p-6 md:p-7 hover:-translate-y-1 transition-all group">
           <div className="flex items-center justify-between mb-4">
             <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">Số khách hàng chưa thanh toán</span>
@@ -602,6 +639,22 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
             </div>
           </div>
           <h3 className="text-2xl font-black text-ink tracking-tight leading-none font-mono">{fmtKWh(kpis.unpaidCustomers)}</h3>
+        </div>
+
+        {/* Số tiền còn chưa thanh toán — cộng theo KỲ chưa có ngày thanh toán,
+            trong phạm vi tháng đang chọn (không đổi theo tab / ô tìm kiếm). */}
+        <div className="vl-card p-6 md:p-7 hover:-translate-y-1 transition-all group">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">Số tiền chưa thanh toán</span>
+            <div className="p-2.5 bg-rose-50 rounded-2xl text-rose-500 group-hover:scale-110 transition-transform">
+              <Banknote className="w-5 h-5" />
+            </div>
+          </div>
+          <h3 className="text-2xl font-black text-rose-600 tracking-tight leading-none font-mono">{fmtVND(kpis.unpaidVAT)}</h3>
+          <p className="text-[11px] font-bold text-soft mt-1 font-mono">
+            {fmtVND(kpis.unpaidPre)} <span className="text-[9px] text-faint font-semibold">trước thuế</span>
+            <span className="text-faint font-semibold"> · {kpis.unpaidKyCount} kỳ</span>
+          </p>
         </div>
 
         <div className="vl-card p-6 md:p-7 hover:-translate-y-1 transition-all group">

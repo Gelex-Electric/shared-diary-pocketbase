@@ -257,6 +257,25 @@ export function computeKpis(bills: Bill[]): Kpis {
   };
 }
 
+/* ── Tháng có dữ liệu mới nhất trong collection `invoice` ──────────
+   Dùng làm giá trị MẶC ĐỊNH cho bộ lọc tháng (thay vì tháng hiện tại): đầu tháng
+   thường chưa có hóa đơn nào nên mặc định "tháng hiện tại" sẽ ra bảng rỗng.
+   Chỉ lấy 1 bản ghi (sort -EndDate) nên rất nhẹ. Trả '' nếu chưa có dữ liệu/lỗi. */
+export async function fetchLatestInvoiceMonth(extraFilter = ''): Promise<string> {
+  try {
+    const res = await pb.collection('invoice').getList<InvoiceRecord>(1, 1, {
+      sort: '-EndDate',
+      ...(extraFilter ? { filter: extraFilter } : {}),
+      requestKey: null,
+    });
+    const end = (res.items[0]?.EndDate || '').toString();
+    const ym = end.split('T')[0].split(' ')[0].slice(0, 7);
+    return /^\d{4}-\d{2}$/.test(ym) ? ym : '';
+  } catch {
+    return '';
+  }
+}
+
 /* ── Hook: load a bounded multi-year window ────────────── */
 export interface UseInvoicesOpts {
   /** Most-recent year to include (default: current year). */

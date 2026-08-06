@@ -45,6 +45,8 @@ export default function BusinessSummaryDashboard() {
 
   /* Năm: TÍCH CHỌN NHIỀU (checkbox), mặc định BẬT HẾT. KCN: tích chọn (ẩn/hiện). */
   const [selectedYears, setSelectedYears] = useState<Set<number>>(new Set());
+  // Tháng của bảng KH: mặc định = tháng có dữ liệu mới nhất (đặt sau khi tải xong,
+  // xem effect bên dưới), không dùng tháng hiện tại vì đầu tháng thường chưa có hóa đơn.
   const [tableMonthIdx, setTableMonthIdx] = useState<number>(new Date().getMonth() + 1);
   const [custA, setCustA] = useState('');
   const [custB, setCustB] = useState('');
@@ -70,6 +72,17 @@ export default function BusinessSummaryDashboard() {
       yearsInited.current = true;
     }
   }, [loading, pmaxLoading, years]);
+
+  /* Mặc định tháng của bảng "Sản lượng & doanh thu theo khách hàng" = tháng có hóa đơn
+     MỚI NHẤT. Chỉ chạy một lần sau khi tải xong; sau đó user tự đổi bằng Select. */
+  const tableMonthInited = useRef(false);
+  useEffect(() => {
+    if (tableMonthInited.current || loading || !bills.length) return;
+    const newest = bills.map(b => b.month).filter(Boolean).sort().pop();
+    const mi = newest ? Number(newest.slice(5, 7)) : 0;
+    if (mi >= 1 && mi <= 12) setTableMonthIdx(mi);
+    tableMonthInited.current = true;
+  }, [loading, bills]);
 
   const toggleYear = (y: number) =>
     setSelectedYears(prev => {

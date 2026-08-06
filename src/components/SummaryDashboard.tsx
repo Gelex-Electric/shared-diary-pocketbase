@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   BarChart, Bar, PieChart, Pie, Cell, LabelList,
@@ -32,7 +32,9 @@ export default function SummaryDashboard() {
   const { rows: pmaxRows, loading: pmaxLoading } = usePmaxDaily();
 
   const [year, setYear] = useState<number>(endYear);
-  const [tableMonthIdx, setTableMonthIdx] = useState<number>(new Date().getMonth() + 1); // tháng bảng KH, theo năm đã chọn
+  // Tháng bảng KH (theo năm đã chọn) — mặc định đặt = tháng có dữ liệu mới nhất
+  // sau khi tải xong (xem effect bên dưới), không dùng tháng hiện tại.
+  const [tableMonthIdx, setTableMonthIdx] = useState<number>(new Date().getMonth() + 1);
   const [custA, setCustA] = useState('');   // chart 1 (mặc định: kWh lớn nhất)
   const [custB, setCustB] = useState('');   // chart 2 (mặc định: Pmax lớn nhất)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -47,6 +49,19 @@ export default function SummaryDashboard() {
   }, [bills, pmaxRows, endYear]);
 
   const yearBills = useMemo(() => bills.filter(b => b.year === year), [bills, year]);
+
+  /* Mặc định tháng của bảng "Sản lượng & doanh thu theo khách hàng" = tháng có hóa đơn
+     MỚI NHẤT (ưu tiên trong năm đang chọn, không có thì lấy mới nhất toàn bộ).
+     Chỉ chạy một lần sau khi tải xong — sau đó user tự đổi bằng Select. */
+  const tableMonthInited = useRef(false);
+  useEffect(() => {
+    if (tableMonthInited.current || loading || !bills.length) return;
+    const pool = yearBills.length ? yearBills : bills;
+    const newest = pool.map(b => b.month).filter(Boolean).sort().pop();
+    const mi = newest ? Number(newest.slice(5, 7)) : 0;
+    if (mi >= 1 && mi <= 12) setTableMonthIdx(mi);
+    tableMonthInited.current = true;
+  }, [loading, bills, yearBills]);
   const kpis = useMemo(() => computeKpis(yearBills), [yearBills]);
 
   /* ── Tổn thất tính toán năm (từ transformer_loss_monthly.csv), lọc theo KCN của tài khoản ── */
