@@ -21,13 +21,14 @@ import OfficeSldPage from './OfficeSldPage';
 const VatTuV2 = lazy(() => import('../v2/VatTuV2'));
 const V2Points = lazy(() => import('../v2/TreeExplorer'));
 const V2Assets = lazy(() => import('../v2/AssetsScreen'));
+const V2Catalog = lazy(() => import('../v2/CatalogScreen'));
 import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
   | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
-  | 'v2-points' | 'v2-assets' | 'vattu-v2';
+  | 'v2-points' | 'v2-assets' | 'v2-catalog' | 'vattu-v2';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
@@ -41,6 +42,7 @@ const TAB_LABEL: Record<Tab, string> = {
   sld:             'Sơ đồ một sợi',
   'v2-points':     'Sơ đồ đơn vị & điểm đo',
   'v2-assets':     'Vật tư trong kho',
+  'v2-catalog':    'Khai báo danh mục',
   'vattu-v2':      'Kết nối & thiết lập',
 };
 
@@ -49,7 +51,7 @@ const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt'];
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
 /** Nhóm "Hồ sơ Kho" — module vật tư làm lại, dữ liệu tách hẳn khỏi 2 nhóm trên. */
-const KHO_TABS: Tab[] = ['v2-points', 'v2-assets', 'vattu-v2'];
+const KHO_TABS: Tab[] = ['v2-points', 'v2-assets', 'v2-catalog', 'vattu-v2'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
@@ -429,6 +431,10 @@ export default function BusinessDashboard() {
             ) : topTab === 'v2-assets' ? (
               <Suspense fallback={<div className="flex items-center justify-center py-20 text-faint">Đang tải...</div>}>
                 <V2Assets />
+              </Suspense>
+            ) : topTab === 'v2-catalog' ? (
+              <Suspense fallback={<div className="flex items-center justify-center py-20 text-faint">Đang tải...</div>}>
+                <V2Catalog />
               </Suspense>
             ) : topTab === 'vattu-v2' ? (
               <Suspense fallback={<div className="flex items-center justify-center py-20 text-faint">Đang tải...</div>}>
