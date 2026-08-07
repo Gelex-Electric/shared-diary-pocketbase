@@ -31,16 +31,16 @@ export const POINT_STATUS = [
 
 export const NGUON_GOC = ['du_phong', 'thu_hoi'];
 
-export type EntityKind = 'zone' | 'station' | 'customer' | 'point' | 'device' | 'warehouse';
+export type EntityKind = 'zone' | 'station' | 'customer' | 'point' | 'device';
 
 export const ENTITY_LABEL: Record<EntityKind, string> = {
   zone: 'Khu công nghiệp', station: 'Trạm', customer: 'Khách hàng',
-  point: 'Điểm đo', device: 'Thiết bị', warehouse: 'Kho',
+  point: 'Điểm đo', device: 'Thiết bị',
 };
 
 export const COLLECTION_OF: Record<EntityKind, string> = {
   zone: WH.zone, station: WH.station, customer: WH.customer,
-  point: WH.point, device: WH.device, warehouse: WH.warehouse,
+  point: WH.point, device: WH.device,
 };
 
 /** Chỉ tài khoản khối kinh doanh (`users.area` rỗng) mới ghi được — khớp
@@ -64,7 +64,7 @@ export interface FieldDef {
   required?: boolean;
   options?: string[];
   /** Nguồn của ô chọn quan hệ. */
-  relFrom?: 'customer' | 'deviceType' | 'warehouse' | 'point' | 'zone' | 'station';
+  relFrom?: 'customer' | 'deviceType' | 'point' | 'zone' | 'station';
   hint?: string;
 }
 
@@ -75,6 +75,9 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
         { name: 'code', label: 'Mã KCN', type: 'text', required: true,
           hint: 'Phải trùng đúng chuỗi đang dùng ở điểm đo, ví dụ "KCN Yên Mỹ"' },
         { name: 'name', label: 'Tên đầy đủ', type: 'text', required: true },
+        { name: 'short_code', label: 'Mã ngắn', type: 'text', hint: 'TH, PĐ, TTI, YM, 03, GETC' },
+        { name: 'warehouse_name', label: 'Tên kho', type: 'text',
+          hint: 'Mỗi đơn vị đúng một kho nên kho không còn là bảng riêng' },
         { name: 'order_index', label: 'Thứ tự hiển thị', type: 'number' },
         { name: 'note', label: 'Ghi chú', type: 'text' },
       ];
@@ -121,17 +124,9 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
         { name: 'calib_expiry', label: 'Hạn kiểm định', type: 'date' },
         { name: 'calib_cert_no', label: 'Số tem/chứng chỉ', type: 'text' },
         { name: 'nguon_goc', label: 'Nguồn gốc', type: 'select', options: NGUON_GOC },
-        { name: 'current_warehouse', label: 'Nhập về kho', type: 'rel', relFrom: 'warehouse',
-          hint: 'Chọn kho sẽ ghi luôn một giao dịch "nhập kho" vào sổ' },
+        { name: 'zone', label: 'Nhập về kho của đơn vị', type: 'rel', relFrom: 'zone',
+          hint: 'Chọn đơn vị sẽ ghi luôn một giao dịch "nhập kho" vào sổ' },
         { name: 'note', label: 'Ghi chú', type: 'text' },
-      ];
-    case 'warehouse':
-      return [
-        { name: 'code', label: 'Mã kho', type: 'text', required: true },
-        { name: 'name', label: 'Tên kho', type: 'text', required: true },
-        { name: 'zone', label: 'Khu công nghiệp', type: 'select', options: ZONES,
-          hint: 'Để trống nếu là kho trung chuyển, không thuộc KCN nào' },
-        { name: 'active', label: 'Còn sử dụng', type: 'bool' },
       ];
   }
 }
@@ -173,21 +168,21 @@ export async function createRecord(kind: EntityKind, v: Record<string, unknown>)
   const body = clean(v);
 
   if (kind === 'device') {
-    const warehouse = String(body.current_warehouse ?? '');
+    const zoneId = String(body.zone ?? '');
     // Trường dẫn xuất: thiết bị mới khai luôn ở trạng thái trong kho nếu đã
     // chọn kho, còn không thì để trống cho tới khi có giao dịch nhập kho.
     const rec = await pbv2.collection(WH.device).create({
       ...body,
-      status: warehouse ? 'trong_kho' : '',
+      status: zoneId ? 'trong_kho' : '',
       tu_dong_tao: false,
     });
-    if (warehouse) {
+    if (zoneId) {
       // Ghi sổ SAU khi có id thiết bị, nhưng TRƯỚC khi coi là xong: thiếu dòng
       // này thì lịch sử thiết bị bắt đầu từ hư không.
       await pbv2.collection(WH.movement).create({
         device: rec.id, action: 'nhap_kho',
         event_date: new Date().toISOString().slice(0, 10),
-        to_warehouse: warehouse,
+        to_zone: zoneId,
         reason: 'Khai báo danh mục',
         performer: pbv2.authStore.record?.email ?? '',
       });
@@ -203,7 +198,7 @@ export async function updateRecord(kind: EntityKind, id: string, v: Record<strin
   // Không bao giờ để biểu mẫu danh mục đụng vào trường dẫn xuất.
   delete body.status;
   delete body.current_point;
-  if (kind === 'device') delete body.current_warehouse;
+  if (kind === 'device') delete body.zone;
   return pbv2.collection(COLLECTION_OF[kind]).update(id, body);
 }
 
@@ -225,10 +220,6 @@ export async function deleteBlockers(kind: EntityKind, id: string): Promise<stri
     const p = await pbv2.collection(WH.point).getList(1, 1, { filter: `customer="${id}"`, requestKey: null });
     if (p.totalItems) out.push(`Còn ${p.totalItems} điểm đo thuộc khách hàng này`);
   }
-  if (kind === 'warehouse') {
-    const dv = await pbv2.collection(WH.device).getList(1, 1, { filter: `current_warehouse="${id}"`, requestKey: null });
-    if (dv.totalItems) out.push(`Còn ${dv.totalItems} thiết bị trong kho`);
-  }
   if (kind === 'station') {
     const p = await pbv2.collection(WH.point).getList(1, 1, { filter: `station="${id}"`, requestKey: null });
     if (p.totalItems) out.push(`Còn ${p.totalItems} điểm đo thuộc trạm này`);
@@ -236,6 +227,8 @@ export async function deleteBlockers(kind: EntityKind, id: string): Promise<stri
   if (kind === 'zone') {
     const st = await pbv2.collection(WH.station).getList(1, 1, { filter: `zone="${id}"`, requestKey: null });
     if (st.totalItems) out.push(`Còn ${st.totalItems} trạm thuộc KCN này`);
+    const dv = await pbv2.collection(WH.device).getList(1, 1, { filter: `zone="${id}"`, requestKey: null });
+    if (dv.totalItems) out.push(`Còn ${dv.totalItems} thiết bị trong kho của đơn vị này`);
   }
   return out;
 }

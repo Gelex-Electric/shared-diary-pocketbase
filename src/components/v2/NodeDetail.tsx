@@ -50,7 +50,6 @@ function ZoneDetail({ data, zones, code }: { data: WhData; zones: ZoneNode[]; co
   const pointIds = new Set(rows.map(r => r.point.id));
   const customers = new Set(rows.map(r => r.point.customer).filter(Boolean));
   const hanging = data.devices.filter(d => d.status === 'dang_treo' && d.current_point && pointIds.has(d.current_point));
-  const warehouses = data.warehouses.filter(w => w.zone === code);
   const kva = rows.reduce((n, r) => n + (r.point.cong_suat_kva ?? 0), 0);
 
   return (
@@ -69,7 +68,6 @@ function ZoneDetail({ data, zones, code }: { data: WhData; zones: ZoneNode[]; co
         <Field label="Điểm đo đang vận hành" value={rows.filter(r => pointStatusOf(r.point) === 'active').length} />
         <Field label="Điểm đo lắp sai (khoá ghi)" value={<span className="text-bad">{rows.filter(r => r.locked).length}</span>} />
         <Field label="Điểm đo còn lắp dở" value={<span className="text-warn">{rows.filter(r => r.incomplete && !r.locked).length}</span>} />
-        <Field label="Kho thuộc KCN" value={warehouses.length ? warehouses.map(w => `${w.code} — ${w.name}`).join(', ') : '—'} />
       </div>
 
       <div className="vl-card overflow-x-auto">
@@ -167,7 +165,10 @@ function PointDetail({ data, zones, pointId }: { data: WhData; zones: ZoneNode[]
   const serialOf = (id: string) => data.devices.find(d => d.id === id)?.serial ?? id;
   const pointCodeOf = (id?: string) =>
     id ? (data.points.find(p => p.id === id)?.point_code ?? id) : '';
-  const whName = (id?: string) => (id ? data.warehouses.find(w => w.id === id)?.name ?? id : '');
+  const zoneName = (id?: string) => {
+    const z = data.zones.find(x => x.id === id);
+    return z ? (z.short_code || z.code) : (id ?? '');
+  };
 
   return (
     <div className="space-y-4">
@@ -254,8 +255,8 @@ function PointDetail({ data, zones, pointId }: { data: WhData; zones: ZoneNode[]
                   <td>{MOVEMENT_LABEL[m.action] ?? m.action}</td>
                   <td className="font-medium">{serialOf(m.device)}</td>
                   <td className="text-dim">
-                    {[whName(m.from_warehouse) || pointCodeOf(m.from_point),
-                      whName(m.to_warehouse) || pointCodeOf(m.to_point)]
+                    {[zoneName(m.from_zone) || pointCodeOf(m.from_point),
+                      zoneName(m.to_zone) || pointCodeOf(m.to_point)]
                       .filter(Boolean).join(' → ') || '—'}
                   </td>
                 </tr>

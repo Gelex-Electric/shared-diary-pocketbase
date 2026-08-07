@@ -42,7 +42,6 @@ export default function CatalogForm({
     switch (f.relFrom) {
       case 'customer': return data.customers.map(c => ({ value: c.id, label: `${c.mkh} — ${c.ten}` }));
       case 'deviceType': return data.deviceTypes.map(t => ({ value: t.id, label: t.name || t.code }));
-      case 'warehouse': return data.warehouses.map(w => ({ value: w.id, label: `${w.code} — ${w.name}` }));
       case 'point': return data.points.map(p => ({ value: p.id, label: p.point_code }));
       case 'zone': return data.zones.map(z => ({ value: z.id, label: z.code }));
       case 'station': return data.stations.map(st => ({ value: st.id, label: st.code }));
@@ -91,7 +90,7 @@ export default function CatalogForm({
 
         <div className="grid sm:grid-cols-2 gap-3">
           {fields.map(f => {
-            const disabled = isEdit && kind === 'device' && f.name === 'current_warehouse';
+            const disabled = isEdit && kind === 'device' && f.name === 'zone';
             return (
               <label key={f.name} className={f.type === 'bool' ? 'sm:col-span-2 flex items-center gap-2' : 'block'}>
                 {f.type !== 'bool' && (

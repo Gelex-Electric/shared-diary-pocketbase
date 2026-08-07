@@ -11,11 +11,17 @@
  *
  * Dải 3 có thêm ô "gắn điểm đo có sẵn": 160 điểm đo nhập từ Excel đều chưa
  * thuộc trạm nào, không có chỗ này thì phải sửa tay từng cái.
+ *
+ * Khách hàng nằm cùng màn hình nhưng ở tab ngang thứ hai (user chốt 07/08).
+ * KHO không còn là danh mục riêng: mỗi KCN đúng một kho nên chính đơn vị là kho,
+ * đơn vị GETC là kho trung chuyển.
  */
 import { useState, useMemo } from 'react';
-import { Plus, RefreshCw, Pencil, Trash2, Lock, MapPin, Building2, Gauge, Link2 } from 'lucide-react';
+import { Plus, RefreshCw, Pencil, Trash2, Lock, MapPin, Building2, Gauge, Link2, Users } from 'lucide-react';
 import { useWhData, ErrorBar, Badge } from './shared';
 import CatalogForm from './CatalogForm';
+import CustomersPanel from './CustomersPanel';
+import { Tabs, type TabItem } from '../ui/Tabs';
 import { pbv2 } from '../../lib/v2/pb';
 import { WH, type WhZone, type WhStation, type WhPoint } from '../../lib/v2/wh';
 import {
@@ -24,7 +30,15 @@ import {
 } from '../../lib/v2/whWrite';
 import { toast as notify } from '../../lib/toast';
 
+type Pane = 'donvi' | 'khachhang';
+
+const PANES: TabItem<Pane>[] = [
+  { id: 'donvi', label: 'Đơn vị & điểm đo', icon: MapPin },
+  { id: 'khachhang', label: 'Khách hàng', icon: Users },
+];
+
 export default function UnitsScreen() {
+  const [pane, setPane] = useState<Pane>('donvi');
   const { data, loading, error, reload } = useWhData();
   const [zoneId, setZoneId] = useState<string | null>(null);
   const [stationId, setStationId] = useState<string | null>(null);
@@ -89,9 +103,9 @@ export default function UnitsScreen() {
     <div className="space-y-4">
       <div className="vl-card p-3 flex flex-wrap items-center gap-3">
         <div className="flex-1 min-w-[200px]">
-          <h2 className="text-[15px] font-semibold">Đơn vị &amp; điểm đo</h2>
+          <h2 className="text-[15px] font-semibold">Danh mục</h2>
           <p className="text-[12px] text-faint">
-            {data.zones.length} KCN · {data.stations.length} trạm · {data.points.length} điểm đo
+            {data.zones.length} đơn vị · {data.stations.length} trạm · {data.points.length} điểm đo · {data.customers.length} khách hàng
           </p>
         </div>
         <button onClick={reload} disabled={loading}
@@ -102,12 +116,17 @@ export default function UnitsScreen() {
 
       <ErrorBar message={error} />
 
+      <Tabs tabs={PANES} value={pane} onChange={p => setPane(p)} />
+
       {!writable && (
         <div className="vl-alert vl-alert-light-warning flex items-center gap-2 text-[13px]">
           <Lock className="w-4 h-4 shrink-0" /> {whyCannotWrite()}
         </div>
       )}
 
+      {pane === 'khachhang'
+        ? <CustomersPanel data={data} loading={loading} reload={reload} />
+        : (
       <div className="grid lg:grid-cols-3 gap-4 items-start">
         {/* ---------- Dải 1: KCN ---------- */}
         <Column
@@ -214,6 +233,7 @@ export default function UnitsScreen() {
           ))}
         </Column>
       </div>
+      )}
 
       {editing && (
         <CatalogForm

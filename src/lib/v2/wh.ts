@@ -15,7 +15,6 @@ import type { V2Asset, V2AssetStatus, V2AssetType, V2PointStatus } from './schem
 export const WH = {
   zone: 'wh_zone',
   station: 'wh_station',
-  warehouse: 'wh_warehouse',
   deviceType: 'wh_device_type',
   customer: 'wh_customer',
   point: 'wh_point',
@@ -23,12 +22,21 @@ export const WH = {
   movement: 'wh_movement',
 } as const;
 
-export interface WhZone { id: string; code: string; name: string; order_index?: number; note?: string }
+/**
+ * Đơn vị = KCN, và cũng LÀ KHO của KCN đó (user chốt 07/08: mỗi KCN đúng một
+ * kho nên bảng `wh_warehouse` đã bị bỏ). Đơn vị `GETC` chính là kho trung
+ * chuyển. `code` là chuỗi dài ("KCN Yên Mỹ") vì `wh_point.zone` đang mang đúng
+ * chuỗi đó; `short_code` (TH/PĐ/TTI/YM/03/GETC) chỉ để hiển thị.
+ */
+export interface WhZone {
+  id: string; code: string; name: string;
+  short_code?: string; warehouse_name?: string;
+  order_index?: number; note?: string;
+}
 export interface WhStation {
   id: string; code: string; name?: string; zone?: string;
   mba?: string; cong_suat_kva?: number; note?: string;
 }
-export interface WhWarehouse { id: string; code: string; name: string; zone: string; active?: boolean }
 export interface WhDeviceType { id: string; code: string; name: string; order_index?: number }
 export interface WhCustomer { id: string; mkh: string; ten: string; tat?: string; zone?: string; trang_thai?: string }
 
@@ -67,7 +75,8 @@ export interface WhDevice {
   calib_cert_no?: string;
   nguon_goc?: string;
   status?: string;
-  current_warehouse?: string;
+  /** relation → wh_zone: đơn vị đang giữ thiết bị khi nó nằm trong kho. */
+  zone?: string;
   current_point?: string;
   note?: string;
 }
@@ -77,8 +86,8 @@ export interface WhMovement {
   device: string;
   action: 'nhap_kho' | 'chuyen_kho' | 'treo' | 'thao' | 'xuat_kho' | 'thanh_ly';
   event_date: string;
-  from_warehouse?: string;
-  to_warehouse?: string;
+  from_zone?: string;
+  to_zone?: string;
   from_point?: string;
   to_point?: string;
   chi_so?: number;
@@ -96,7 +105,6 @@ export const MOVEMENT_LABEL: Record<WhMovement['action'], string> = {
 export interface WhData {
   zones: WhZone[];
   stations: WhStation[];
-  warehouses: WhWarehouse[];
   deviceTypes: WhDeviceType[];
   customers: WhCustomer[];
   points: WhPoint[];
@@ -104,7 +112,7 @@ export interface WhData {
 }
 
 export const EMPTY_WH: WhData = {
-  zones: [], stations: [], warehouses: [], deviceTypes: [],
+  zones: [], stations: [], deviceTypes: [],
   customers: [], points: [], devices: [],
 };
 
@@ -115,16 +123,15 @@ export const EMPTY_WH: WhData = {
  */
 export async function fetchWh(): Promise<WhData> {
   const opt = { requestKey: null } as const;
-  const [zones, stations, warehouses, deviceTypes, customers, points, devices] = await Promise.all([
+  const [zones, stations, deviceTypes, customers, points, devices] = await Promise.all([
     pbv2.collection(WH.zone).getFullList<WhZone>({ sort: 'order_index,code', ...opt }),
     pbv2.collection(WH.station).getFullList<WhStation>({ sort: 'code', ...opt }),
-    pbv2.collection(WH.warehouse).getFullList<WhWarehouse>({ sort: 'code', ...opt }),
     pbv2.collection(WH.deviceType).getFullList<WhDeviceType>({ sort: 'order_index', ...opt }),
     pbv2.collection(WH.customer).getFullList<WhCustomer>({ sort: 'mkh', ...opt }),
     pbv2.collection(WH.point).getFullList<WhPoint>({ sort: 'point_code', ...opt }),
     pbv2.collection(WH.device).getFullList<WhDevice>({ sort: 'serial', ...opt }),
   ]);
-  return { zones, stations, warehouses, deviceTypes, customers, points, devices };
+  return { zones, stations, deviceTypes, customers, points, devices };
 }
 
 /** Lịch sử treo/tháo của MỘT điểm đo, mới nhất trước. */

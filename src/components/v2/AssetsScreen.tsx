@@ -274,11 +274,14 @@ function DeviceDetail({
     return () => { alive = false; };
   }, [device.id]);
 
-  const whName = (id?: string) => (id ? data.warehouses.find(w => w.id === id)?.name ?? id : '');
+  const zoneName = (id?: string) => {
+    const z = data.zones.find(x => x.id === id);
+    return z ? (z.short_code || z.code) : (id ?? '');
+  };
   const pointCode = (id?: string) => (id ? data.points.find(p => p.id === id)?.point_code ?? id : '');
   const place = device.current_point
     ? `Điểm đo ${pointCode(device.current_point)}`
-    : device.current_warehouse ? `Kho ${whName(device.current_warehouse)}` : '—';
+    : device.zone ? `Kho ${zoneName(device.zone)}` : '—';
 
   return (
     <div className="space-y-4">
@@ -340,8 +343,8 @@ function DeviceDetail({
                   <td className="text-dim">{viDate(m.event_date)}</td>
                   <td>{MOVEMENT_LABEL[m.action] ?? m.action}</td>
                   <td className="text-dim">
-                    {[whName(m.from_warehouse) || pointCode(m.from_point),
-                      whName(m.to_warehouse) || pointCode(m.to_point)]
+                    {[zoneName(m.from_zone) || pointCode(m.from_point),
+                      zoneName(m.to_zone) || pointCode(m.to_point)]
                       .filter(Boolean).join(' → ') || '—'}
                   </td>
                   <td className="text-dim">{m.doc_no || '—'}</td>
