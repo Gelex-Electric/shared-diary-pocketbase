@@ -52,6 +52,7 @@ export interface WhDevice {
   year_made?: number;
   calib_date?: string;
   calib_expiry?: string;
+  calib_cert_no?: string;
   nguon_goc?: string;
   status?: string;
   current_warehouse?: string;
@@ -114,6 +115,20 @@ export async function fetchPointHistory(pointId: string): Promise<WhMovement[]> 
   try {
     return await pbv2.collection(WH.movement).getFullList<WhMovement>({
       filter: `from_point="${pointId}" || to_point="${pointId}"`,
+      sort: '-event_date,-created',
+      requestKey: null,
+    });
+  } catch (e) {
+    if (isAbort(e)) throw e;
+    return [];
+  }
+}
+
+/** Vòng đời của MỘT thiết bị, mới nhất trước. */
+export async function fetchDeviceHistory(deviceId: string): Promise<WhMovement[]> {
+  try {
+    return await pbv2.collection(WH.movement).getFullList<WhMovement>({
+      filter: `device="${deviceId}"`,
       sort: '-event_date,-created',
       requestKey: null,
     });
