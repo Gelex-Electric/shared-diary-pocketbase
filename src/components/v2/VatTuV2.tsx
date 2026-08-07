@@ -6,18 +6,14 @@
  * đây là chỗ trả lời "mất dữ liệu hay chưa đăng nhập hay chưa nhập liệu".
  */
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, LogOut, CheckCircle2, XCircle } from 'lucide-react';
-import { pbv2, V2_PB_URL, logoutV2, isAbort } from '../../lib/v2/pb';
+import { RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
+import { pbv2, V2_PB_URL, isAbort } from '../../lib/v2/pb';
 import { WH } from '../../lib/v2/wh';
-import { LoginGate, pbEmail } from './shared';
+import { pbEmail } from './shared';
 
 interface Probe { name: string; exists: boolean; count: number; error?: string }
 
 export default function VatTuV2() {
-  return <LoginGate><Setup /></LoginGate>;
-}
-
-function Setup() {
   const [busy, setBusy] = useState(false);
   const [probes, setProbes] = useState<Probe[]>([]);
 
@@ -46,8 +42,6 @@ function Setup() {
 
   useEffect(() => { probe(); }, [probe]);
 
-  const doLogout = () => { logoutV2(); window.location.reload(); };
-
   return (
     <div className="space-y-4">
       <div className="vl-card p-4 flex flex-wrap items-center gap-3">
@@ -58,10 +52,6 @@ function Setup() {
         <button onClick={probe} disabled={busy}
           className="px-3 py-2 rounded-lg border border-hair text-[13px] flex items-center gap-1.5 disabled:opacity-60">
           <RefreshCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} /> Kiểm tra lại
-        </button>
-        <button onClick={doLogout}
-          className="px-3 py-2 rounded-lg border border-hair text-[13px] flex items-center gap-1.5 text-bad">
-          <LogOut className="w-4 h-4" /> Thoát
         </button>
       </div>
 

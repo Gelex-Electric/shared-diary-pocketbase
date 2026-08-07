@@ -10,7 +10,7 @@
  */
 import { useState, useMemo } from 'react';
 import { ChevronRight, Search, MapPin, Building2, Gauge, RefreshCw } from 'lucide-react';
-import { useWhData, LoginGate, ErrorBar, Badge, pbEmail } from './shared';
+import { useWhData, ErrorBar, Badge, pbEmail } from './shared';
 import NodeDetail, { type Selection } from './NodeDetail';
 import { toAsset, pointStatusOf, NO_STATION, NO_ZONE, type WhPoint, type WhData } from '../../lib/v2/wh';
 import { pointViolations } from '../../lib/v2/rules';
@@ -71,10 +71,6 @@ export function buildTree(data: WhData): { zones: ZoneNode[]; rows: Map<string, 
 }
 
 export default function TreeExplorer() {
-  return <LoginGate><Explorer /></LoginGate>;
-}
-
-function Explorer() {
   const { data, loading, error, reload } = useWhData();
   const [term, setTerm] = useState('');
   const [openZones, setOpenZones] = useState<Set<string>>(new Set());

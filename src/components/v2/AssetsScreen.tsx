@@ -8,7 +8,7 @@
 import { useState, useMemo } from 'react';
 import { Search, Package, RefreshCw } from 'lucide-react';
 import {
-  useWhData, LoginGate, ErrorBar, Badge, StatCard, ASSET_STATUS_LABEL, viDate,
+  useWhData, ErrorBar, Badge, StatCard, ASSET_STATUS_LABEL, viDate,
 } from './shared';
 import { toAsset } from '../../lib/v2/wh';
 import { isOverdue } from '../../lib/v2/rules';
@@ -24,10 +24,6 @@ function calibrationTone(next?: string): 'bad' | 'warn' | 'muted' {
 }
 
 export default function AssetsScreen() {
-  return <LoginGate><Assets /></LoginGate>;
-}
-
-function Assets() {
   const { data, loading, error, reload } = useWhData();
   const [term, setTerm] = useState('');
   const [type, setType] = useState<string>('');

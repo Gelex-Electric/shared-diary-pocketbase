@@ -1,41 +1,29 @@
 /**
- * Client PocketBase RIÊNG cho module vật tư làm lại (v2).
+ * Kết nối PocketBase cho module Hồ sơ Kho.
  *
- * Vì sao không dùng chung `lib/pocketbase.ts` (user chốt 07/08):
- *   - Phần làm lại phải chạy trên DỮ LIỆU THẬT của production, trong khi app
- *     trên nhánh staging vẫn trỏ PocketBase staging qua `VITE_PB_URL`.
- *   - Tách hẳn client thì màn hình cũ không thể vô tình ghi sang production,
- *     và module mới không phụ thuộc biến môi trường của môi trường đang chạy.
+ * DÙNG CHUNG client với toàn app (`lib/pocketbase.ts`) — user chốt 07/08.
  *
- * Kèm theo là kho token riêng (`V2_AUTH_KEY`): đăng nhập ở module này KHÔNG
- * đụng tới phiên đăng nhập của app cũ, và ngược lại. Đổi lại, người dùng phải
- * đăng nhập một lần nữa khi mở module — đây là cái giá của việc nói chuyện với
- * hai server khác nhau, không né được.
+ * Trước đó module này có client + phiên đăng nhập riêng, vì tưởng app trên
+ * staging trỏ PocketBase staging còn dữ liệu kho nằm ở production. Kiểm tra lại
+ * biến môi trường thì `VITE_PB_URL` của staging vốn ĐÃ là
+ * `https://getc.up.railway.app/pb`, nghĩa là cả app từ lâu đã đọc production.
+ * Client riêng chỉ tạo thêm một lần đăng nhập vô ích, nên bỏ.
+ *
+ * Hệ quả cần nhớ: mọi thao tác GHI trên staging đi thẳng vào dữ liệu thật.
  */
-import PocketBase, { LocalAuthStore } from 'pocketbase';
+import { pb } from '../pocketbase';
 
-/** PocketBase PRODUCTION. Cố định, KHÔNG đọc `VITE_PB_URL`. */
-export const V2_PB_URL = 'https://getc.up.railway.app/pb';
+export const pbv2 = pb;
 
-const V2_AUTH_KEY = 'pb_v2_auth';
-
-export const pbv2 = new PocketBase(V2_PB_URL, new LocalAuthStore(V2_AUTH_KEY));
+export const V2_PB_URL = pb.baseURL;
 
 export function isAuthed(): boolean {
-  return pbv2.authStore.isValid;
-}
-
-export async function loginV2(email: string, password: string) {
-  return pbv2.collection('users').authWithPassword(email, password);
-}
-
-export function logoutV2() {
-  pbv2.authStore.clear();
+  return pb.authStore.isValid;
 }
 
 /**
- * Lỗi do request bị HUỶ (đổi trang, tải lại chồng nhau) — không phải lỗi thật.
- * Sao chép có chủ ý từ `lib/catalog.ts` để module v2 không phụ thuộc code cũ.
+ * Lỗi do request bị HUỶ (đổi trang, tải lại chồng nhau) — không phải lỗi thật,
+ * người dùng không làm gì được với nó nên đừng hiện thông báo đỏ.
  */
 export function isAbort(e: unknown): boolean {
   const err = e as { isAbort?: boolean; name?: string; message?: string };
