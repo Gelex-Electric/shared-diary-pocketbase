@@ -7,7 +7,7 @@
 import { useState, useMemo } from 'react';
 import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
 import CatalogForm from './CatalogForm';
-import type { WhData } from '../../lib/v2/wh';
+import { isWarehouseCustomer, type WhData } from '../../lib/v2/wh';
 import {
   canWrite, whyCannotWrite, deleteBlockers, deleteRecord, readableError, isValidTat,
 } from '../../lib/v2/whWrite';
@@ -44,7 +44,7 @@ export default function CustomersPanel({
 
   const ask = async (record: any) => {
     try {
-      setConfirming({ record, blockers: await deleteBlockers('customer', record.id) });
+      setConfirming({ record, blockers: await deleteBlockers('customer', record.id, record) });
     } catch (e) { notify.error(readableError(e)); }
   };
 
@@ -98,7 +98,12 @@ export default function CustomersPanel({
             {rows.map(c => (
               <tr key={c.id}>
                 <td className="font-medium">{c.mkh}</td>
-                <td>{c.ten}</td>
+                <td>
+                  {c.ten}
+                  {isWarehouseCustomer(c.mkh) && (
+                    <span className="vl-badge-info px-1.5 py-0.5 rounded-md text-[11px] ml-1.5">kho</span>
+                  )}
+                </td>
                 <td className="text-dim">{c.zone || '—'}</td>
                 <td>
                   {c.tat

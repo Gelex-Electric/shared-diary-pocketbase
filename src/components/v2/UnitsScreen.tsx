@@ -23,7 +23,7 @@ import CatalogForm from './CatalogForm';
 import CustomersPanel from './CustomersPanel';
 import { Tabs, type TabItem } from '../ui/Tabs';
 import { pbv2 } from '../../lib/v2/pb';
-import { WH, type WhZone, type WhStation, type WhPoint } from '../../lib/v2/wh';
+import { WH, isTransitZone, type WhZone, type WhStation, type WhPoint } from '../../lib/v2/wh';
 import {
   canWrite, whyCannotWrite, deleteBlockers, deleteRecord, readableError,
   ENTITY_LABEL, type EntityKind,
@@ -65,7 +65,7 @@ export default function UnitsScreen() {
 
   const ask = async (kind: EntityKind, record: any) => {
     try {
-      setConfirming({ kind, record, blockers: await deleteBlockers(kind, record.id) });
+      setConfirming({ kind, record, blockers: await deleteBlockers(kind, record.id, record) });
     } catch (e) { notify.error(readableError(e)); }
   };
 
@@ -139,11 +139,11 @@ export default function UnitsScreen() {
             <Row
               key={z.id} active={z.id === zoneId}
               onClick={() => { setZoneId(z.id); setStationId(null); }}
-              title={z.code} sub={z.name}
+              title={z.short_code || z.code} sub={isTransitZone(z.code) ? 'Kho trung chuyển — khoá' : z.name}
               right={<span className="text-[11px] text-faint tnum">
                 {data.stations.filter(s => s.zone === z.id).length}
               </span>}
-              writable={writable}
+              writable={writable && !isTransitZone(z.code)}
               onEdit={() => setEditing({ kind: 'zone', record: z })}
               onDelete={() => ask('zone', z)}
             />

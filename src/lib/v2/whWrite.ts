@@ -14,7 +14,7 @@
  *    R1–R7 vô hiệu vì ai cũng sửa thẳng được kết quả.
  */
 import { pbv2 } from './pb';
-import { WH } from './wh';
+import { WH, isWarehouseCustomer, isTransitZone } from './wh';
 
 /** 5 KCN thật + kho văn phòng GETC (theo `scripts/wh_schema.mjs`). */
 export const ZONES = [
@@ -22,11 +22,9 @@ export const ZONES = [
   'KCN Yên Mỹ', 'KCN Số 3', 'GETC',
 ];
 
-/** 9 trạng thái điểm đo đang dùng thật trong Excel gốc. */
+/** 4 tag trạng thái điểm đo (user chốt 07/08, đã quy đổi 47 bản ghi cũ). */
 export const POINT_STATUS = [
-  'Đang hoạt động', 'Chưa đóng điện', 'Chưa gán khách hàng',
-  'Không hoạt động', 'Lưu tại chi nhánh', 'Lưu tại văn phòng',
-  'Đã thu hồi', 'Đã thanh lý', 'Trả Emic',
+  'Dự kiến', 'Đang hoạt động', 'Chưa hoạt động', 'Đã thanh lý',
 ];
 
 export const NGUON_GOC = ['du_phong', 'thu_hoi'];
@@ -126,6 +124,8 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
         { name: 'calib_expiry', label: 'Hạn kiểm định', type: 'date' },
         { name: 'calib_cert_no', label: 'Số tem/chứng chỉ', type: 'text' },
         { name: 'nguon_goc', label: 'Nguồn gốc', type: 'select', options: NGUON_GOC },
+        { name: 'status', label: 'Trạng thái', type: 'select', options: ['trong_kho', 'thu_hoi', 'tra_hang'],
+          hint: 'Không có “Đã treo” — tag đó chỉ đặt được bằng thao tác treo lên điểm đo' },
         { name: 'zone', label: 'Nhập về kho của đơn vị', type: 'rel', relFrom: 'zone',
           hint: 'Chọn đơn vị sẽ ghi luôn một giao dịch "nhập kho" vào sổ' },
         { name: 'note', label: 'Ghi chú', type: 'text' },
@@ -157,6 +157,9 @@ export function validate(kind: EntityKind, v: Record<string, unknown>): string[]
     const ce = String(v.calib_expiry ?? '').slice(0, 10);
     if (cd && ce && ce < cd) errs.push('Hạn kiểm định sớm hơn ngày kiểm định');
   }
+  if (kind === 'device' && String(v.status ?? '') === 'da_treo') {
+    errs.push('Không đặt tay tag “Đã treo” — phải treo lên một điểm đo');
+  }
   if (kind === 'customer') {
     const tat = String(v.tat ?? '').trim();
     if (tat && !isValidTat(tat)) {
@@ -181,7 +184,7 @@ export async function createRecord(kind: EntityKind, v: Record<string, unknown>)
     // chọn kho, còn không thì để trống cho tới khi có giao dịch nhập kho.
     const rec = await pbv2.collection(WH.device).create({
       ...body,
-      status: zoneId ? 'trong_kho' : '',
+      status: String(body.status ?? '') || (zoneId ? 'trong_kho' : ''),
       tu_dong_tao: false,
     });
     if (zoneId) {
@@ -203,8 +206,7 @@ export async function createRecord(kind: EntityKind, v: Record<string, unknown>)
 
 export async function updateRecord(kind: EntityKind, id: string, v: Record<string, unknown>) {
   const body = clean(v);
-  // Không bao giờ để biểu mẫu danh mục đụng vào trường dẫn xuất.
-  delete body.status;
+  // `current_point` vẫn là trường dẫn xuất: chỉ thao tác treo/tháo được đặt.
   delete body.current_point;
   if (kind === 'device') delete body.zone;
   return pbv2.collection(COLLECTION_OF[kind]).update(id, body);
@@ -214,8 +216,16 @@ export async function updateRecord(kind: EntityKind, id: string, v: Record<strin
  * Xoá có chặn: thiết bị đã có giao dịch thì KHÔNG xoá (sổ sẽ mồ côi), điểm đo
  * còn thiết bị đang treo cũng không. Trả về lý do để nút nói được vì sao.
  */
-export async function deleteBlockers(kind: EntityKind, id: string): Promise<string[]> {
+export async function deleteBlockers(kind: EntityKind, id: string, record?: any): Promise<string[]> {
   const out: string[] = [];
+
+  // Kho đặc thù không được xoá: cả hệ thống đang dựa vào chúng làm nơi chứa.
+  if (kind === 'customer' && isWarehouseCustomer(record?.mkh)) {
+    out.push('Đây là kho đặc thù (văn phòng), không phải khách hàng thường');
+  }
+  if (kind === 'zone' && isTransitZone(record?.code)) {
+    out.push('GETC là kho trung chuyển, không xóa được');
+  }
   if (kind === 'device') {
     const mv = await pbv2.collection(WH.movement).getList(1, 1, { filter: `device="${id}"`, requestKey: null });
     if (mv.totalItems) out.push(`Đã có ${mv.totalItems} giao dịch trong sổ`);

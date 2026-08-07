@@ -180,9 +180,23 @@ export function parseSpec(spec?: string): { primary?: number; secondary?: number
   return Number.isFinite(primary) && Number.isFinite(secondary) ? { primary, secondary } : {};
 }
 
+/** 4 tag trạng thái thiết bị (user chốt 07/08). */
+export const DEVICE_TAGS = ['trong_kho', 'da_treo', 'thu_hoi', 'tra_hang'] as const;
+export type DeviceTag = typeof DEVICE_TAGS[number];
+
+export const DEVICE_TAG_LABEL: Record<string, string> = {
+  trong_kho: 'Trong kho', da_treo: 'Đã treo',
+  thu_hoi: 'Thu hồi', tra_hang: 'Trả hàng', '': '—',
+};
+
+/**
+ * Tag → trạng thái mà `rules.ts` hiểu.
+ * `thu_hoi` coi như đang trong kho: user chốt 07/08 là thiết bị thu hồi được treo
+ * lại ngay nếu còn hạn kiểm định — luật R7 vẫn chặn nếu quá hạn.
+ * `tra_hang` = trả lại nhà cung cấp nên coi như ra khỏi hệ thống, không treo được.
+ */
 const STATUS_MAP: Record<string, V2AssetStatus> = {
-  trong_kho: 'kho', dang_treo: 'dang_treo', da_thu_hoi: 'kho',
-  da_xuat_kho: 'kho', thanh_ly: 'thanh_ly',
+  trong_kho: 'kho', da_treo: 'dang_treo', thu_hoi: 'kho', tra_hang: 'thanh_ly',
 };
 
 /**
@@ -239,6 +253,20 @@ export function pointStatusOf(p: WhPoint): V2PointStatus {
   return 'chua_van_hanh';
 }
 
-/** Nhãn nhóm trạm cho cây. Chưa có dữ liệu trạm thì gom vào một nhóm rõ ràng. */
-export const NO_STATION = '(chưa gán trạm)';
+/**
+ * Điểm đo chưa gắn lên trạm nào thì **mặc định đang lưu tại văn phòng KCN**
+ * (user chốt 07/08) — không phải "lỗi thiếu dữ liệu" mà là một vị trí thật.
+ */
+export const NO_STATION = 'Văn phòng KCN';
+
+/**
+ * Mã khách hàng thực ra là KHO, không phải khách hàng thật: `GETC` (kho trung
+ * chuyển ở văn phòng) và `KCNxx-000` (văn phòng từng KCN). Phải phân biệt vì
+ * chúng không được xoá và không nên đếm vào số khách hàng.
+ */
+export const isWarehouseCustomer = (mkh?: string): boolean =>
+  /^GETC$/i.test((mkh || '').trim()) || /^KCN.*-0+$/i.test((mkh || '').trim());
+
+/** Đơn vị GETC là kho trung chuyển, không nằm ở KCN nào — khoá sửa và xoá. */
+export const isTransitZone = (code?: string): boolean => (code || '').trim().toUpperCase() === 'GETC';
 export const NO_ZONE = '(chưa gán KCN)';

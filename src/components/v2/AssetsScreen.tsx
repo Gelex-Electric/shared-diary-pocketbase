@@ -13,10 +13,11 @@ import { useState, useMemo, useEffect } from 'react';
 import {
   Search, Plus, RefreshCw, Pencil, Trash2, History, Package, Lock,
 } from 'lucide-react';
-import { useWhData, ErrorBar, Badge, StatCard, Field, ASSET_STATUS_LABEL, viDate } from './shared';
+import { useWhData, ErrorBar, Badge, StatCard, Field, viDate } from './shared';
 import CatalogForm from './CatalogForm';
 import {
-  toAsset, fetchDeviceHistory, MOVEMENT_LABEL, type WhDevice, type WhMovement,
+  toAsset, fetchDeviceHistory, MOVEMENT_LABEL, DEVICE_TAGS, DEVICE_TAG_LABEL,
+  type WhDevice, type WhMovement,
 } from '../../lib/v2/wh';
 import { isOverdue } from '../../lib/v2/rules';
 import { V2_ASSET_TYPES, V2_ASSET_TYPE_LABEL, isMeter, type V2AssetType } from '../../lib/v2/schema';
@@ -39,6 +40,7 @@ export default function AssetsScreen() {
   const { data, loading, error, reload } = useWhData();
   const [term, setTerm] = useState('');
   const [type, setType] = useState<string>('');
+  const [tag, setTag] = useState<string>('');
   const [picked, setPicked] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ record: WhDevice | null } | null>(null);
   const [confirming, setConfirming] = useState<{ record: WhDevice; blockers: string[] } | null>(null);
@@ -58,10 +60,12 @@ export default function AssetsScreen() {
     const t = term.trim().toLowerCase();
     return items.filter(({ device, asset }) => {
       if (type && asset.type !== type) return false;
+      if (tag === '__trong') { if (device.status) return false; }
+      else if (tag && (device.status ?? '') !== tag) return false;
       if (!t) return true;
       return `${device.serial} ${device.model ?? ''} ${device.spec ?? ''}`.toLowerCase().includes(t);
     });
-  }, [items, term, type]);
+  }, [items, term, type, tag]);
 
   const stat = useMemo(() => ({
     total: items.length,
@@ -78,6 +82,22 @@ export default function AssetsScreen() {
     }
     return c;
   }, [items]);
+
+  const countByTag = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const { device } of items) {
+      const t = device.status ?? '';
+      if (!t) continue;
+      c.set(t, (c.get(t) ?? 0) + 1);
+    }
+    return c;
+  }, [items]);
+
+  /** 807 thiết bị nhập từ Excel đang để trống tag — đếm riêng để không bỏ sót. */
+  const chuaCoTag = useMemo(
+    () => items.filter(x => !x.device.status).length,
+    [items],
+  );
 
   const selected = picked ? items.find(x => x.device.id === picked) ?? null : null;
 
@@ -150,6 +170,28 @@ export default function AssetsScreen() {
             </button>
           ))}
         </div>
+
+        <p className="text-[12px] text-faint mt-3 mb-2">Trạng thái</p>
+        <div className="flex flex-wrap gap-2">
+          {DEVICE_TAGS.map(t => (
+            <button key={t} onClick={() => setTag(tag === t ? '' : t)}
+              className={`px-3 py-1.5 rounded-lg border text-[13px] flex items-center gap-2 ${
+                tag === t ? 'border-[var(--accent)] text-accent' : 'border-hair text-dim'
+              }`}>
+              {DEVICE_TAG_LABEL[t]}
+              <span className="tnum font-semibold">{countByTag.get(t) ?? 0}</span>
+            </button>
+          ))}
+          {chuaCoTag > 0 && (
+            <button onClick={() => setTag(tag === '__trong' ? '' : '__trong')}
+              className={`px-3 py-1.5 rounded-lg border border-dashed text-[13px] flex items-center gap-2 ${
+                tag === '__trong' ? 'border-[var(--danger)] text-bad' : 'border-hair text-faint'
+              }`}>
+              Chưa đặt tag
+              <span className="tnum font-semibold">{chuaCoTag}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-[320px_1fr] gap-4 items-start">
@@ -177,7 +219,7 @@ export default function AssetsScreen() {
                   <span className="block text-[11px] text-faint truncate">
                     {V2_ASSET_TYPE_LABEL[asset.type]}
                     {device.spec ? ` · ${device.spec}` : ''}
-                    {` · ${ASSET_STATUS_LABEL[asset.current_status]}`}
+                    {` · ${DEVICE_TAG_LABEL[device.status ?? ''] ?? '—'}`}
                   </span>
                 </span>
                 {isOverdue(asset) && <span className="w-1.5 h-1.5 rounded-full bg-[var(--danger)] shrink-0" />}
@@ -318,7 +360,7 @@ function DeviceDetail({
         } />
         <Field label="Số tem / chứng chỉ" value={device.calib_cert_no || '—'} />
         <Field label="Nguồn gốc" value={device.nguon_goc === 'thu_hoi' ? 'Thu hồi' : device.nguon_goc === 'du_phong' ? 'Dự phòng' : '—'} />
-        <Field label="Trạng thái" value={ASSET_STATUS_LABEL[asset.current_status]} />
+        <Field label="Trạng thái" value={<Badge tone={device.status === 'da_treo' ? 'info' : device.status === 'tra_hang' ? 'bad' : 'ok'}>{DEVICE_TAG_LABEL[device.status ?? ''] ?? '—'}</Badge>} />
         <Field label="Đang ở" value={place} />
         <Field label="Ghi chú" value={device.note || '—'} />
       </div>

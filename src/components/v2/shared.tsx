@@ -84,6 +84,9 @@ export const POINT_STATUS_LABEL: Record<V2PointStatus, string> = {
   active: 'Đang vận hành', dismounted: 'Đã tháo',
 };
 
+/** Nhãn tag thật trên `wh_device.status` — khác với trạng thái nội bộ của luật. */
+export { DEVICE_TAG_LABEL } from '../../lib/v2/wh';
+
 export const ASSET_STATUS_LABEL: Record<V2AssetStatus, string> = {
   kho: 'Trong kho', dang_treo: 'Đang treo', cho_kiem_dinh: 'Chờ kiểm định',
   dang_kiem_dinh: 'Đang kiểm định', dat: 'Kiểm định đạt',
