@@ -20,7 +20,7 @@ const CatalogAssign = lazy(() => import('../catalog/CatalogAssign'));
 // Module vat tu lam lai (v2): PocketBase rieng tro production, collection v2_*,
 // khong dung chung code/du lieu voi 2 tab danh muc o tren.
 const VatTuV2 = lazy(() => import('../v2/VatTuV2'));
-const V2Points = lazy(() => import('../v2/PointsScreen'));
+const V2Points = lazy(() => import('../v2/TreeExplorer'));
 const V2Assets = lazy(() => import('../v2/AssetsScreen'));
 import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
@@ -42,7 +42,7 @@ const TAB_LABEL: Record<Tab, string> = {
   opchart:         'Đồ thị điện áp & công suất',
   loss:            'Tổn thất tính toán',
   sld:             'Sơ đồ một sợi',
-  'v2-points':     'Điểm đo',
+  'v2-points':     'Sơ đồ đơn vị & điểm đo',
   'v2-assets':     'Vật tư trong kho',
   'vattu-v2':      'Kết nối & thiết lập',
 };

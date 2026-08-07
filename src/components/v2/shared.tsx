@@ -1,45 +1,101 @@
 /**
- * Mảnh dùng chung của module v2: nạp dữ liệu, băng cảnh báo dữ liệu mẫu, nhãn.
- * Để riêng vì cả màn hình điểm đo lẫn màn hình vật tư đều cần y hệt.
+ * Mảnh dùng chung của module Hồ sơ Kho: đăng nhập, nạp dữ liệu, nhãn, badge.
+ *
+ * Không còn dữ liệu mẫu (user chốt 07/08) — màn hình nối THẲNG PocketBase
+ * production. Chưa đăng nhập thì hiện form đăng nhập, lỗi thì hiện lỗi thật,
+ * không có bản thay thế nào cả.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { FlaskConical, RefreshCw } from 'lucide-react';
-import { fetchV2, DEMO_DATA, type V2Data } from '../../lib/v2/data';
-import { isAbort } from '../../lib/v2/pb';
+import { Lock, AlertTriangle } from 'lucide-react';
+import { pbv2, V2_PB_URL, isAuthed, loginV2, isAbort } from '../../lib/v2/pb';
+import { fetchWh, EMPTY_WH, type WhData } from '../../lib/v2/wh';
 import type { V2AssetStatus, V2PointStatus } from '../../lib/v2/schema';
 
-export function useV2Data() {
-  const [data, setData] = useState<V2Data>(DEMO_DATA);
+export function useWhData() {
+  const [data, setData] = useState<WhData>(EMPTY_WH);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const reload = useCallback(async () => {
+    if (!isAuthed()) { setLoading(false); return; }
     setLoading(true);
+    setError('');
     try {
-      setData(await fetchV2());
+      setData(await fetchWh());
     } catch (e) {
-      if (!isAbort(e)) setData({ ...DEMO_DATA, reason: String((e as Error).message ?? e) });
+      if (isAbort(e)) return;
+      setError((e as { message?: string }).message ?? 'Không đọc được dữ liệu');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
-  return { data, loading, reload };
+  return { data, loading, error, reload };
 }
 
-/** Băng cảnh báo — người dùng KHÔNG được nhầm dữ liệu mẫu là dữ liệu thật. */
-export function DemoBanner({ data, onReload }: { data: V2Data; onReload: () => void }) {
-  if (data.source !== 'demo') return null;
+/** Bọc màn hình: chưa đăng nhập PocketBase production thì hỏi trước. */
+export function LoginGate({ children }: { children: React.ReactNode }) {
+  const [authed, setAuthed] = useState(isAuthed());
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  if (authed) return <>{children}</>;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr('');
+    try {
+      await loginV2(email.trim(), password);
+      setAuthed(true);
+    } catch (e) {
+      setErr((e as { message?: string }).message ?? 'Đăng nhập không thành công');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="vl-alert vl-alert-light-warning flex flex-wrap items-center gap-2 text-[13px]">
-      <FlaskConical className="w-4 h-4 shrink-0" />
-      <p className="flex-1 min-w-[220px]">
-        <strong className="font-semibold">Đang xem dữ liệu mẫu</strong> — {data.reason ?? 'chưa nối PocketBase'}.
-        Số liệu dưới đây là bịa, chỉ để xem giao diện và kiểm tra luật.
+    <div className="vl-card max-w-md mx-auto p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Lock className="w-[18px] h-[18px] text-dim" />
+        <h2 className="text-[16px] font-semibold">Đăng nhập dữ liệu kho</h2>
+      </div>
+      <p className="text-[13px] text-faint mb-4">
+        Phần này đọc thẳng dữ liệu thật trên {V2_PB_URL} nên có phiên đăng nhập riêng.
       </p>
-      <button onClick={onReload} className="px-2.5 py-1 rounded-md border border-hair text-[12px] flex items-center gap-1.5">
-        <RefreshCw className="w-3.5 h-3.5" /> Thử nối lại
-      </button>
+      <form onSubmit={submit} className="space-y-3">
+        <input
+          type="email" value={email} onChange={e => setEmail(e.target.value)}
+          placeholder="Email" autoComplete="username" required
+          className="w-full px-3 py-2 rounded-lg border border-hair bg-inset text-[14px]"
+        />
+        <input
+          type="password" value={password} onChange={e => setPassword(e.target.value)}
+          placeholder="Mật khẩu" autoComplete="current-password" required
+          className="w-full px-3 py-2 rounded-lg border border-hair bg-inset text-[14px]"
+        />
+        {err && <p className="text-[13px] text-bad">{err}</p>}
+        <button
+          type="submit" disabled={busy}
+          className="w-full py-2 rounded-lg bg-accent text-[var(--on-accent)] text-[14px] font-semibold disabled:opacity-60"
+        >
+          {busy ? 'Đang đăng nhập...' : 'Đăng nhập'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export function ErrorBar({ message }: { message: string }) {
+  if (!message) return null;
+  return (
+    <div className="vl-alert vl-alert-light-danger flex items-start gap-2 text-[13px]">
+      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+      <p>{message}</p>
     </div>
   );
 }
@@ -69,6 +125,16 @@ export function StatCard({ label, value, tone }: { label: string; value: number 
   );
 }
 
+/** Một dòng "nhãn — giá trị" trong thẻ chi tiết. */
+export function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-3 py-1.5 border-b border-hair last:border-0">
+      <span className="text-[12px] text-faint w-[150px] shrink-0">{label}</span>
+      <span className="text-[13px] flex-1">{value ?? '—'}</span>
+    </div>
+  );
+}
+
 export const POINT_STATUS_LABEL: Record<V2PointStatus, string> = {
   du_kien: 'Dự kiến', chua_van_hanh: 'Chưa vận hành',
   active: 'Đang vận hành', dismounted: 'Đã tháo',
@@ -87,3 +153,5 @@ export function viDate(v?: string): string {
   const [y, m, day] = d.split('-');
   return y && m && day ? `${day}/${m}/${y}` : d;
 }
+
+export const pbEmail = () => pbv2.authStore.record?.email ?? '';
