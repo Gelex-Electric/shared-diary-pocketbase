@@ -6,9 +6,10 @@
  * kết quả mà không đi qua thao tác treo/tháo.
  */
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Wand2 } from 'lucide-react';
 import {
   fieldsOf, validate, createRecord, updateRecord, readableError,
+  suggestStationCode, normalizeTat, isValidTat,
   type EntityKind, type FieldDef, ENTITY_LABEL,
 } from '../../lib/v2/whWrite';
 import type { WhData } from '../../lib/v2/wh';
@@ -33,6 +34,9 @@ export default function CatalogForm({
   });
   const [errs, setErrs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  /** Chỉ dùng cho biểu mẫu trạm: hai mảnh không phải trường của trạm nhưng cần để đề xuất mã. */
+  const [ghepKH, setGhepKH] = useState('');
+  const [ghepDinhDanh, setGhepDinhDanh] = useState('');
 
   const isEdit = Boolean(record?.id);
   const set = (name: string, val: unknown) => setV(s => ({ ...s, [name]: val }));
@@ -88,6 +92,17 @@ export default function CatalogForm({
           </div>
         )}
 
+        {kind === 'station' && (
+          <GoiYMaTram
+            data={data}
+            zoneId={String(v.zone ?? '')}
+            kva={v.cong_suat_kva}
+            khachHang={ghepKH} setKhachHang={setGhepKH}
+            dinhDanh={ghepDinhDanh} setDinhDanh={setGhepDinhDanh}
+            onApply={code => set('code', code)}
+          />
+        )}
+
         <div className="grid sm:grid-cols-2 gap-3">
           {fields.map(f => {
             const disabled = isEdit && kind === 'device' && f.name === 'zone';
@@ -124,6 +139,13 @@ export default function CatalogForm({
                   />
                 )}
 
+                {kind === 'customer' && f.name === 'tat'
+                  && String(v.tat ?? '').trim() && !isValidTat(String(v.tat)) && (
+                  <button type="button" onClick={() => set('tat', normalizeTat(String(v.tat)))}
+                    className="mt-1 text-[11.5px] text-accent underline">
+                    Dùng “{normalizeTat(String(v.tat))}” cho hợp lệ
+                  </button>
+                )}
                 {f.hint && <span className="block text-[11.5px] text-faint mt-1">{f.hint}</span>}
                 {disabled && <span className="block text-[11.5px] text-faint mt-1">
                   Đổi kho phải qua thao tác điều chuyển để sổ nhật ký còn khớp.
@@ -143,6 +165,70 @@ export default function CatalogForm({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Khối đề xuất mã trạm theo quy ước user đưa ra 07/08:
+ *   <mã ngắn KCN>.<tên tắt KH><tên định danh>.<công suất>KVA
+ *
+ * Khách hàng và tên định danh KHÔNG phải trường của trạm — chúng chỉ là
+ * nguyên liệu để ghép mã, nên để riêng ở đây thay vì thêm cột vào bảng trạm.
+ * Mã đề xuất vẫn sửa tay được trước khi lưu.
+ */
+function GoiYMaTram({
+  data, zoneId, kva, khachHang, setKhachHang, dinhDanh, setDinhDanh, onApply,
+}: {
+  data: WhData; zoneId: string; kva: unknown;
+  khachHang: string; setKhachHang: (v: string) => void;
+  dinhDanh: string; setDinhDanh: (v: string) => void;
+  onApply: (code: string) => void;
+}) {
+  const zone = data.zones.find(z => z.id === zoneId);
+  const kh = data.customers.find(c => c.id === khachHang);
+  const code = suggestStationCode({
+    zoneShort: zone?.short_code || zone?.code,
+    tat: kh?.tat,
+    dinhDanh,
+    kva: kva as number,
+  });
+
+  return (
+    <div className="vl-alert vl-alert-light-primary space-y-2">
+      <p className="text-[12px] font-medium flex items-center gap-1.5">
+        <Wand2 className="w-3.5 h-3.5" /> Đề xuất mã trạm
+      </p>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <label className="block">
+          <span className="block text-[11.5px] mb-1">Khách hàng</span>
+          <select value={khachHang} onChange={e => setKhachHang(e.target.value)}
+            className="w-full px-2 py-1.5 rounded-lg bg-inset border border-hair text-[12.5px]">
+            <option value="">—</option>
+            {data.customers.map(c => (
+              <option key={c.id} value={c.id}>{c.tat || c.mkh} — {c.ten}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="block text-[11.5px] mb-1">Tên định danh trạm</span>
+          <input value={dinhDanh} onChange={e => setDinhDanh(e.target.value)}
+            placeholder="T1, T2, NX9..."
+            className="w-full px-2 py-1.5 rounded-lg bg-inset border border-hair text-[12.5px]" />
+        </label>
+      </div>
+      {kh && kh.tat && !isValidTat(kh.tat) && (
+        <p className="text-[11.5px] text-bad">
+          Tên tắt “{kh.tat}” chưa hợp lệ (còn dấu hoặc khoảng trắng) — mã dưới đây đã chuẩn hoá tạm.
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <code className="flex-1 text-[13px] font-medium">{code || '— chọn KCN và khách hàng —'}</code>
+        <button type="button" disabled={!code} onClick={() => onApply(code)}
+          className="px-3 py-1.5 rounded-lg bg-accent text-[var(--on-accent)] text-[12.5px] font-semibold disabled:opacity-40">
+          Dùng mã này
+        </button>
+      </div>
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
 import CatalogForm from './CatalogForm';
 import type { WhData } from '../../lib/v2/wh';
 import {
-  canWrite, whyCannotWrite, deleteBlockers, deleteRecord, readableError,
+  canWrite, whyCannotWrite, deleteBlockers, deleteRecord, readableError, isValidTat,
 } from '../../lib/v2/whWrite';
 import { toast as notify } from '../../lib/toast';
 
@@ -29,6 +29,12 @@ export default function CustomersPanel({
     }
     return c;
   }, [data.points]);
+
+  /** Tên tắt phải viết liền không dấu vì nó đi thẳng vào mã trạm. */
+  const soTatSai = useMemo(
+    () => data.customers.filter(c => (c.tat || '').trim() && !isValidTat(c.tat as string)).length,
+    [data.customers],
+  );
 
   const rows = useMemo(() => {
     const t = term.trim().toLowerCase();
@@ -64,6 +70,9 @@ export default function CustomersPanel({
           />
         </div>
         <span className="text-[12px] text-faint tnum">{rows.length}/{data.customers.length}</span>
+        {soTatSai > 0 && (
+          <span className="text-[12px] text-bad">{soTatSai} tên tắt còn dấu hoặc khoảng trắng</span>
+        )}
         <button onClick={() => setEditing({ record: null })} disabled={!writable}
           title={writable ? '' : whyCannotWrite()}
           className="px-3 py-2 rounded-lg bg-accent text-[var(--on-accent)] text-[13px] font-semibold flex items-center gap-1.5 disabled:opacity-50">
@@ -75,9 +84,12 @@ export default function CustomersPanel({
         <table className="vl-table w-full text-[13px]">
           <thead>
             <tr>
-              <th className="text-left">Mã KH</th>
+              <th className="text-left">MKH</th>
               <th className="text-left">Tên khách hàng</th>
-              <th className="text-left">Khu công nghiệp</th>
+              <th className="text-left">KCN</th>
+              <th className="text-left">Tên tắt</th>
+              <th className="text-left">Trạng thái</th>
+              <th className="text-left">Ghi chú</th>
               <th className="text-right">Điểm đo</th>
               <th className="w-[90px]" />
             </tr>
@@ -86,8 +98,20 @@ export default function CustomersPanel({
             {rows.map(c => (
               <tr key={c.id}>
                 <td className="font-medium">{c.mkh}</td>
-                <td>{c.ten}{c.tat ? <span className="text-faint"> · {c.tat}</span> : null}</td>
+                <td>{c.ten}</td>
                 <td className="text-dim">{c.zone || '—'}</td>
+                <td>
+                  {c.tat
+                    ? (isValidTat(c.tat)
+                        ? <span className="tnum">{c.tat}</span>
+                        : <span className="inline-flex items-center gap-1.5">
+                            <span>{c.tat}</span>
+                            <span className="vl-badge-danger px-1.5 py-0.5 rounded-md text-[11px]">có dấu</span>
+                          </span>)
+                    : <span className="text-faint">—</span>}
+                </td>
+                <td className="text-dim">{c.trang_thai || '—'}</td>
+                <td className="text-dim">{c.note || '—'}</td>
                 <td className="text-right tnum">{pointCount.get(c.id) ?? 0}</td>
                 <td>
                   <div className="flex items-center gap-1 justify-end">
@@ -104,7 +128,7 @@ export default function CustomersPanel({
               </tr>
             ))}
             {!rows.length && (
-              <tr><td colSpan={5} className="py-10 text-center text-faint">
+              <tr><td colSpan={8} className="py-10 text-center text-faint">
                 {loading ? 'Đang tải...' : 'Không có khách hàng nào khớp'}
               </td></tr>
             )}

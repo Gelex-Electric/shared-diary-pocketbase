@@ -94,9 +94,11 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
       return [
         { name: 'mkh', label: 'Mã khách hàng', type: 'text', required: true },
         { name: 'ten', label: 'Tên khách hàng', type: 'text', required: true },
-        { name: 'tat', label: 'Tên viết tắt', type: 'text' },
         { name: 'zone', label: 'Khu công nghiệp', type: 'select', options: ZONES },
+        { name: 'tat', label: 'Tên tắt', type: 'text',
+          hint: 'Viết liền, không dấu, không ký tự đặc biệt — vì nó đi thẳng vào mã trạm' },
         { name: 'trang_thai', label: 'Trạng thái', type: 'text' },
+        { name: 'note', label: 'Ghi chú', type: 'text' },
       ];
     case 'point':
       return [
@@ -154,6 +156,12 @@ export function validate(kind: EntityKind, v: Record<string, unknown>): string[]
     const cd = String(v.calib_date ?? '').slice(0, 10);
     const ce = String(v.calib_expiry ?? '').slice(0, 10);
     if (cd && ce && ce < cd) errs.push('Hạn kiểm định sớm hơn ngày kiểm định');
+  }
+  if (kind === 'customer') {
+    const tat = String(v.tat ?? '').trim();
+    if (tat && !isValidTat(tat)) {
+      errs.push(`Tên tắt "${tat}" phải viết liền không dấu — đề xuất: ${normalizeTat(tat)}`);
+    }
   }
   if (kind === 'point') {
     const kva = Number(v.cong_suat_kva ?? 0);
@@ -235,6 +243,49 @@ export async function deleteBlockers(kind: EntityKind, id: string): Promise<stri
 
 export async function deleteRecord(kind: EntityKind, id: string) {
   return pbv2.collection(COLLECTION_OF[kind]).delete(id);
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Tên tắt khách hàng và mã trạm
+ * ------------------------------------------------------------------ */
+
+/**
+ * Tên tắt phải VIẾT LIỀN KHÔNG DẤU (user chốt 07/08).
+ * Lý do không phải thẩm mỹ: nó đi thẳng vào mã trạm và mã điểm đo, mà hai
+ * mã đó còn bị tách bằng dấu chấm — có khoảng trắng hoặc dấu tiếng Việt thì
+ * mã vỡ khi đọc từ file, khi đặt tên file, và khi tra cứu.
+ */
+export const isValidTat = (s: string): boolean => /^[A-Za-z0-9]+$/.test((s || '').trim());
+
+/** Đề xuất tên tắt hợp lệ: bỏ dấu, bỏ ký tự lạ, viết hoa. */
+export function normalizeTat(s: string): string {
+  return (s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // bỏ dấu thanh + dấu mũ
+    .replace(/\u0111/g, 'd').replace(/\u0110/g, 'D')     // đ/Đ không tách được bằng NFD
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase();
+}
+
+/**
+ * Đề xuất mã trạm theo quy ước user đưa ra 07/08:
+ *   <mã ngắn KCN> . <tên tắt KH><tên định danh trạm> . <công suất>
+ * Ví dụ: TH + ECOLAND + T1 + 400  →  TH.ECOLANDT1.400KVA
+ *
+ * Lưu ý: quy ước này chỉ có HAI dấu chấm, khác với mã điểm đo sẵn có trong
+ * dữ liệu (`03.ECOLAND.T1.400KVA` — ba dấu chấm). Giữ đúng lời user; mã đề
+ * xuất vẫn sửa tay được trước khi lưu.
+ */
+export function suggestStationCode(p: {
+  zoneShort?: string; tat?: string; dinhDanh?: string; kva?: number | string;
+}): string {
+  const zone = normalizeTat(p.zoneShort ?? '');
+  const tat = normalizeTat(p.tat ?? '');
+  const dd = normalizeTat(p.dinhDanh ?? '');
+  const kva = String(p.kva ?? '').replace(/[^0-9.]/g, '');
+  if (!zone || !tat) return '';
+  const giua = `${tat}${dd}`;
+  return kva ? `${zone}.${giua}.${kva}KVA` : `${zone}.${giua}`;
 }
 
 /** Lỗi PocketBase → câu tiếng Việt đọc được. */

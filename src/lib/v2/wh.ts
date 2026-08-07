@@ -38,7 +38,12 @@ export interface WhStation {
   mba?: string; cong_suat_kva?: number; note?: string;
 }
 export interface WhDeviceType { id: string; code: string; name: string; order_index?: number }
-export interface WhCustomer { id: string; mkh: string; ten: string; tat?: string; zone?: string; trang_thai?: string }
+export interface WhCustomer {
+  id: string; mkh: string; ten: string;
+  /** Tên tắt — phải viết liền không dấu, vì nó ghép thẳng vào mã trạm. */
+  tat?: string;
+  zone?: string; trang_thai?: string; note?: string;
+}
 
 export interface WhPoint {
   id: string;
