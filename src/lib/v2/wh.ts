@@ -13,6 +13,8 @@ import { pbv2, isAbort } from './pb';
 import type { V2Asset, V2AssetStatus, V2AssetType, V2PointStatus } from './schema';
 
 export const WH = {
+  zone: 'wh_zone',
+  station: 'wh_station',
   warehouse: 'wh_warehouse',
   deviceType: 'wh_device_type',
   customer: 'wh_customer',
@@ -21,6 +23,11 @@ export const WH = {
   movement: 'wh_movement',
 } as const;
 
+export interface WhZone { id: string; code: string; name: string; order_index?: number; note?: string }
+export interface WhStation {
+  id: string; code: string; name?: string; zone?: string;
+  mba?: string; cong_suat_kva?: number; note?: string;
+}
 export interface WhWarehouse { id: string; code: string; name: string; zone: string; active?: boolean }
 export interface WhDeviceType { id: string; code: string; name: string; order_index?: number }
 export interface WhCustomer { id: string; mkh: string; ten: string; tat?: string; zone?: string; trang_thai?: string }
@@ -36,7 +43,12 @@ export interface WhPoint {
   ngay_thanh_ly?: string;
   trang_thai?: string;
   line_name?: string;
+  /** Mã trạm dạng chữ, còn lại từ đợt nhập Excel. Khoá thật là `station`. */
   station_code?: string;
+  /** relation → wh_station */
+  station?: string;
+  /** Vai trò điểm đo trong trạm. */
+  role?: 'chinh' | 'phu' | '';
 }
 
 export interface WhDevice {
@@ -82,6 +94,8 @@ export const MOVEMENT_LABEL: Record<WhMovement['action'], string> = {
 };
 
 export interface WhData {
+  zones: WhZone[];
+  stations: WhStation[];
   warehouses: WhWarehouse[];
   deviceTypes: WhDeviceType[];
   customers: WhCustomer[];
@@ -90,7 +104,8 @@ export interface WhData {
 }
 
 export const EMPTY_WH: WhData = {
-  warehouses: [], deviceTypes: [], customers: [], points: [], devices: [],
+  zones: [], stations: [], warehouses: [], deviceTypes: [],
+  customers: [], points: [], devices: [],
 };
 
 /**
@@ -100,14 +115,16 @@ export const EMPTY_WH: WhData = {
  */
 export async function fetchWh(): Promise<WhData> {
   const opt = { requestKey: null } as const;
-  const [warehouses, deviceTypes, customers, points, devices] = await Promise.all([
+  const [zones, stations, warehouses, deviceTypes, customers, points, devices] = await Promise.all([
+    pbv2.collection(WH.zone).getFullList<WhZone>({ sort: 'order_index,code', ...opt }),
+    pbv2.collection(WH.station).getFullList<WhStation>({ sort: 'code', ...opt }),
     pbv2.collection(WH.warehouse).getFullList<WhWarehouse>({ sort: 'code', ...opt }),
     pbv2.collection(WH.deviceType).getFullList<WhDeviceType>({ sort: 'order_index', ...opt }),
     pbv2.collection(WH.customer).getFullList<WhCustomer>({ sort: 'mkh', ...opt }),
     pbv2.collection(WH.point).getFullList<WhPoint>({ sort: 'point_code', ...opt }),
     pbv2.collection(WH.device).getFullList<WhDevice>({ sort: 'serial', ...opt }),
   ]);
-  return { warehouses, deviceTypes, customers, points, devices };
+  return { zones, stations, warehouses, deviceTypes, customers, points, devices };
 }
 
 /** Lịch sử treo/tháo của MỘT điểm đo, mới nhất trước. */

@@ -1,15 +1,16 @@
 /**
- * Màn hình KHAI BÁO DANH MỤC: khách hàng, điểm đo, kho.
+ * Màn hình KHÁCH HÀNG & KHO.
  *
- * THIẾT BỊ không còn ở đây — đã gộp vào màn hình "Vật tư trong kho" (user chốt
- * 07/08), nơi vừa xem vừa khai báo vừa tra vòng đời trên cùng một bản ghi.
+ * Thiết bị đã gộp vào "Vật tư trong kho"; KCN, trạm và điểm đo đã chuyển sang
+ * màn hình "Đơn vị & điểm đo" dạng ba dải (user chốt 07/08). Còn lại hai danh
+ * mục phẳng, không có quan hệ cha con nên bảng thường là đủ.
  *
  * Cũng chỉ làm phần khai báo. Biến động hằng ngày (nhập kho, điều chuyển, treo,
  * tháo, kiểm định, thanh lý) thuộc màn hình khác — gộp vào đây thì cùng một
  * việc sẽ có hai đường ghi khác nhau, và sổ nhật ký sẽ lệch.
  */
 import { useState, useMemo } from 'react';
-import { Plus, Search, RefreshCw, Pencil, Trash2, Lock, Users, Gauge, Warehouse } from 'lucide-react';
+import { Plus, Search, RefreshCw, Pencil, Trash2, Lock, Users, Warehouse } from 'lucide-react';
 import { useWhData, ErrorBar } from './shared';
 import { Tabs, type TabItem } from '../ui/Tabs';
 import CatalogForm from './CatalogForm';
@@ -21,7 +22,6 @@ import { toast as notify } from '../../lib/toast';
 
 const KIND_TABS: TabItem<EntityKind>[] = [
   { id: 'customer', label: 'Khách hàng', icon: Users },
-  { id: 'point', label: 'Điểm đo', icon: Gauge },
   { id: 'warehouse', label: 'Kho', icon: Warehouse },
 ];
 
@@ -33,16 +33,11 @@ export default function CatalogScreen() {
   const [confirming, setConfirming] = useState<{ record: any; blockers: string[] } | null>(null);
   const writable = canWrite();
 
-  const customerName = (id?: string) => {
-    const c = data.customers.find(x => x.id === id);
-    return c ? `${c.mkh} — ${c.ten}` : '—';
-  };
   const rows: any[] = useMemo(() => {
     const t = term.trim().toLowerCase();
     const hit = (s: string) => !t || s.toLowerCase().includes(t);
     switch (kind) {
       case 'customer': return data.customers.filter(c => hit(`${c.mkh} ${c.ten} ${c.tat ?? ''}`));
-      case 'point': return data.points.filter(p => hit(`${p.point_code} ${p.mba ?? ''} ${p.station_code ?? ''}`));
       case 'warehouse': return data.warehouses.filter(w => hit(`${w.code} ${w.name}`));
       default: return [];
     }
@@ -72,9 +67,9 @@ export default function CatalogScreen() {
     <div className="space-y-4">
       <div className="vl-card p-3 flex flex-wrap items-center gap-3">
         <div className="flex-1 min-w-[200px]">
-          <h2 className="text-[15px] font-semibold">Khai báo danh mục</h2>
+          <h2 className="text-[15px] font-semibold">Khách hàng &amp; kho</h2>
           <p className="text-[12px] text-faint">
-            Khách hàng, điểm đo, kho — thiết bị nằm ở mục Vật tư trong kho
+            Khách hàng và kho — KCN, trạm, điểm đo ở mục Đơn vị & điểm đo
           </p>
         </div>
         <button onClick={reload} disabled={loading}
@@ -117,7 +112,6 @@ export default function CatalogScreen() {
           <thead>
             <tr>
               {kind === 'customer' && <><th className="text-left">Mã KH</th><th className="text-left">Tên</th><th className="text-left">KCN</th><th className="text-left">Trạng thái</th></>}
-              {kind === 'point' && <><th className="text-left">Mã điểm đo</th><th className="text-left">Khách hàng</th><th className="text-left">Trạm</th><th className="text-left">Trạng thái</th></>}
               {kind === 'warehouse' && <><th className="text-left">Mã kho</th><th className="text-left">Tên kho</th><th className="text-left">KCN</th><th className="text-left">Còn dùng</th></>}
               <th className="w-[90px]" />
             </tr>
@@ -128,12 +122,6 @@ export default function CatalogScreen() {
                 {kind === 'customer' && <>
                   <td className="font-medium">{r.mkh}</td><td>{r.ten}</td>
                   <td className="text-dim">{r.zone || '—'}</td><td className="text-dim">{r.trang_thai || '—'}</td>
-                </>}
-                {kind === 'point' && <>
-                  <td className="font-medium">{r.point_code}</td>
-                  <td className="text-dim">{customerName(r.customer)}</td>
-                  <td className="text-dim">{r.station_code || '—'}</td>
-                  <td className="text-dim">{r.trang_thai || '—'}</td>
                 </>}
                 {kind === 'warehouse' && <>
                   <td className="font-medium">{r.code}</td><td>{r.name}</td>

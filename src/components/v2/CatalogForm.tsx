@@ -44,6 +44,8 @@ export default function CatalogForm({
       case 'deviceType': return data.deviceTypes.map(t => ({ value: t.id, label: t.name || t.code }));
       case 'warehouse': return data.warehouses.map(w => ({ value: w.id, label: `${w.code} — ${w.name}` }));
       case 'point': return data.points.map(p => ({ value: p.id, label: p.point_code }));
+      case 'zone': return data.zones.map(z => ({ value: z.id, label: z.code }));
+      case 'station': return data.stations.map(st => ({ value: st.id, label: st.code }));
       default: return [];
     }
   };

@@ -31,14 +31,16 @@ export const POINT_STATUS = [
 
 export const NGUON_GOC = ['du_phong', 'thu_hoi'];
 
-export type EntityKind = 'customer' | 'point' | 'device' | 'warehouse';
+export type EntityKind = 'zone' | 'station' | 'customer' | 'point' | 'device' | 'warehouse';
 
 export const ENTITY_LABEL: Record<EntityKind, string> = {
-  customer: 'Khách hàng', point: 'Điểm đo', device: 'Thiết bị', warehouse: 'Kho',
+  zone: 'Khu công nghiệp', station: 'Trạm', customer: 'Khách hàng',
+  point: 'Điểm đo', device: 'Thiết bị', warehouse: 'Kho',
 };
 
 export const COLLECTION_OF: Record<EntityKind, string> = {
-  customer: WH.customer, point: WH.point, device: WH.device, warehouse: WH.warehouse,
+  zone: WH.zone, station: WH.station, customer: WH.customer,
+  point: WH.point, device: WH.device, warehouse: WH.warehouse,
 };
 
 /** Chỉ tài khoản khối kinh doanh (`users.area` rỗng) mới ghi được — khớp
@@ -62,12 +64,29 @@ export interface FieldDef {
   required?: boolean;
   options?: string[];
   /** Nguồn của ô chọn quan hệ. */
-  relFrom?: 'customer' | 'deviceType' | 'warehouse' | 'point';
+  relFrom?: 'customer' | 'deviceType' | 'warehouse' | 'point' | 'zone' | 'station';
   hint?: string;
 }
 
 export function fieldsOf(kind: EntityKind): FieldDef[] {
   switch (kind) {
+    case 'zone':
+      return [
+        { name: 'code', label: 'Mã KCN', type: 'text', required: true,
+          hint: 'Phải trùng đúng chuỗi đang dùng ở điểm đo, ví dụ "KCN Yên Mỹ"' },
+        { name: 'name', label: 'Tên đầy đủ', type: 'text', required: true },
+        { name: 'order_index', label: 'Thứ tự hiển thị', type: 'number' },
+        { name: 'note', label: 'Ghi chú', type: 'text' },
+      ];
+    case 'station':
+      return [
+        { name: 'code', label: 'Mã trạm', type: 'text', required: true },
+        { name: 'name', label: 'Tên trạm', type: 'text' },
+        { name: 'zone', label: 'Khu công nghiệp', type: 'rel', relFrom: 'zone', required: true },
+        { name: 'mba', label: 'Máy biến áp', type: 'text' },
+        { name: 'cong_suat_kva', label: 'Công suất (kVA)', type: 'number' },
+        { name: 'note', label: 'Ghi chú', type: 'text' },
+      ];
     case 'customer':
       return [
         { name: 'mkh', label: 'Mã khách hàng', type: 'text', required: true },
@@ -81,7 +100,9 @@ export function fieldsOf(kind: EntityKind): FieldDef[] {
         { name: 'point_code', label: 'Mã điểm đo', type: 'text', required: true },
         { name: 'customer', label: 'Khách hàng', type: 'rel', relFrom: 'customer' },
         { name: 'zone', label: 'Khu công nghiệp', type: 'select', options: ZONES },
-        { name: 'station_code', label: 'Mã trạm', type: 'text', hint: 'Dùng để gom nhóm trên cây' },
+        { name: 'station', label: 'Trạm', type: 'rel', relFrom: 'station' },
+        { name: 'role', label: 'Vai trò', type: 'select', options: ['chinh', 'phu'],
+          hint: 'Điểm đo chính là điểm tính tổn thất; điểm phụ đã nằm trong điểm chính' },
         { name: 'line_name', label: 'Lộ đường dây', type: 'text' },
         { name: 'mba', label: 'Máy biến áp', type: 'text' },
         { name: 'cong_suat_kva', label: 'Công suất (kVA)', type: 'number' },
@@ -207,6 +228,14 @@ export async function deleteBlockers(kind: EntityKind, id: string): Promise<stri
   if (kind === 'warehouse') {
     const dv = await pbv2.collection(WH.device).getList(1, 1, { filter: `current_warehouse="${id}"`, requestKey: null });
     if (dv.totalItems) out.push(`Còn ${dv.totalItems} thiết bị trong kho`);
+  }
+  if (kind === 'station') {
+    const p = await pbv2.collection(WH.point).getList(1, 1, { filter: `station="${id}"`, requestKey: null });
+    if (p.totalItems) out.push(`Còn ${p.totalItems} điểm đo thuộc trạm này`);
+  }
+  if (kind === 'zone') {
+    const st = await pbv2.collection(WH.station).getList(1, 1, { filter: `zone="${id}"`, requestKey: null });
+    if (st.totalItems) out.push(`Còn ${st.totalItems} trạm thuộc KCN này`);
   }
   return out;
 }
