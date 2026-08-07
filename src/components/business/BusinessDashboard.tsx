@@ -2,7 +2,7 @@ import { useState, lazy, Suspense } from 'react';
 import { pb } from '../../lib/pocketbase';
 import {
   LogOut, X, Menu, ChevronDown,
-  FileText, LayoutDashboard, Briefcase, Activity,
+  FileText, LayoutDashboard, Briefcase, Activity, Warehouse,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import BusinessSummaryDashboard from './BusinessSummaryDashboard';
@@ -17,12 +17,18 @@ import OfficeSldPage from './OfficeSldPage';
 // Tai cham: keo theo @dnd-kit, chi can khi mo 2 tab danh muc
 const CatalogAdmin = lazy(() => import('../catalog/CatalogAdmin'));
 const CatalogAssign = lazy(() => import('../catalog/CatalogAssign'));
+// Module vat tu lam lai (v2): PocketBase rieng tro production, collection v2_*,
+// khong dung chung code/du lieu voi 2 tab danh muc o tren.
+const VatTuV2 = lazy(() => import('../v2/VatTuV2'));
+const V2Points = lazy(() => import('../v2/PointsScreen'));
+const V2Assets = lazy(() => import('../v2/AssetsScreen'));
 import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
   | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'catalog' | 'assign'
-  | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld';
+  | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
+  | 'v2-points' | 'v2-assets' | 'vattu-v2';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
@@ -36,30 +42,33 @@ const TAB_LABEL: Record<Tab, string> = {
   opchart:         'Đồ thị điện áp & công suất',
   loss:            'Tổn thất tính toán',
   sld:             'Sơ đồ một sợi',
+  'v2-points':     'Điểm đo',
+  'v2-assets':     'Vật tư trong kho',
+  'vattu-v2':      'Kết nối & thiết lập',
 };
 
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
 const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt', 'catalog', 'assign'];
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
+/** Nhóm "Hồ sơ Kho" — module vật tư làm lại, dữ liệu tách hẳn khỏi 2 nhóm trên. */
+const KHO_TABS: Tab[] = ['v2-points', 'v2-assets', 'vattu-v2'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isBusinessExpanded, setIsBusinessExpanded] = useState(true);
   const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
+  const [isKhoExpanded, setIsKhoExpanded] = useState(false);
 
-  // Accordion: mở nhóm này thì nhóm kia tự đóng
-  const toggleSection = (section: 'business' | 'operating') => {
-    if (section === 'business') {
-      const willOpen = !isBusinessExpanded;
-      setIsBusinessExpanded(willOpen);
-      if (willOpen) setIsOperatingExpanded(false);
-    } else {
-      const willOpen = !isOperatingExpanded;
-      setIsOperatingExpanded(willOpen);
-      if (willOpen) setIsBusinessExpanded(false);
-    }
+  // Accordion: mở nhóm này thì các nhóm kia tự đóng
+  const toggleSection = (section: 'business' | 'operating' | 'kho') => {
+    const open = {
+      business: isBusinessExpanded, operating: isOperatingExpanded, kho: isKhoExpanded,
+    }[section];
+    setIsBusinessExpanded(section === 'business' && !open);
+    setIsOperatingExpanded(section === 'operating' && !open);
+    setIsKhoExpanded(section === 'kho' && !open);
   };
 
   const handleLogout = () => { pb.authStore.clear(); window.location.reload(); };
@@ -280,6 +289,48 @@ export default function BusinessDashboard() {
               )}
             </AnimatePresence>
           </li>
+
+          {/* Hồ sơ Kho — module vật tư làm lại (collection v2_* trên production) */}
+          <li className="relative mt-1">
+            <button
+              id="nav-kho"
+              onClick={() => toggleSection('kho')}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                KHO_TABS.includes(topTab) ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <Warehouse className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Hồ sơ Kho</span>
+              <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isKhoExpanded ? 'rotate-180' : ''}`} />
+            </button>
+            <AnimatePresence initial={false}>
+              {isKhoExpanded && (
+                <motion.ul
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22 }}
+                  className="overflow-hidden list-none px-0"
+                >
+                  {KHO_TABS.map(t => (
+                    <li key={t}>
+                      <button
+                        id={`nav-${t}-sub`}
+                        onClick={() => { setTopTab(t); onNavigate?.(); }}
+                        className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                          topTab === t ? 'text-accent' : 'text-soft hover:text-dim'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                        <span className="flex-1">{TAB_LABEL[t]}</span>
+                        <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+                      </button>
+                    </li>
+                  ))}
+                </motion.ul>
+              )}
+            </AnimatePresence>
+          </li>
         </ul>
       </nav>
     </div>
@@ -407,6 +458,18 @@ export default function BusinessDashboard() {
             ) : topTab === 'assign' ? (
               <Suspense fallback={<div className="flex items-center justify-center py-20 text-faint">Đang tải...</div>}>
                 <CatalogAssign />
+              </Suspense>
+            ) : topTab === 'v2-points' ? (
+              <Suspense fallback={<div className="flex items-center justify-center py-20 text-faint">Đang tải...</div>}>
+                <V2Points />
+              </Suspense>
+            ) : topTab === 'v2-assets' ? (
+              <Suspense fallback={<div className="flex items-center justify-center py-20 text-faint">Đang tải...</div>}>
+                <V2Assets />
+              </Suspense>
+            ) : topTab === 'vattu-v2' ? (
+              <Suspense fallback={<div className="flex items-center justify-center py-20 text-faint">Đang tải...</div>}>
+                <VatTuV2 />
               </Suspense>
             ) : topTab === 'operating' ? (
               <OfficeCustomerManager />

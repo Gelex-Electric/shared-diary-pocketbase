@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, Plus, Search, Lock, AlertTriangle, Ban, Archive, Save, Undo2,
-  MapPin, Building2, Gauge, Package, ChevronDown, Upload, Users,
+  MapPin, Building2, Gauge, Package, ChevronDown, Upload, Users, Warehouse,
 } from 'lucide-react';
 import { toast as notify } from '../../lib/toast';
 import { fetchCatalog, isAbortError, type CatalogData, hasRatio, viDate } from '../../lib/catalog';
@@ -26,17 +26,18 @@ const EMPTY: CatalogData = {
   warehouses: [], assets: [], installs: [],
 };
 
-// Bo tab Kho: moi KCN dung 1 kho, tao san boi script, khong can quan ly rieng
+// Mo lai tab Kho (user chot 07/08): 6 kho - 5 kho tai KCN + 1 kho trung chuyen
+// khong thuoc KCN nao, nen danh sach kho khong con suy ra duoc tu KCN.
 /** 'mkh' KHONG phai EntityKind: no gan khach hang vao diem do (ghi
     dm_point_customer), khong phai CRUD mot bang. */
-const TABS: EntityKind[] = ['zone', 'station', 'point', 'asset', 'customer'];
+const TABS: EntityKind[] = ['zone', 'station', 'point', 'asset', 'warehouse', 'customer'];
 const TAB_LABEL: Record<EntityKind, string> = {
   zone: 'Khu công nghiệp', station: 'Trạm', point: 'Điểm đo', asset: 'Vật tư',
   warehouse: 'Kho', customer: 'Khách hàng',
 };
 const TAB_ICON: Record<EntityKind, any> = {
   zone: MapPin, station: Building2, point: Gauge, asset: Package,
-  warehouse: Package, customer: Users,
+  warehouse: Warehouse, customer: Users,
 };
 
 /** Trang QUẢN LÝ DANH MỤC — thêm / sửa / xóa. Kéo thả nằm ở trang riêng. */
