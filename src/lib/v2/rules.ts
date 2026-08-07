@@ -4,8 +4,8 @@
  * User chốt 07/08:
  *   R1  Mỗi điểm đo có đúng 1 công tơ đang treo.
  *   R2  Mỗi điểm đo có đúng 1 GP-03 đang treo.
- *   R3  Công tơ trực tiếp (ME-42, DTS27) → cấm treo TI/TU, HSN = 1.
- *   R4  Công tơ gián tiếp (ME-41) → bắt buộc có TI, HSN = tỷ số TU × tỷ số TI.
+ *   R3  Công tơ trực tiếp (ME-42) → cấm treo TI/TU, HSN = 1.
+ *   R4  Công tơ gián tiếp (ME-41, DTS27) → bắt buộc có TI, HSN = tỷ số TU × TI.
  *   R5  Một bộ TI (hoặc TU) cùng tỷ số chỉ tính MỘT lần trong phép nhân.
  *   R6  Không có TU → thừa số TU = 1.
  *   R7  Vật tư quá hạn kiểm định không được treo.

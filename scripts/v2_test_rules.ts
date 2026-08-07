@@ -68,6 +68,18 @@ console.log('R4/R6 — công tơ gián tiếp: bắt buộc TI, HSN = TU × TI')
   check('TI chưa khai tỷ số → khoá ghi', isLocked('active', [me41, gp, tiTrong]) === true);
 }
 
+console.log('DTS27 — công tơ gián tiếp (user xác nhận 07/08)');
+{
+  const dts = mk('DTS27'), gp = mk('GP03');
+  check('DTS27 chưa có TI → chưa suy ra được HSN', hsnOf([dts, gp]).value === null);
+  check('DTS27 chưa có TI → không cho vận hành', canActivate([dts, gp]).ok === false);
+  const ti = mk('TI', { ratio_primary: 1600, ratio_secondary: 5 });
+  check('treo TI lên điểm đo DTS27 → cho phép', canHang(ti, 'active', [dts, gp]).ok === true,
+    canHang(ti, 'active', [dts, gp]).reason);
+  check('DTS27 + TI 1600/5 → HSN = 320', hsnOf([dts, gp, ti]).value === 320,
+    hsnOf([dts, gp, ti]).explain);
+}
+
 console.log('R1/R2 — đúng 1 công tơ và 1 GP-03');
 {
   const me41 = mk('ME41'), gp = mk('GP03');

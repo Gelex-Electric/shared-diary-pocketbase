@@ -27,14 +27,14 @@ export const V2_ASSET_TYPE_LABEL: Record<V2AssetType, string> = {
   TI: 'TI', TU: 'TU', GP03: 'GP-03', KHAC: 'Khác',
 };
 
-/** Công tơ gián tiếp — đo qua TI nên BẮT BUỘC có TI (luật R4). */
-export const METER_INDIRECT: V2AssetType[] = ['ME41'];
-
 /**
- * Công tơ trực tiếp — đấu thẳng, HSN = 1, cấm treo TI/TU (luật R3).
- * DTS27 tạm xếp vào đây (giả định ghi trong plan, chờ user xác nhận).
+ * Công tơ gián tiếp — đo qua TI nên BẮT BUỘC có TI (luật R4).
+ * DTS27 nằm ở đây: user xác nhận 07/08 là loại gián tiếp, cần TI.
  */
-export const METER_DIRECT: V2AssetType[] = ['ME42', 'DTS27'];
+export const METER_INDIRECT: V2AssetType[] = ['ME41', 'DTS27'];
+
+/** Công tơ trực tiếp — đấu thẳng, HSN = 1, cấm treo TI/TU (luật R3). */
+export const METER_DIRECT: V2AssetType[] = ['ME42'];
 
 export const METER_TYPES: V2AssetType[] = [...METER_INDIRECT, ...METER_DIRECT];
 
