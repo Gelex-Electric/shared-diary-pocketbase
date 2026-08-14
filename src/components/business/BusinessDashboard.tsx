@@ -9,7 +9,7 @@ import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
 import QuickImportManager from './QuickImportManager';
 import CustomerDebtManager from './CustomerDebtManager';
-import OfficeCustomerManager from './OfficeCustomerManager';
+import CustomerManager from '../CustomerManager';
 import HesReadingManager from '../hes/HesReadingManager';
 import OfficeVoltagePowerDashboard from './OfficeVoltagePowerDashboard';
 import TransformerLossManager from '../TransformerLossManager';
@@ -370,7 +370,7 @@ export default function BusinessDashboard() {
             ) : topTab === 'customer-debt' ? (
               <CustomerDebtManager />
             ) : topTab === 'operating' ? (
-              <OfficeCustomerManager />
+              <CustomerManager scope="vanphong" />
             ) : topTab === 'hes' ? (
               <HesReadingManager scope="vanphong" />
             ) : topTab === 'opchart' ? (
