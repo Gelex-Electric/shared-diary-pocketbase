@@ -36,18 +36,27 @@ export interface Zone extends PbRecord {
 }
 
 export interface Station extends PbRecord {
+  /** Do hệ thống sinh, không gõ tay — xem `buildStationCode` trong `naming.ts`. */
   code: string;
   name?: string;
   zone: string;
+  /** Chủ trạm — cần để lấy tên tắt khi sinh mã trạm. */
+  customer?: string;
+  /** Định danh trạm trong khuôn viên khách hàng: T1, T2, NX1… */
+  ident?: string;
   sdm_kva?: number;
-  p0_kw?: number;
-  pk_kw?: number;
+  /** Tổn hao không tải, đơn vị W (không phải kW). */
+  p0_w?: number;
+  /** Tổn hao ngắn mạch, đơn vị W. */
+  pk_w?: number;
   note?: string;
 }
 
 export interface Customer extends PbRecord {
   mkh: string;
   name: string;
+  /** Tên tắt: viết liền, không dấu, chỉ cho phép thêm dấu '-'. Dùng sinh mã trạm. */
+  short_name?: string;
   address?: string;
   zone?: string;
   active?: boolean;

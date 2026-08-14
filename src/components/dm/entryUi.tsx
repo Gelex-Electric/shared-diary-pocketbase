@@ -74,6 +74,18 @@ export function NumberInput({ value, onChange, placeholder, suffix }: {
 }
 
 /**
+ * Ô chỉ đọc — dùng cho giá trị do hệ thống sinh (vd mã trạm ghép từ 4 mảnh).
+ * Nền chìm + viền đứt để người dùng thấy ngay là không gõ vào đây được.
+ */
+export function DerivedValue({ value, placeholder }: { value: string; placeholder?: string }) {
+  return (
+    <div className="w-full rounded border border-dashed border-[var(--border)] bg-subtle px-4 py-3 font-mono text-sm font-bold">
+      {value ? <span className="text-ink">{value}</span> : <span className="text-faint">{placeholder}</span>}
+    </div>
+  );
+}
+
+/**
  * Modal nhập liệu — bấm "Thêm …" mới hiện, dùng lại cho cả thêm mới lẫn sửa.
  * Nền mờ bấm ra ngoài để đóng, hệt các modal sẵn có trong app.
  */
