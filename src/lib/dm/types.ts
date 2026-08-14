@@ -63,8 +63,15 @@ export interface Customer extends PbRecord {
 }
 
 export interface Point extends PbRecord {
-  line_id: string;
-  line_name: string;
+  /** Mã điểm đo do hệ thống sinh — xem `buildPointCode` trong `naming.ts`. */
+  code?: string;
+  /** Định danh điểm đo, phần trong ngoặc cuối mã: `0,4` → `(0,4)`. */
+  ident?: string;
+  /** Điểm đo phụ trỏ về điểm đo chính của nó. Rỗng nếu là điểm chính. */
+  parent_point?: string;
+  /** Mã bên HES — thường chưa có lúc khai, nên để tuỳ chọn. */
+  line_id?: string;
+  line_name?: string;
   station: string;
   zone?: string;
   customer?: string;

@@ -88,3 +88,53 @@ export function missingStationCodeParts(p: StationCodeParts): string[] {
   if (!powerPart(p.sdmKva)) miss.push('công suất trạm');
   return miss;
 }
+
+/* ==================================================================
+   MÃ ĐIỂM ĐO
+   ================================================================== */
+
+/**
+ * Định danh điểm đo hiện trong ngoặc ở cuối mã (vd `(0,4)`).
+ * Người dùng gõ `0,4` hay `(0,4)` đều ra một kết quả — bỏ ngoặc thừa rồi bọc lại.
+ */
+export function pointIdentPart(ident?: string | null): string {
+  const s = (ident ?? '').trim().replace(/^\(+|\)+$/g, '').trim();
+  return s ? `(${s})` : '';
+}
+
+export interface PointCodeParts extends StationCodeParts {
+  /** `true` = điểm đo phụ → chèn thêm tên tắt KH phụ trước định danh trạm. */
+  isSub: boolean;
+  /** Tên tắt KH của chính điểm đo phụ. Bỏ qua khi là điểm đo chính. */
+  subCustomerShortName?: string;
+  /** Định danh điểm đo, phần trong ngoặc ở cuối. Có thể bỏ trống. */
+  pointIdent?: string;
+}
+
+/**
+ * Ghép mã điểm đo.
+ *   chính : TH.BQL-TH.T1.180kVA(0,4)
+ *   phụ   : TH.BQL-TH.<KH phụ>.T1.180kVA(0,4)
+ *
+ * Phần đầu trùng đúng mã trạm — điểm đo chính chỉ là mã trạm cộng thêm định
+ * danh trong ngoặc; điểm đo phụ chèn tên tắt KH phụ ngay sau tên tắt KH của trạm.
+ */
+export function buildPointCode(p: PointCodeParts): string {
+  const segments = [
+    zoneSuffix(p.zoneCode),
+    normalizeShortName(p.customerShortName),
+    ...(p.isSub ? [normalizeShortName(p.subCustomerShortName ?? '')] : []),
+    p.ident.trim().toUpperCase(),
+    powerPart(p.sdmKva),
+  ];
+  return segments.join('.') + pointIdentPart(p.pointIdent);
+}
+
+/** Phần còn thiếu để ghép được mã điểm đo (định danh điểm đo KHÔNG bắt buộc). */
+export function missingPointCodeParts(p: PointCodeParts): string[] {
+  const miss = missingStationCodeParts(p);
+  if (p.isSub && !normalizeShortName(p.subCustomerShortName ?? '')) {
+    miss.push('tên tắt khách hàng phụ');
+  }
+  return miss;
+}

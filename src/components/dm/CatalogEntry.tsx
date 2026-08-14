@@ -12,28 +12,31 @@
  * đầu trang). Thêm và Sửa dùng chung một modal.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Building2, Factory, Users, Plus, Trash2, Edit2, RefreshCw } from 'lucide-react';
+import { Building2, Factory, Users, Gauge, Plus, Trash2, Edit2, RefreshCw, CornerDownRight } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import type { TabItem } from '../ui/Tabs';
 import { Select } from '../ui/Select';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { toast } from '../../lib/toast';
-import { customers, loadCatalog, pbErrorMessage, stations, zones } from '../../lib/dm/repo';
+import { Toggle } from '../ui/Toggle';
+import { customers, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
-import type { Customer, Station, Zone } from '../../lib/dm/types';
+import { CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
+import type { Connection, Customer, Point, PointRole, PointStatus, Station, Zone } from '../../lib/dm/types';
 import type { Scope } from '../../lib/scope';
 import { DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS } from './entryUi';
 import {
-  SHORT_NAME_HINT, buildStationCode, isValidShortName,
-  missingStationCodeParts, normalizeShortName,
+  SHORT_NAME_HINT, buildPointCode, buildStationCode, isValidShortName,
+  missingPointCodeParts, missingStationCodeParts, normalizeShortName,
 } from '../../lib/dm/naming';
 
-type CatTab = 'zone' | 'station' | 'customer';
+type CatTab = 'zone' | 'station' | 'customer' | 'point';
 
 const TABS: TabItem<CatTab>[] = [
   { id: 'zone', label: 'Khu công nghiệp', icon: Building2, sub: 'dm_zone' },
   { id: 'station', label: 'Trạm', icon: Factory, sub: 'dm_station' },
   { id: 'customer', label: 'Khách hàng', icon: Users, sub: 'dm_customer' },
+  { id: 'point', label: 'Điểm đo', icon: Gauge, sub: 'dm_point' },
 ];
 
 const HEAD: Record<CatTab, { title: string; desc: string; add: string }> = {
@@ -52,6 +55,11 @@ const HEAD: Record<CatTab, { title: string; desc: string; add: string }> = {
     desc: 'Một khách hàng có nhiều điểm đo, có thể nằm ở nhiều trạm',
     add: 'Thêm khách hàng',
   },
+  point: {
+    title: 'Điểm đo',
+    desc: 'Điểm đo phụ nằm trong phạm vi đo của một điểm đo chính',
+    add: 'Thêm điểm đo',
+  },
 };
 
 const EMPTY_Z = { code: '', name: '', address: '' };
@@ -61,6 +69,12 @@ const EMPTY_S = {
   sdm_kva: '', p0_w: '', pk_w: '', note: '',
 };
 const EMPTY_C = { mkh: '', name: '', short_name: '', address: '', zone: '' };
+/** `code` cũng do hệ thống sinh; `customer` chỉ dùng khi là điểm đo phụ. */
+const EMPTY_P = {
+  station: '', role: 'chinh' as PointRole, connection: 'truc_tiep' as Connection,
+  customer: '', parent_point: '', ident: '', hsn: '1',
+  line_id: '', status: '' as PointStatus, note: '',
+};
 
 const toNum = (s: string): number | undefined => {
   const v = parseFloat(s);
@@ -82,6 +96,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const [zForm, setZForm] = useState(EMPTY_Z);
   const [sForm, setSForm] = useState(EMPTY_S);
   const [cForm, setCForm] = useState(EMPTY_C);
+  const [pForm, setPForm] = useState(EMPTY_P);
 
   const load = async () => {
     setLoading(true);
@@ -103,6 +118,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       value: c.id,
       label: c.short_name ? `${c.mkh} — ${c.name} (${c.short_name})` : `${c.mkh} — ${c.name}`,
     })), [d]);
+  const stationOpts = useMemo(
+    () => (d?.stations ?? []).map(s => ({ value: s.id, label: s.code })), [d]);
   const zoneName = (id?: string) => d?.zones.find(z => z.id === id)?.name ?? '—';
   const customerMkh = (id?: string) => d?.customers.find(c => c.id === id)?.mkh ?? '—';
   const stationsOfZone = (id: string) => d?.stations.filter(s => s.zone === id).length ?? 0;
@@ -115,6 +132,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     if (tab === 'zone') setZForm(EMPTY_Z);
     if (tab === 'station') setSForm({ ...EMPTY_S, zone: sForm.zone });
     if (tab === 'customer') setCForm({ ...EMPTY_C, zone: cForm.zone });
+    // Giữ trạm đang chọn để khai liên tiếp nhiều điểm đo trong cùng một trạm.
+    if (tab === 'point') setPForm({ ...EMPTY_P, station: pForm.station });
     setModal(tab);
   };
 
@@ -140,6 +159,17 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     setModal('customer');
   };
 
+  const editPoint = (p: Point) => {
+    setEditingId(p.id);
+    setPForm({
+      station: p.station, role: p.role, connection: p.connection,
+      customer: p.customer ?? '', parent_point: p.parent_point ?? '',
+      ident: p.ident ?? '', hsn: str(p.hsn),
+      line_id: p.line_id ?? '', status: (p.status ?? '') as PointStatus, note: p.note ?? '',
+    });
+    setModal('point');
+  };
+
   const closeModal = () => { setModal(null); setEditingId(null); };
 
   /* ------------------- mã trạm do hệ thống sinh ------------------- */
@@ -155,6 +185,32 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const stationCodeMissing = missingStationCodeParts(codeParts);
   /** KH đã chọn nhưng chưa khai tên tắt → không ghép được mã, phải chỉ rõ. */
   const customerLacksShortName = !!sCustomer && !sCustomer.short_name;
+
+  /* ------------------ mã điểm đo do hệ thống sinh ------------------ */
+  const pStation = d?.stations.find(s => s.id === pForm.station);
+  const pStationZone = d?.zones.find(z => z.id === pStation?.zone);
+  const pStationCustomer = d?.customers.find(c => c.id === pStation?.customer);
+  const pSubCustomer = d?.customers.find(c => c.id === pForm.customer);
+  const isSub = pForm.role === 'phu';
+
+  const pointParts = {
+    zoneCode: pStationZone?.code ?? '',
+    customerShortName: pStationCustomer?.short_name ?? '',
+    ident: pStation?.ident ?? '',
+    sdmKva: pStation?.sdm_kva ?? null,   // công suất lấy theo trạm chứa nó
+    isSub,
+    subCustomerShortName: pSubCustomer?.short_name ?? '',
+    pointIdent: pForm.ident,
+  };
+  const pointCode = buildPointCode(pointParts);
+  const pointCodeMissing = missingPointCodeParts(pointParts);
+
+  /** Điểm đo chính trong cùng trạm — nguồn chọn cha cho điểm đo phụ. */
+  const parentOpts = useMemo(
+    () => (d?.points ?? [])
+      .filter(p => p.role === 'chinh' && p.station === pForm.station && p.id !== editingId)
+      .map(p => ({ value: p.id, label: p.code || p.line_name || p.id })),
+    [d, pForm.station, editingId]);
 
   /* --------------------------- lưu --------------------------- */
   const persist = async (fn: () => Promise<unknown>, okMsg: string) => {
@@ -217,6 +273,40 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         () => (editingId ? customers.update(editingId, body) : customers.create(body)),
         `Khách hàng ${body.mkh}`);
     }
+
+    if (modal === 'point') {
+      if (!pForm.station) {
+        return toast.warning('Thiếu thông tin', 'Phải chọn trạm chứa điểm đo.');
+      }
+      if (pointCodeMissing.length) {
+        return toast.warning('Chưa sinh được mã điểm đo',
+          `Còn thiếu: ${pointCodeMissing.join(', ')}.`);
+      }
+      if (isSub && !pForm.parent_point) {
+        return toast.warning('Thiếu điểm đo chính',
+          'Điểm đo phụ phải nằm trong phạm vi đo của một điểm đo chính.');
+      }
+      const body = {
+        code: pointCode,
+        // LINE_NAME bên HES chính là chuỗi mã này — điền luôn để khỏi lệch.
+        line_name: pointCode,
+        line_id: pForm.line_id.trim(),
+        ident: pForm.ident.trim(),
+        station: pForm.station,
+        zone: pStation?.zone || undefined,
+        // Điểm đo chính thuộc về chủ trạm; điểm đo phụ mang khách hàng riêng.
+        customer: isSub ? pForm.customer : (pStation?.customer || undefined),
+        parent_point: isSub ? pForm.parent_point : '',
+        role: pForm.role,
+        connection: pForm.connection,
+        hsn: pForm.connection === 'truc_tiep' ? 1 : toNum(pForm.hsn),
+        status: pForm.status || undefined,
+        note: pForm.note.trim(),
+      };
+      return void persist(
+        () => (editingId ? points.update(editingId, body) : points.create(body)),
+        `Điểm đo ${body.code}`);
+    }
   };
 
   const del = async (label: string, fn: () => Promise<unknown>, warn?: string) => {
@@ -248,6 +338,33 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       </button>
     </div>
   );
+
+  const stationCodeOf = (id?: string) => d?.stations.find(s => s.id === id)?.code ?? '—';
+  const childrenOf = (id: string) => d?.points.filter(p => p.parent_point === id).length ?? 0;
+
+  /**
+   * Xếp bảng điểm đo theo phân cấp: mỗi điểm chính kéo theo các điểm phụ của
+   * nó (thụt lề). Điểm phụ mất cha, hoặc điểm phụ chưa gán cha, xếp cuối bảng
+   * để không biến mất khỏi danh sách.
+   */
+  const pointRows = useMemo(() => {
+    const all = d?.points ?? [];
+    const rows: { point: Point; isChild: boolean }[] = [];
+    const placed = new Set<string>();
+
+    for (const p of all.filter(x => x.role === 'chinh')) {
+      rows.push({ point: p, isChild: false });
+      placed.add(p.id);
+      for (const child of all.filter(x => x.parent_point === p.id)) {
+        rows.push({ point: child, isChild: true });
+        placed.add(child.id);
+      }
+    }
+    for (const p of all) {
+      if (!placed.has(p.id)) rows.push({ point: p, isChild: false });
+    }
+    return rows;
+  }, [d]);
 
   const head = HEAD[tab];
   const modalTitle = editingId
@@ -394,6 +511,61 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         </TableCard>
       )}
 
+      {/* ============================ Điểm đo ============================ */}
+      {tab === 'point' && (
+        <>
+          {!d?.stations.length && !loading && (
+            <div className="vl-alert vl-alert-light-warning">
+              Phải khai ít nhất một trạm ở tab "Trạm" trước khi thêm điểm đo.
+            </div>
+          )}
+          <TableCard loading={loading} isEmpty={(d?.points.length ?? 0) === 0}
+            empty="Chưa có điểm đo nào được khai."
+            columns={<>
+              <th className={`${TH_CLS} pl-10`}>Mã điểm đo</th>
+              <th className={TH_CLS}>Trạm</th>
+              <th className={TH_CLS}>Khách hàng</th>
+              <th className={`${TH_CLS} w-28`}>Loại</th>
+              <th className={`${TH_CLS} w-32`}>Đấu nối</th>
+              <th className={`${TH_CLS} w-24`}>HSN</th>
+              <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
+            </>}>
+            {pointRows.map(({ point: p, isChild }) => (
+              <tr key={p.id} className="transition-colors hover:bg-subtle/50">
+                <td className={`px-6 py-4 ${isChild ? 'pl-16' : 'pl-10'}`}>
+                  <span className="flex items-center gap-2">
+                    {isChild && <CornerDownRight className="h-4 w-4 shrink-0 text-faint" />}
+                    <span className={`font-mono text-sm ${isChild ? 'text-dim' : 'font-bold text-ink'}`}>
+                      {p.code || p.line_name || '—'}
+                    </span>
+                  </span>
+                </td>
+                <td className="px-6 py-4 font-mono text-xs text-soft">{stationCodeOf(p.station)}</td>
+                <td className="px-6 py-4 font-mono text-xs font-bold text-soft">{customerMkh(p.customer)}</td>
+                <td className="px-6 py-4">
+                  <span className={p.role === 'chinh' ? 'vl-badge-primary' : 'vl-badge-info'}>
+                    {ROLE_LABEL[p.role]}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
+                  <span className={p.connection === 'gian_tiep' ? 'vl-badge-warning' : 'vl-badge-success'}>
+                    {CONNECTION_LABEL[p.connection]}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-sm font-bold text-dim">{p.hsn ?? '—'}</td>
+                <td className="px-6 py-4 pr-10 text-right">
+                  <RowActions onEdit={() => editPoint(p)}
+                    onDelete={() => void del(`điểm đo ${p.code || p.line_name}`, () => points.remove(p.id),
+                      childrenOf(p.id) > 0
+                        ? `Điểm đo này đang có ${childrenOf(p.id)} điểm đo phụ. Xóa nó KHÔNG xóa các điểm phụ — chúng sẽ mất điểm đo chính.`
+                        : undefined)} />
+                </td>
+              </tr>
+            ))}
+          </TableCard>
+        </>
+      )}
+
       {/* ============================ Modal ============================ */}
       <FormModal open={modal !== null} title={modalTitle} onClose={closeModal} onSubmit={submit} saving={saving}>
         {modal === 'zone' && (
@@ -499,6 +671,103 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             </Field>
             <Field label="Địa chỉ">
               <TextInput value={cForm.address} onChange={v => setCForm(f => ({ ...f, address: v }))} />
+            </Field>
+          </>
+        )}
+
+        {modal === 'point' && (
+          <>
+            <Field label="Trạm" required
+              hint={pStation ? `KCN ${pStationZone?.code ?? '—'} · KH ${pStationCustomer?.short_name ?? '—'} · ${pStation.ident ?? '—'} · ${pStation.sdm_kva ?? '—'} kVA` : undefined}>
+              <Select value={pForm.station} onChange={v => setPForm(f => ({ ...f, station: v, parent_point: '' }))}
+                options={stationOpts} placeholder="Chọn trạm" searchable />
+            </Field>
+
+            {/* Hai thanh gạt — đúng yêu cầu user */}
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label="Đấu nối">
+                <Toggle value={pForm.connection}
+                  onChange={v => setPForm(f => ({ ...f, connection: v, hsn: v === 'truc_tiep' ? '1' : '' }))}
+                  options={[
+                    { value: 'truc_tiep', label: CONNECTION_LABEL.truc_tiep, hex: '#10b981' },
+                    { value: 'gian_tiep', label: CONNECTION_LABEL.gian_tiep, hex: '#f97316' },
+                  ]} />
+              </Field>
+              <Field label="Loại điểm đo">
+                <Toggle value={pForm.role}
+                  onChange={v => setPForm(f => ({ ...f, role: v, customer: '', parent_point: '' }))}
+                  options={[
+                    { value: 'chinh', label: ROLE_LABEL.chinh },
+                    { value: 'phu', label: ROLE_LABEL.phu, hex: '#8b5cf6' },
+                  ]} />
+              </Field>
+            </div>
+
+            {/* Điểm đo phụ: cần KH phụ + điểm đo chính chứa nó */}
+            {isSub && (
+              <div className="grid gap-6 sm:grid-cols-2">
+                <Field label="Khách hàng phụ" required
+                  hint={pSubCustomer && !pSubCustomer.short_name ? 'KH này chưa khai tên tắt' : 'Tên tắt của KH này chèn vào giữa mã'}>
+                  <Select value={pForm.customer} onChange={v => setPForm(f => ({ ...f, customer: v }))}
+                    options={customerOpts} placeholder="Chọn khách hàng phụ" searchable />
+                </Field>
+                <Field label="Phụ của điểm đo chính" required
+                  hint={pForm.station ? undefined : 'Chọn trạm trước'}>
+                  <Select value={pForm.parent_point} onChange={v => setPForm(f => ({ ...f, parent_point: v }))}
+                    options={parentOpts} placeholder={parentOpts.length ? 'Chọn điểm đo chính' : 'Trạm này chưa có điểm đo chính'}
+                    disabled={!parentOpts.length} searchable />
+                </Field>
+              </div>
+            )}
+
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label="Định danh điểm đo" hint="Không bắt buộc. Gõ 0,4 → mã có đuôi (0,4)">
+                <TextInput value={pForm.ident} mono placeholder="0,4"
+                  onChange={v => setPForm(f => ({ ...f, ident: v }))} />
+              </Field>
+              <Field label="HSN"
+                hint={pForm.connection === 'truc_tiep'
+                  ? 'Đấu trực tiếp: HSN luôn = 1, không có TI để nhân.'
+                  : 'Đấu gián tiếp: HSN = tỷ số TI (× TU nếu có).'}>
+                <NumberInput value={pForm.connection === 'truc_tiep' ? '1' : pForm.hsn}
+                  onChange={v => setPForm(f => ({ ...f, hsn: v }))} />
+              </Field>
+            </div>
+
+            <Field label="Mã điểm đo (hệ thống tự sinh)"
+              hint={isSub
+                ? 'Ghép: hậu tố KCN . tên tắt KH của trạm . tên tắt KH phụ . định danh trạm . công suất(định danh điểm đo)'
+                : 'Ghép: hậu tố KCN . tên tắt KH . định danh trạm . công suất(định danh điểm đo)'}>
+              <DerivedValue value={pointCodeMissing.length ? '' : pointCode}
+                placeholder={pForm.station ? pointCode : 'Chọn trạm trước'} />
+            </Field>
+            {pointCodeMissing.length > 0 && (
+              <p className="-mt-3 ml-1 text-[11px] font-semibold text-warn">
+                Còn thiếu: {pointCodeMissing.join(', ')}. Các mảnh này lấy từ hồ sơ trạm và khách hàng.
+              </p>
+            )}
+
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label="LINE_ID (HES)" hint="Bỏ trống nếu chưa có mã bên HES">
+                <TextInput value={pForm.line_id} mono
+                  onChange={v => setPForm(f => ({ ...f, line_id: v }))} />
+              </Field>
+              <Field label="Trạng thái">
+                <Select value={pForm.status}
+                  onChange={v => setPForm(f => ({ ...f, status: v as PointStatus }))}
+                  options={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
+                  placeholder="Chưa xác định" />
+              </Field>
+            </div>
+
+            <div className="vl-alert vl-alert-light-primary text-[12px]">
+              Điểm đo còn cần <b>1 công tơ</b> + <b>1 đo xa GP-03</b>
+              {pForm.connection === 'gian_tiep' && <> và <b>3 TI</b></>} — phần vật tư làm ở bước sau,
+              hiện chưa kiểm tra được.
+            </div>
+
+            <Field label="Ghi chú">
+              <TextInput value={pForm.note} onChange={v => setPForm(f => ({ ...f, note: v }))} />
             </Field>
           </>
         )}

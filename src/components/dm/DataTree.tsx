@@ -12,13 +12,32 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Building2, Factory, Gauge, ChevronRight, RefreshCw, Search,
-  FoldVertical, UnfoldVertical, AlertTriangle,
+  FoldVertical, UnfoldVertical, AlertTriangle, CornerDownRight,
 } from 'lucide-react';
 import { loadCatalog, pbErrorMessage } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
 import { CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
 import type { Point, Station, Zone } from '../../lib/dm/types';
 import { kcnColorOf } from '../../lib/kcnColors';
+
+/**
+ * Xếp điểm đo trong một trạm theo phân cấp: mỗi điểm chính kéo theo các điểm
+ * phụ của nó (thụt lề). Điểm phụ chưa gán cha xếp cuối để không bị mất.
+ */
+function orderPoints(list: Point[]): { point: Point; isChild: boolean }[] {
+  const rows: { point: Point; isChild: boolean }[] = [];
+  const placed = new Set<string>();
+  for (const p of list.filter(x => x.role === 'chinh')) {
+    rows.push({ point: p, isChild: false });
+    placed.add(p.id);
+    for (const child of list.filter(x => x.parent_point === p.id)) {
+      rows.push({ point: child, isChild: true });
+      placed.add(child.id);
+    }
+  }
+  for (const p of list) if (!placed.has(p.id)) rows.push({ point: p, isChild: false });
+  return rows;
+}
 
 /** Nút bấm mở/đóng — mũi tên xoay, vùng bấm rộng cả hàng. */
 function Caret({ open, hidden }: { open: boolean; hidden?: boolean }) {
@@ -127,13 +146,17 @@ export default function DataTree() {
     && orphanStations.length === 0 && orphanPoints.length === 0;
 
   /* -------------------------- hàng điểm đo -------------------------- */
-  const PointRow = ({ p }: { p: Point }) => {
+  const PointRow = ({ p, isChild }: { p: Point; isChild?: boolean }) => {
     const c = customerOf(p);
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-subtle">
+      <div className={`flex flex-wrap items-center gap-2 rounded-lg py-2 pr-3 transition-colors hover:bg-subtle ${
+        isChild ? 'pl-9' : 'pl-3'
+      }`}>
+        {isChild && <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-faint" />}
         <Gauge className="h-4 w-4 shrink-0 text-faint" />
-        <span className="font-mono text-[11px] text-faint">{p.line_id}</span>
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">{p.line_name}</span>
+        <span className={`min-w-0 flex-1 truncate text-[13px] ${isChild ? 'text-dim' : 'font-semibold text-ink'}`}>
+          {p.code || p.line_name || p.line_id}
+        </span>
 
         <span className={p.role === 'chinh' ? 'vl-badge-primary' : 'vl-badge-info'}>
           {ROLE_LABEL[p.role]}
@@ -261,7 +284,9 @@ export default function DataTree() {
                           {/* --- Cấp 3: Điểm đo --- */}
                           {sOpen && points.length > 0 && (
                             <div className="ml-[9px] border-l border-[var(--border)] pl-4">
-                              {points.map(p => <PointRow key={p.id} p={p} />)}
+                              {orderPoints(points).map(({ point, isChild }) => (
+                                <PointRow key={point.id} p={point} isChild={isChild} />
+                              ))}
                             </div>
                           )}
                         </div>
