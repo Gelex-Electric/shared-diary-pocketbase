@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { pb, AREAS } from '../lib/pocketbase';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
+import { useScopeAreas, type Scope } from '../lib/scope';
 import {
   MapPin, RefreshCw, ChevronRight,
   CheckCircle2, XCircle, Search, Gauge,
@@ -21,7 +21,7 @@ type CustomerGroup = { code: string; name: string; area: string; meters: MeterIn
 /* ================================================================
    COMPONENT
 ================================================================ */
-export default function CustomerManager() {
+export default function CustomerManager({ scope = 'doi' }: { scope?: Scope }) {
   const [rows, setRows] = useState<MeterInfoRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterArea, setFilterArea] = useState('');
@@ -36,13 +36,7 @@ export default function CustomerManager() {
   }, []);
 
   /* ---- Area helpers ---- */
-  const userAreas = React.useMemo(() => {
-    const raw = pb.authStore.model?.area;
-    return Array.isArray(raw)
-      ? raw
-      : typeof raw === 'string' ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
-  }, [JSON.stringify(pb.authStore.model?.area)]);
-  const effectiveAreas = React.useMemo(() => (userAreas.length > 0 ? userAreas : AREAS), [userAreas]);
+  const { areas: effectiveAreas, canPickArea, allLabel } = useScopeAreas(scope);
 
   /* ================================================================
      DATA
@@ -116,9 +110,9 @@ export default function CustomerManager() {
               />
             </div>
 
-            {userAreas.length !== 1 && (
+            {canPickArea && (
               <Select value={filterArea} onChange={setFilterArea}
-                options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map(a => ({ value: a, label: a }))]}
+                options={[{ value: '', label: allLabel }, ...effectiveAreas.map(a => ({ value: a, label: a }))]}
                 className="min-w-[160px]" />
             )}
           </div>

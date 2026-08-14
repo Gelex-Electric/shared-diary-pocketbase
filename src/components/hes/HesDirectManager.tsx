@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
-import { pb, AREAS, ID_TO_AREA } from '../../lib/pocketbase';
 import { fetchMeterInfo } from '../../lib/meterInfo';
+import { useScopeAreas, type Scope } from '../../lib/scope';
 import {
   fetchHesIndex, computeConsumption,
   type HesIndexData, type Consumption,
@@ -27,7 +27,7 @@ const fmtTime = (raw?: string): string => {
   return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
-export default function HesDirectManager() {
+export default function HesDirectManager({ scope = 'doi' }: { scope?: Scope }) {
   const [meters, setMeters]         = useState<MeterRow[]>([]);
   const [hesData, setHesData]       = useState<HesIndexData | null>(null);
   const [isLoading, setIsLoading]   = useState(true);
@@ -36,22 +36,15 @@ export default function HesDirectManager() {
   const [endDate, setEndDate]       = useState('');
 
   /* ---- User areas (giống tab thủ công) ---- */
-  const userAreas = useMemo(() => {
-    const raw = pb.authStore.model?.area;
-    const items = Array.isArray(raw)
-      ? raw
-      : typeof raw === 'string' ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
-    return items.map(item => ID_TO_AREA[item] || item);
-  }, [JSON.stringify(pb.authStore.model?.area)]);
-
-  const effectiveAreas = useMemo(() => (userAreas.length > 0 ? userAreas : AREAS), [userAreas]);
+  // Bộ chọn KCN ở màn này LUÔN hiện (khác CustomerManager) — giữ nguyên hành vi cũ.
+  const { areas: effectiveAreas, allLabel } = useScopeAreas(scope);
 
   /* ---- Load meters + CSV chỉ số ---- */
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
       const [rows, idx] = await Promise.all([fetchMeterInfo(), fetchHesIndex()]);
-      const allowed = new Set(userAreas.length > 0 ? userAreas : AREAS);
+      const allowed = new Set(effectiveAreas);
       const filtered = rows
         .filter(r => r.STATUS === 'Yes')
         .filter(r => (filterArea ? r.ADDRESS === filterArea : allowed.has(r.ADDRESS)))
@@ -70,7 +63,7 @@ export default function HesDirectManager() {
     } finally {
       setIsLoading(false);
     }
-  }, [filterArea, userAreas]);
+  }, [filterArea, effectiveAreas]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -162,7 +155,7 @@ export default function HesDirectManager() {
             <Select
               value={filterArea}
               onChange={setFilterArea}
-              options={[{ value: '', label: 'Tất cả khu vực' }, ...effectiveAreas.map(a => ({ value: a, label: a }))]}
+              options={[{ value: '', label: allLabel }, ...effectiveAreas.map(a => ({ value: a, label: a }))]}
               className="min-w-[160px]"
             />
             <button onClick={exportToExcel} disabled={meters.length === 0 || !validRange} className="vl-btn vl-btn-primary vl-btn-sm gap-1.5 disabled:opacity-50">
