@@ -289,6 +289,23 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   };
   const derivedHsn = deriveHsn(hsnInput);
 
+  /**
+   * Cảnh báo vật tư — CHỈ nhắc, không chặn lưu (user chốt 14/08). Điểm đo đang
+   * khai dở vẫn phải lưu được.
+   */
+  const filledRows = pForm.assetRows.filter(r => r.type && r.serial.trim());
+  const countType = (t: AssetType) => filledRows.filter(r => r.type === t).length;
+  const assetWarnings: string[] = [];
+  if (countType('CONGTO') === 0) assetWarnings.push('chưa có công tơ');
+  else if (countType('CONGTO') > 1) assetWarnings.push('có nhiều hơn 1 công tơ');
+  if (countType('GP03') === 0) assetWarnings.push('chưa có đo xa GP-03');
+  if (pForm.connection === 'gian_tiep' && countType('TI') !== 3) {
+    assetWarnings.push(`đấu gián tiếp thường đủ 3 TI (đang có ${countType('TI')})`);
+  }
+  if (pForm.connection === 'truc_tiep' && countType('TI') > 0) {
+    assetWarnings.push('đấu trực tiếp thì không cần TI');
+  }
+
   /** Điểm đo chính trong cùng trạm — nguồn chọn cha cho điểm đo phụ. */
   const parentOpts = useMemo(
     () => (d?.points ?? [])
@@ -1000,11 +1017,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 placeholder="Chưa xác định" />
             </Field>
 
-            <div className="vl-alert vl-alert-light-primary text-[12px]">
-              Điểm đo còn cần <b>1 công tơ</b> + <b>1 đo xa GP-03</b>
-              {pForm.connection === 'gian_tiep' && <> và <b>3 TI</b></>} — phần vật tư làm ở bước sau,
-              hiện chưa kiểm tra được.
-            </div>
+            {assetWarnings.length > 0 && (
+              <div className="vl-alert vl-alert-light-warning text-[12px]">
+                <b>Nhắc:</b> {assetWarnings.join('; ')}. Vẫn lưu được — điểm đo khai dở
+                sẽ hiện nhãn thiếu vật tư.
+              </div>
+            )}
 
             <Field label="Ghi chú">
               <TextInput value={pForm.note} onChange={v => setPForm(f => ({ ...f, note: v }))} />
