@@ -1,33 +1,37 @@
 /**
- * Mảnh ghép dùng chung cho các màn nhập danh mục `dm_*`.
+ * Mảnh ghép dùng chung cho các màn danh mục `dm_*`.
  *
- * Vì sao có file này: bản đầu xếp ô nhập sát viền thẻ nên nhìn rối. Ở đây tách
- * hẳn hai khối — KHU NHẬP (nền chìm, bo góc, có khoảng thở) và DANH SÁCH (thẻ
- * riêng) — để mắt phân biệt được "đang khai" với "đã khai".
+ * Bám đúng khuôn đang dùng trong app (mẫu: `ElectricShiftManager`):
+ *   - Đầu trang: tiêu đề + mô tả bên trái, nút "Thêm …" bên phải.
+ *   - Bảng full-width trong `vl-card overflow-hidden`, ô `px-6 py-4`,
+ *     cột đầu thụt `pl-10`, cột thao tác canh phải `pr-10`.
+ *   - Form nằm trong MODAL nổi, không đặt cố định đầu trang.
  *
- * Vẫn dùng token/lớp có sẵn của app (`vl-card`, `vl-btn*`, `vl-table`, biến
- * theme), không đẻ ngôn ngữ thiết kế mới.
+ * Ô nhập dùng lại nguyên chuỗi class của `ElectricShiftManager` để 3 màn danh
+ * mục nhìn y hệt các màn cũ.
  */
-import type { ReactNode } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import type { FormEvent, ReactNode } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { X, Check } from 'lucide-react';
 
-/* Ô nhập: nền nổi trên nền chìm của khu nhập, viền mảnh, focus ring accent. */
-const INPUT_CLS =
-  'w-full px-3.5 py-2.5 bg-surface border border-[var(--border)] rounded-lg text-sm ' +
-  'outline-none transition-all focus:ring-2 focus:ring-accent focus:border-accent ' +
-  'placeholder:text-faint placeholder:font-normal';
+export const INPUT_CLS =
+  'w-full bg-subtle border border-[var(--border)] px-4 py-3 rounded focus:outline-none ' +
+  'focus:ring-2 focus:ring-accent focus:bg-surface transition-all text-sm font-bold';
 
-export function Field({ label, required, hint, children, className = '' }: {
-  label: string; required?: boolean; hint?: string;
-  children: ReactNode; className?: string;
+/** Ô tiêu đề cột — dùng chung cho cả 3 bảng. */
+export const TH_CLS =
+  'px-6 py-4 text-[10px] font-bold text-faint uppercase tracking-widest';
+
+export function Field({ label, required, hint, children }: {
+  label: string; required?: boolean; hint?: string; children: ReactNode;
 }) {
   return (
-    <div className={`min-w-0 ${className}`}>
-      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-faint">
+    <div className="space-y-2">
+      <label className="ml-1 block text-[10px] font-bold uppercase text-faint">
         {label} {required && <span className="text-bad">*</span>}
       </label>
       {children}
-      {hint && <p className="mt-1.5 text-[11px] leading-snug text-faint">{hint}</p>}
+      {hint && <p className="ml-1 text-[11px] leading-snug text-faint">{hint}</p>}
     </div>
   );
 }
@@ -38,20 +42,18 @@ export function TextInput({ value, onChange, placeholder, disabled, mono }: {
 }) {
   return (
     <input
+      type="text"
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       disabled={disabled}
-      className={`${INPUT_CLS} ${mono ? 'font-mono font-semibold' : ''} ${
-        disabled ? 'cursor-not-allowed opacity-50' : ''
-      }`}
+      className={`${INPUT_CLS} ${mono ? 'font-mono' : ''} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
     />
   );
 }
 
-export function NumberInput({ value, onChange, placeholder, disabled, suffix }: {
-  value: string; onChange: (v: string) => void;
-  placeholder?: string; disabled?: boolean; suffix?: string;
+export function NumberInput({ value, onChange, placeholder, suffix }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; suffix?: string;
 }) {
   return (
     <div className="relative">
@@ -60,11 +62,10 @@ export function NumberInput({ value, onChange, placeholder, disabled, suffix }: 
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        disabled={disabled}
-        className={`${INPUT_CLS} ${suffix ? 'pr-14' : ''} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+        className={`${INPUT_CLS} ${suffix ? 'pr-14' : ''}`}
       />
       {suffix && (
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-faint">
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-bold text-faint">
           {suffix}
         </span>
       )}
@@ -72,77 +73,85 @@ export function NumberInput({ value, onChange, placeholder, disabled, suffix }: 
   );
 }
 
-/** Ô chỉ đọc — dùng cho giá trị suy ra từ lựa chọn khác (vd KCN suy từ trạm). */
-export function ReadOnlyValue({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-dashed border-[var(--border)] bg-subtle px-3.5 py-2.5 text-sm text-soft">
-      {children}
-    </div>
-  );
-}
-
 /**
- * Khu nhập liệu: dải màu mảnh trên đầu + tiêu đề + lưới ô nhập trên nền chìm,
- * nút lưu tách xuống chân bởi một đường kẻ.
+ * Modal nhập liệu — bấm "Thêm …" mới hiện, dùng lại cho cả thêm mới lẫn sửa.
+ * Nền mờ bấm ra ngoài để đóng, hệt các modal sẵn có trong app.
  */
-export function FormPanel({ icon: Icon, hex, title, subtitle, children, footer }: {
-  icon: LucideIcon; hex: string; title: string; subtitle: string;
-  children: ReactNode; footer: ReactNode;
+export function FormModal({ open, title, onClose, onSubmit, saving, children }: {
+  open: boolean; title: string; onClose: () => void;
+  onSubmit: () => void; saving?: boolean; children: ReactNode;
 }) {
-  return (
-    <div className="vl-card overflow-hidden p-0">
-      {/* Dải màu nhận diện bảng */}
-      <div className="h-1" style={{ backgroundColor: hex }} />
+  const submit = (e: FormEvent) => { e.preventDefault(); onSubmit(); };
 
-      <div className="flex items-center gap-3 px-6 pt-5">
-        <span
-          className="grid h-10 w-10 shrink-0 place-content-center rounded-xl"
-          style={{ backgroundColor: `${hex}1f`, color: hex }}
-        >
-          <Icon className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-[1rem] font-bold leading-tight text-ink">{title}</p>
-          <p className="text-[12px] leading-snug text-faint">{subtitle}</p>
+  return (
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+          />
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-surface p-8 shadow-2xl"
+          >
+            <div className="mb-6 flex items-center justify-between border-b border-[var(--border)] pb-4">
+              <h3 className="text-xl font-bold text-ink">{title}</h3>
+              <button onClick={onClose} className="rounded-lg p-1 transition-colors hover:bg-subtle">
+                <X className="h-6 w-6 text-faint" />
+              </button>
+            </div>
+
+            <form onSubmit={submit} className="space-y-6">
+              {children}
+              <div className="flex justify-end gap-3 border-t border-[var(--border)] pt-4">
+                <button type="button" onClick={onClose} className="vl-btn vl-btn-secondary">Hủy</button>
+                <button type="submit" disabled={saving} className="vl-btn vl-btn-primary flex items-center gap-2">
+                  <Check className="h-4 w-4" />
+                  {saving ? 'Đang lưu…' : 'Lưu lại'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
         </div>
-      </div>
-
-      {/* Nền chìm để ô nhập không dính viền thẻ */}
-      <div className="px-6 pb-1 pt-5">
-        <div className="rounded-xl border border-[var(--border)] bg-subtle p-5">
-          {children}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-end gap-3 px-6 py-4">{footer}</div>
-    </div>
-  );
-}
-
-/** Lưới ô nhập — khoảng cách rộng, tự xuống dòng theo bề ngang. */
-export function FormGrid({ cols = 3, children }: { cols?: 2 | 3; children: ReactNode }) {
-  return (
-    <div className={`grid gap-x-5 gap-y-4 ${cols === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'}`}>
-      {children}
-    </div>
-  );
-}
-
-/** Thẻ danh sách bản ghi đã khai, tách hẳn khỏi khu nhập. */
-export function ListPanel({ title, count, empty, children }: {
-  title: string; count: number; empty: string; children: ReactNode;
-}) {
-  return (
-    <div className="vl-card">
-      <div className="mb-4 flex items-center gap-2.5">
-        <p className="text-[13px] font-bold uppercase tracking-wide text-dim">{title}</p>
-        <span className="rounded-md bg-subtle px-2 py-0.5 text-[11px] font-bold text-soft">{count}</span>
-      </div>
-      {count === 0 ? (
-        <p className="py-10 text-center text-[13px] italic text-faint">{empty}</p>
-      ) : (
-        <div className="overflow-x-auto">{children}</div>
       )}
+    </AnimatePresence>
+  );
+}
+
+/** Khung bảng: thẻ bo góc, cuộn ngang, kèm trạng thái đang tải / rỗng. */
+export function TableCard({ columns, loading, empty, isEmpty, children }: {
+  columns: ReactNode; loading: boolean; empty: string; isEmpty: boolean; children: ReactNode;
+}) {
+  const colSpan = 99;
+  return (
+    <div className="vl-card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="vl-table w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-[var(--border)]">{columns}</tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border)]">
+            {loading ? (
+              <tr>
+                <td colSpan={colSpan} className="px-6 py-12 text-center text-faint">
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                    <span>Đang tải danh sách...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : isEmpty ? (
+              <tr>
+                <td colSpan={colSpan} className="px-6 py-12 text-center italic text-faint">{empty}</td>
+              </tr>
+            ) : children}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
