@@ -99,8 +99,6 @@ export interface Asset extends PbRecord {
   type: AssetType;
   /** Điểm đo đang lắp; rỗng = chưa gắn ở đâu. */
   point?: string;
-  /** Chỉ dùng cho TI, để phân biệt đủ 3 pha. */
-  phase?: 'A' | 'B' | 'C' | '';
   ratio_primary?: number;
   ratio_secondary?: number;
   model_desc?: string;
