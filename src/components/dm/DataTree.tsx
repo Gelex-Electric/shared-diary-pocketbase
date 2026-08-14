@@ -19,6 +19,7 @@ import type { CatalogData } from '../../lib/dm/repo';
 import { CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
 import type { Point, Station, Zone } from '../../lib/dm/types';
 import { kcnColorOf } from '../../lib/kcnColors';
+import { PointBadgeIcon } from './pointIcons';
 
 /**
  * Xếp điểm đo trong một trạm theo phân cấp: mỗi điểm chính kéo theo các điểm
@@ -153,7 +154,7 @@ export default function DataTree() {
         isChild ? 'pl-9' : 'pl-3'
       }`}>
         {isChild && <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-faint" />}
-        <Gauge className="h-4 w-4 shrink-0 text-faint" />
+        <PointBadgeIcon point={p} />
         <span className={`min-w-0 flex-1 truncate text-[13px] ${isChild ? 'text-dim' : 'font-semibold text-ink'}`}>
           {p.code || p.line_name || p.line_id}
         </span>

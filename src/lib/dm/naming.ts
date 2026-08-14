@@ -151,9 +151,16 @@ export function missingPointCodeParts(p: PointCodeParts): string[] {
  */
 export const SUB_PURPOSES: { code: string; label: string }[] = [
   { code: 'CSCC', label: 'Chiếu sáng công cộng' },
+  { code: 'PCCC', label: 'Phòng cháy chữa cháy' },
   { code: 'BCC', label: 'Bơm chuyển cốt' },
   { code: 'TRAM-BOM', label: 'Trạm bơm' },
   { code: 'VP', label: 'Văn phòng' },
   { code: 'NX', label: 'Nhà xưởng' },
   { code: 'DP', label: 'Dự phòng' },
 ];
+
+/** Tên đầy đủ của một nhãn đuôi; nhãn tự nhập thì trả lại chính nó. */
+export function purposeLabelOf(code?: string): string {
+  if (!code) return '';
+  return SUB_PURPOSES.find(x => x.code === code)?.label ?? code;
+}

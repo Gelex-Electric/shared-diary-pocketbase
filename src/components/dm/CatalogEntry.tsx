@@ -1,11 +1,12 @@
 /**
- * Màn "Danh mục" (khối Văn phòng) — 3 bảng nền:
+ * Màn "Danh mục" (khối Văn phòng) — 4 bảng:
  *   Tab 1 Khu công nghiệp (dm_zone)
  *   Tab 2 Trạm            (dm_station)
  *   Tab 3 Khách hàng      (dm_customer)
+ *   Tab 4 Điểm đo         (dm_point)
  *
- * Điểm đo (dm_point) KHÔNG ở đây — thuộc màn "Quản lý trạm & điểm đo" làm sau,
- * vì còn phải gắn vật tư (công tơ / GP-03 / TI).
+ * Mã trạm và mã điểm đo do hệ thống sinh (xem `lib/dm/naming.ts`), không gõ tay.
+ * Điểm đo phụ phải trỏ về một điểm đo chính cùng trạm và được thụt lề dưới nó.
  *
  * Khuôn giao diện bám mẫu `ElectricShiftManager`: tiêu đề + nút "Thêm …" ở đầu,
  * bảng full-width bên dưới, form nhập nằm trong MODAL nổi (không đặt cố định
@@ -25,6 +26,7 @@ import { CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
 import type { Connection, Customer, Point, PointRole, PointStatus, Station, Zone } from '../../lib/dm/types';
 import type { Scope } from '../../lib/scope';
 import { DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS } from './entryUi';
+import { PointBadgeChip, PointBadgeIcon } from './pointIcons';
 import {
   SHORT_NAME_HINT, SUB_PURPOSES, buildPointCode, buildStationCode, isValidShortName,
   missingPointCodeParts, missingStationCodeParts, normalizeShortName,
@@ -75,7 +77,7 @@ const EMPTY_P = {
   customer: '', parent_point: '', ident: '', hsn: '1',
   /** Chỉ dùng khi điểm phụ trùng KH với điểm chính: mã nhãn, hoặc CUSTOM. */
   purpose: '', purpose_custom: '',
-  line_id: '', status: '' as PointStatus, note: '',
+  status: '' as PointStatus, note: '',
 };
 
 /** Giá trị đặc biệt của bộ chọn nhãn mục đích: cho gõ tay chuỗi bất kỳ. */
@@ -175,7 +177,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       ident: p.ident ?? '', hsn: str(p.hsn),
       purpose: isPreset ? saved : (saved ? CUSTOM : ''),
       purpose_custom: isPreset ? '' : saved,
-      line_id: p.line_id ?? '', status: (p.status ?? '') as PointStatus, note: p.note ?? '',
+      status: (p.status ?? '') as PointStatus, note: p.note ?? '',
     });
     setModal('point');
   };
@@ -316,7 +318,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         code: pointCode,
         // LINE_NAME bên HES chính là chuỗi mã này — điền luôn để khỏi lệch.
         line_name: pointCode,
-        line_id: pForm.line_id.trim(),
         ident: pForm.ident.trim(),
         sub_label: isSub ? subLabel : '',
         station: pForm.station,
@@ -562,6 +563,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 <td className={`px-6 py-4 ${isChild ? 'pl-16' : 'pl-10'}`}>
                   <span className="flex items-center gap-2">
                     {isChild && <CornerDownRight className="h-4 w-4 shrink-0 text-faint" />}
+                    <PointBadgeIcon point={p} />
                     <span className={`font-mono text-sm ${isChild ? 'text-dim' : 'font-bold text-ink'}`}>
                       {p.code || p.line_name || '—'}
                     </span>
@@ -570,9 +572,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 <td className="px-6 py-4 font-mono text-xs text-soft">{stationCodeOf(p.station)}</td>
                 <td className="px-6 py-4 font-mono text-xs font-bold text-soft">{customerMkh(p.customer)}</td>
                 <td className="px-6 py-4">
-                  <span className={p.role === 'chinh' ? 'vl-badge-primary' : 'vl-badge-info'}>
-                    {ROLE_LABEL[p.role]}
-                  </span>
+                  {p.role === 'chinh'
+                    ? <span className="vl-badge-primary">{ROLE_LABEL.chinh}</span>
+                    : <PointBadgeChip point={p} />}
                 </td>
                 <td className="px-6 py-4">
                   <span className={p.connection === 'gian_tiep' ? 'vl-badge-warning' : 'vl-badge-success'}>
@@ -804,18 +806,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </p>
             )}
 
-            <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="LINE_ID (HES)" hint="Bỏ trống nếu chưa có mã bên HES">
-                <TextInput value={pForm.line_id} mono
-                  onChange={v => setPForm(f => ({ ...f, line_id: v }))} />
-              </Field>
-              <Field label="Trạng thái">
-                <Select value={pForm.status}
-                  onChange={v => setPForm(f => ({ ...f, status: v as PointStatus }))}
-                  options={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
-                  placeholder="Chưa xác định" />
-              </Field>
-            </div>
+            <Field label="Trạng thái">
+              <Select value={pForm.status}
+                onChange={v => setPForm(f => ({ ...f, status: v as PointStatus }))}
+                options={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
+                placeholder="Chưa xác định" />
+            </Field>
 
             <div className="vl-alert vl-alert-light-primary text-[12px]">
               Điểm đo còn cần <b>1 công tơ</b> + <b>1 đo xa GP-03</b>
