@@ -15,13 +15,14 @@ import OfficeVoltagePowerDashboard from './OfficeVoltagePowerDashboard';
 import TransformerLossManager from '../TransformerLossManager';
 import OfficeSldPage from './OfficeSldPage';
 import GeneralManagement from '../dm/GeneralManagement';
+import CatalogEntry from '../dm/CatalogEntry';
 import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
   | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
-  | 'dm-general';
+  | 'dm-general' | 'dm-catalog';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
@@ -34,6 +35,7 @@ const TAB_LABEL: Record<Tab, string> = {
   loss:            'Tổn thất tính toán',
   sld:             'Sơ đồ một sợi',
   'dm-general':    'Quản lý chung',
+  'dm-catalog':    'Danh mục',
 };
 
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
@@ -41,7 +43,7 @@ const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt'];
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
 /** Các tab con thuộc nhóm "Quản lý vật tư thiết bị điện". */
-const ASSET_TABS: Tab[] = ['dm-general'];
+const ASSET_TABS: Tab[] = ['dm-general', 'dm-catalog'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
@@ -291,6 +293,19 @@ export default function BusinessDashboard() {
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
+                  <li>
+                    <button
+                      id="nav-dm-catalog-sub"
+                      onClick={() => { setTopTab('dm-catalog'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'dm-catalog' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Danh mục</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+                    </button>
+                  </li>
                 </motion.ul>
               )}
             </AnimatePresence>
@@ -423,6 +438,8 @@ export default function BusinessDashboard() {
               <OfficeVoltagePowerDashboard />
             ) : topTab === 'dm-general' ? (
               <GeneralManagement scope="vanphong" />
+            ) : topTab === 'dm-catalog' ? (
+              <CatalogEntry scope="vanphong" />
             ) : topTab === 'loss' ? (
               <TransformerLossManager />
             ) : topTab === 'sld' ? (
