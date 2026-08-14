@@ -52,14 +52,18 @@ export function pointBadge(p: Point): PointBadge {
     : { icon: Tag, hex: '#64748b', code: 'Phụ', title: 'Điểm đo phụ' };
 }
 
-/** Chip biểu tượng + mã, dùng trong bảng. */
+/**
+ * Chip biểu tượng + mã, dùng trong bảng.
+ * Cùng khuôn với tag KCN ở bảng Trạm: viên thuốc bo tròn, `px-3 py-1`,
+ * chữ in hoa giãn nhẹ — để các tag trong app nhìn đồng bộ, không bó sát chữ.
+ */
 export function PointBadgeChip({ point }: { point: Point }) {
   const b = pointBadge(point);
   const Icon = b.icon;
   return (
     <span
       title={b.title}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-bold"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider"
       style={{ backgroundColor: `${b.hex}1f`, color: b.hex }}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" />

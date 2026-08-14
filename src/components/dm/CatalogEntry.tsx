@@ -13,17 +13,23 @@
  * đầu trang). Thêm và Sửa dùng chung một modal.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Building2, Factory, Users, Gauge, Plus, Trash2, Edit2, RefreshCw, CornerDownRight } from 'lucide-react';
+import {
+  Building2, Factory, Users, Gauge, Package,
+  Plus, Trash2, Edit2, RefreshCw, CornerDownRight,
+} from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import type { TabItem } from '../ui/Tabs';
 import { Select } from '../ui/Select';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { toast } from '../../lib/toast';
 import { Toggle } from '../ui/Toggle';
-import { customers, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
+import { assets, customers, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
 import { CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
-import type { Connection, Customer, Point, PointRole, PointStatus, Station, Zone } from '../../lib/dm/types';
+import type {
+  AssetType, Connection, Customer, Point, PointRole, PointStatus, Station, Zone,
+} from '../../lib/dm/types';
+import { deriveHsn, hsnFormula } from '../../lib/dm/hsn';
 import type { Scope } from '../../lib/scope';
 import { DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS } from './entryUi';
 import { PointBadgeChip, PointBadgeIcon } from './pointIcons';
@@ -78,6 +84,10 @@ const EMPTY_P = {
   /** Chỉ dùng khi điểm phụ trùng KH với điểm chính: mã nhãn, hoặc CUSTOM. */
   purpose: '', purpose_custom: '',
   status: '' as PointStatus, note: '',
+  /* --- Vật tư khai luôn cùng điểm đo (ghi vào dm_asset) --- */
+  meter_serial: '', gp03_serial: '',
+  ti_a: '', ti_b: '', ti_c: '', ti_p: '', ti_s: '',
+  tu_serial: '', tu_p: '', tu_s: '',
 };
 
 /** Giá trị đặc biệt của bộ chọn nhãn mục đích: cho gõ tay chuỗi bất kỳ. */
@@ -171,7 +181,22 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     // Nhãn đuôi đã lưu: khớp một mục có sẵn thì chọn mục đó, không thì là tự nhập.
     const saved = p.sub_label ?? '';
     const isPreset = SUB_PURPOSES.some(x => x.code === saved);
+    // Vật tư đang gắn ở điểm đo này → điền ngược lên form.
+    const mine = d?.assets.filter(a => a.point === p.id) ?? [];
+    const find = (type: string, phase?: string) =>
+      mine.find(a => a.type === type && (phase ? a.phase === phase : true));
+    const ti = find('TI');
+    const tu = find('TU');
     setPForm({
+      ...EMPTY_P,
+      meter_serial: find('CONGTO')?.serial ?? '',
+      gp03_serial: find('GP03')?.serial ?? '',
+      ti_a: find('TI', 'A')?.serial ?? '',
+      ti_b: find('TI', 'B')?.serial ?? '',
+      ti_c: find('TI', 'C')?.serial ?? '',
+      ti_p: str(ti?.ratio_primary), ti_s: str(ti?.ratio_secondary),
+      tu_serial: tu?.serial ?? '',
+      tu_p: str(tu?.ratio_primary), tu_s: str(tu?.ratio_secondary),
       station: p.station, role: p.role, connection: p.connection,
       customer: p.customer ?? '', parent_point: p.parent_point ?? '',
       ident: p.ident ?? '', hsn: str(p.hsn),
@@ -232,6 +257,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   };
   const pointCode = buildPointCode(pointParts);
   const pointCodeMissing = missingPointCodeParts(pointParts);
+
+  /* ---------------- HSN suy từ tỷ số TI / TU ---------------- */
+  const hsnInput = {
+    connection: pForm.connection,
+    ti: { primary: toNum(pForm.ti_p) ?? null, secondary: toNum(pForm.ti_s) ?? null },
+    tu: { primary: toNum(pForm.tu_p) ?? null, secondary: toNum(pForm.tu_s) ?? null },
+  };
+  const derivedHsn = deriveHsn(hsnInput);
 
   /** Điểm đo chính trong cùng trạm — nguồn chọn cha cho điểm đo phụ. */
   const parentOpts = useMemo(
@@ -327,13 +360,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         parent_point: isSub ? pForm.parent_point : '',
         role: pForm.role,
         connection: pForm.connection,
-        hsn: pForm.connection === 'truc_tiep' ? 1 : toNum(pForm.hsn),
+        hsn: derivedHsn ?? undefined,
         status: pForm.status || undefined,
         note: pForm.note.trim(),
       };
-      return void persist(
-        () => (editingId ? points.update(editingId, body) : points.create(body)),
-        `Điểm đo ${body.code}`);
+      return void persist(async () => {
+        const rec = editingId
+          ? await points.update(editingId, body)
+          : await points.create(body);
+        // Vật tư lưu sau vì cần id điểm đo; lỗi ở đây sẽ báo nguyên văn từ PB
+        // (thường là trùng số No với vật tư đang gắn ở điểm đo khác).
+        await syncAssets((rec as { id: string }).id);
+      }, `Điểm đo ${body.code}`);
     }
   };
 
@@ -366,6 +404,49 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       </button>
     </div>
   );
+
+  /**
+   * Đồng bộ vật tư của một điểm đo theo những gì đang khai trên form.
+   * Khớp bản ghi cũ theo (loại, pha): còn số No thì cập nhật, bỏ trống thì gỡ
+   * bản ghi cũ đi — nhờ vậy sửa điểm đo không đẻ ra vật tư trùng.
+   */
+  const syncAssets = async (pointId: string) => {
+    const mine = d?.assets.filter(a => a.point === pointId) ?? [];
+    const tiRatio = {
+      ratio_primary: toNum(pForm.ti_p),
+      ratio_secondary: toNum(pForm.ti_s),
+    };
+    const indirect = pForm.connection === 'gian_tiep';
+
+    const wanted: { type: AssetType; phase?: 'A' | 'B' | 'C'; serial: string; extra?: object }[] = [
+      { type: 'CONGTO', serial: pForm.meter_serial },
+      { type: 'GP03', serial: pForm.gp03_serial },
+      // Đấu trực tiếp thì không có TI/TU — coi như bỏ trống để gỡ nếu từng có.
+      { type: 'TI', phase: 'A', serial: indirect ? pForm.ti_a : '', extra: tiRatio },
+      { type: 'TI', phase: 'B', serial: indirect ? pForm.ti_b : '', extra: tiRatio },
+      { type: 'TI', phase: 'C', serial: indirect ? pForm.ti_c : '', extra: tiRatio },
+      {
+        type: 'TU', serial: indirect ? pForm.tu_serial : '',
+        extra: { ratio_primary: toNum(pForm.tu_p), ratio_secondary: toNum(pForm.tu_s) },
+      },
+    ];
+
+    for (const w of wanted) {
+      const old = mine.find(a => a.type === w.type && (w.phase ? a.phase === w.phase : !a.phase));
+      const serial = w.serial.trim();
+
+      if (!serial) {
+        if (old) await assets.remove(old.id);
+        continue;
+      }
+      const body = {
+        serial, type: w.type, point: pointId, phase: (w.phase ?? '') as '' | 'A' | 'B' | 'C',
+        status: 'dang_treo' as const, ...(w.extra ?? {}),
+      };
+      if (old) await assets.update(old.id, body);
+      else await assets.create(body);
+    }
+  };
 
   const stationCodeOf = (id?: string) => d?.stations.find(s => s.id === id)?.code ?? '—';
   const childrenOf = (id: string) => d?.points.filter(p => p.parent_point === id).length ?? 0;
@@ -571,13 +652,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 </td>
                 <td className="px-6 py-4 font-mono text-xs text-soft">{stationCodeOf(p.station)}</td>
                 <td className="px-6 py-4 font-mono text-xs font-bold text-soft">{customerMkh(p.customer)}</td>
+                <td className="px-6 py-4"><PointBadgeChip point={p} /></td>
                 <td className="px-6 py-4">
-                  {p.role === 'chinh'
-                    ? <span className="vl-badge-primary">{ROLE_LABEL.chinh}</span>
-                    : <PointBadgeChip point={p} />}
-                </td>
-                <td className="px-6 py-4">
-                  <span className={p.connection === 'gian_tiep' ? 'vl-badge-warning' : 'vl-badge-success'}>
+                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
+                    p.connection === 'gian_tiep'
+                      ? 'bg-[var(--warning-soft)] text-warn'
+                      : 'bg-[var(--success-soft)] text-good'
+                  }`}>
                     {CONNECTION_LABEL[p.connection]}
                   </span>
                 </td>
@@ -779,19 +860,85 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </>
             )}
 
-            <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Định danh điểm đo" hint="Không bắt buộc. Gõ 0,4 → mã có đuôi (0,4)">
-                <TextInput value={pForm.ident} mono placeholder="0,4"
-                  onChange={v => setPForm(f => ({ ...f, ident: v }))} />
-              </Field>
-              <Field label="HSN"
-                hint={pForm.connection === 'truc_tiep'
-                  ? 'Đấu trực tiếp: HSN luôn = 1, không có TI để nhân.'
-                  : 'Đấu gián tiếp: HSN = tỷ số TI (× TU nếu có).'}>
-                <NumberInput value={pForm.connection === 'truc_tiep' ? '1' : pForm.hsn}
-                  onChange={v => setPForm(f => ({ ...f, hsn: v }))} />
-              </Field>
+            <Field label="Định danh điểm đo" hint="Không bắt buộc. Gõ 0,4 → mã có đuôi (0,4)">
+              <TextInput value={pForm.ident} mono placeholder="0,4"
+                onChange={v => setPForm(f => ({ ...f, ident: v }))} />
+            </Field>
+
+            {/* ---------------- Vật tư gắn ở điểm đo ---------------- */}
+            <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
+              <p className="mb-3 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-dim">
+                <Package className="h-4 w-4" /> Vật tư gắn ở điểm đo
+              </p>
+
+              <div className="grid gap-6 sm:grid-cols-2">
+                <Field label="Số No công tơ">
+                  <TextInput value={pForm.meter_serial} mono placeholder="2210575660"
+                    onChange={v => setPForm(f => ({ ...f, meter_serial: v }))} />
+                </Field>
+                <Field label="Số No đo xa GP-03">
+                  <TextInput value={pForm.gp03_serial} mono
+                    onChange={v => setPForm(f => ({ ...f, gp03_serial: v }))} />
+                </Field>
+              </div>
+
+              {pForm.connection === 'gian_tiep' ? (
+                <>
+                  <div className="mt-4 grid gap-6 sm:grid-cols-3">
+                    <Field label="Số No TI pha A">
+                      <TextInput value={pForm.ti_a} mono
+                        onChange={v => setPForm(f => ({ ...f, ti_a: v }))} />
+                    </Field>
+                    <Field label="Số No TI pha B">
+                      <TextInput value={pForm.ti_b} mono
+                        onChange={v => setPForm(f => ({ ...f, ti_b: v }))} />
+                    </Field>
+                    <Field label="Số No TI pha C">
+                      <TextInput value={pForm.ti_c} mono
+                        onChange={v => setPForm(f => ({ ...f, ti_c: v }))} />
+                    </Field>
+                  </div>
+
+                  <div className="mt-4 grid gap-6 sm:grid-cols-2">
+                    <Field label="Tỷ số TI" hint="Áp chung cho cả 3 TI">
+                      <div className="flex items-center gap-2">
+                        <NumberInput value={pForm.ti_p} placeholder="200"
+                          onChange={v => setPForm(f => ({ ...f, ti_p: v }))} />
+                        <span className="text-lg font-bold text-faint">/</span>
+                        <NumberInput value={pForm.ti_s} placeholder="5"
+                          onChange={v => setPForm(f => ({ ...f, ti_s: v }))} />
+                      </div>
+                    </Field>
+                    <Field label="Tỷ số TU" hint="Bỏ trống với điểm đo hạ áp — khi đó TU = 1">
+                      <div className="flex items-center gap-2">
+                        <NumberInput value={pForm.tu_p} placeholder="22000"
+                          onChange={v => setPForm(f => ({ ...f, tu_p: v }))} />
+                        <span className="text-lg font-bold text-faint">/</span>
+                        <NumberInput value={pForm.tu_s} placeholder="100"
+                          onChange={v => setPForm(f => ({ ...f, tu_s: v }))} />
+                      </div>
+                    </Field>
+                  </div>
+
+                  <div className="mt-4">
+                    <Field label="Số No TU" hint="Bỏ trống nếu không có TU">
+                      <TextInput value={pForm.tu_serial} mono
+                        onChange={v => setPForm(f => ({ ...f, tu_serial: v }))} />
+                    </Field>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-3 text-[12px] italic text-faint">
+                  Đấu trực tiếp không cần TI/TU. Gạt sang "Gián tiếp" để khai 3 TI.
+                </p>
+              )}
             </div>
+
+            {/* HSN: chỉ đọc, suy từ tỷ số vừa nhập */}
+            <Field label="HSN (suy từ tỷ số TI / TU)" hint={hsnFormula(hsnInput)}>
+              <DerivedValue value={derivedHsn == null ? '' : String(derivedHsn)}
+                placeholder="Nhập tỷ số TI ở phần vật tư" />
+            </Field>
 
             <Field label="Mã điểm đo (hệ thống tự sinh)"
               hint={isSub

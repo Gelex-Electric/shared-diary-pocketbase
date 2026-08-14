@@ -88,6 +88,35 @@ export interface Point extends PbRecord {
   note?: string;
 }
 
+/** Loại vật tư gắn ở điểm đo. */
+export type AssetType = 'CONGTO' | 'GP03' | 'TI' | 'TU' | 'SIM' | 'KHAC';
+
+export type AssetStatus = 'dang_treo' | 'kho' | 'thao_go' | 'thanh_ly' | '';
+
+export interface Asset extends PbRecord {
+  /** Số No (số chế tạo) — định danh duy nhất của vật tư. */
+  serial: string;
+  type: AssetType;
+  /** Điểm đo đang lắp; rỗng = chưa gắn ở đâu. */
+  point?: string;
+  /** Chỉ dùng cho TI, để phân biệt đủ 3 pha. */
+  phase?: 'A' | 'B' | 'C' | '';
+  ratio_primary?: number;
+  ratio_secondary?: number;
+  model_desc?: string;
+  status?: AssetStatus;
+  note?: string;
+}
+
+export const ASSET_LABEL: Record<AssetType, string> = {
+  CONGTO: 'Công tơ',
+  GP03: 'Đo xa GP-03',
+  TI: 'TI (biến dòng)',
+  TU: 'TU (biến điện áp)',
+  SIM: 'SIM',
+  KHAC: 'Khác',
+};
+
 /* ------------------------- nhãn hiển thị ------------------------- */
 
 export const ROLE_LABEL: Record<PointRole, string> = {
