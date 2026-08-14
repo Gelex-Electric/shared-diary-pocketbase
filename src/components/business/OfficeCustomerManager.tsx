@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AREAS } from '../../lib/pocketbase';
 import { kcnColorOf } from '../../lib/kcnColors';
+import { ZoneSection } from './ZoneSection';
 import { fetchMeterInfo, MeterInfoRow } from '../../lib/meterInfo';
 import {
   MapPin, RefreshCw, ChevronRight,
@@ -188,21 +189,13 @@ export default function OfficeCustomerManager() {
         </div>
       ) : (
         <div className="space-y-7">
-          {zoneSections.map(({ area, groups }) => {
-            const c = kcnColorOf(area);
-            return (
-              <section key={area}>
-                <div className={`flex items-center gap-2.5 mb-3 px-3 py-2 rounded-lg border ${c.bg} ${c.border}`}>
-                  <span className={`w-3 h-3 rounded-full ${c.dot}`} />
-                  <h3 className={`text-sm font-bold ${c.text}`}>{area}</h3>
-                  <span className="text-xs font-semibold text-soft">· {groups.length} khách hàng</span>
-                </div>
-                <div className="vl-accordion">
-                  {groups.map(renderCard)}
-                </div>
-              </section>
-            );
-          })}
+          {zoneSections.map(({ area, groups }) => (
+            <ZoneSection key={area} area={area} count={groups.length} countLabel="khách hàng">
+              <div className="vl-accordion">
+                {groups.map(renderCard)}
+              </div>
+            </ZoneSection>
+          ))}
         </div>
       )}
     </div>
