@@ -134,6 +134,28 @@ export function FormModal({ open, title, onClose, onSubmit, saving, children }: 
   );
 }
 
+/**
+ * Ô nhập NẰM TRONG BẢNG — trong suốt, không viền riêng, lấp đầy ô.
+ * Khuôn lấy từ bảng "tình hình vận hành" ở sổ nhật ký (`HandoverManager`):
+ * viền là của ô bảng, nên chữ được trọn bề ngang thay vì bị bóp trong hộp con.
+ */
+export function CellInput({ value, onChange, placeholder, mono, align = 'left', type = 'text' }: {
+  value: string; onChange: (v: string) => void; placeholder?: string;
+  mono?: boolean; align?: 'left' | 'center'; type?: 'text' | 'number';
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={`w-full rounded-lg bg-transparent p-2 text-sm outline-none transition-colors focus:bg-subtle placeholder:font-normal placeholder:text-faint ${
+        mono ? 'font-mono font-semibold' : ''
+      } ${align === 'center' ? 'text-center' : ''}`}
+    />
+  );
+}
+
 /** Khung bảng: thẻ bo góc, cuộn ngang, kèm trạng thái đang tải / rỗng. */
 export function TableCard({ columns, loading, empty, isEmpty, children }: {
   columns: ReactNode; loading: boolean; empty: string; isEmpty: boolean; children: ReactNode;

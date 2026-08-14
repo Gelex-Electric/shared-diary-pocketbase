@@ -31,7 +31,9 @@ import type {
 } from '../../lib/dm/types';
 import { deriveHsn, hsnFormula } from '../../lib/dm/hsn';
 import type { Scope } from '../../lib/scope';
-import { DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS } from './entryUi';
+import {
+  CellInput, DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
+} from './entryUi';
 import { PointBadgeChip, PointBadgeIcon } from './pointIcons';
 import {
   SHORT_NAME_HINT, SUB_PURPOSES, buildPointCode, buildStationCode, isValidShortName,
@@ -913,82 +915,77 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 </span>
               </div>
 
-              {pForm.assetRows.length === 0 ? (
-                <p className="py-4 text-center text-[12px] italic text-faint">
-                  Chưa khai thiết bị nào. Bấm "Thêm dòng" để chọn thiết bị và nhập số No.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-left">
-                    <thead>
-                      <tr className="border-b border-[var(--border)]">
-                        <th className="pb-2 pr-3 text-[10px] font-bold uppercase tracking-wide text-faint">Thiết bị</th>
-                        <th className="pb-2 pr-3 text-[10px] font-bold uppercase tracking-wide text-faint">Số No</th>
-                        <th className="w-24 pb-2 pr-3 text-[10px] font-bold uppercase tracking-wide text-faint">Pha</th>
-                        <th className="w-52 pb-2 pr-3 text-[10px] font-bold uppercase tracking-wide text-faint">Tỷ số</th>
-                        <th className="w-10 pb-2" />
+              <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-surface">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-[var(--border)] bg-subtle">
+                    <tr>
+                      <th className="w-52 px-4 py-3 text-left font-bold text-soft">Thiết bị</th>
+                      <th className="px-4 py-3 text-left font-bold text-soft">Số No</th>
+                      <th className="w-24 px-4 py-3 text-left font-bold text-soft">Pha</th>
+                      <th className="w-44 px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
+                      <th className="w-12 px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {pForm.assetRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-[13px] italic text-faint">
+                          Chưa khai thiết bị nào — bấm "Thêm dòng" bên dưới.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {pForm.assetRows.map(r => {
-                        const hasRatio = HAS_RATIO.includes(r.type as AssetType);
-                        const hasPhase = HAS_PHASE.includes(r.type as AssetType);
-                        return (
-                          <tr key={r.key} className="border-b border-[var(--border)] last:border-0">
-                            <td className="py-2 pr-3 align-top">
-                              <Select value={r.type} onChange={v => setRow(r.key, { type: v as AssetType })}
-                                options={Object.entries(ASSET_LABEL).map(([value, label]) => ({ value, label }))}
-                                placeholder="Chọn thiết bị" />
-                            </td>
-                            <td className="py-2 pr-3 align-top">
-                              <TextInput value={r.serial} mono placeholder="Số chế tạo"
-                                onChange={v => setRow(r.key, { serial: v })} />
-                            </td>
-                            <td className="py-2 pr-3 align-top">
-                              {hasPhase ? (
-                                <Select value={r.phase} onChange={v => setRow(r.key, { phase: v as AssetRow['phase'] })}
-                                  options={[{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }, { value: 'C', label: 'C' }]}
-                                  placeholder="—" />
-                              ) : <span className="block pt-3 text-center text-faint">—</span>}
-                            </td>
-                            <td className="py-2 pr-3 align-top">
-                              {hasRatio ? (
-                                <div className="flex items-center gap-1.5">
-                                  <NumberInput value={r.rp} placeholder={r.type === 'TU' ? '22000' : '200'}
-                                    onChange={v => setRow(r.key, { rp: v })} />
-                                  <span className="font-bold text-faint">/</span>
-                                  <NumberInput value={r.rs} placeholder={r.type === 'TU' ? '100' : '5'}
-                                    onChange={v => setRow(r.key, { rs: v })} />
-                                </div>
-                              ) : <span className="block pt-3 text-center text-faint">—</span>}
-                            </td>
-                            <td className="py-2 align-top">
-                              <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"
-                                className="mt-1.5 rounded p-2 text-soft transition-colors hover:bg-[var(--danger-soft)] hover:text-red-500">
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Thêm dòng — nút trắng thêm dòng trống, các nút còn lại thêm sẵn loại */}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button type="button" onClick={() => addRow()} className="vl-btn vl-btn-secondary vl-btn-sm">
-                  <Plus className="h-3.5 w-3.5" /> <span>Thêm dòng</span>
-                </button>
-                <span className="text-[11px] text-faint">Thêm nhanh:</span>
-                {(['CONGTO', 'GP03', 'TI', 'TU'] as AssetType[]).map(t => (
-                  <button key={t} type="button" onClick={() => addRow(t)}
-                    className="rounded-md border border-[var(--border)] bg-surface px-2.5 py-1 text-[11px] font-bold text-soft transition-colors hover:border-accent hover:text-accent">
-                    + {ASSET_LABEL[t]}
-                  </button>
-                ))}
+                    ) : pForm.assetRows.map(r => {
+                      const hasRatio = HAS_RATIO.includes(r.type as AssetType);
+                      const hasPhase = HAS_PHASE.includes(r.type as AssetType);
+                      return (
+                        <tr key={r.key}>
+                          <td className="p-2">
+                            <Select value={r.type} variant="bare"
+                              onChange={v => setRow(r.key, { type: v as AssetType })}
+                              options={Object.entries(ASSET_LABEL).map(([value, label]) => ({ value, label }))}
+                              placeholder="Chọn thiết bị" />
+                          </td>
+                          <td className="p-2">
+                            <CellInput value={r.serial} mono placeholder="Nhập số chế tạo"
+                              onChange={v => setRow(r.key, { serial: v })} />
+                          </td>
+                          <td className="p-2">
+                            {hasPhase ? (
+                              <Select value={r.phase} variant="bare"
+                                onChange={v => setRow(r.key, { phase: v as AssetRow['phase'] })}
+                                options={[{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }, { value: 'C', label: 'C' }]}
+                                placeholder="—" />
+                            ) : <span className="block p-2 text-faint">—</span>}
+                          </td>
+                          <td className="p-2">
+                            {hasRatio ? (
+                              <div className="flex items-center">
+                                <CellInput type="number" align="center" value={r.rp}
+                                  placeholder={r.type === 'TU' ? '22000' : '200'}
+                                  onChange={v => setRow(r.key, { rp: v })} />
+                                <span className="shrink-0 font-bold text-faint">/</span>
+                                <CellInput type="number" align="center" value={r.rs}
+                                  placeholder={r.type === 'TU' ? '100' : '5'}
+                                  onChange={v => setRow(r.key, { rs: v })} />
+                              </div>
+                            ) : <span className="block p-2 text-faint">—</span>}
+                          </td>
+                          <td className="p-2">
+                            <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"
+                              className="p-1 text-faint transition-colors hover:text-red-500">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
+
+              <button type="button" onClick={() => addRow()}
+                className="mt-3 flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline">
+                <Plus className="h-4 w-4" /> Thêm dòng
+              </button>
             </div>
 
             {/* HSN: chỉ đọc, suy từ tỷ số vừa nhập */}
