@@ -29,7 +29,7 @@ import { ASSET_LABEL, CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../l
 import type {
   AssetType, Connection, Customer, Point, PointRole, PointStatus, Station, Zone,
 } from '../../lib/dm/types';
-import { deriveHsn, hsnFormula } from '../../lib/dm/hsn';
+import { deriveHsn, formatRatio, hsnFormula, parseRatio } from '../../lib/dm/hsn';
 import type { Scope } from '../../lib/scope';
 import {
   CellInput, DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
@@ -100,19 +100,16 @@ interface AssetRow {
   id?: string;
   type: AssetType | '';
   serial: string;
-  phase: '' | 'A' | 'B' | 'C';
-  rp: string;
-  rs: string;
+  /** Gõ nguyên chuỗi `200/5`; tách ra 2 số khi lưu (`parseRatio`). */
+  ratio: string;
 }
 
 let rowSeq = 0;
 const newRow = (type: AssetType | '' = ''): AssetRow =>
-  ({ key: `r${++rowSeq}`, type, serial: '', phase: '', rp: '', rs: '' });
+  ({ key: `r${++rowSeq}`, type, serial: '', ratio: '' });
 
 /** Loại có tỷ số biến đổi — chỉ 2 loại này mới hiện ô tỷ số. */
 const HAS_RATIO: AssetType[] = ['TI', 'TU'];
-/** Chỉ TI mới cần phân biệt pha. */
-const HAS_PHASE: AssetType[] = ['TI'];
 
 /** Giá trị đặc biệt của bộ chọn nhãn mục đích: cho gõ tay chuỗi bất kỳ. */
 const CUSTOM = '__custom';
@@ -210,8 +207,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       .filter(a => a.point === p.id)
       .map(a => ({
         key: `r${++rowSeq}`, id: a.id, type: a.type, serial: a.serial,
-        phase: (a.phase ?? '') as AssetRow['phase'],
-        rp: str(a.ratio_primary), rs: str(a.ratio_secondary),
+        ratio: formatRatio(a.ratio_primary, a.ratio_secondary),
       }));
     setPForm({
       ...EMPTY_P,
@@ -280,14 +276,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   /* ------------- HSN suy từ tỷ số TI / TU trong bảng vật tư ------------- */
   /** Lấy dòng đầu tiên của một loại có nhập tỷ số — 3 TI cùng bộ luôn cùng tỷ số. */
   const ratioRowOf = (type: AssetType) =>
-    pForm.assetRows.find(r => r.type === type && (r.rp !== '' || r.rs !== ''));
-  const tiRow = ratioRowOf('TI');
-  const tuRow = ratioRowOf('TU');
+    pForm.assetRows.find(r => r.type === type && r.ratio.trim() !== '');
 
   const hsnInput = {
     connection: pForm.connection,
-    ti: { primary: toNum(tiRow?.rp ?? '') ?? null, secondary: toNum(tiRow?.rs ?? '') ?? null },
-    tu: { primary: toNum(tuRow?.rp ?? '') ?? null, secondary: toNum(tuRow?.rs ?? '') ?? null },
+    ti: parseRatio(ratioRowOf('TI')?.ratio ?? ''),
+    tu: parseRatio(ratioRowOf('TU')?.ratio ?? ''),
   };
   const derivedHsn = deriveHsn(hsnInput);
 
@@ -462,13 +456,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     }
 
     for (const r of rows) {
+      const hasRatio = HAS_RATIO.includes(r.type as AssetType);
+      const { primary, secondary } = parseRatio(r.ratio);
       const body = {
         serial: r.serial.trim(),
         type: r.type as AssetType,
         point: pointId,
-        phase: (HAS_PHASE.includes(r.type as AssetType) ? r.phase : '') as '' | 'A' | 'B' | 'C',
-        ratio_primary: HAS_RATIO.includes(r.type as AssetType) ? toNum(r.rp) : undefined,
-        ratio_secondary: HAS_RATIO.includes(r.type as AssetType) ? toNum(r.rs) : undefined,
+        ratio_primary: hasRatio ? (primary ?? undefined) : undefined,
+        ratio_secondary: hasRatio ? (secondary ?? undefined) : undefined,
         status: 'dang_treo' as const,
       };
       if (r.id) await assets.update(r.id, body);
@@ -716,7 +711,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       )}
 
       {/* ============================ Modal ============================ */}
-      <FormModal open={modal !== null} title={modalTitle} onClose={closeModal} onSubmit={submit} saving={saving}>
+      <FormModal open={modal !== null} title={modalTitle} onClose={closeModal} onSubmit={submit}
+        saving={saving} wide={modal === 'point'}>
         {modal === 'zone' && (
           <>
             <div className="grid gap-6 sm:grid-cols-2">
@@ -916,68 +912,57 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </div>
 
               <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-surface">
-                <table className="w-full text-sm">
+                {/* table-fixed + colgroup: khoá tỷ lệ cột, không để nội dung
+                    trong ô tự kéo co làm cột "Số No" teo lại. */}
+                <table className="w-full table-fixed text-sm">
+                  <colgroup>
+                    <col style={{ width: '30%' }} />
+                    <col style={{ width: '42%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '8%' }} />
+                  </colgroup>
                   <thead className="border-b border-[var(--border)] bg-subtle">
                     <tr>
-                      <th className="w-52 px-4 py-3 text-left font-bold text-soft">Thiết bị</th>
+                      <th className="px-4 py-3 text-left font-bold text-soft">Thiết bị</th>
                       <th className="px-4 py-3 text-left font-bold text-soft">Số No</th>
-                      <th className="w-24 px-4 py-3 text-left font-bold text-soft">Pha</th>
-                      <th className="w-44 px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
-                      <th className="w-12 px-4 py-3" />
+                      <th className="px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
+                      <th className="px-2 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
                     {pForm.assetRows.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-[13px] italic text-faint">
+                        <td colSpan={4} className="px-4 py-8 text-center text-[13px] italic text-faint">
                           Chưa khai thiết bị nào — bấm "Thêm dòng" bên dưới.
                         </td>
                       </tr>
-                    ) : pForm.assetRows.map(r => {
-                      const hasRatio = HAS_RATIO.includes(r.type as AssetType);
-                      const hasPhase = HAS_PHASE.includes(r.type as AssetType);
-                      return (
-                        <tr key={r.key}>
-                          <td className="p-2">
-                            <Select value={r.type} variant="bare"
-                              onChange={v => setRow(r.key, { type: v as AssetType })}
-                              options={Object.entries(ASSET_LABEL).map(([value, label]) => ({ value, label }))}
-                              placeholder="Chọn thiết bị" />
-                          </td>
-                          <td className="p-2">
-                            <CellInput value={r.serial} mono placeholder="Nhập số chế tạo"
-                              onChange={v => setRow(r.key, { serial: v })} />
-                          </td>
-                          <td className="p-2">
-                            {hasPhase ? (
-                              <Select value={r.phase} variant="bare"
-                                onChange={v => setRow(r.key, { phase: v as AssetRow['phase'] })}
-                                options={[{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }, { value: 'C', label: 'C' }]}
-                                placeholder="—" />
-                            ) : <span className="block p-2 text-faint">—</span>}
-                          </td>
-                          <td className="p-2">
-                            {hasRatio ? (
-                              <div className="flex items-center">
-                                <CellInput type="number" align="center" value={r.rp}
-                                  placeholder={r.type === 'TU' ? '22000' : '200'}
-                                  onChange={v => setRow(r.key, { rp: v })} />
-                                <span className="shrink-0 font-bold text-faint">/</span>
-                                <CellInput type="number" align="center" value={r.rs}
-                                  placeholder={r.type === 'TU' ? '100' : '5'}
-                                  onChange={v => setRow(r.key, { rs: v })} />
-                              </div>
-                            ) : <span className="block p-2 text-faint">—</span>}
-                          </td>
-                          <td className="p-2">
-                            <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"
-                              className="p-1 text-faint transition-colors hover:text-red-500">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    ) : pForm.assetRows.map(r => (
+                      <tr key={r.key}>
+                        <td className="p-2">
+                          <Select value={r.type} variant="bare"
+                            onChange={v => setRow(r.key, { type: v as AssetType })}
+                            options={Object.entries(ASSET_LABEL).map(([value, label]) => ({ value, label }))}
+                            placeholder="Chọn thiết bị" />
+                        </td>
+                        <td className="p-2">
+                          <CellInput value={r.serial} mono placeholder="Nhập số chế tạo"
+                            onChange={v => setRow(r.key, { serial: v })} />
+                        </td>
+                        <td className="p-2">
+                          {HAS_RATIO.includes(r.type as AssetType) ? (
+                            <CellInput value={r.ratio} mono
+                              placeholder={r.type === 'TU' ? '22000/100' : '200/5'}
+                              onChange={v => setRow(r.key, { ratio: v })} />
+                          ) : <span className="block p-2 text-faint">—</span>}
+                        </td>
+                        <td className="p-2 text-center">
+                          <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"
+                            className="p-1 text-faint transition-colors hover:text-red-500">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

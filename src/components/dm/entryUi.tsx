@@ -89,9 +89,12 @@ export function DerivedValue({ value, placeholder }: { value: string; placeholde
  * Modal nhập liệu — bấm "Thêm …" mới hiện, dùng lại cho cả thêm mới lẫn sửa.
  * Nền mờ bấm ra ngoài để đóng, hệt các modal sẵn có trong app.
  */
-export function FormModal({ open, title, onClose, onSubmit, saving, children }: {
+export function FormModal({ open, title, onClose, onSubmit, saving, wide, children }: {
   open: boolean; title: string; onClose: () => void;
-  onSubmit: () => void; saving?: boolean; children: ReactNode;
+  onSubmit: () => void; saving?: boolean;
+  /** Form có bảng bên trong thì cần rộng hơn, kẻo các cột teo lại. */
+  wide?: boolean;
+  children: ReactNode;
 }) {
   const submit = (e: FormEvent) => { e.preventDefault(); onSubmit(); };
 
@@ -108,7 +111,9 @@ export function FormModal({ open, title, onClose, onSubmit, saving, children }: 
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-surface p-8 shadow-2xl"
+            className={`relative max-h-[90vh] w-full overflow-y-auto rounded-lg bg-surface p-8 shadow-2xl ${
+              wide ? 'max-w-4xl' : 'max-w-2xl'
+            }`}
           >
             <div className="mb-6 flex items-center justify-between border-b border-[var(--border)] pb-4">
               <h3 className="text-xl font-bold text-ink">{title}</h3>

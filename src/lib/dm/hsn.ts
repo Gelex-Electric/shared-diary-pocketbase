@@ -28,6 +28,29 @@ export function ratioOf(r: RatioInput): number | null {
   return p / s;
 }
 
+/**
+ * Tách chuỗi tỷ số người dùng gõ dạng `200/5` thành cặp sơ cấp/thứ cấp.
+ * Chấp nhận khoảng trắng thừa và dấu phẩy thập phân (`22,5/5`).
+ * Không có dấu `/` thì coi cả chuỗi là sơ cấp, thứ cấp bỏ trống.
+ */
+export function parseRatio(text: string): RatioInput {
+  const [a, b] = (text ?? '').split('/');
+  const num = (s?: string) => {
+    const v = parseFloat((s ?? '').trim().replace(',', '.'));
+    return Number.isFinite(v) ? v : null;
+  };
+  return { primary: num(a), secondary: num(b) };
+}
+
+/** Dựng lại chuỗi `200/5` từ cặp số đã lưu, để đổ ngược lên form khi sửa. */
+export function formatRatio(primary?: number | null, secondary?: number | null): string {
+  if (primary == null && secondary == null) return '';
+  // Thiếu một vế thì không kèm dấu '/' lửng, tránh mở sửa ra chuỗi "400/".
+  if (secondary == null) return `${primary}`;
+  if (primary == null) return `/${secondary}`;
+  return `${primary}/${secondary}`;
+}
+
 export interface HsnInput {
   connection: Connection;
   ti: RatioInput;
