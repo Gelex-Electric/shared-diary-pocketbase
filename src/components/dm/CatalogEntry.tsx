@@ -25,7 +25,7 @@ import { toast } from '../../lib/toast';
 import { Toggle } from '../ui/Toggle';
 import { assets, customers, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
-import { CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
+import { ASSET_LABEL, CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
 import type {
   AssetType, Connection, Customer, Point, PointRole, PointStatus, Station, Zone,
 } from '../../lib/dm/types';
@@ -84,11 +84,33 @@ const EMPTY_P = {
   /** Chỉ dùng khi điểm phụ trùng KH với điểm chính: mã nhãn, hoặc CUSTOM. */
   purpose: '', purpose_custom: '',
   status: '' as PointStatus, note: '',
-  /* --- Vật tư khai luôn cùng điểm đo (ghi vào dm_asset) --- */
-  meter_serial: '', gp03_serial: '',
-  ti_a: '', ti_b: '', ti_c: '', ti_p: '', ti_s: '',
-  tu_serial: '', tu_p: '', tu_s: '',
+  /** Vật tư khai luôn cùng điểm đo — mỗi dòng một thiết bị (ghi vào dm_asset). */
+  assetRows: [] as AssetRow[],
 };
+
+/**
+ * Một dòng vật tư trong bảng của form điểm đo.
+ * `id` có giá trị = bản ghi `dm_asset` đã tồn tại (đang sửa); rỗng = dòng mới.
+ * `key` chỉ để React phân biệt dòng, không lưu xuống PB.
+ */
+interface AssetRow {
+  key: string;
+  id?: string;
+  type: AssetType | '';
+  serial: string;
+  phase: '' | 'A' | 'B' | 'C';
+  rp: string;
+  rs: string;
+}
+
+let rowSeq = 0;
+const newRow = (type: AssetType | '' = ''): AssetRow =>
+  ({ key: `r${++rowSeq}`, type, serial: '', phase: '', rp: '', rs: '' });
+
+/** Loại có tỷ số biến đổi — chỉ 2 loại này mới hiện ô tỷ số. */
+const HAS_RATIO: AssetType[] = ['TI', 'TU'];
+/** Chỉ TI mới cần phân biệt pha. */
+const HAS_PHASE: AssetType[] = ['TI'];
 
 /** Giá trị đặc biệt của bộ chọn nhãn mục đích: cho gõ tay chuỗi bất kỳ. */
 const CUSTOM = '__custom';
@@ -181,22 +203,17 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     // Nhãn đuôi đã lưu: khớp một mục có sẵn thì chọn mục đó, không thì là tự nhập.
     const saved = p.sub_label ?? '';
     const isPreset = SUB_PURPOSES.some(x => x.code === saved);
-    // Vật tư đang gắn ở điểm đo này → điền ngược lên form.
-    const mine = d?.assets.filter(a => a.point === p.id) ?? [];
-    const find = (type: string, phase?: string) =>
-      mine.find(a => a.type === type && (phase ? a.phase === phase : true));
-    const ti = find('TI');
-    const tu = find('TU');
+    // Vật tư đang gắn ở điểm đo này → dựng lại thành các dòng của bảng.
+    const rows: AssetRow[] = (d?.assets ?? [])
+      .filter(a => a.point === p.id)
+      .map(a => ({
+        key: `r${++rowSeq}`, id: a.id, type: a.type, serial: a.serial,
+        phase: (a.phase ?? '') as AssetRow['phase'],
+        rp: str(a.ratio_primary), rs: str(a.ratio_secondary),
+      }));
     setPForm({
       ...EMPTY_P,
-      meter_serial: find('CONGTO')?.serial ?? '',
-      gp03_serial: find('GP03')?.serial ?? '',
-      ti_a: find('TI', 'A')?.serial ?? '',
-      ti_b: find('TI', 'B')?.serial ?? '',
-      ti_c: find('TI', 'C')?.serial ?? '',
-      ti_p: str(ti?.ratio_primary), ti_s: str(ti?.ratio_secondary),
-      tu_serial: tu?.serial ?? '',
-      tu_p: str(tu?.ratio_primary), tu_s: str(tu?.ratio_secondary),
+      assetRows: rows,
       station: p.station, role: p.role, connection: p.connection,
       customer: p.customer ?? '', parent_point: p.parent_point ?? '',
       ident: p.ident ?? '', hsn: str(p.hsn),
@@ -258,11 +275,17 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const pointCode = buildPointCode(pointParts);
   const pointCodeMissing = missingPointCodeParts(pointParts);
 
-  /* ---------------- HSN suy từ tỷ số TI / TU ---------------- */
+  /* ------------- HSN suy từ tỷ số TI / TU trong bảng vật tư ------------- */
+  /** Lấy dòng đầu tiên của một loại có nhập tỷ số — 3 TI cùng bộ luôn cùng tỷ số. */
+  const ratioRowOf = (type: AssetType) =>
+    pForm.assetRows.find(r => r.type === type && (r.rp !== '' || r.rs !== ''));
+  const tiRow = ratioRowOf('TI');
+  const tuRow = ratioRowOf('TU');
+
   const hsnInput = {
     connection: pForm.connection,
-    ti: { primary: toNum(pForm.ti_p) ?? null, secondary: toNum(pForm.ti_s) ?? null },
-    tu: { primary: toNum(pForm.tu_p) ?? null, secondary: toNum(pForm.tu_s) ?? null },
+    ti: { primary: toNum(tiRow?.rp ?? '') ?? null, secondary: toNum(tiRow?.rs ?? '') ?? null },
+    tu: { primary: toNum(tuRow?.rp ?? '') ?? null, secondary: toNum(tuRow?.rs ?? '') ?? null },
   };
   const derivedHsn = deriveHsn(hsnInput);
 
@@ -411,42 +434,39 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    * bản ghi cũ đi — nhờ vậy sửa điểm đo không đẻ ra vật tư trùng.
    */
   const syncAssets = async (pointId: string) => {
-    const mine = d?.assets.filter(a => a.point === pointId) ?? [];
-    const tiRatio = {
-      ratio_primary: toNum(pForm.ti_p),
-      ratio_secondary: toNum(pForm.ti_s),
-    };
-    const indirect = pForm.connection === 'gian_tiep';
+    const rows = pForm.assetRows.filter(r => r.type && r.serial.trim());
+    const keptIds = new Set(rows.map(r => r.id).filter(Boolean));
 
-    const wanted: { type: AssetType; phase?: 'A' | 'B' | 'C'; serial: string; extra?: object }[] = [
-      { type: 'CONGTO', serial: pForm.meter_serial },
-      { type: 'GP03', serial: pForm.gp03_serial },
-      // Đấu trực tiếp thì không có TI/TU — coi như bỏ trống để gỡ nếu từng có.
-      { type: 'TI', phase: 'A', serial: indirect ? pForm.ti_a : '', extra: tiRatio },
-      { type: 'TI', phase: 'B', serial: indirect ? pForm.ti_b : '', extra: tiRatio },
-      { type: 'TI', phase: 'C', serial: indirect ? pForm.ti_c : '', extra: tiRatio },
-      {
-        type: 'TU', serial: indirect ? pForm.tu_serial : '',
-        extra: { ratio_primary: toNum(pForm.tu_p), ratio_secondary: toNum(pForm.tu_s) },
-      },
-    ];
+    // Dòng bị xoá khỏi bảng → gỡ bản ghi tương ứng.
+    for (const old of d?.assets.filter(a => a.point === pointId) ?? []) {
+      if (!keptIds.has(old.id)) await assets.remove(old.id);
+    }
 
-    for (const w of wanted) {
-      const old = mine.find(a => a.type === w.type && (w.phase ? a.phase === w.phase : !a.phase));
-      const serial = w.serial.trim();
-
-      if (!serial) {
-        if (old) await assets.remove(old.id);
-        continue;
-      }
+    for (const r of rows) {
       const body = {
-        serial, type: w.type, point: pointId, phase: (w.phase ?? '') as '' | 'A' | 'B' | 'C',
-        status: 'dang_treo' as const, ...(w.extra ?? {}),
+        serial: r.serial.trim(),
+        type: r.type as AssetType,
+        point: pointId,
+        phase: (HAS_PHASE.includes(r.type as AssetType) ? r.phase : '') as '' | 'A' | 'B' | 'C',
+        ratio_primary: HAS_RATIO.includes(r.type as AssetType) ? toNum(r.rp) : undefined,
+        ratio_secondary: HAS_RATIO.includes(r.type as AssetType) ? toNum(r.rs) : undefined,
+        status: 'dang_treo' as const,
       };
-      if (old) await assets.update(old.id, body);
+      if (r.id) await assets.update(r.id, body);
       else await assets.create(body);
     }
   };
+
+  /* ------------- thao tác trên bảng vật tư của form điểm đo ------------- */
+  const setRow = (key: string, patch: Partial<AssetRow>) =>
+    setPForm(f => ({
+      ...f,
+      assetRows: f.assetRows.map(r => (r.key === key ? { ...r, ...patch } : r)),
+    }));
+  const addRow = (type: AssetType | '' = '') =>
+    setPForm(f => ({ ...f, assetRows: [...f.assetRows, newRow(type)] }));
+  const removeRow = (key: string) =>
+    setPForm(f => ({ ...f, assetRows: f.assetRows.filter(r => r.key !== key) }));
 
   const stationCodeOf = (id?: string) => d?.stations.find(s => s.id === id)?.code ?? '—';
   const childrenOf = (id: string) => d?.points.filter(p => p.parent_point === id).length ?? 0;
@@ -865,73 +885,93 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 onChange={v => setPForm(f => ({ ...f, ident: v }))} />
             </Field>
 
-            {/* ---------------- Vật tư gắn ở điểm đo ---------------- */}
+            {/* ---------------- Bảng vật tư gắn ở điểm đo ---------------- */}
             <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
-              <p className="mb-3 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-dim">
-                <Package className="h-4 w-4" /> Vật tư gắn ở điểm đo
-              </p>
-
-              <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Số No công tơ">
-                  <TextInput value={pForm.meter_serial} mono placeholder="2210575660"
-                    onChange={v => setPForm(f => ({ ...f, meter_serial: v }))} />
-                </Field>
-                <Field label="Số No đo xa GP-03">
-                  <TextInput value={pForm.gp03_serial} mono
-                    onChange={v => setPForm(f => ({ ...f, gp03_serial: v }))} />
-                </Field>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-dim">
+                  <Package className="h-4 w-4" /> Vật tư gắn ở điểm đo
+                </p>
+                <span className="text-[11px] text-faint">
+                  {pForm.assetRows.length} thiết bị
+                </span>
               </div>
 
-              {pForm.connection === 'gian_tiep' ? (
-                <>
-                  <div className="mt-4 grid gap-6 sm:grid-cols-3">
-                    <Field label="Số No TI pha A">
-                      <TextInput value={pForm.ti_a} mono
-                        onChange={v => setPForm(f => ({ ...f, ti_a: v }))} />
-                    </Field>
-                    <Field label="Số No TI pha B">
-                      <TextInput value={pForm.ti_b} mono
-                        onChange={v => setPForm(f => ({ ...f, ti_b: v }))} />
-                    </Field>
-                    <Field label="Số No TI pha C">
-                      <TextInput value={pForm.ti_c} mono
-                        onChange={v => setPForm(f => ({ ...f, ti_c: v }))} />
-                    </Field>
-                  </div>
-
-                  <div className="mt-4 grid gap-6 sm:grid-cols-2">
-                    <Field label="Tỷ số TI" hint="Áp chung cho cả 3 TI">
-                      <div className="flex items-center gap-2">
-                        <NumberInput value={pForm.ti_p} placeholder="200"
-                          onChange={v => setPForm(f => ({ ...f, ti_p: v }))} />
-                        <span className="text-lg font-bold text-faint">/</span>
-                        <NumberInput value={pForm.ti_s} placeholder="5"
-                          onChange={v => setPForm(f => ({ ...f, ti_s: v }))} />
-                      </div>
-                    </Field>
-                    <Field label="Tỷ số TU" hint="Bỏ trống với điểm đo hạ áp — khi đó TU = 1">
-                      <div className="flex items-center gap-2">
-                        <NumberInput value={pForm.tu_p} placeholder="22000"
-                          onChange={v => setPForm(f => ({ ...f, tu_p: v }))} />
-                        <span className="text-lg font-bold text-faint">/</span>
-                        <NumberInput value={pForm.tu_s} placeholder="100"
-                          onChange={v => setPForm(f => ({ ...f, tu_s: v }))} />
-                      </div>
-                    </Field>
-                  </div>
-
-                  <div className="mt-4">
-                    <Field label="Số No TU" hint="Bỏ trống nếu không có TU">
-                      <TextInput value={pForm.tu_serial} mono
-                        onChange={v => setPForm(f => ({ ...f, tu_serial: v }))} />
-                    </Field>
-                  </div>
-                </>
-              ) : (
-                <p className="mt-3 text-[12px] italic text-faint">
-                  Đấu trực tiếp không cần TI/TU. Gạt sang "Gián tiếp" để khai 3 TI.
+              {pForm.assetRows.length === 0 ? (
+                <p className="py-4 text-center text-[12px] italic text-faint">
+                  Chưa khai thiết bị nào. Bấm "Thêm dòng" để chọn thiết bị và nhập số No.
                 </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left">
+                    <thead>
+                      <tr className="border-b border-[var(--border)]">
+                        <th className="pb-2 pr-3 text-[10px] font-bold uppercase tracking-wide text-faint">Thiết bị</th>
+                        <th className="pb-2 pr-3 text-[10px] font-bold uppercase tracking-wide text-faint">Số No</th>
+                        <th className="w-24 pb-2 pr-3 text-[10px] font-bold uppercase tracking-wide text-faint">Pha</th>
+                        <th className="w-52 pb-2 pr-3 text-[10px] font-bold uppercase tracking-wide text-faint">Tỷ số</th>
+                        <th className="w-10 pb-2" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pForm.assetRows.map(r => {
+                        const hasRatio = HAS_RATIO.includes(r.type as AssetType);
+                        const hasPhase = HAS_PHASE.includes(r.type as AssetType);
+                        return (
+                          <tr key={r.key} className="border-b border-[var(--border)] last:border-0">
+                            <td className="py-2 pr-3 align-top">
+                              <Select value={r.type} onChange={v => setRow(r.key, { type: v as AssetType })}
+                                options={Object.entries(ASSET_LABEL).map(([value, label]) => ({ value, label }))}
+                                placeholder="Chọn thiết bị" />
+                            </td>
+                            <td className="py-2 pr-3 align-top">
+                              <TextInput value={r.serial} mono placeholder="Số chế tạo"
+                                onChange={v => setRow(r.key, { serial: v })} />
+                            </td>
+                            <td className="py-2 pr-3 align-top">
+                              {hasPhase ? (
+                                <Select value={r.phase} onChange={v => setRow(r.key, { phase: v as AssetRow['phase'] })}
+                                  options={[{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }, { value: 'C', label: 'C' }]}
+                                  placeholder="—" />
+                              ) : <span className="block pt-3 text-center text-faint">—</span>}
+                            </td>
+                            <td className="py-2 pr-3 align-top">
+                              {hasRatio ? (
+                                <div className="flex items-center gap-1.5">
+                                  <NumberInput value={r.rp} placeholder={r.type === 'TU' ? '22000' : '200'}
+                                    onChange={v => setRow(r.key, { rp: v })} />
+                                  <span className="font-bold text-faint">/</span>
+                                  <NumberInput value={r.rs} placeholder={r.type === 'TU' ? '100' : '5'}
+                                    onChange={v => setRow(r.key, { rs: v })} />
+                                </div>
+                              ) : <span className="block pt-3 text-center text-faint">—</span>}
+                            </td>
+                            <td className="py-2 align-top">
+                              <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"
+                                className="mt-1.5 rounded p-2 text-soft transition-colors hover:bg-[var(--danger-soft)] hover:text-red-500">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
+
+              {/* Thêm dòng — nút trắng thêm dòng trống, các nút còn lại thêm sẵn loại */}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => addRow()} className="vl-btn vl-btn-secondary vl-btn-sm">
+                  <Plus className="h-3.5 w-3.5" /> <span>Thêm dòng</span>
+                </button>
+                <span className="text-[11px] text-faint">Thêm nhanh:</span>
+                {(['CONGTO', 'GP03', 'TI', 'TU'] as AssetType[]).map(t => (
+                  <button key={t} type="button" onClick={() => addRow(t)}
+                    className="rounded-md border border-[var(--border)] bg-surface px-2.5 py-1 text-[11px] font-bold text-soft transition-colors hover:border-accent hover:text-accent">
+                    + {ASSET_LABEL[t]}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* HSN: chỉ đọc, suy từ tỷ số vừa nhập */}
