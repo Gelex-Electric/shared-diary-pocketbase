@@ -103,10 +103,14 @@ export function pointIdentPart(ident?: string | null): string {
 }
 
 export interface PointCodeParts extends StationCodeParts {
-  /** `true` = điểm đo phụ → chèn thêm tên tắt KH phụ trước định danh trạm. */
+  /** `true` = điểm đo phụ → nối thêm một đoạn đuôi sau công suất. */
   isSub: boolean;
-  /** Tên tắt KH của chính điểm đo phụ. Bỏ qua khi là điểm đo chính. */
-  subCustomerShortName?: string;
+  /**
+   * Đoạn đuôi của điểm đo phụ, đứng ngay sau công suất trạm. Là **tên tắt KH
+   * phụ** khi khác khách hàng với điểm chính, hoặc **nhãn mục đích** (CSCC,
+   * BCC…) khi trùng khách hàng — lúc đó lấy tên tắt sẽ trùng phần đầu mã.
+   */
+  subLabel?: string;
   /** Định danh điểm đo, phần trong ngoặc ở cuối. Có thể bỏ trống. */
   pointIdent?: string;
 }
@@ -114,18 +118,20 @@ export interface PointCodeParts extends StationCodeParts {
 /**
  * Ghép mã điểm đo.
  *   chính : TH.BQL-TH.T1.180kVA(0,4)
- *   phụ   : TH.BQL-TH.<KH phụ>.T1.180kVA(0,4)
+ *   phụ   : TH.BQL-TH.T1.180kVA.RICO(0,4)
+ *           TH.BQL-TH.T1.180kVA.CSCC(0,4)   (trùng KH với điểm chính)
  *
- * Phần đầu trùng đúng mã trạm — điểm đo chính chỉ là mã trạm cộng thêm định
- * danh trong ngoặc; điểm đo phụ chèn tên tắt KH phụ ngay sau tên tắt KH của trạm.
+ * Phần đầu luôn trùng đúng mã trạm. Điểm đo chính chỉ là mã trạm cộng định
+ * danh trong ngoặc; điểm đo phụ nối thêm đoạn đuôi sau công suất, rồi mới tới
+ * ngoặc định danh.
  */
 export function buildPointCode(p: PointCodeParts): string {
   const segments = [
     zoneSuffix(p.zoneCode),
     normalizeShortName(p.customerShortName),
-    ...(p.isSub ? [normalizeShortName(p.subCustomerShortName ?? '')] : []),
     p.ident.trim().toUpperCase(),
     powerPart(p.sdmKva),
+    ...(p.isSub ? [normalizeShortName(p.subLabel ?? '')] : []),
   ];
   return segments.join('.') + pointIdentPart(p.pointIdent);
 }
@@ -133,8 +139,21 @@ export function buildPointCode(p: PointCodeParts): string {
 /** Phần còn thiếu để ghép được mã điểm đo (định danh điểm đo KHÔNG bắt buộc). */
 export function missingPointCodeParts(p: PointCodeParts): string[] {
   const miss = missingStationCodeParts(p);
-  if (p.isSub && !normalizeShortName(p.subCustomerShortName ?? '')) {
-    miss.push('tên tắt khách hàng phụ');
+  if (p.isSub && !normalizeShortName(p.subLabel ?? '')) {
+    miss.push('tên tắt khách hàng phụ hoặc nhãn mục đích');
   }
   return miss;
 }
+
+/**
+ * Nhãn mục đích dùng khi điểm đo phụ TRÙNG khách hàng với điểm đo chính.
+ * Viết tắt ngắn để mã không dài; ngoài danh sách này còn cho tự nhập.
+ */
+export const SUB_PURPOSES: { code: string; label: string }[] = [
+  { code: 'CSCC', label: 'Chiếu sáng công cộng' },
+  { code: 'BCC', label: 'Bơm chuyển cốt' },
+  { code: 'TRAM-BOM', label: 'Trạm bơm' },
+  { code: 'VP', label: 'Văn phòng' },
+  { code: 'NX', label: 'Nhà xưởng' },
+  { code: 'DP', label: 'Dự phòng' },
+];

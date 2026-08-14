@@ -67,6 +67,11 @@ export interface Point extends PbRecord {
   code?: string;
   /** Định danh điểm đo, phần trong ngoặc cuối mã: `0,4` → `(0,4)`. */
   ident?: string;
+  /**
+   * Đoạn đuôi của điểm đo phụ (sau công suất): tên tắt KH phụ, hoặc nhãn mục
+   * đích (CSCC, BCC…) khi trùng khách hàng với điểm đo chính.
+   */
+  sub_label?: string;
   /** Điểm đo phụ trỏ về điểm đo chính của nó. Rỗng nếu là điểm chính. */
   parent_point?: string;
   /** Mã bên HES — thường chưa có lúc khai, nên để tuỳ chọn. */

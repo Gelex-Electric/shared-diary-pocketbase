@@ -26,7 +26,7 @@ import type { Connection, Customer, Point, PointRole, PointStatus, Station, Zone
 import type { Scope } from '../../lib/scope';
 import { DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS } from './entryUi';
 import {
-  SHORT_NAME_HINT, buildPointCode, buildStationCode, isValidShortName,
+  SHORT_NAME_HINT, SUB_PURPOSES, buildPointCode, buildStationCode, isValidShortName,
   missingPointCodeParts, missingStationCodeParts, normalizeShortName,
 } from '../../lib/dm/naming';
 
@@ -73,8 +73,13 @@ const EMPTY_C = { mkh: '', name: '', short_name: '', address: '', zone: '' };
 const EMPTY_P = {
   station: '', role: 'chinh' as PointRole, connection: 'truc_tiep' as Connection,
   customer: '', parent_point: '', ident: '', hsn: '1',
+  /** Chỉ dùng khi điểm phụ trùng KH với điểm chính: mã nhãn, hoặc CUSTOM. */
+  purpose: '', purpose_custom: '',
   line_id: '', status: '' as PointStatus, note: '',
 };
+
+/** Giá trị đặc biệt của bộ chọn nhãn mục đích: cho gõ tay chuỗi bất kỳ. */
+const CUSTOM = '__custom';
 
 const toNum = (s: string): number | undefined => {
   const v = parseFloat(s);
@@ -161,10 +166,15 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
   const editPoint = (p: Point) => {
     setEditingId(p.id);
+    // Nhãn đuôi đã lưu: khớp một mục có sẵn thì chọn mục đó, không thì là tự nhập.
+    const saved = p.sub_label ?? '';
+    const isPreset = SUB_PURPOSES.some(x => x.code === saved);
     setPForm({
       station: p.station, role: p.role, connection: p.connection,
       customer: p.customer ?? '', parent_point: p.parent_point ?? '',
       ident: p.ident ?? '', hsn: str(p.hsn),
+      purpose: isPreset ? saved : (saved ? CUSTOM : ''),
+      purpose_custom: isPreset ? '' : saved,
       line_id: p.line_id ?? '', status: (p.status ?? '') as PointStatus, note: p.note ?? '',
     });
     setModal('point');
@@ -193,13 +203,29 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const pSubCustomer = d?.customers.find(c => c.id === pForm.customer);
   const isSub = pForm.role === 'phu';
 
+  /** Điểm đo chính mà điểm phụ này thuộc về (nếu đã chọn). */
+  const pParent = d?.points.find(p => p.id === pForm.parent_point);
+  /**
+   * Điểm phụ TRÙNG khách hàng với điểm chính → lấy tên tắt KH làm đuôi sẽ
+   * lặp y hệt phần đầu mã, không phân biệt được. Khi đó dùng nhãn mục đích.
+   * Chưa chọn điểm chính thì so với chủ trạm.
+   */
+  const parentCustomerId = pParent?.customer ?? pStation?.customer ?? '';
+  const sameCustomer = isSub && !!pForm.customer && pForm.customer === parentCustomerId;
+
+  const purposeLabel = pForm.purpose === CUSTOM
+    ? normalizeShortName(pForm.purpose_custom)
+    : pForm.purpose;
+  /** Đuôi mã của điểm phụ: nhãn mục đích khi trùng KH, ngược lại là tên tắt KH phụ. */
+  const subLabel = sameCustomer ? purposeLabel : (pSubCustomer?.short_name ?? '');
+
   const pointParts = {
     zoneCode: pStationZone?.code ?? '',
     customerShortName: pStationCustomer?.short_name ?? '',
     ident: pStation?.ident ?? '',
     sdmKva: pStation?.sdm_kva ?? null,   // công suất lấy theo trạm chứa nó
     isSub,
-    subCustomerShortName: pSubCustomer?.short_name ?? '',
+    subLabel,
     pointIdent: pForm.ident,
   };
   const pointCode = buildPointCode(pointParts);
@@ -292,6 +318,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         line_name: pointCode,
         line_id: pForm.line_id.trim(),
         ident: pForm.ident.trim(),
+        sub_label: isSub ? subLabel : '',
         station: pForm.station,
         zone: pStation?.zone || undefined,
         // Điểm đo chính thuộc về chủ trạm; điểm đo phụ mang khách hàng riêng.
@@ -705,19 +732,49 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
             {/* Điểm đo phụ: cần KH phụ + điểm đo chính chứa nó */}
             {isSub && (
-              <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Khách hàng phụ" required
-                  hint={pSubCustomer && !pSubCustomer.short_name ? 'KH này chưa khai tên tắt' : 'Tên tắt của KH này chèn vào giữa mã'}>
-                  <Select value={pForm.customer} onChange={v => setPForm(f => ({ ...f, customer: v }))}
-                    options={customerOpts} placeholder="Chọn khách hàng phụ" searchable />
-                </Field>
-                <Field label="Phụ của điểm đo chính" required
-                  hint={pForm.station ? undefined : 'Chọn trạm trước'}>
-                  <Select value={pForm.parent_point} onChange={v => setPForm(f => ({ ...f, parent_point: v }))}
-                    options={parentOpts} placeholder={parentOpts.length ? 'Chọn điểm đo chính' : 'Trạm này chưa có điểm đo chính'}
-                    disabled={!parentOpts.length} searchable />
-                </Field>
-              </div>
+              <>
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <Field label="Phụ của điểm đo chính" required
+                    hint={pForm.station ? undefined : 'Chọn trạm trước'}>
+                    <Select value={pForm.parent_point} onChange={v => setPForm(f => ({ ...f, parent_point: v }))}
+                      options={parentOpts} placeholder={parentOpts.length ? 'Chọn điểm đo chính' : 'Trạm này chưa có điểm đo chính'}
+                      disabled={!parentOpts.length} searchable />
+                  </Field>
+                  <Field label="Khách hàng phụ" required
+                    hint={pSubCustomer && !pSubCustomer.short_name
+                      ? 'KH này chưa khai tên tắt'
+                      : 'Tên tắt của KH này thành đuôi mã'}>
+                    <Select value={pForm.customer} onChange={v => setPForm(f => ({ ...f, customer: v }))}
+                      options={customerOpts} placeholder="Chọn khách hàng phụ" searchable />
+                  </Field>
+                </div>
+
+                {/* Trùng KH với điểm chính → tên tắt sẽ lặp, phải chọn nhãn mục đích */}
+                {sameCustomer && (
+                  <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
+                    <p className="mb-3 text-[12px] text-soft">
+                      Điểm đo phụ này <b className="text-dim">trùng khách hàng</b> với điểm đo chính,
+                      nên tên tắt sẽ lặp lại phần đầu mã. Chọn nhãn mục đích để phân biệt.
+                    </p>
+                    <div className="grid gap-6 sm:grid-cols-2">
+                      <Field label="Mục đích điểm đo phụ" required>
+                        <Select value={pForm.purpose} onChange={v => setPForm(f => ({ ...f, purpose: v }))}
+                          options={[
+                            ...SUB_PURPOSES.map(x => ({ value: x.code, label: `${x.label} (${x.code})` })),
+                            { value: CUSTOM, label: 'Tự nhập ký tự…' },
+                          ]}
+                          placeholder="Chọn mục đích" />
+                      </Field>
+                      {pForm.purpose === CUSTOM && (
+                        <Field label="Ký tự tự nhập" required hint={SHORT_NAME_HINT}>
+                          <TextInput value={pForm.purpose_custom} mono placeholder="KHO-LANH-2"
+                            onChange={v => setPForm(f => ({ ...f, purpose_custom: normalizeShortName(v) }))} />
+                        </Field>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="grid gap-6 sm:grid-cols-2">
@@ -736,8 +793,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
             <Field label="Mã điểm đo (hệ thống tự sinh)"
               hint={isSub
-                ? 'Ghép: hậu tố KCN . tên tắt KH của trạm . tên tắt KH phụ . định danh trạm . công suất(định danh điểm đo)'
-                : 'Ghép: hậu tố KCN . tên tắt KH . định danh trạm . công suất(định danh điểm đo)'}>
+                ? `Ghép: mã trạm . ${sameCustomer ? 'nhãn mục đích' : 'tên tắt KH phụ'}(định danh điểm đo)`
+                : 'Ghép: mã trạm(định danh điểm đo)'}>
               <DerivedValue value={pointCodeMissing.length ? '' : pointCode}
                 placeholder={pForm.station ? pointCode : 'Chọn trạm trước'} />
             </Field>
