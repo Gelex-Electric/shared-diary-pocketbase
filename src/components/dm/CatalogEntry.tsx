@@ -77,7 +77,7 @@ const HEAD: Record<CatTab, { title: string; desc: string; add: string }> = {
 const EMPTY_Z = { code: '', name: '', address: '' };
 /** `code` không có trong form trạm — hệ thống tự sinh từ 4 mảnh bên dưới. */
 const EMPTY_S = {
-  name: '', zone: '', customer: '', ident: '',
+  zone: '', customer: '', ident: '',
   sdm_kva: '', p0_w: '', pk_w: '', note: '',
 };
 const EMPTY_C = { mkh: '', name: '', short_name: '', address: '', zone: '' };
@@ -202,7 +202,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const editStation = (s: Station) => {
     setEditingId(s.id);
     setSForm({
-      name: s.name ?? '', zone: s.zone, customer: s.customer ?? '', ident: s.ident ?? '',
+      zone: s.zone, customer: s.customer ?? '', ident: s.ident ?? '',
       sdm_kva: str(s.sdm_kva), p0_w: str(s.p0_w), pk_w: str(s.pk_w), note: s.note ?? '',
     });
     setModal('station');
@@ -395,7 +395,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
           `Còn thiếu: ${stationCodeMissing.join(', ')}.`);
       }
       const body = {
-        code: stationCode, name: sForm.name.trim(), zone: sForm.zone,
+        code: stationCode, zone: sForm.zone,
         customer: sForm.customer, ident: sForm.ident.trim().toUpperCase(),
         sdm_kva: toNum(sForm.sdm_kva), p0_w: toNum(sForm.p0_w), pk_w: toNum(sForm.pk_w),
         note: sForm.note.trim(),
@@ -876,11 +876,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </p>
             )}
 
-            <div className="grid gap-6 sm:grid-cols-3">
-              <Field label="Tên trạm">
-                <TextInput value={sForm.name} placeholder="Trạm Rico số 1"
-                  onChange={v => setSForm(f => ({ ...f, name: v }))} />
-              </Field>
+            <div className="grid gap-6 sm:grid-cols-2">
               <Field label="Tổn hao không tải" hint="P0">
                 <NumberInput value={sForm.p0_w} suffix="W"
                   onChange={v => setSForm(f => ({ ...f, p0_w: v }))} />

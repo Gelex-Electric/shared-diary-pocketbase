@@ -101,8 +101,7 @@ export default function DataTree() {
     const c = customerOf(p);
     return [p.line_id, p.line_name, c?.mkh, c?.name].some(x => x?.toLowerCase().includes(q));
   };
-  const matchStation = (s: Station) =>
-    !q || s.code.toLowerCase().includes(q) || (s.name ?? '').toLowerCase().includes(q);
+  const matchStation = (s: Station) => !q || s.code.toLowerCase().includes(q);
   const matchZone = (z: Zone) =>
     !q || z.code.toLowerCase().includes(q) || z.name.toLowerCase().includes(q);
 
@@ -271,9 +270,6 @@ export default function DataTree() {
                             <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-bold text-dim">
                               {station.code}
                             </span>
-                            {station.name && (
-                              <span className="hidden shrink-0 text-[12px] text-soft sm:block">{station.name}</span>
-                            )}
                             {station.sdm_kva != null && (
                               <span className="shrink-0 text-[11px] font-semibold text-faint">
                                 {station.sdm_kva} kVA

@@ -38,7 +38,6 @@ export interface Zone extends PbRecord {
 export interface Station extends PbRecord {
   /** Do hệ thống sinh, không gõ tay — xem `buildStationCode` trong `naming.ts`. */
   code: string;
-  name?: string;
   zone: string;
   /** Chủ trạm — cần để lấy tên tắt khi sinh mã trạm. */
   customer?: string;
