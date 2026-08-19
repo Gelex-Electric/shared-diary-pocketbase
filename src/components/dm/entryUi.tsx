@@ -92,7 +92,10 @@ export function DerivedValue({ value, placeholder }: { value: string; placeholde
 export function FormModal({ open, title, onClose, onSubmit, saving, wide, children }: {
   open: boolean; title: string; onClose: () => void;
   onSubmit: () => void; saving?: boolean;
-  /** Form có bảng bên trong thì cần rộng hơn, kẻo các cột teo lại. */
+  /**
+   * Form có bảng bên trong thì cần rộng hơn, kẻo các cột teo lại. Nở dần theo
+   * bề ngang màn hình: laptop giữ nguyên 4xl như cũ, màn lớn mới rộng thêm.
+   */
   wide?: boolean;
   children: ReactNode;
 }) {
@@ -112,7 +115,7 @@ export function FormModal({ open, title, onClose, onSubmit, saving, wide, childr
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             className={`relative max-h-[90vh] w-full overflow-y-auto rounded-lg bg-surface p-8 shadow-2xl ${
-              wide ? 'max-w-4xl' : 'max-w-2xl'
+              wide ? 'max-w-4xl xl:max-w-5xl 2xl:max-w-7xl' : 'max-w-2xl'
             }`}
           >
             <div className="mb-6 flex items-center justify-between border-b border-[var(--border)] pb-4">

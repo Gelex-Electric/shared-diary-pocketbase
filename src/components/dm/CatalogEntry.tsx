@@ -925,6 +925,21 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
         {modal === 'point' && (
           <>
+            {/* Mã điểm đo đứng ĐẦU form: nó là kết quả của mọi ô bên dưới, để
+                trên cùng thì vừa gõ vừa thấy mã đổi theo, khỏi cuộn xuống. */}
+            <Field label="Mã điểm đo (hệ thống tự sinh)"
+              hint={isSub
+                ? `Ghép: mã trạm . ${sameCustomer ? 'nhãn mục đích' : 'tên tắt KH phụ'}(định danh điểm đo)`
+                : 'Ghép: mã trạm(định danh điểm đo)'}>
+              <DerivedValue value={pointCodeMissing.length ? '' : pointCode}
+                placeholder={pForm.station ? pointCode : 'Chọn trạm trước'} />
+            </Field>
+            {pointCodeMissing.length > 0 && (
+              <p className="-mt-3 ml-1 text-[11px] font-semibold text-warn">
+                Còn thiếu: {pointCodeMissing.join(', ')}. Các mảnh này lấy từ hồ sơ trạm và khách hàng.
+              </p>
+            )}
+
             <Field label="Trạm" required
               hint={pStation ? `KCN ${pStationZone?.code ?? '—'} · KH ${pStationCustomer?.short_name ?? '—'} · ${pStation.ident ?? '—'} · ${pStation.sdm_kva ?? '—'} kVA` : undefined}>
               <Select value={pForm.station} onChange={v => setPForm(f => ({ ...f, station: v, parent_point: '' }))}
@@ -1106,19 +1121,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <DerivedValue value={derivedHsn == null ? '' : String(derivedHsn)}
                 placeholder="Nhập tỷ số TI ở phần vật tư" />
             </Field>
-
-            <Field label="Mã điểm đo (hệ thống tự sinh)"
-              hint={isSub
-                ? `Ghép: mã trạm . ${sameCustomer ? 'nhãn mục đích' : 'tên tắt KH phụ'}(định danh điểm đo)`
-                : 'Ghép: mã trạm(định danh điểm đo)'}>
-              <DerivedValue value={pointCodeMissing.length ? '' : pointCode}
-                placeholder={pForm.station ? pointCode : 'Chọn trạm trước'} />
-            </Field>
-            {pointCodeMissing.length > 0 && (
-              <p className="-mt-3 ml-1 text-[11px] font-semibold text-warn">
-                Còn thiếu: {pointCodeMissing.join(', ')}. Các mảnh này lấy từ hồ sơ trạm và khách hàng.
-              </p>
-            )}
 
             <Field label="Trạng thái">
               <Select value={pForm.status}
