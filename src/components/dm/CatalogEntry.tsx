@@ -23,11 +23,13 @@ import { Select } from '../ui/Select';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { toast } from '../../lib/toast';
 import { Toggle } from '../ui/Toggle';
+import { Switch } from '../ui/Switch';
+import { DatePicker } from '../ui/DateTimePickers';
 import { assets, customers, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
 import type {
-  AssetType, Connection, Customer, Point, PointRole, PointStatus, Station, Zone,
+  AssetStatus, AssetType, Connection, Customer, Point, PointRole, PointStatus, Station, Zone,
 } from '../../lib/dm/types';
 import { deriveHsn, formatRatio, hsnFormula, parseRatio } from '../../lib/dm/hsn';
 import type { Scope } from '../../lib/scope';
@@ -102,14 +104,31 @@ interface AssetRow {
   serial: string;
   /** Gõ nguyên chuỗi `200/5`; tách ra 2 số khi lưu (`parseRatio`). */
   ratio: string;
+  /** `YYYY-MM-DD`, khớp định dạng của `ui/DatePicker`. */
+  dateOn: string;
+  dateOff: string;
+  /** Đang đo ở điểm đo này hay không — thiết bị cũ đã thay vẫn giữ trong bảng. */
+  active: boolean;
 }
 
 let rowSeq = 0;
 const newRow = (type: AssetType | '' = ''): AssetRow =>
-  ({ key: `r${++rowSeq}`, type, serial: '', ratio: '' });
+  ({ key: `r${++rowSeq}`, type, serial: '', ratio: '', dateOn: '', dateOff: '', active: true });
 
 /** Loại có tỷ số biến đổi — chỉ 2 loại này mới hiện ô tỷ số. */
 const HAS_RATIO: AssetType[] = ['TI', 'TU'];
+
+/**
+ * Loại chỉ được có ĐÚNG MỘT cái đang hoạt động ở mỗi điểm đo. Khai thêm cái
+ * mới cùng loại thì cái cũ tự tắt hoạt động (thay thiết bị), không xoá đi để
+ * còn giữ lịch sử treo/tháo.
+ *
+ * TI/TU không nằm ở đây: một bộ gồm 3 TI cùng hoạt động song song.
+ */
+const ONE_ACTIVE: AssetType[] = ['CONGTO', 'GP03'];
+
+/** Ngày hôm nay dạng `YYYY-MM-DD` — điền sẵn ngày tháo khi gạt tắt hoạt động. */
+const today = () => new Date().toISOString().slice(0, 10);
 
 /** Giá trị đặc biệt của bộ chọn nhãn mục đích: cho gõ tay chuỗi bất kỳ. */
 const CUSTOM = '__custom';
@@ -208,6 +227,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       .map(a => ({
         key: `r${++rowSeq}`, id: a.id, type: a.type, serial: a.serial,
         ratio: formatRatio(a.ratio_primary, a.ratio_secondary),
+        // Bản ghi tạo trước đợt 7 chưa có 3 cột này: `active` mặc định TRUE vì
+        // hồi đó mọi vật tư khai ở điểm đo đều là đang treo.
+        dateOn: (a.date_on ?? '').slice(0, 10),
+        dateOff: (a.date_off ?? '').slice(0, 10),
+        active: a.active ?? true,
       }));
     setPForm({
       ...EMPTY_P,
@@ -274,9 +298,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const pointCodeMissing = missingPointCodeParts(pointParts);
 
   /* ------------- HSN suy từ tỷ số TI / TU trong bảng vật tư ------------- */
-  /** Lấy dòng đầu tiên của một loại có nhập tỷ số — 3 TI cùng bộ luôn cùng tỷ số. */
+  /**
+   * Lấy dòng đầu tiên của một loại có nhập tỷ số — 3 TI cùng bộ luôn cùng tỷ số.
+   * Chỉ xét thiết bị ĐANG HOẠT ĐỘNG: TI cũ đã tháo không được kéo HSN theo.
+   */
   const ratioRowOf = (type: AssetType) =>
-    pForm.assetRows.find(r => r.type === type && r.ratio.trim() !== '');
+    pForm.assetRows.find(r => r.active && r.type === type && r.ratio.trim() !== '');
 
   const hsnInput = {
     connection: pForm.connection,
@@ -290,11 +317,35 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    * khai dở vẫn phải lưu được.
    */
   const filledRows = pForm.assetRows.filter(r => r.type && r.serial.trim());
-  const countType = (t: AssetType) => filledRows.filter(r => r.type === t).length;
+  /** Chỉ đếm thiết bị đang hoạt động — cái đã tháo vẫn nằm bảng để giữ lịch sử. */
+  const countType = (t: AssetType) =>
+    filledRows.filter(r => r.type === t && r.active).length;
   const assetWarnings: string[] = [];
-  if (countType('CONGTO') === 0) assetWarnings.push('chưa có công tơ');
-  else if (countType('CONGTO') > 1) assetWarnings.push('có nhiều hơn 1 công tơ');
-  if (countType('GP03') === 0) assetWarnings.push('chưa có đo xa GP-03');
+  if (countType('CONGTO') === 0) assetWarnings.push('chưa có công tơ đang hoạt động');
+  else if (countType('CONGTO') > 1) assetWarnings.push('có nhiều hơn 1 công tơ đang hoạt động');
+  if (countType('GP03') === 0) assetWarnings.push('chưa có đo xa GP-03 đang hoạt động');
+
+  // Lệch tỷ số trong cùng một bộ TI (hoặc TU): 3 TI phải cùng tỷ số, khác nhau
+  // là khai nhầm — HSN đang lấy theo dòng đầu nên phải nói rõ.
+  for (const t of HAS_RATIO) {
+    const kinds = new Set(
+      pForm.assetRows.filter(r => r.active && r.type === t && r.ratio.trim())
+        .map(r => r.ratio.trim()));
+    if (kinds.size > 1) {
+      assetWarnings.push(`các ${t} không cùng tỷ số (${[...kinds].join(' ≠ ')}) — HSN đang lấy theo cái đầu`);
+    }
+  }
+
+  // Đã tháo mà chưa khai ngày, hoặc còn hoạt động mà đã có ngày tháo.
+  if (filledRows.some(r => !r.active && !r.dateOff)) {
+    assetWarnings.push('có thiết bị đã ngưng hoạt động nhưng chưa khai ngày tháo');
+  }
+  if (filledRows.some(r => r.active && r.dateOff)) {
+    assetWarnings.push('có thiết bị đang hoạt động nhưng đã khai ngày tháo');
+  }
+  if (filledRows.some(r => r.dateOn && r.dateOff && r.dateOff < r.dateOn)) {
+    assetWarnings.push('có thiết bị khai ngày tháo trước ngày treo');
+  }
   if (pForm.connection === 'gian_tiep' && countType('TI') !== 3) {
     assetWarnings.push(`đấu gián tiếp thường đủ 3 TI (đang có ${countType('TI')})`);
   }
@@ -464,7 +515,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         point: pointId,
         ratio_primary: hasRatio ? (primary ?? undefined) : undefined,
         ratio_secondary: hasRatio ? (secondary ?? undefined) : undefined,
-        status: 'dang_treo' as const,
+        date_on: r.dateOn || '',
+        date_off: r.dateOff || '',
+        active: r.active,
+        // `status` là vòng đời trong kho, `active` là "đang đo ở điểm đo này":
+        // thiết bị tắt hoạt động coi như đã tháo khỏi điểm đo.
+        status: (r.active ? 'dang_treo' : 'thao_go') as AssetStatus,
       };
       if (r.id) await assets.update(r.id, body);
       else await assets.create(body);
@@ -472,13 +528,60 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   };
 
   /* ------------- thao tác trên bảng vật tư của form điểm đo ------------- */
+
+  /**
+   * Sửa một dòng rồi áp 2 luật nghiệp vụ lên các dòng còn lại:
+   *
+   * 1. **Tỷ số dùng chung theo loại** — 3 TI của một bộ luôn cùng tỷ số, TU
+   *    cũng vậy. Nhập tỷ số cho một cái thì các dòng cùng loại CÒN TRỐNG tự
+   *    điền theo; dòng đã có tỷ số khác thì KHÔNG đè, chỉ cảnh báo lệch.
+   * 2. **Một cái hoạt động mỗi loại** (công tơ, GP-03) — bật cái mới thì cái
+   *    cũ tự tắt và điền sẵn ngày tháo là hôm nay.
+   */
+  const applyRowRules = (rows: AssetRow[], key: string, patch: Partial<AssetRow>): AssetRow[] => {
+    const next = rows.map(r => (r.key === key ? { ...r, ...patch } : r));
+    const me = next.find(r => r.key === key);
+    if (!me || !me.type) return next;
+    const type = me.type as AssetType;
+
+    // Đổi loại sang TI/TU mà chưa có tỷ số → thừa hưởng tỷ số của bộ cùng loại.
+    let inherited = next;
+    if (patch.type !== undefined && HAS_RATIO.includes(type) && !me.ratio.trim()) {
+      const src = next.find(r => r.key !== key && r.type === type && r.ratio.trim());
+      if (src) inherited = next.map(r => (r.key === key ? { ...r, ratio: src.ratio } : r));
+    }
+
+    // Nhập tỷ số → lan sang các dòng cùng loại đang bỏ trống.
+    const spread = patch.ratio !== undefined && HAS_RATIO.includes(type) && patch.ratio.trim()
+      ? inherited.map(r =>
+          r.key !== key && r.type === type && !r.ratio.trim() ? { ...r, ratio: patch.ratio! } : r)
+      : inherited;
+
+    // Bật hoạt động (hoặc chuyển sang loại độc nhất) → tắt các cái cùng loại cũ.
+    const turnsOn = patch.active === true || (patch.type !== undefined && me.active);
+    if (turnsOn && ONE_ACTIVE.includes(type)) {
+      return spread.map(r =>
+        r.key !== key && r.type === type && r.active
+          ? { ...r, active: false, dateOff: r.dateOff || today() }
+          : r);
+    }
+    return spread;
+  };
+
   const setRow = (key: string, patch: Partial<AssetRow>) =>
-    setPForm(f => ({
-      ...f,
-      assetRows: f.assetRows.map(r => (r.key === key ? { ...r, ...patch } : r)),
-    }));
+    setPForm(f => {
+      // Gạt TẮT một dòng: điền sẵn ngày tháo, nhưng không đè ngày đã khai.
+      const cur = f.assetRows.find(r => r.key === key);
+      const p = patch.active === false && cur && !cur.dateOff
+        ? { ...patch, dateOff: today() } : patch;
+      return { ...f, assetRows: applyRowRules(f.assetRows, key, p) };
+    });
+
   const addRow = (type: AssetType | '' = '') =>
-    setPForm(f => ({ ...f, assetRows: [...f.assetRows, newRow(type)] }));
+    setPForm(f => {
+      const row = newRow(type);
+      return { ...f, assetRows: applyRowRules([...f.assetRows, row], row.key, { type }) };
+    });
   const removeRow = (key: string) =>
     setPForm(f => ({ ...f, assetRows: f.assetRows.filter(r => r.key !== key) }));
 
@@ -908,6 +1011,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 </p>
                 <span className="text-[11px] text-faint">
                   {pForm.assetRows.length} thiết bị
+                  {pForm.assetRows.some(r => !r.active) &&
+                    ` · ${pForm.assetRows.filter(r => r.active).length} đang hoạt động`}
                 </span>
               </div>
 
@@ -916,28 +1021,36 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                     trong ô tự kéo co làm cột "Số No" teo lại. */}
                 <table className="w-full table-fixed text-sm">
                   <colgroup>
-                    <col style={{ width: '30%' }} />
-                    <col style={{ width: '42%' }} />
+                    <col style={{ width: '17%' }} />
                     <col style={{ width: '20%' }} />
-                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '13%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '6%' }} />
                   </colgroup>
                   <thead className="border-b border-[var(--border)] bg-subtle">
                     <tr>
                       <th className="px-4 py-3 text-left font-bold text-soft">Thiết bị</th>
                       <th className="px-4 py-3 text-left font-bold text-soft">Số No</th>
                       <th className="px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
+                      <th className="px-2 py-3 text-left font-bold text-soft">Ngày treo</th>
+                      <th className="px-2 py-3 text-left font-bold text-soft">Ngày tháo</th>
+                      <th className="px-2 py-3 text-left font-bold text-soft">Hoạt động</th>
                       <th className="px-2 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
                     {pForm.assetRows.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-[13px] italic text-faint">
+                        <td colSpan={7} className="px-4 py-8 text-center text-[13px] italic text-faint">
                           Chưa khai thiết bị nào — bấm "Thêm dòng" bên dưới.
                         </td>
                       </tr>
                     ) : pForm.assetRows.map(r => (
-                      <tr key={r.key}>
+                      // Dòng đã ngưng hoạt động làm mờ đi — vẫn sửa được, chỉ
+                      // để mắt nhận ra ngay đâu là thiết bị đang treo.
+                      <tr key={r.key} className={r.active ? '' : 'opacity-60'}>
                         <td className="p-2">
                           <Select value={r.type} variant="bare"
                             onChange={v => setRow(r.key, { type: v as AssetType })}
@@ -954,6 +1067,21 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                               placeholder={r.type === 'TU' ? '22000/100' : '200/5'}
                               onChange={v => setRow(r.key, { ratio: v })} />
                           ) : <span className="block p-2 text-faint">—</span>}
+                        </td>
+                        <td className="p-2">
+                          {/* usePortal: bảng nằm trong khung overflow-hidden,
+                              không có portal thì lịch bị cắt mất. */}
+                          <DatePicker value={r.dateOn} usePortal
+                            onChange={v => setRow(r.key, { dateOn: v })} />
+                        </td>
+                        <td className="p-2">
+                          <DatePicker value={r.dateOff} usePortal
+                            onChange={v => setRow(r.key, { dateOff: v })} />
+                        </td>
+                        <td className="p-2">
+                          <Switch checked={r.active} label={r.active ? 'Có' : 'Ngưng'}
+                            title={r.active ? 'Đang đo tại điểm đo này' : 'Đã ngưng — giữ lại làm lịch sử'}
+                            onChange={v => setRow(r.key, { active: v })} />
                         </td>
                         <td className="p-2 text-center">
                           <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"

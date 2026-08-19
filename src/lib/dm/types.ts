@@ -103,6 +103,17 @@ export interface Asset extends PbRecord {
   ratio_secondary?: number;
   model_desc?: string;
   status?: AssetStatus;
+  /** Ngày treo lên điểm đo, dạng `YYYY-MM-DD` (PB lưu ISO, UI chỉ dùng phần ngày). */
+  date_on?: string;
+  /** Ngày tháo khỏi điểm đo. Còn treo thì để trống. */
+  date_off?: string;
+  /**
+   * Có đang hoạt động tại điểm đo hay không.
+   * Tách khỏi `status`: `status` là vòng đời trong KHO (đang treo/kho/tháo gỡ/
+   * thanh lý), `active` là "cái này có đang đo ở điểm đo này không". Thay công
+   * tơ thì cái cũ `active = false` nhưng vẫn giữ nguyên lịch sử ở điểm đo.
+   */
+  active?: boolean;
   note?: string;
 }
 
