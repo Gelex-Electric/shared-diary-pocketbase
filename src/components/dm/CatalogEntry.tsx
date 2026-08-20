@@ -517,13 +517,31 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
+  /**
+   * Mã điểm đo trùng một điểm đo khác. `dm_point.code` là UNIQUE nên PocketBase
+   * sẽ trả "Value must be unique" — một câu chẳng nói được gì. Bắt trước ở đây
+   * và nói rõ đang đụng vào điểm đo nào.
+   *
+   * Rất dễ gặp: điểm đo chính cùng khách với chủ trạm sinh mã ĐÚNG BẰNG mã
+   * trạm, nên khai điểm đo chính thứ hai cho cùng một trạm là trùng ngay.
+   */
+  const codeClash = pointCode && !pointCodeMissing.length
+    ? d?.points.find(p => p.code === pointCode && p.id !== editingId)
+    : undefined;
+
   const serialBlocks: string[] = [
     ...dupInForm.map(([serial, rows]) =>
       `số No ${serial} bị khai ${rows.length} lần trong cùng điểm đo `
       + `(${rows.map(r => ASSET_LABEL[r.type as AssetType] ?? '—').join(', ')})`),
     ...busyElsewhere.map(b =>
-      `số No ${b.serial} đang HOẠT ĐỘNG ở điểm đo ${b.code} `
-      + `— cho ngưng ở đó trước rồi mới lắp sang đây`),
+      `số No ${b.serial} đang HOẠT ĐỘNG ở ${ASSET_LABEL[b.asset.type as AssetType] ?? 'vật tư'} `
+      + `của điểm đo ${b.code} — mở điểm đo đó, gạt "Hoạt động" của dòng này sang Ngưng, `
+      + 'lưu lại rồi mới lắp sang đây'),
+    ...(codeClash ? [
+      `mã điểm đo ${pointCode} đã thuộc về một điểm đo khác `
+      + `(khách ${customerMkh(codeClash.customer)}) — đổi định danh điểm đo, `
+      + 'hoặc chọn khách hàng khác để mã có đuôi phân biệt',
+    ] : []),
   ];
 
   /** Tỷ số TI khai 0 (hoặc chia 0) là sai chắc chắn — HSN sẽ ra 0 hoặc vô nghĩa. */
@@ -595,6 +613,37 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     [d, pForm.station, editingId]);
 
   /* --------------------------- lưu --------------------------- */
+  /**
+   * PocketBase báo vi phạm unique bằng đúng một câu "Value must be unique",
+   * không nói giá trị nào và ai đang giữ nó. Ở đây tra ngược ra bản ghi đang
+   * chiếm chỗ để người dùng biết phải đi sửa ở đâu.
+   */
+  const explainSaveError = (e: unknown): string => {
+    const base = pbErrorMessage(e);
+    if (!/unique/i.test(base)) return base;
+    // Phần tra ngược bên dưới chỉ đúng với form điểm đo.
+    if (modal !== 'point') return `${base} — giá trị này đã tồn tại ở một bản ghi khác.`;
+
+    // Vật tư: tìm bản ghi cùng số No đang gắn ở điểm đo khác.
+    const clashes = [...serialInForm.keys()]
+      .map(serial => {
+        const a = (d?.assets ?? []).find(x => x.serial === serial && x.point !== editingId);
+        return a ? `${serial} đang ${a.active ? 'HOẠT ĐỘNG' : 'ngưng'} ở điểm đo ${pointCodeOf(a.point)}` : null;
+      })
+      .filter(Boolean);
+    if (clashes.length) {
+      return `Trùng số chế tạo: ${clashes.join('; ')}. `
+        + 'Mở điểm đo đó, gạt "Hoạt động" sang Ngưng rồi lưu, sau đó mới lắp sang đây.';
+    }
+
+    const dupPoint = d?.points.find(p => p.code === pointCode && p.id !== editingId);
+    if (dupPoint) {
+      return `Mã điểm đo ${pointCode} đã thuộc về một điểm đo khác `
+        + `(khách ${customerMkh(dupPoint.customer)}). Đổi định danh điểm đo hoặc khách hàng.`;
+    }
+    return `${base} — một giá trị bạn vừa nhập đã tồn tại (mã KCN / mã khách hàng / mã trạm / mã điểm đo / số chế tạo).`;
+  };
+
   const persist = async (fn: () => Promise<unknown>, okMsg: string) => {
     setSaving(true);
     try {
@@ -603,7 +652,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       closeModal();
       await load();
     } catch (e) {
-      toast.error('Lưu thất bại', pbErrorMessage(e));
+      toast.error('Lưu thất bại', explainSaveError(e));
     } finally {
       setSaving(false);
     }
