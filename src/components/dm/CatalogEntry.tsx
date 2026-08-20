@@ -198,6 +198,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const mkhOf = (id?: string) => d?.customers.find(c => c.id === id)?.mkh;
   /** MKH để HIỂN THỊ trong ô bảng. */
   const customerMkh = (id?: string) => mkhOf(id) ?? '—';
+  /** Mã điểm đo để nêu trong cảnh báo trùng số chế tạo. */
+  const pointCodeOf = (id?: string) => {
+    const p = d?.points.find(x => x.id === id);
+    return p?.code || p?.line_name || '(không rõ)';
+  };
   const stationsOfZone = (id: string) => d?.stations.filter(s => s.zone === id).length ?? 0;
   const pointsOfStation = (id: string) => d?.points.filter(p => p.station === id).length ?? 0;
   const pointsOfCustomer = (id: string) => d?.points.filter(p => p.customer === id).length ?? 0;
@@ -467,6 +472,43 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       : `HSN khai ra ${derivedHsn} nhưng hóa đơn ghi ${refHsn} — kiểm tra lại tỷ số TI`);
   }
 
+  /* ---------------- Trùng số chế tạo (số No) ---------------- */
+  /**
+   * Hai loại đụng độ, đều CHẶN LƯU (khác với các cảnh báo mềm khác của màn này):
+   *
+   * 1. Trùng ngay trong bảng vật tư của điểm đo đang khai — PocketBase cũng
+   *    chặn (unique `serial` + `point`), báo trước cho rõ ràng thay vì để PB
+   *    trả lỗi khó hiểu lúc bấm Lưu.
+   * 2. Số đó đang CÒN HOẠT ĐỘNG ở điểm đo khác — một công tơ không thể đang đo
+   *    ở hai nơi cùng lúc. Muốn lắp sang đây thì phải cho ngưng ở điểm đo cũ
+   *    trước (user chốt 20/08/2026).
+   */
+  const serialInForm = new Map<string, AssetRow[]>();
+  for (const r of pForm.assetRows) {
+    const s = r.serial.trim();
+    if (!s) continue;
+    serialInForm.set(s, [...(serialInForm.get(s) ?? []), r]);
+  }
+  const dupInForm = [...serialInForm.entries()].filter(([, rows]) => rows.length > 1);
+
+  /** Bản ghi cùng số chế tạo ở điểm đo KHÁC mà vẫn đang hoạt động. */
+  const busyElsewhere = [...serialInForm.keys()]
+    .map(serial => {
+      const other = (d?.assets ?? []).find(a =>
+        a.serial === serial && a.active && a.point && a.point !== editingId);
+      return other ? { serial, asset: other, code: pointCodeOf(other.point) } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const serialBlocks: string[] = [
+    ...dupInForm.map(([serial, rows]) =>
+      `số No ${serial} bị khai ${rows.length} lần trong cùng điểm đo `
+      + `(${rows.map(r => ASSET_LABEL[r.type as AssetType] ?? '—').join(', ')})`),
+    ...busyElsewhere.map(b =>
+      `số No ${b.serial} đang HOẠT ĐỘNG ở điểm đo ${b.code} `
+      + `— cho ngưng ở đó trước rồi mới lắp sang đây`),
+  ];
+
   /** Tỷ số TI khai 0 (hoặc chia 0) là sai chắc chắn — HSN sẽ ra 0 hoặc vô nghĩa. */
   const badRatioRows = pForm.assetRows.filter(r => {
     if (!HAS_RATIO.includes(r.type as AssetType) || !r.ratio.trim()) return false;
@@ -608,6 +650,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       if (isSub && !pForm.parent_point) {
         return toast.warning('Thiếu điểm đo chính',
           'Điểm đo phụ phải nằm trong phạm vi đo của một điểm đo chính.');
+      }
+      // Đụng độ số chế tạo là lỗi thật, không phải nhắc nhở — chặn lưu.
+      if (serialBlocks.length) {
+        return toast.error('Trùng số chế tạo', `${serialBlocks.join('. ')}.`);
       }
       const body = {
         code: pointCode,
@@ -1513,6 +1559,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 <StatusTag status={derivedStatus} />
               </div>
             </Field>
+
+            {/* Đụng độ số chế tạo: màu đỏ vì đây là thứ DUY NHẤT chặn lưu. */}
+            {serialBlocks.length > 0 && (
+              <div className="vl-alert vl-alert-light-danger text-[12px]">
+                <b>Không lưu được:</b> {serialBlocks.join('; ')}.
+              </div>
+            )}
 
             {assetWarnings.length > 0 && (
               <div className="vl-alert vl-alert-light-warning text-[12px]">
