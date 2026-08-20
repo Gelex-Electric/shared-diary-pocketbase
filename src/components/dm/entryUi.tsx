@@ -10,6 +10,7 @@
  * Ô nhập dùng lại nguyên chuỗi class của `ElectricShiftManager` để 3 màn danh
  * mục nhìn y hệt các màn cũ.
  */
+import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Check } from 'lucide-react';
@@ -52,22 +53,66 @@ export function TextInput({ value, onChange, placeholder, disabled, mono }: {
   );
 }
 
-export function NumberInput({ value, onChange, placeholder, suffix }: {
-  value: string; onChange: (v: string) => void; placeholder?: string; suffix?: string;
+/** Chấm ngăn ngàn kiểu Việt Nam: 1963 → "1.963". Chỉ để NHÌN, không để lưu. */
+export const groupThousands = (digits: string) =>
+  digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+/**
+ * Ô nhập SỐ NGUYÊN (kVA, W…).
+ *
+ * KHÔNG dùng `<input type="number">`: trên locale Việt, gõ "1.963" được trình
+ * duyệt hiểu là 1,963 (dấu chấm = thập phân) chứ không phải 1963. Đã có 2 trạm
+ * lưu tổn hao ngắn mạch bằng ~2 W vì lỗi này (sửa ngày 20/08/2026, xem
+ * `scripts/dm_fix_pk_w.mjs`).
+ *
+ * Cách chặn: ô là `type="text"`, mọi ký tự không phải chữ số bị LỌC BỎ ngay khi
+ * gõ — "1.963", "1,963", "1 963 W" đều thành "1963". Dấu ngăn cách không còn
+ * đường nào lọt xuống cơ sở dữ liệu.
+ *
+ * `min`/`max` chỉ để CẢNH BÁO, không chặn lưu — đúng luật đã chốt cho màn danh
+ * mục: nhắc màu vàng, người dùng vẫn tự quyết.
+ */
+export function NumberInput({ value, onChange, placeholder, suffix, min, max }: {
+  value: string; onChange: (v: string) => void;
+  placeholder?: string; suffix?: string;
+  /** Ngoài khoảng [min, max] thì nhắc màu vàng, KHÔNG cấm lưu. */
+  min?: number; max?: number;
 }) {
+  const [focused, setFocused] = useState(false);
+
+  const n = value === '' ? undefined : Number(value);
+  const outOfRange = n !== undefined &&
+    ((min !== undefined && n < min) || (max !== undefined && n > max));
+
   return (
-    <div className="relative">
-      <input
-        type="number"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={`${INPUT_CLS} ${suffix ? 'pr-14' : ''}`}
-      />
-      {suffix && (
-        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-bold text-faint">
-          {suffix}
-        </span>
+    <div className="space-y-1.5">
+      <div className="relative">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={focused || !value ? value : groupThousands(value)}
+          onChange={e => onChange(e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, ''))}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={placeholder}
+          className={`${INPUT_CLS} ${suffix ? 'pr-14' : ''} ${
+            outOfRange ? 'border-[var(--warning)] focus:ring-[var(--warning)]' : ''
+          }`}
+        />
+        {suffix && (
+          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-bold text-faint">
+            {suffix}
+          </span>
+        )}
+      </div>
+      {outOfRange && (
+        <p className="ml-1 text-[11px] font-semibold leading-snug text-warn">
+          Giá trị {groupThousands(value)} nằm ngoài khoảng thường gặp
+          {min !== undefined && max !== undefined
+            ? ` ${groupThousands(String(min))}–${groupThousands(String(max))}`
+            : min !== undefined ? ` từ ${groupThousands(String(min))}` : ` tới ${groupThousands(String(max))}`}
+          {suffix ? ` ${suffix}` : ''}. Kiểm tra lại — vẫn lưu được nếu đúng.
+        </p>
       )}
     </div>
   );

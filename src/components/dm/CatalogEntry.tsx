@@ -12,7 +12,7 @@
  * bảng full-width bên dưới, form nhập nằm trong MODAL nổi (không đặt cố định
  * đầu trang). Thêm và Sửa dùng chung một modal.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Building2, Factory, Users, Gauge, Package,
   Plus, Trash2, Edit2, RefreshCw, CornerDownRight,
@@ -37,6 +37,8 @@ import {
   CellInput, DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
 } from './entryUi';
 import { PointBadgeChip, PointBadgeIcon } from './pointIcons';
+import { groupByZone, sortByMkh } from './groupByZone';
+import { ZoneGroupRow } from './ZoneGroupRow';
 import {
   SHORT_NAME_HINT, SUB_PURPOSES, buildPointCode, buildStationCode, isValidShortName,
   missingPointCodeParts, missingStationCodeParts, normalizeShortName,
@@ -133,6 +135,15 @@ const today = () => new Date().toISOString().slice(0, 10);
 /** Giá trị đặc biệt của bộ chọn nhãn mục đích: cho gõ tay chuỗi bất kỳ. */
 const CUSTOM = '__custom';
 
+/**
+ * Khoảng giá trị thường gặp của thông số trạm — chỉ dùng để CẢNH BÁO khi nhập
+ * lệch, không chặn lưu. Ngưỡng do user chốt 20/08/2026.
+ * P0/Pk tính bằng W (không phải kW): MBA 180 kVA có Pk cỡ 1963 W.
+ */
+const SDM_RANGE: [number, number] = [10, 10_000];
+const P0_RANGE: [number, number] = [50, 20_000];
+const PK_RANGE: [number, number] = [200, 100_000];
+
 const toNum = (s: string): number | undefined => {
   const v = parseFloat(s);
   return Number.isFinite(v) ? v : undefined;
@@ -178,7 +189,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const stationOpts = useMemo(
     () => (d?.stations ?? []).map(s => ({ value: s.id, label: s.code })), [d]);
   const zoneName = (id?: string) => d?.zones.find(z => z.id === id)?.name ?? '—';
-  const customerMkh = (id?: string) => d?.customers.find(c => c.id === id)?.mkh ?? '—';
+  /** MKH thô để SẮP XẾP — chưa gắn khách hàng thì trả undefined (xuống cuối bảng). */
+  const mkhOf = (id?: string) => d?.customers.find(c => c.id === id)?.mkh;
+  /** MKH để HIỂN THỊ trong ô bảng. */
+  const customerMkh = (id?: string) => mkhOf(id) ?? '—';
   const stationsOfZone = (id: string) => d?.stations.filter(s => s.zone === id).length ?? 0;
   const pointsOfStation = (id: string) => d?.points.filter(p => p.station === id).length ?? 0;
   const pointsOfCustomer = (id: string) => d?.points.filter(p => p.customer === id).length ?? 0;
@@ -588,28 +602,57 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const stationCodeOf = (id?: string) => d?.stations.find(s => s.id === id)?.code ?? '—';
   const childrenOf = (id: string) => d?.points.filter(p => p.parent_point === id).length ?? 0;
 
+  /* ---------------------------------------------------------------------
+   * Ba bảng Trạm / Khách hàng / Điểm đo đều: xếp theo MKH → gom theo KCN.
+   * Mỗi KCN một dòng tiêu đề màu, giống bảng lấy chỉ số HES.
+   * ------------------------------------------------------------------- */
+
+  /** KCN xếp theo mã, để bảng KCN cũng có thứ tự ổn định. */
+  const zoneRows = useMemo(
+    () => [...(d?.zones ?? [])].sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true })),
+    [d]);
+
+  const stationGroups = useMemo(
+    () => groupByZone(sortByMkh(d?.stations ?? [], s => mkhOf(s.customer)), s => s.zone, d?.zones ?? []),
+    [d]);
+
+  const customerGroups = useMemo(
+    () => groupByZone(sortByMkh(d?.customers ?? [], c => c.mkh), c => c.zone, d?.zones ?? []),
+    [d]);
+
   /**
-   * Xếp bảng điểm đo theo phân cấp: mỗi điểm chính kéo theo các điểm phụ của
-   * nó (thụt lề). Điểm phụ mất cha, hoặc điểm phụ chưa gán cha, xếp cuối bảng
-   * để không biến mất khỏi danh sách.
+   * Điểm đo giữ nguyên phân cấp: mỗi điểm chính kéo theo đàn điểm phụ của nó
+   * (thụt lề). Vì vậy phải sắp xếp theo CỤM — xếp các điểm chính theo MKH rồi
+   * mới trải phẳng, chứ không xếp từng dòng, kẻo điểm phụ bị tách khỏi cha.
+   *
+   * Điểm phụ mất cha, hoặc chưa gán cha, thành cụm một dòng xếp cuối để không
+   * biến mất khỏi danh sách.
    */
-  const pointRows = useMemo(() => {
+  const pointGroups = useMemo(() => {
     const all = d?.points ?? [];
-    const rows: { point: Point; isChild: boolean }[] = [];
     const placed = new Set<string>();
+    const clusters: { head: Point; rows: { point: Point; isChild: boolean }[] }[] = [];
 
     for (const p of all.filter(x => x.role === 'chinh')) {
-      rows.push({ point: p, isChild: false });
+      const rows = [{ point: p, isChild: false }];
       placed.add(p.id);
       for (const child of all.filter(x => x.parent_point === p.id)) {
         rows.push({ point: child, isChild: true });
         placed.add(child.id);
       }
+      clusters.push({ head: p, rows });
     }
     for (const p of all) {
-      if (!placed.has(p.id)) rows.push({ point: p, isChild: false });
+      if (!placed.has(p.id)) clusters.push({ head: p, rows: [{ point: p, isChild: false }] });
     }
-    return rows;
+
+    const sorted = sortByMkh(clusters, c => mkhOf(c.head.customer));
+    // KCN của cụm lấy theo trạm của điểm chính (điểm đo không giữ KCN riêng).
+    const zoneOfCluster = (c: (typeof clusters)[number]) =>
+      d?.stations.find(s => s.id === c.head.station)?.zone;
+
+    return groupByZone(sorted, zoneOfCluster, d?.zones ?? [])
+      .map(g => ({ zone: g.zone, rows: g.rows.flatMap(c => c.rows) }));
   }, [d]);
 
   const head = HEAD[tab];
@@ -652,7 +695,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             <th className={`${TH_CLS} w-28`}>Số trạm</th>
             <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
           </>}>
-          {d?.zones.map(z => (
+          {zoneRows.map(z => (
             <tr key={z.id} className="transition-colors hover:bg-subtle/50">
               <td className="px-6 py-4 pl-10">
                 <span className="rounded-md bg-subtle px-2.5 py-1 font-mono text-xs font-bold text-soft">{z.code}</span>
@@ -691,7 +734,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <th className={`${TH_CLS} w-28`}>Điểm đo</th>
               <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
             </>}>
-            {d?.stations.map(s => (
+            {stationGroups.map(g => (
+              <Fragment key={g.zone?.id ?? '__no_zone'}>
+                <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="trạm" colSpan={7} />
+                {g.rows.map(s => (
               <tr key={s.id} className="transition-colors hover:bg-subtle/50">
                 <td className="px-6 py-4 pl-10 font-mono text-sm font-bold text-ink">{s.code}</td>
                 <td className="px-6 py-4">
@@ -713,6 +759,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                         : undefined)} />
                 </td>
               </tr>
+                ))}
+              </Fragment>
             ))}
           </TableCard>
         </>
@@ -731,7 +779,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             <th className={`${TH_CLS} w-28`}>Điểm đo</th>
             <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
           </>}>
-          {d?.customers.map(c => (
+          {customerGroups.map(g => (
+            <Fragment key={g.zone?.id ?? '__no_zone'}>
+              <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="khách hàng" colSpan={7} />
+              {g.rows.map(c => (
             <tr key={c.id} className="transition-colors hover:bg-subtle/50">
               <td className="px-6 py-4 pl-10">
                 <span className="rounded-md bg-subtle px-2.5 py-1 font-mono text-xs font-bold text-soft">{c.mkh}</span>
@@ -753,6 +804,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                       : undefined)} />
               </td>
             </tr>
+              ))}
+            </Fragment>
           ))}
         </TableCard>
       )}
@@ -776,7 +829,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <th className={`${TH_CLS} w-24`}>HSN</th>
               <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
             </>}>
-            {pointRows.map(({ point: p, isChild }) => (
+            {pointGroups.map(g => (
+              <Fragment key={g.zone?.id ?? '__no_zone'}>
+                <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="điểm đo" colSpan={7} />
+                {g.rows.map(({ point: p, isChild }) => (
               <tr key={p.id} className="transition-colors hover:bg-subtle/50">
                 <td className={`px-6 py-4 ${isChild ? 'pl-16' : 'pl-10'}`}>
                   <span className="flex items-center gap-2">
@@ -808,6 +864,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                         : undefined)} />
                 </td>
               </tr>
+                ))}
+              </Fragment>
             ))}
           </TableCard>
         </>
@@ -815,10 +873,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
       {/* ============================ Modal ============================ */}
       <FormModal open={modal !== null} title={modalTitle} onClose={closeModal} onSubmit={submit}
-        saving={saving} wide={modal === 'point'}>
+        saving={saving} wide>
         {modal === 'zone' && (
           <>
-            <div className="grid gap-6 sm:grid-cols-2">
+            {/* Modal đã rộng: màn lớn xếp cả 3 ô một hàng cho đỡ cuộn. */}
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
               <Field label="Mã KCN" required>
                 <TextInput value={zForm.code} mono placeholder="KCNTH"
                   onChange={v => setZForm(f => ({ ...f, code: v }))} />
@@ -827,18 +886,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 <TextInput value={zForm.name} placeholder="KCN Tiền Hải"
                   onChange={v => setZForm(f => ({ ...f, name: v }))} />
               </Field>
+              <Field label="Địa chỉ">
+                <TextInput value={zForm.address} placeholder="Xã…, tỉnh…"
+                  onChange={v => setZForm(f => ({ ...f, address: v }))} />
+              </Field>
             </div>
-            <Field label="Địa chỉ">
-              <TextInput value={zForm.address} placeholder="Xã…, tỉnh…"
-                onChange={v => setZForm(f => ({ ...f, address: v }))} />
-            </Field>
           </>
         )}
 
         {modal === 'station' && (
           <>
             {/* 4 mảnh ghép nên mã trạm — đặt trước, để ô mã bên dưới cập nhật theo */}
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
               <Field label="Khu công nghiệp" required hint={sZone ? `Hậu tố: ${sZone.code}` : undefined}>
                 <Select value={sForm.zone} onChange={v => setSForm(f => ({ ...f, zone: v }))}
                   options={zoneOpts} placeholder="Chọn KCN" searchable />
@@ -854,6 +913,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </Field>
               <Field label="Công suất trạm" required>
                 <NumberInput value={sForm.sdm_kva} suffix="kVA" placeholder="2500"
+                  min={SDM_RANGE[0]} max={SDM_RANGE[1]}
                   onChange={v => setSForm(f => ({ ...f, sdm_kva: v }))} />
               </Field>
             </div>
@@ -877,12 +937,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             )}
 
             <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Tổn hao không tải" hint="P0">
+              <Field label="Tổn hao không tải" hint="P0 — đơn vị W, không phải kW.">
                 <NumberInput value={sForm.p0_w} suffix="W"
+                  min={P0_RANGE[0]} max={P0_RANGE[1]}
                   onChange={v => setSForm(f => ({ ...f, p0_w: v }))} />
               </Field>
-              <Field label="Tổn hao ngắn mạch" hint="Pk">
+              <Field label="Tổn hao ngắn mạch" hint="Pk — đơn vị W, không phải kW.">
                 <NumberInput value={sForm.pk_w} suffix="W"
+                  min={PK_RANGE[0]} max={PK_RANGE[1]}
                   onChange={v => setSForm(f => ({ ...f, pk_w: v }))} />
               </Field>
             </div>
@@ -894,7 +956,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
         {modal === 'customer' && (
           <>
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
               <Field label="Mã khách hàng" required>
                 <TextInput value={cForm.mkh} mono placeholder="KCNTH-001"
                   onChange={v => setCForm(f => ({ ...f, mkh: v }))} />
@@ -903,19 +965,21 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 <Select value={cForm.zone} onChange={v => setCForm(f => ({ ...f, zone: v }))}
                   options={zoneOpts} placeholder="Chưa gắn" searchable />
               </Field>
+              <Field label="Tên tắt khách hàng" hint={`${SHORT_NAME_HINT} Dùng để sinh mã trạm.`}>
+                {/* Chuẩn hoá ngay khi gõ: bỏ dấu, viết hoa, loại ký tự lạ. */}
+                <TextInput value={cForm.short_name} mono placeholder="RICO"
+                  onChange={v => setCForm(f => ({ ...f, short_name: normalizeShortName(v) }))} />
+              </Field>
             </div>
-            <Field label="Tên khách hàng" required>
-              <TextInput value={cForm.name} placeholder="CÔNG TY TNHH…"
-                onChange={v => setCForm(f => ({ ...f, name: v }))} />
-            </Field>
-            <Field label="Tên tắt khách hàng" hint={`${SHORT_NAME_HINT} Dùng để sinh mã trạm.`}>
-              {/* Chuẩn hoá ngay khi gõ: bỏ dấu, viết hoa, loại ký tự lạ. */}
-              <TextInput value={cForm.short_name} mono placeholder="RICO"
-                onChange={v => setCForm(f => ({ ...f, short_name: normalizeShortName(v) }))} />
-            </Field>
-            <Field label="Địa chỉ">
-              <TextInput value={cForm.address} onChange={v => setCForm(f => ({ ...f, address: v }))} />
-            </Field>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label="Tên khách hàng" required>
+                <TextInput value={cForm.name} placeholder="CÔNG TY TNHH…"
+                  onChange={v => setCForm(f => ({ ...f, name: v }))} />
+              </Field>
+              <Field label="Địa chỉ">
+                <TextInput value={cForm.address} onChange={v => setCForm(f => ({ ...f, address: v }))} />
+              </Field>
+            </div>
           </>
         )}
 
