@@ -17,12 +17,13 @@ import OfficeSldPage from './OfficeSldPage';
 import GeneralManagement from '../dm/GeneralManagement';
 import CatalogEntry from '../dm/CatalogEntry';
 import NotificationBell from '../ui/NotificationBell';
+import AssetLifecycle from '../dm/AssetLifecycle';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
   | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
-  | 'dm-general' | 'dm-catalog';
+  | 'dm-general' | 'dm-catalog' | 'dm-lifecycle';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
@@ -36,6 +37,7 @@ const TAB_LABEL: Record<Tab, string> = {
   sld:             'Sơ đồ một sợi',
   'dm-general':    'Quản lý chung',
   'dm-catalog':    'Danh mục',
+  'dm-lifecycle':  'Vòng đời vật tư',
 };
 
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
@@ -43,7 +45,7 @@ const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt'];
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
 /** Các tab con thuộc nhóm "Quản lý vật tư thiết bị điện". */
-const ASSET_TABS: Tab[] = ['dm-general', 'dm-catalog'];
+const ASSET_TABS: Tab[] = ['dm-general', 'dm-catalog', 'dm-lifecycle'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
@@ -306,6 +308,19 @@ export default function BusinessDashboard() {
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
+                  <li>
+                    <button
+                      id="nav-dm-lifecycle-sub"
+                      onClick={() => { setTopTab('dm-lifecycle'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'dm-lifecycle' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Vòng đời vật tư</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+                    </button>
+                  </li>
                 </motion.ul>
               )}
             </AnimatePresence>
@@ -440,6 +455,8 @@ export default function BusinessDashboard() {
               <GeneralManagement scope="vanphong" />
             ) : topTab === 'dm-catalog' ? (
               <CatalogEntry scope="vanphong" />
+            ) : topTab === 'dm-lifecycle' ? (
+              <AssetLifecycle scope="vanphong" />
             ) : topTab === 'loss' ? (
               <TransformerLossManager />
             ) : topTab === 'sld' ? (
