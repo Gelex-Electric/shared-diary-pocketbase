@@ -45,12 +45,19 @@ export const SHORT_NAME_HINT =
   'Viết liền, không dấu, không ký tự đặc biệt (chỉ được dùng dấu gạch ngang).';
 
 /**
- * Hậu tố KCN: bỏ tiền tố "KCN" rồi lấy 2 ký tự đầu.
- * `KCNTH` → `TH`. Mã không có tiền tố "KCN" thì lấy luôn 2 ký tự đầu.
+ * Hậu tố KCN: bỏ tiền tố "KCN", lấy TOÀN BỘ phần còn lại.
+ *
+ *   KCNTH → TH · KCN03 → 03 · KCNPĐ → PĐ · KCNYM → YM · KCNTTI → TTI
+ *
+ * Trước 20/08/2026 hàm này cắt 2 ký tự đầu, nên KCNTTI ra `TT`. Đối chiếu
+ * `public/mba_info.csv`, `metterinfo.csv` và `line_info.csv` thì 15 trạm Thuận
+ * Thành thực tế dùng hậu tố `TTI` — mã trạm còn là `LINE_NAME` bên HES, cắt cụt
+ * là lệch với dữ liệu đo đếm. Bỏ việc cắt thì cả 5 KCN đều ra đúng thực tế và
+ * không mã trạm nào đang có bị đổi (hiện toàn `TH.*`).
  */
 export function zoneSuffix(zoneCode: string): string {
-  const rest = zoneCode.trim().toUpperCase().replace(/^KCN/, '');
-  return (rest || zoneCode.trim().toUpperCase()).slice(0, 2);
+  const code = zoneCode.trim().toUpperCase();
+  return code.replace(/^KCN/, '') || code;
 }
 
 /** Công suất ghi kèm đơn vị: 2500 → `2500kVA`. */
