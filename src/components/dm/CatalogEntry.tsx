@@ -31,7 +31,7 @@ import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
 import type {
   AssetStatus, AssetType, Customer, Point, PointRole, Station, Zone,
 } from '../../lib/dm/types';
-import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio } from '../../lib/dm/hsn';
+import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio, pickRatio } from '../../lib/dm/hsn';
 import { TI_PER_SET, countAssets, derivePointStatus } from '../../lib/dm/pointStatus';
 import type { Scope } from '../../lib/scope';
 import {
@@ -325,16 +325,22 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     pForm.assetRows.find(r => r.active && r.type === type && r.ratio.trim() !== '');
 
   /**
+   * Tỷ số đại diện của một bộ: ưu tiên cái đang hoạt động, cả bộ đã tháo thì
+   * lấy cái tháo sau cùng — xem `pickRatio`. Không làm vậy thì điểm đo đã tháo
+   * mất sạch HSN.
+   */
+  const ratioOfSet = (type: AssetType) =>
+    pickRatio(pForm.assetRows
+      .filter(r => r.type === type && r.ratio.trim() !== '')
+      .map(r => ({ ...parseRatio(r.ratio), active: r.active })));
+
+  /**
    * Có khai TI hay không thay cho câu hỏi "đấu nối" đã bỏ khỏi form. Xét CẢ TI
    * đã tháo: điểm đo từng đo gián tiếp thì vẫn là gián tiếp, tháo TI ra không
    * biến nó thành đo thẳng.
    */
   const hasTi = pForm.assetRows.some(r => r.type === 'TI');
-  const hsnInput = {
-    hasTi,
-    ti: parseRatio(ratioRowOf('TI')?.ratio ?? ''),
-    tu: parseRatio(ratioRowOf('TU')?.ratio ?? ''),
-  };
+  const hsnInput = { hasTi, ti: ratioOfSet('TI'), tu: ratioOfSet('TU') };
   const derivedHsn = deriveHsn(hsnInput);
 
   /* ------------ Đối chiếu công tơ với hóa đơn (chỉ tham chiếu) ------------ */
@@ -449,6 +455,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    */
   const refHsn = invoiceHsn
     ?? meterRefs.map(m => m.mine?.hsn).filter((h): h is number => h != null).pop();
+  /**
+   * HSN thực sự ghi xuống: suy từ TI/TU trước; suy không ra (hoặc ra 0 vì tỷ số
+   * khai sai) thì lấy HSN hóa đơn. Thà lấy hóa đơn còn hơn để 0.
+   */
+  const effectiveHsn = derivedHsn != null && derivedHsn > 0 ? derivedHsn : refHsn;
+
   if (refHsn != null && derivedHsn != null && derivedHsn !== refHsn) {
     invoiceNotes.push(tuRow
       ? `TI × TU đang ra HSN ${derivedHsn}, hóa đơn ghi ${refHsn} — tích hai tỷ số phải bằng ${refHsn}`
@@ -611,8 +623,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         role: pForm.role,
         // `connection` không còn hỏi người dùng — suy ngược từ HSN. Vẫn ghi vì
         // PocketBase đang để trường này bắt buộc.
-        connection: connectionOfHsn(derivedHsn),
-        hsn: derivedHsn ?? undefined,
+        connection: connectionOfHsn(effectiveHsn),
+        // KHÔNG BAO GIỜ ghi HSN = 0 hay bỏ trống: sai HSN là sai toàn bộ sản
+        // lượng. Suy từ TI trước, không suy được thì lấy HSN hóa đơn.
+        hsn: effectiveHsn ?? undefined,
         status: derivedStatus || undefined,
         note: pForm.note.trim(),
       };
@@ -860,19 +874,28 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     const placed = new Set<string>();
     const clusters: { head: Point; rows: { point: Point; isChild: boolean }[] }[] = [];
 
-    for (const p of all.filter(x => x.role === 'chinh')) {
+    // Điểm đo chính xếp theo MKH của chủ trạm, cùng MKH thì theo mã cho ổn định.
+    const mains = sortByMkh(all.filter(x => x.role === 'chinh'), p => mkhOf(p.customer))
+      .sort((a, b) => {
+        const ma = mkhOf(a.customer) ?? '￿', mb = mkhOf(b.customer) ?? '￿';
+        return ma === mb ? (a.code ?? '').localeCompare(b.code ?? '', 'vi', { numeric: true }) : 0;
+      });
+
+    for (const p of mains) {
       const rows = [{ point: p, isChild: false }];
       placed.add(p.id);
-      for (const child of all.filter(x => x.parent_point === p.id)) {
+      // Điểm phụ trong cùng cụm cũng xếp theo MKH của chính nó.
+      for (const child of sortByMkh(all.filter(x => x.parent_point === p.id), c => mkhOf(c.customer))) {
         rows.push({ point: child, isChild: true });
         placed.add(child.id);
       }
       clusters.push({ head: p, rows });
     }
-    for (const p of all) {
-      if (!placed.has(p.id)) clusters.push({ head: p, rows: [{ point: p, isChild: false }] });
+    for (const p of sortByMkh(all.filter(x => !placed.has(x.id)), x => mkhOf(x.customer))) {
+      clusters.push({ head: p, rows: [{ point: p, isChild: false }] });
     }
 
+    // Cụm giữ nguyên thứ tự đã xếp ở trên; `sortByMkh` ổn định nên không đảo lại.
     const sorted = sortByMkh(clusters, c => mkhOf(c.head.customer));
     // KCN của cụm lấy theo trạm của điểm chính (điểm đo không giữ KCN riêng).
     const zoneOfCluster = (c: (typeof clusters)[number]) =>

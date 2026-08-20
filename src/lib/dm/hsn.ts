@@ -51,6 +51,30 @@ export function formatRatio(primary?: number | null, secondary?: number | null):
   return `${primary}/${secondary}`;
 }
 
+export interface RatioCandidate extends RatioInput {
+  /** Thiết bị còn đang đo ở điểm đo này hay đã tháo. */
+  active?: boolean;
+}
+
+/**
+ * Chọn tỷ số đại diện cho một bộ TI (hoặc TU) của điểm đo.
+ *
+ * - Còn thiết bị ĐANG HOẠT ĐỘNG ⇒ lấy tỷ số của nó. Thay TI thì HSN phải theo
+ *   TI mới, TI cũ đã tháo không được kéo HSN theo (luật chốt 19/08/2026).
+ * - CẢ BỘ ĐÃ THÁO ⇒ lấy tỷ số của cái tháo sau cùng. Điểm đo ngưng hoạt động
+ *   vẫn phải giữ đúng HSN lịch sử; bỏ trống thì HSN rơi về 0 và toàn bộ sản
+ *   lượng đã tính của điểm đo đó thành vô nghĩa (đã xảy ra với
+ *   `TH.BQL.T2.160kVA.HANA` và `TH.GIZA.T1.250kVA`).
+ *
+ * Danh sách truyền vào theo thứ tự khai; cái cuối coi là mới nhất.
+ */
+export function pickRatio(rows: RatioCandidate[]): RatioInput {
+  const usable = rows.filter(r => ratioOf(r) != null);
+  const live = usable.filter(r => r.active);
+  const chosen = live.length ? live[0] : usable[usable.length - 1];
+  return chosen ?? { primary: null, secondary: null };
+}
+
 export interface HsnInput {
   /**
    * Điểm đo có khai TI hay không — thay cho câu hỏi "đấu nối trực tiếp hay gián
