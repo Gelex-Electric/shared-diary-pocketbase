@@ -92,7 +92,7 @@ async function main() {
       for (const s of segs) {
         const mark = s.mkh === mkh ? '→' : ' ';
         console.log(`  ${mark}hóa đơn  : ${s.mkh}  ${s.from} → ${s.to}  (${s.count} HĐ, HSN ${s.hsnHistory.join('→')})`
-          + `${s.isCurrent ? '  [còn phát sinh tháng này]' : ''}`);
+          + `${s.isCurrent ? '  [còn phát sinh gần đây]' : ''}`);
       }
 
       // Cảnh báo 1+2: thứ tự treo/tháo so với quãng phát sinh tiền điện.

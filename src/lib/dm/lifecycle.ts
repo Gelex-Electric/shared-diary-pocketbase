@@ -42,7 +42,10 @@ export interface Segment {
    * dùng biết thay vì im lặng lấy cái cuối.
    */
   hsnHistory: number[];
-  /** Kỳ cuối rơi vào tháng hiện tại ⇒ công tơ còn đang phát sinh tiền điện. */
+  /**
+   * Kỳ cuối nằm trong `RECENT_DAYS` ngày gần đây ⇒ công tơ còn đang phát sinh
+   * tiền điện.
+   */
   isCurrent: boolean;
 }
 
@@ -58,8 +61,22 @@ export const ymd = (v?: string): string => (v ? String(v).slice(0, 10) : '');
 export const counts = (i: InvoiceLite): boolean =>
   (i.ThTien ?? 0) > 0 && !!ymd(i.StartDate) && !!ymd(i.EndDate);
 
-/** `YYYY-MM` của hôm nay — tách riêng để test chèn được ngày giả. */
-const monthOf = (d: string) => d.slice(0, 7);
+/**
+ * Cửa sổ "còn đang phát sinh": hóa đơn kỳ cuối cách hôm nay không quá bao nhiêu
+ * ngày thì coi như công tơ vẫn đang chạy.
+ *
+ * Trước 20/08/2026 luật này là "rơi vào tháng hiện tại", nhưng hóa đơn thường
+ * chốt cuối tháng và phát hành trễ — sang ngày 1 là mọi công tơ đang chạy đều
+ * bị coi là ngừng. 40 ngày phủ trọn một kỳ cộng thời gian phát hành trễ.
+ */
+export const RECENT_DAYS = 40;
+
+/** Mốc `YYYY-MM-DD` sớm nhất còn được coi là "gần đây" so với `today`. */
+export function recentSince(today: Date): string {
+  const d = new Date(today.getTime());
+  d.setDate(d.getDate() - RECENT_DAYS);
+  return d.toISOString().slice(0, 10);
+}
 
 /**
  * Cắt danh sách hóa đơn CỦA MỘT SỐ CÔNG TƠ thành các chặng theo khách hàng.
@@ -68,7 +85,7 @@ const monthOf = (d: string) => d.slice(0, 7);
  * `today` chỉ dùng để biết chặng có còn "đang chạy" không; mặc định là hôm nay.
  */
 export function segmentsOf(invoices: InvoiceLite[], today = new Date()): Segment[] {
-  const nowMonth = monthOf(today.toISOString().slice(0, 10));
+  const since = recentSince(today);
   const byMkh = new Map<string, InvoiceLite[]>();
 
   for (const inv of invoices) {
@@ -96,7 +113,7 @@ export function segmentsOf(invoices: InvoiceLite[], today = new Date()): Segment
       count: sorted.length,
       hsn: hsnHistory[hsnHistory.length - 1],
       hsnHistory,
-      isCurrent: monthOf(to) === nowMonth,
+      isCurrent: to >= since,
     });
   }
 

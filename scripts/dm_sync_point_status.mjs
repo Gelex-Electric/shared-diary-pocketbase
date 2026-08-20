@@ -98,13 +98,14 @@ async function main() {
     for (const p of points) {
       const rows = assets.filter(a => a.point === p.id);
       const mkh = mkhById.get(p.customer);
-      // Có hóa đơn hay chưa: xét công tơ ĐANG hoạt động, khớp cả số công tơ lẫn
-      // mã khách hàng — công tơ tái sử dụng cho khách khác không tính.
-      const hasInvoice = rows.some(a =>
+      // Có hóa đơn GẦN ĐÂY (40 ngày) hay không: xét công tơ ĐANG hoạt động, khớp
+      // cả số công tơ lẫn mã khách hàng — công tơ tái sử dụng cho khách khác
+      // không tính. Ngừng phát sinh cả năm thì không còn là đang vận hành.
+      const hasRecentInvoice = rows.some(a =>
         a.type === 'CONGTO' && a.active
-        && L.segmentOf(L.segmentsOf(invBySerial.get(a.serial) ?? []), mkh) != null);
+        && L.segmentOf(L.segmentsOf(invBySerial.get(a.serial) ?? []), mkh)?.isCurrent === true);
 
-      const next = S.derivePointStatus({ ...S.countAssets(rows), hasInvoice });
+      const next = S.derivePointStatus({ ...S.countAssets(rows), hasRecentInvoice });
       tally[next] = (tally[next] ?? 0) + 1;
       if ((p.status ?? '') !== next) changes.push({ id: p.id, code: p.code, from: p.status ?? '', to: next });
     }

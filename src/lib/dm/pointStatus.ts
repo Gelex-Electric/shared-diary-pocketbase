@@ -6,8 +6,8 @@
  * chỉ tạo ra dữ liệu mâu thuẫn.
  *
  *   chưa gắn công tơ                      → Dự kiến
- *   gắn đầy đủ, chưa có hóa đơn           → Chưa vận hành
- *   gắn đầy đủ, đã có hóa đơn             → Đang vận hành
+ *   gắn đầy đủ, chưa có hóa đơn gần đây   → Chưa vận hành
+ *   gắn đầy đủ, có hóa đơn trong 40 ngày  → Đang vận hành
  *   mọi vật tư đều đã ngưng hoạt động     → Đã tháo gỡ
  *
  * "Đầy đủ" = có công tơ đang hoạt động, và nếu đo gián tiếp thì phải đủ 3 TI
@@ -25,8 +25,14 @@ export interface PointStatusInput {
   tis: number;
   /** Số TI đang hoạt động. */
   activeTis: number;
-  /** Công tơ đang hoạt động đã phát sinh hóa đơn cho đúng khách của điểm đo chưa. */
-  hasInvoice: boolean;
+  /**
+   * Công tơ đang hoạt động có hóa đơn GẦN ĐÂY cho đúng khách của điểm đo không
+   * (`RECENT_DAYS` = 40 ngày, xem `lifecycle.ts`).
+   *
+   * Phải là "gần đây" chứ không phải "từng có": điểm đo ngừng phát sinh tiền
+   * điện cả năm nay mà vẫn còn công tơ treo thì không thể coi là đang vận hành.
+   */
+  hasRecentInvoice: boolean;
 }
 
 /** Bộ TI của một điểm đo gián tiếp: 3 cái chạy song song trên 3 pha. */
@@ -44,7 +50,7 @@ export function derivePointStatus(i: PointStatusInput): PointStatus {
   const indirect = i.tis > 0;
   if (indirect && i.activeTis < TI_PER_SET) return 'du_kien';
 
-  return i.hasInvoice ? 'active' : 'chua_van_hanh';
+  return i.hasRecentInvoice ? 'active' : 'chua_van_hanh';
 }
 
 /** Đếm vật tư theo loại — gom ở đây để form và script dùng chung một cách đếm. */

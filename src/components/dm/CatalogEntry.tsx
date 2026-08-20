@@ -525,7 +525,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    */
   const derivedStatus = derivePointStatus({
     ...countAssets(filledRows),
-    hasInvoice: meterRefs.some(m => m.row.active && m.mine),
+    hasRecentInvoice: meterRefs.some(m => m.row.active && m.mine?.isCurrent),
   });
 
   /** Điểm đo chính trong cùng trạm — nguồn chọn cha cho điểm đo phụ. */
@@ -1454,7 +1454,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                           {' '}· khách <span className="font-mono font-bold text-ink">{mine!.mkh}</span>
                           {' '}· phát sinh tiền điện{' '}
                           <b className="text-ink">{mine!.from} → {mine!.to}</b>
-                          {' '}({mine!.count} HĐ){mine!.isCurrent && ' — còn phát sinh tháng này'}
+                          {' '}({mine!.count} HĐ){mine!.isCurrent && ' — còn phát sinh gần đây'}
                           {mine!.hsn != null && <> · HSN hóa đơn <b className="text-ink">{mine!.hsn}</b></>}
                         </p>
                         {/*
