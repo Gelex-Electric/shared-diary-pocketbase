@@ -15,7 +15,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Building2, Factory, Users, Gauge, Package,
-  Plus, Trash2, Edit2, RefreshCw, CornerDownRight,
+  Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import type { TabItem } from '../ui/Tabs';
@@ -37,6 +37,9 @@ import {
   CellInput, DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
 } from './entryUi';
 import { PointBadgeChip, PointBadgeIcon } from './pointIcons';
+import { invoicesOfSerial } from '../../lib/dm/invoiceRepo';
+import { segmentOf, segmentsOf } from '../../lib/dm/lifecycle';
+import type { Segment } from '../../lib/dm/lifecycle';
 import { groupByZone, sortByMkh } from './groupByZone';
 import { ZoneGroupRow } from './ZoneGroupRow';
 import {
@@ -326,6 +329,102 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   };
   const derivedHsn = deriveHsn(hsnInput);
 
+  /* ------------ Đối chiếu công tơ với hóa đơn (chỉ tham chiếu) ------------ */
+  /**
+   * Hóa đơn là nguồn CHUẨN NHẤT cho HSN (đối chiếu 8 điểm đo: 7 khớp tuyệt
+   * đối, 1 lệch do khai sai tỷ số TI). Nhưng hóa đơn KHÔNG cho biết ngày treo /
+   * ngày tháo — công tơ treo trước rồi mới dùng điện — nên ở đây chỉ HIỂN THỊ
+   * để đối chiếu, tuyệt đối không tự điền vào ô nào.
+   */
+  const [invSegs, setInvSegs] = useState<Record<string, Segment[]>>({});
+  const [invLoading, setInvLoading] = useState(false);
+
+  /** MKH của điểm đo: điểm phụ mang KH riêng, điểm chính theo chủ trạm. */
+  const pointMkh = mkhOf(isSub ? pForm.customer : pStation?.customer);
+
+  /** Số chế tạo của các dòng công tơ — ngắn quá thì chưa gõ xong, đừng tra vội. */
+  const meterSerials = useMemo(
+    () => pForm.assetRows
+      .filter(r => r.type === 'CONGTO' && r.serial.trim().length >= 6)
+      .map(r => r.serial.trim()),
+    [pForm.assetRows]);
+  const serialKey = meterSerials.join('|');
+
+  useEffect(() => {
+    if (modal !== 'point') return;
+    const missing = meterSerials.filter(s => !(s in invSegs));
+    if (!missing.length) return;
+    // Chờ người dùng gõ xong rồi mới tra, khỏi bắn một request mỗi ký tự.
+    const timer = setTimeout(async () => {
+      setInvLoading(true);
+      try {
+        const got: Record<string, Segment[]> = {};
+        for (const s of missing) got[s] = segmentsOf(await invoicesOfSerial(s));
+        setInvSegs(prev => ({ ...prev, ...got }));
+      } catch {
+        // Tra cứu hỏng thì thôi, không được chặn việc nhập liệu.
+      } finally {
+        setInvLoading(false);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serialKey, modal, invSegs]);
+
+  /** Công tơ ĐANG hoạt động — HSN của điểm đo phải khớp hóa đơn của cái này. */
+  const activeMeter = pForm.assetRows.find(r => r.type === 'CONGTO' && r.active && r.serial.trim());
+  const activeSeg = segmentOf(invSegs[activeMeter?.serial.trim() ?? ''] ?? [], pointMkh);
+  const invoiceHsn = activeSeg?.hsn;
+
+  /**
+   * Chỉ suy ngược được tỷ số TI khi KHÔNG có TU: khi đó HSN = TI sơ/TI thứ.
+   * Có cả TU thì một HSN ứng với vô số cặp tỷ số — phải nhập tay cả hai, app
+   * chỉ kiểm tích số (user chốt 20/08).
+   */
+  const tuRow = ratioRowOf('TU');
+  const tiSecondary = parseRatio(ratioRowOf('TI')?.ratio ?? '').secondary ?? 5;
+  const canFillTi = pForm.connection === 'gian_tiep' && invoiceHsn != null && !tuRow
+    && pForm.assetRows.some(r => r.type === 'TI' && r.active);
+  const suggestedTi = invoiceHsn != null ? `${invoiceHsn * tiSecondary}/${tiSecondary}` : '';
+
+  /** Điền tỷ số suy từ HSN hóa đơn cho CẢ BỘ TI đang hoạt động. */
+  const fillTiFromInvoice = () =>
+    setPForm(f => ({
+      ...f,
+      assetRows: f.assetRows.map(r =>
+        r.type === 'TI' && r.active ? { ...r, ratio: suggestedTi } : r),
+    }));
+
+  /** Nhắc đối chiếu hóa đơn — tách khỏi `assetWarnings` vì đây là tham chiếu. */
+  const invoiceNotes: string[] = [];
+  for (const r of pForm.assetRows) {
+    const serial = r.serial.trim();
+    const segs = r.type === 'CONGTO' ? invSegs[serial] : undefined;
+    if (!segs) continue;
+    const mine = segmentOf(segs, pointMkh);
+    if (!mine) {
+      if (segs.length) {
+        invoiceNotes.push(`công tơ ${serial} có hóa đơn nhưng của khách khác `
+          + `(${segs.map(s => `${s.mkh}: ${s.from}→${s.to}`).join(', ')})`);
+      }
+      continue;
+    }
+    if (r.dateOn && r.dateOn > mine.from) {
+      invoiceNotes.push(`công tơ ${serial} khai treo ${r.dateOn} nhưng đã phát sinh tiền điện từ ${mine.from}`);
+    }
+    if (r.dateOff && r.dateOff < mine.to) {
+      invoiceNotes.push(`công tơ ${serial} khai tháo ${r.dateOff} nhưng còn phát sinh tiền điện đến ${mine.to}`);
+    }
+    if (mine.hsnHistory.length > 1) {
+      invoiceNotes.push(`công tơ ${serial} từng đổi HSN: ${mine.hsnHistory.join(' → ')}`);
+    }
+  }
+  if (invoiceHsn != null && derivedHsn != null && derivedHsn !== invoiceHsn) {
+    invoiceNotes.push(tuRow
+      ? `TI × TU đang ra HSN ${derivedHsn}, hóa đơn ghi ${invoiceHsn} — tích hai tỷ số phải bằng ${invoiceHsn}`
+      : `HSN khai ra ${derivedHsn} nhưng hóa đơn ghi ${invoiceHsn} — kiểm tra lại tỷ số TI`);
+  }
+
   /**
    * Cảnh báo vật tư — CHỈ nhắc, không chặn lưu (user chốt 14/08). Điểm đo đang
    * khai dở vẫn phải lưu được.
@@ -337,7 +436,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const assetWarnings: string[] = [];
   if (countType('CONGTO') === 0) assetWarnings.push('chưa có công tơ đang hoạt động');
   else if (countType('CONGTO') > 1) assetWarnings.push('có nhiều hơn 1 công tơ đang hoạt động');
-  if (countType('GP03') === 0) assetWarnings.push('chưa có đo xa GP-03 đang hoạt động');
+  // Không nhắc "thiếu GP-03" nữa: user bỏ ràng buộc bắt buộc có đo xa
+  // (20/08/2026). Luật ONE_ACTIVE vẫn giữ — vẫn chỉ được 1 GP-03 hoạt động.
 
   // Lệch tỷ số trong cùng một bộ TI (hoặc TU): 3 TI phải cùng tỷ số, khác nhau
   // là khai nhầm — HSN đang lấy theo dòng đầu nên phải nói rõ.
@@ -1187,6 +1287,54 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <DerivedValue value={derivedHsn == null ? '' : String(derivedHsn)}
                 placeholder="Nhập tỷ số TI ở phần vật tư" />
             </Field>
+
+            {/*
+              Đối chiếu hóa đơn — THAM CHIẾU, không tự điền gì cả.
+              Hóa đơn chuẩn cho HSN, nhưng không nói được ngày treo/tháo.
+            */}
+            {(invLoading || activeSeg || invoiceNotes.length > 0) && (
+              <div className="rounded-lg border border-dashed border-[var(--border)] bg-subtle/40 p-4 text-[12px] space-y-2">
+                <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-[10px] text-faint">
+                  <FileText className="h-3.5 w-3.5" />
+                  Đối chiếu hóa đơn
+                  {invLoading && <RefreshCw className="h-3 w-3 animate-spin" />}
+                </div>
+
+                {activeSeg ? (
+                  <p className="text-soft">
+                    Công tơ <span className="font-mono font-bold text-ink">{activeMeter?.serial.trim()}</span>
+                    {' '}· khách <span className="font-mono font-bold text-ink">{activeSeg.mkh}</span>
+                    {' '}· phát sinh tiền điện{' '}
+                    <b className="text-ink">{activeSeg.from} → {activeSeg.to}</b>
+                    {' '}({activeSeg.count} HĐ){activeSeg.isCurrent && ' — còn phát sinh tháng này'}
+                    {activeSeg.hsn != null && <> · HSN hóa đơn <b className="text-ink">{activeSeg.hsn}</b></>}
+                  </p>
+                ) : !invLoading && (
+                  <p className="italic text-faint">
+                    Chưa tra được hóa đơn cho công tơ đang hoạt động của điểm đo này.
+                  </p>
+                )}
+
+                {canFillTi && suggestedTi !== ratioRowOf('TI')?.ratio && (
+                  <button type="button" onClick={fillTiFromInvoice}
+                    className="vl-btn vl-btn-secondary vl-btn-sm">
+                    Điền tỷ số TI theo hóa đơn: {suggestedTi} (HSN {invoiceHsn})
+                  </button>
+                )}
+                {pForm.connection === 'gian_tiep' && invoiceHsn != null && tuRow && (
+                  <p className="text-faint">
+                    Có TU nên không suy ngược được tỷ số — nhập cả TI và TU sao cho
+                    tích hai tỷ số bằng <b className="text-ink">{invoiceHsn}</b>.
+                  </p>
+                )}
+
+                {invoiceNotes.length > 0 && (
+                  <div className="vl-alert vl-alert-light-warning text-[12px]">
+                    <b>Nhắc:</b> {invoiceNotes.join('; ')}. Vẫn lưu được.
+                  </div>
+                )}
+              </div>
+            )}
 
             <Field label="Trạng thái">
               <Select value={pForm.status}
