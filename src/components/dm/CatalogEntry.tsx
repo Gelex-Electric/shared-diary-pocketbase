@@ -37,7 +37,8 @@ import {
   CellInput, DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
 } from './entryUi';
 import { PointBadgeChip, PointBadgeIcon } from './pointIcons';
-import { invoicesOfSerial } from '../../lib/dm/invoiceRepo';
+import { invoicesOfSerial, loadCustomerFacts } from '../../lib/dm/invoiceRepo';
+import { isEmptyPlan, latestByMkh, planCustomerSync } from '../../lib/dm/customerSync';
 import { segmentOf, segmentsOf } from '../../lib/dm/lifecycle';
 import type { Segment } from '../../lib/dm/lifecycle';
 import { groupByZone, sortByMkh } from './groupByZone';
@@ -576,6 +577,82 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     }
   };
 
+  /* ---------------- Đồng bộ khách hàng từ hóa đơn ---------------- */
+  /**
+   * `MKHang` là khoá không đổi, còn tên/địa chỉ khách hàng thì đổi theo thời
+   * gian ⇒ lấy theo hóa đơn có ngày chốt mới nhất.
+   *
+   * Ghi thẳng vào dữ liệu thật nên: xem trước → hỏi → mới ghi; chỉ tạo và cập
+   * nhật, KHÔNG BAO GIỜ xoá; chạy lại không nhân bản.
+   */
+  const [syncing, setSyncing] = useState(false);
+
+  const syncCustomers = async () => {
+    if (!d) return;
+    setSyncing(true);
+    try {
+      const plan = planCustomerSync(latestByMkh(await loadCustomerFacts()), d.zones, d.customers);
+
+      if (isEmptyPlan(plan)) {
+        toast.info('Không có gì thay đổi', 'Danh mục khách hàng đã khớp hóa đơn.');
+        return;
+      }
+
+      const lines = [
+        plan.zonesToCreate.length && `• Tạo ${plan.zonesToCreate.length} KCN: ${plan.zonesToCreate.map(z => z.code).join(', ')}`,
+        plan.customersToCreate.length && `• Tạo ${plan.customersToCreate.length} khách hàng mới`,
+        plan.customersToUpdate.length && `• Cập nhật ${plan.customersToUpdate.length} khách hàng (tên / địa chỉ / KCN)`,
+        plan.unknownZoneCodes.length && `• Bỏ qua mã KCN lạ: ${plan.unknownZoneCodes.join(', ')}`,
+      ].filter(Boolean).join('\n');
+
+      const ok = await confirm({
+        title: 'Đồng bộ khách hàng từ hóa đơn?',
+        message: `${lines}\n\nKhông xóa bản ghi nào, không đụng tên tắt đã khai. `
+          + `Ghi thẳng vào dữ liệu thật.`,
+        confirmLabel: 'Đồng bộ', variant: 'warning',
+      });
+      if (!ok) return;
+
+      // Tạo KCN trước để còn lấy id gắn cho khách hàng.
+      const zoneIdByCode = new Map(d.zones.map(z => [z.code, z.id]));
+      for (const z of plan.zonesToCreate) {
+        const rec = await zones.create({ code: z.code, name: z.name, active: true });
+        zoneIdByCode.set(z.code, (rec as unknown as Zone).id);
+      }
+
+      for (const c of plan.customersToCreate) {
+        await customers.create({
+          mkh: c.mkh, name: c.name, address: c.address,
+          zone: zoneIdByCode.get(c.zoneCode) || undefined, active: true,
+        });
+      }
+
+      for (const u of plan.customersToUpdate) {
+        const body: Partial<Customer> = {};
+        for (const ch of u.changes) {
+          if (ch.field === 'name') body.name = ch.to;
+          if (ch.field === 'address') body.address = ch.to;
+          if (ch.field === 'zone') body.zone = zoneIdByCode.get(ch.to) || undefined;
+        }
+        await customers.update(u.id, body);
+      }
+
+      toast.success('Đã đồng bộ',
+        `${plan.zonesToCreate.length} KCN, ${plan.customersToCreate.length} khách mới, `
+        + `${plan.customersToUpdate.length} khách cập nhật.`);
+      if (plan.customersToCreate.length) {
+        toast.warning('Chưa có tên tắt',
+          `${plan.customersToCreate.length} khách hàng mới chưa có tên tắt — `
+          + 'phải khai thì mới sinh được mã trạm.');
+      }
+      await load();
+    } catch (e) {
+      toast.error('Đồng bộ thất bại', pbErrorMessage(e));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const del = async (label: string, fn: () => Promise<unknown>, warn?: string) => {
     const ok = await confirm({
       title: `Xóa ${label}?`,
@@ -775,6 +852,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Nạp lại
           </button>
+          {tab === 'customer' && (
+            <button onClick={() => void syncCustomers()} disabled={syncing || loading}
+              title="Lấy tên và địa chỉ theo hóa đơn có ngày chốt mới nhất"
+              className="vl-btn vl-btn-secondary flex items-center gap-2">
+              <FileText className={`h-4 w-4 ${syncing ? 'animate-pulse' : ''}`} />
+              {syncing ? 'Đang đồng bộ…' : 'Đồng bộ từ hóa đơn'}
+            </button>
+          )}
           <button onClick={openAdd} className="flex flex-1 items-center justify-center gap-2 vl-btn vl-btn-primary md:flex-none">
             <Plus className="h-5 w-5" />
             {head.add}

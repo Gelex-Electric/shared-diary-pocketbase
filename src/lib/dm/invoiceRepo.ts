@@ -11,6 +11,7 @@
  */
 import { pb } from '../pocketbase';
 import type { InvoiceLite } from './lifecycle';
+import type { CustomerFact } from './customerSync';
 
 /** Chỉ lấy đúng các cột cần cho vòng đời + HSN. 2110 bản ghi × 7 cột ≈ 200KB. */
 const FIELDS = 'SCT,MKHang,HSN,StartDate,EndDate,ThTien,LoaiHD';
@@ -32,6 +33,19 @@ export async function invoicesOfSerial(serial: string): Promise<InvoiceLite[]> {
     batch: 500,
   });
   return items as unknown as InvoiceLite[];
+}
+
+/**
+ * Dữ liệu khách hàng lấy từ hóa đơn, để đồng bộ danh mục khách hàng.
+ * Cột riêng, không dùng `FIELDS` — địa chỉ là chuỗi dài, chỉ kéo về khi cần.
+ */
+export async function loadCustomerFacts(): Promise<CustomerFact[]> {
+  const items = await pb.collection('invoice').getFullList({
+    fields: 'MKHang,NMua,DChiNMua,EndDate',
+    sort: 'EndDate',
+    batch: 500,
+  });
+  return items as unknown as CustomerFact[];
 }
 
 /**
