@@ -157,6 +157,8 @@ const str = (n?: number) => (n == null ? '' : String(n));
 
 export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: Scope }) {
   const [tab, setTab] = useState<CatTab>('zone');
+  /** Bộ lọc KCN của 3 bảng Trạm / Khách hàng / Điểm đo. `''` = tất cả. */
+  const [filterZone, setFilterZone] = useState('');
   const [data, setData] = useState<CatalogData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -910,6 +912,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    * Mỗi KCN một dòng tiêu đề màu, giống bảng lấy chỉ số HES.
    * ------------------------------------------------------------------- */
 
+
   /** KCN xếp theo mã, để bảng KCN cũng có thứ tự ổn định. */
   const zoneRows = useMemo(
     () => [...(d?.zones ?? [])].sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true })),
@@ -967,6 +970,36 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       .map(g => ({ zone: g.zone, rows: g.rows.flatMap(c => c.rows) }));
   }, [d]);
 
+  /**
+   * Bộ lọc KCN: giữ nguyên cách gom nhóm, chỉ bỏ bớt nhóm không được chọn. Nhờ
+   * vậy dòng tiêu đề nhóm và số đếm vẫn đúng khi lọc.
+   */
+  const NO_ZONE = '__no_zone';
+  const byFilterZone = <T,>(groups: { zone: Zone | null; rows: T[] }[]) =>
+    filterZone
+      ? groups.filter(g => (filterZone === NO_ZONE ? g.zone === null : g.zone?.id === filterZone))
+      : groups;
+
+  /**
+   * Liệt kê ĐỦ các KCN kèm số bản ghi ở tab hiện tại, kể cả KCN đang có 0 bản
+   * ghi. Nếu chỉ liệt kê KCN có dữ liệu thì đổi tab xong lựa chọn cũ biến mất
+   * khỏi danh sách: ô hiện "Tất cả KCN" trong khi bộ lọc vẫn đang chạy.
+   */
+  const zoneFilterOpts = useMemo(() => {
+    const groups = tab === 'station' ? stationGroups
+      : tab === 'customer' ? customerGroups
+        : tab === 'point' ? pointGroups : [];
+    const countOf = (id: string | null) =>
+      groups.find(g => (g.zone?.id ?? null) === id)?.rows.length ?? 0;
+    const orphans = countOf(null);
+
+    return [
+      { value: '', label: `Tất cả KCN — ${groups.reduce((n, g) => n + g.rows.length, 0)}` },
+      ...zoneRows.map(z => ({ value: z.id, label: `${z.name} (${z.code}) — ${countOf(z.id)}` })),
+      ...(orphans ? [{ value: NO_ZONE, label: `Chưa gắn KCN — ${orphans}` }] : []),
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, zoneRows, stationGroups, customerGroups, pointGroups]);
   const head = HEAD[tab];
   const modalTitle = editingId
     ? `Chỉnh sửa ${HEAD[modal ?? tab].title.toLowerCase()}`
@@ -983,6 +1016,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
           <p className="mt-1 text-sm text-soft">{head.desc}</p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-3 md:w-auto">
+          {tab !== 'zone' && (
+            <div className="w-full min-w-56 md:w-64">
+              <Select value={filterZone} onChange={setFilterZone}
+                options={zoneFilterOpts} placeholder="Tất cả KCN" icon={Building2} searchable />
+            </div>
+          )}
           <button onClick={() => void load()} disabled={loading} className="vl-btn vl-btn-secondary flex items-center gap-2">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Nạp lại
@@ -1043,8 +1082,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               Phải khai ít nhất một KCN ở tab "Khu công nghiệp" trước khi thêm trạm.
             </div>
           )}
-          <TableCard fixed loading={loading} isEmpty={(d?.stations.length ?? 0) === 0}
-            empty="Chưa có trạm nào được khai."
+          <TableCard fixed loading={loading} isEmpty={byFilterZone(stationGroups).length === 0}
+            empty={filterZone ? 'Không có trạm nào trong KCN đang lọc.' : 'Chưa có trạm nào được khai.'}
             columns={<>
               <th className={`${TH_CLS} w-[27%] pl-10`}>Mã trạm</th>
               <th className={`${TH_CLS} w-[20%]`}>Khu công nghiệp</th>
@@ -1054,7 +1093,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <th className={`${TH_CLS} w-[8%]`}>Điểm đo</th>
               <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
             </>}>
-            {stationGroups.map(g => (
+            {byFilterZone(stationGroups).map(g => (
               <Fragment key={g.zone?.id ?? '__no_zone'}>
                 <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="trạm" colSpan={7} />
                 {g.rows.map(s => (
@@ -1088,8 +1127,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
       {/* ========================= Khách hàng ========================= */}
       {tab === 'customer' && (
-        <TableCard fixed loading={loading} isEmpty={(d?.customers.length ?? 0) === 0}
-          empty="Chưa có khách hàng nào được khai."
+        <TableCard fixed loading={loading} isEmpty={byFilterZone(customerGroups).length === 0}
+          empty={filterZone ? 'Không có khách hàng nào trong KCN đang lọc.' : 'Chưa có khách hàng nào được khai.'}
           columns={<>
             <th className={`${TH_CLS} w-[12%] pl-10`}>Mã KH</th>
             <th className={`${TH_CLS} w-[27%]`}>Tên khách hàng</th>
@@ -1099,7 +1138,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             <th className={`${TH_CLS} w-[8%]`}>Điểm đo</th>
             <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
           </>}>
-          {customerGroups.map(g => (
+          {byFilterZone(customerGroups).map(g => (
             <Fragment key={g.zone?.id ?? '__no_zone'}>
               <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="khách hàng" colSpan={7} />
               {g.rows.map(c => (
@@ -1138,8 +1177,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               Phải khai ít nhất một trạm ở tab "Trạm" trước khi thêm điểm đo.
             </div>
           )}
-          <TableCard fixed loading={loading} isEmpty={(d?.points.length ?? 0) === 0}
-            empty="Chưa có điểm đo nào được khai."
+          <TableCard fixed loading={loading} isEmpty={byFilterZone(pointGroups).length === 0}
+            empty={filterZone ? 'Không có điểm đo nào trong KCN đang lọc.' : 'Chưa có điểm đo nào được khai.'}
             columns={<>
               <th className={`${TH_CLS} w-[28%] pl-10`}>Mã điểm đo</th>
               <th className={`${TH_CLS} w-[22%]`}>Trạm</th>
@@ -1149,7 +1188,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <th className={`${TH_CLS} w-[6%]`}>HSN</th>
               <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
             </>}>
-            {pointGroups.map(g => (
+            {byFilterZone(pointGroups).map(g => (
               <Fragment key={g.zone?.id ?? '__no_zone'}>
                 <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="điểm đo" colSpan={7} />
                 {g.rows.map(({ point: p, isChild }) => (
