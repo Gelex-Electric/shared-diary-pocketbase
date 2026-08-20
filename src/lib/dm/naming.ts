@@ -110,12 +110,19 @@ export function pointIdentPart(ident?: string | null): string {
 }
 
 export interface PointCodeParts extends StationCodeParts {
-  /** `true` = điểm đo phụ → nối thêm một đoạn đuôi sau công suất. */
+  /** `true` = điểm đo phụ → BẮT BUỘC phải có đuôi. */
   isSub: boolean;
   /**
-   * Đoạn đuôi của điểm đo phụ, đứng ngay sau công suất trạm. Là **tên tắt KH
-   * phụ** khi khác khách hàng với điểm chính, hoặc **nhãn mục đích** (CSCC,
-   * BCC…) khi trùng khách hàng — lúc đó lấy tên tắt sẽ trùng phần đầu mã.
+   * Đoạn đuôi đứng ngay sau công suất trạm. Bỏ trống thì mã điểm đo trùng đúng
+   * mã trạm.
+   *
+   * - Điểm đo **phụ**: bắt buộc. Là **tên tắt KH phụ** khi khác khách hàng với
+   *   điểm chính, hoặc **nhãn mục đích** (CSCC, BCC…) khi trùng khách hàng —
+   *   lúc đó lấy tên tắt sẽ trùng phần đầu mã.
+   * - Điểm đo **chính**: chỉ có đuôi khi khách hàng của điểm đo KHÁC chủ trạm
+   *   (chủ nhà xưởng cho thuê). Khi đó đuôi là tên tắt của khách thuê, đúng như
+   *   `LINE_NAME` bên HES đang dùng: `YM.TITAN.NX9.750kVA.ANGSTROM`.
+   *   Cùng khách với chủ trạm thì bỏ trống, mã gọn bằng mã trạm.
    */
   subLabel?: string;
   /** Định danh điểm đo, phần trong ngoặc ở cuối. Có thể bỏ trống. */
@@ -125,20 +132,21 @@ export interface PointCodeParts extends StationCodeParts {
 /**
  * Ghép mã điểm đo.
  *   chính : TH.BQL-TH.T1.180kVA(0,4)
+ *           YM.TITAN.NX9.750kVA.ANGSTROM     (trạm cho thuê: KH điểm đo ≠ chủ trạm)
  *   phụ   : TH.BQL-TH.T1.180kVA.RICO(0,4)
- *           TH.BQL-TH.T1.180kVA.CSCC(0,4)   (trùng KH với điểm chính)
+ *           TH.BQL-TH.T1.180kVA.CSCC(0,4)    (trùng KH với điểm chính)
  *
- * Phần đầu luôn trùng đúng mã trạm. Điểm đo chính chỉ là mã trạm cộng định
- * danh trong ngoặc; điểm đo phụ nối thêm đoạn đuôi sau công suất, rồi mới tới
- * ngoặc định danh.
+ * Phần đầu luôn trùng đúng mã trạm. Có `subLabel` thì nối thêm đoạn đuôi sau
+ * công suất, rồi mới tới ngoặc định danh — áp cho cả điểm chính lẫn điểm phụ.
  */
 export function buildPointCode(p: PointCodeParts): string {
+  const tail = normalizeShortName(p.subLabel ?? '');
   const segments = [
     zoneSuffix(p.zoneCode),
     normalizeShortName(p.customerShortName),
     p.ident.trim().toUpperCase(),
     powerPart(p.sdmKva),
-    ...(p.isSub ? [normalizeShortName(p.subLabel ?? '')] : []),
+    ...(tail ? [tail] : []),
   ];
   return segments.join('.') + pointIdentPart(p.pointIdent);
 }
