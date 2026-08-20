@@ -896,16 +896,22 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
         {modal === 'station' && (
           <>
-            {/* 4 mảnh ghép nên mã trạm — đặt trước, để ô mã bên dưới cập nhật theo */}
-            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            {/*
+              4 mảnh ghép nên mã trạm — đặt trước, để ô mã bên dưới cập nhật theo.
+              Khách hàng chiếm TRỌN MỘT HÀNG: nhãn là "MKH — tên đầy đủ (tên tắt)",
+              tên công ty dài mấy chục ký tự, nhét chung hàng với 3 ô kia là bị
+              cắt cụt không đọc nổi.
+            */}
+            <Field label="Khách hàng" required
+              hint={sCustomer?.short_name ? `Tên tắt: ${sCustomer.short_name}` : undefined}>
+              <Select value={sForm.customer} onChange={v => setSForm(f => ({ ...f, customer: v }))}
+                options={customerOpts} placeholder="Chọn khách hàng" searchable />
+            </Field>
+
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
               <Field label="Khu công nghiệp" required hint={sZone ? `Hậu tố: ${sZone.code}` : undefined}>
                 <Select value={sForm.zone} onChange={v => setSForm(f => ({ ...f, zone: v }))}
                   options={zoneOpts} placeholder="Chọn KCN" searchable />
-              </Field>
-              <Field label="Khách hàng" required
-                hint={sCustomer?.short_name ? `Tên tắt: ${sCustomer.short_name}` : undefined}>
-                <Select value={sForm.customer} onChange={v => setSForm(f => ({ ...f, customer: v }))}
-                  options={customerOpts} placeholder="Chọn khách hàng" searchable />
               </Field>
               <Field label="Định danh trạm" required hint="T1, T2, NX1…">
                 <TextInput value={sForm.ident} mono placeholder="T1"
