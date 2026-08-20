@@ -921,22 +921,22 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
       {/* ============================ KCN ============================ */}
       {tab === 'zone' && (
-        <TableCard loading={loading} isEmpty={(d?.zones.length ?? 0) === 0}
+        <TableCard fixed loading={loading} isEmpty={(d?.zones.length ?? 0) === 0}
           empty="Chưa có khu công nghiệp nào được khai."
           columns={<>
-            <th className={`${TH_CLS} w-40 pl-10`}>Mã KCN</th>
-            <th className={TH_CLS}>Tên khu công nghiệp</th>
-            <th className={TH_CLS}>Địa chỉ</th>
-            <th className={`${TH_CLS} w-28`}>Số trạm</th>
-            <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
+            <th className={`${TH_CLS} w-[14%] pl-10`}>Mã KCN</th>
+            <th className={`${TH_CLS} w-[26%]`}>Tên khu công nghiệp</th>
+            <th className={`${TH_CLS} w-[42%]`}>Địa chỉ</th>
+            <th className={`${TH_CLS} w-[10%]`}>Số trạm</th>
+            <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
           </>}>
           {zoneRows.map(z => (
             <tr key={z.id} className="transition-colors hover:bg-subtle/50">
               <td className="px-6 py-4 pl-10">
                 <span className="rounded-md bg-subtle px-2.5 py-1 font-mono text-xs font-bold text-soft">{z.code}</span>
               </td>
-              <td className="px-6 py-4 font-bold text-ink">{z.name}</td>
-              <td className="px-6 py-4 text-sm text-soft">{z.address || '—'}</td>
+              <td className="truncate px-6 py-4 font-bold text-ink" title={z.name}>{z.name}</td>
+              <td className="truncate px-6 py-4 text-sm text-soft" title={z.address || ''}>{z.address || '—'}</td>
               <td className="px-6 py-4 text-sm font-semibold text-dim">{stationsOfZone(z.id)}</td>
               <td className="px-6 py-4 pr-10 text-right">
                 <RowActions onEdit={() => editZone(z)}
@@ -958,23 +958,23 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               Phải khai ít nhất một KCN ở tab "Khu công nghiệp" trước khi thêm trạm.
             </div>
           )}
-          <TableCard loading={loading} isEmpty={(d?.stations.length ?? 0) === 0}
+          <TableCard fixed loading={loading} isEmpty={(d?.stations.length ?? 0) === 0}
             empty="Chưa có trạm nào được khai."
             columns={<>
-              <th className={`${TH_CLS} pl-10`}>Mã trạm</th>
-              <th className={TH_CLS}>Khu công nghiệp</th>
-              <th className={TH_CLS}>Khách hàng</th>
-              <th className={`${TH_CLS} w-32`}>Sdm (kVA)</th>
-              <th className={`${TH_CLS} w-40`}>P0 / Pk (W)</th>
-              <th className={`${TH_CLS} w-28`}>Điểm đo</th>
-              <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
+              <th className={`${TH_CLS} w-[27%] pl-10`}>Mã trạm</th>
+              <th className={`${TH_CLS} w-[20%]`}>Khu công nghiệp</th>
+              <th className={`${TH_CLS} w-[15%]`}>Khách hàng</th>
+              <th className={`${TH_CLS} w-[10%]`}>Sdm (kVA)</th>
+              <th className={`${TH_CLS} w-[12%]`}>P0 / Pk (W)</th>
+              <th className={`${TH_CLS} w-[8%]`}>Điểm đo</th>
+              <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
             </>}>
             {stationGroups.map(g => (
               <Fragment key={g.zone?.id ?? '__no_zone'}>
                 <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="trạm" colSpan={7} />
                 {g.rows.map(s => (
               <tr key={s.id} className="transition-colors hover:bg-subtle/50">
-                <td className="px-6 py-4 pl-10 font-mono text-sm font-bold text-ink">{s.code}</td>
+                <td className="truncate px-6 py-4 pl-10 font-mono text-sm font-bold text-ink" title={s.code}>{s.code}</td>
                 <td className="px-6 py-4">
                   <span className="inline-flex items-center rounded-full bg-accent-soft px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-blue-600">
                     {zoneName(s.zone)}
@@ -1003,16 +1003,16 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
       {/* ========================= Khách hàng ========================= */}
       {tab === 'customer' && (
-        <TableCard loading={loading} isEmpty={(d?.customers.length ?? 0) === 0}
+        <TableCard fixed loading={loading} isEmpty={(d?.customers.length ?? 0) === 0}
           empty="Chưa có khách hàng nào được khai."
           columns={<>
-            <th className={`${TH_CLS} w-44 pl-10`}>Mã KH</th>
-            <th className={TH_CLS}>Tên khách hàng</th>
-            <th className={`${TH_CLS} w-40`}>Tên tắt</th>
-            <th className={TH_CLS}>Khu công nghiệp</th>
-            <th className={TH_CLS}>Địa chỉ</th>
-            <th className={`${TH_CLS} w-28`}>Điểm đo</th>
-            <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
+            <th className={`${TH_CLS} w-[12%] pl-10`}>Mã KH</th>
+            <th className={`${TH_CLS} w-[27%]`}>Tên khách hàng</th>
+            <th className={`${TH_CLS} w-[11%]`}>Tên tắt</th>
+            <th className={`${TH_CLS} w-[14%]`}>Khu công nghiệp</th>
+            <th className={`${TH_CLS} w-[20%]`}>Địa chỉ</th>
+            <th className={`${TH_CLS} w-[8%]`}>Điểm đo</th>
+            <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
           </>}>
           {customerGroups.map(g => (
             <Fragment key={g.zone?.id ?? '__no_zone'}>
@@ -1022,14 +1022,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <td className="px-6 py-4 pl-10">
                 <span className="rounded-md bg-subtle px-2.5 py-1 font-mono text-xs font-bold text-soft">{c.mkh}</span>
               </td>
-              <td className="px-6 py-4 font-bold text-ink">{c.name}</td>
+              <td className="truncate px-6 py-4 font-bold text-ink" title={c.name}>{c.name}</td>
               <td className="px-6 py-4">
                 {c.short_name
                   ? <span className="font-mono text-xs font-bold text-dim">{c.short_name}</span>
                   : <span className="text-[11px] italic text-warn">chưa khai</span>}
               </td>
               <td className="px-6 py-4 text-sm text-soft">{c.zone ? zoneName(c.zone) : '—'}</td>
-              <td className="px-6 py-4 text-sm text-soft">{c.address || '—'}</td>
+              <td className="truncate px-6 py-4 text-sm text-soft" title={c.address || ''}>{c.address || '—'}</td>
               <td className="px-6 py-4 text-sm font-semibold text-dim">{pointsOfCustomer(c.id)}</td>
               <td className="px-6 py-4 pr-10 text-right">
                 <RowActions onEdit={() => editCustomer(c)}
@@ -1053,16 +1053,16 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               Phải khai ít nhất một trạm ở tab "Trạm" trước khi thêm điểm đo.
             </div>
           )}
-          <TableCard loading={loading} isEmpty={(d?.points.length ?? 0) === 0}
+          <TableCard fixed loading={loading} isEmpty={(d?.points.length ?? 0) === 0}
             empty="Chưa có điểm đo nào được khai."
             columns={<>
-              <th className={`${TH_CLS} pl-10`}>Mã điểm đo</th>
-              <th className={TH_CLS}>Trạm</th>
-              <th className={TH_CLS}>Khách hàng</th>
-              <th className={`${TH_CLS} w-28`}>Loại</th>
-              <th className={`${TH_CLS} w-36`}>Trạng thái</th>
-              <th className={`${TH_CLS} w-24`}>HSN</th>
-              <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
+              <th className={`${TH_CLS} w-[28%] pl-10`}>Mã điểm đo</th>
+              <th className={`${TH_CLS} w-[22%]`}>Trạm</th>
+              <th className={`${TH_CLS} w-[13%]`}>Khách hàng</th>
+              <th className={`${TH_CLS} w-[10%]`}>Loại</th>
+              <th className={`${TH_CLS} w-[13%]`}>Trạng thái</th>
+              <th className={`${TH_CLS} w-[6%]`}>HSN</th>
+              <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
             </>}>
             {pointGroups.map(g => (
               <Fragment key={g.zone?.id ?? '__no_zone'}>
@@ -1070,15 +1070,16 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 {g.rows.map(({ point: p, isChild }) => (
               <tr key={p.id} className="transition-colors hover:bg-subtle/50">
                 <td className={`px-6 py-4 ${isChild ? 'pl-16' : 'pl-10'}`}>
-                  <span className="flex items-center gap-2">
+                  <span className="flex min-w-0 items-center gap-2">
                     {isChild && <CornerDownRight className="h-4 w-4 shrink-0 text-faint" />}
                     <PointBadgeIcon point={p} />
-                    <span className={`font-mono text-sm ${isChild ? 'text-dim' : 'font-bold text-ink'}`}>
+                    <span className={`truncate font-mono text-sm ${isChild ? 'text-dim' : 'font-bold text-ink'}`}
+                      title={p.code || p.line_name || ''}>
                       {p.code || p.line_name || '—'}
                     </span>
                   </span>
                 </td>
-                <td className="px-6 py-4 font-mono text-xs text-soft">{stationCodeOf(p.station)}</td>
+                <td className="truncate px-6 py-4 font-mono text-xs text-soft" title={stationCodeOf(p.station)}>{stationCodeOf(p.station)}</td>
                 <td className="px-6 py-4 font-mono text-xs font-bold text-soft">{customerMkh(p.customer)}</td>
                 <td className="px-6 py-4"><PointBadgeChip point={p} /></td>
                 <td className="px-6 py-4"><StatusTag status={p.status} /></td>

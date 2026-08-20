@@ -209,15 +209,23 @@ export function CellInput({ value, onChange, placeholder, mono, align = 'left', 
   );
 }
 
-/** Khung bảng: thẻ bo góc, cuộn ngang, kèm trạng thái đang tải / rỗng. */
-export function TableCard({ columns, loading, empty, isEmpty, children }: {
-  columns: ReactNode; loading: boolean; empty: string; isEmpty: boolean; children: ReactNode;
+/**
+ * Khung bảng: thẻ bo góc, cuộn ngang, kèm trạng thái đang tải / rỗng.
+ *
+ * `fixed` bật `table-fixed`: bề rộng cột lấy đúng theo `w-[..%]` khai ở `<th>`
+ * thay vì để trình duyệt tự chia theo nội dung. Không có nó thì ở màn rộng mấy
+ * cột đầu (nội dung dài) nuốt hết khoảng dư, đẩy các cột sau dồn về mép phải.
+ * Chỉ bật cho bảng đã khai đủ % cho MỌI cột, cộng lại bằng 100.
+ */
+export function TableCard({ columns, loading, empty, isEmpty, fixed, children }: {
+  columns: ReactNode; loading: boolean; empty: string; isEmpty: boolean;
+  fixed?: boolean; children: ReactNode;
 }) {
   const colSpan = 99;
   return (
     <div className="vl-card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="vl-table w-full border-collapse text-left">
+        <table className={`vl-table w-full border-collapse text-left ${fixed ? 'table-fixed' : ''}`}>
           <thead>
             <tr className="border-b border-[var(--border)]">{columns}</tr>
           </thead>
