@@ -14,7 +14,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { purposeLabelOf } from '../../lib/dm/naming';
-import type { Point } from '../../lib/dm/types';
+import { STATUS_LABEL } from '../../lib/dm/types';
+import type { Point, PointStatus } from '../../lib/dm/types';
 
 interface PointBadge {
   icon: LucideIcon;
@@ -79,6 +80,28 @@ export function PointBadgeIcon({ point }: { point: Point }) {
   return (
     <span title={b.title} className="inline-flex shrink-0">
       <Icon className="h-4 w-4" style={{ color: b.hex }} />
+    </span>
+  );
+}
+
+/**
+ * Tag trạng thái vận hành của điểm đo.
+ *
+ * Trạng thái do hệ thống suy từ vật tư + hóa đơn (`lib/dm/pointStatus.ts`),
+ * người dùng không chọn tay — nên ở đây chỉ có việc hiển thị.
+ */
+const STATUS_STYLE: Record<Exclude<PointStatus, ''>, string> = {
+  du_kien:       'bg-subtle text-faint',
+  chua_van_hanh: 'bg-[var(--warning-soft)] text-warn',
+  active:        'bg-[var(--success-soft)] text-good',
+  thao_go:       'bg-[var(--danger-soft)] text-bad',
+};
+
+export function StatusTag({ status }: { status?: PointStatus }) {
+  if (!status) return <span className="text-[11px] italic text-faint">chưa tính</span>;
+  return (
+    <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${STATUS_STYLE[status]}`}>
+      {STATUS_LABEL[status]}
     </span>
   );
 }

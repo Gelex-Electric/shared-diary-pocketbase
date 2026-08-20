@@ -52,18 +52,28 @@ export function formatRatio(primary?: number | null, secondary?: number | null):
 }
 
 export interface HsnInput {
-  connection: Connection;
+  /**
+   * Điểm đo có khai TI hay không — thay cho câu hỏi "đấu nối trực tiếp hay gián
+   * tiếp" đã bỏ khỏi giao diện (user chốt 20/08/2026: HSN = 1 thì đã hiểu là
+   * đấu trực tiếp rồi, hỏi thêm chỉ tạo cơ hội khai mâu thuẫn).
+   */
+  hasTi: boolean;
   ti: RatioInput;
   /** Bỏ trống với điểm đo hạ áp — khi đó phần TU bằng 1. */
   tu?: RatioInput;
 }
 
+/** Suy ngược cách đấu nối từ HSN, để còn ghi xuống cột `connection` của PB. */
+export const connectionOfHsn = (hsn: number | null): Connection =>
+  hsn === 1 ? 'truc_tiep' : 'gian_tiep';
+
 /**
- * HSN suy ra, hoặc `null` khi chưa đủ dữ liệu (gián tiếp mà chưa nhập tỷ số TI).
+ * HSN suy ra, hoặc `null` khi chưa đủ dữ liệu (có TI mà chưa nhập tỷ số).
+ * Không có TI nào ⇒ công tơ đo thẳng ⇒ HSN = 1.
  * Làm tròn 6 chữ số thập phân để tránh rác dấu phẩy động (vd 39.99999999).
  */
-export function deriveHsn({ connection, ti, tu }: HsnInput): number | null {
-  if (connection === 'truc_tiep') return 1;
+export function deriveHsn({ hasTi, ti, tu }: HsnInput): number | null {
+  if (!hasTi) return 1;
 
   const tiRatio = ratioOf(ti);
   if (tiRatio == null) return null;
@@ -75,8 +85,8 @@ export function deriveHsn({ connection, ti, tu }: HsnInput): number | null {
 }
 
 /** Mô tả công thức đang áp dụng, hiện dưới ô HSN cho người dùng đối chiếu. */
-export function hsnFormula({ connection, ti, tu }: HsnInput): string {
-  if (connection === 'truc_tiep') return 'Đấu trực tiếp → HSN = 1';
+export function hsnFormula({ hasTi, ti, tu }: HsnInput): string {
+  if (!hasTi) return 'Không có TI → công tơ đo thẳng → HSN = 1';
   const tiRatio = ratioOf(ti);
   if (tiRatio == null) return 'Nhập tỷ số TI để suy HSN';
   const tuRatio = tu && (tu.primary != null || tu.secondary != null) ? ratioOf(tu) : null;

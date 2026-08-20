@@ -16,10 +16,10 @@ import {
 } from 'lucide-react';
 import { loadCatalog, pbErrorMessage } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
-import { CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
+import { ROLE_LABEL } from '../../lib/dm/types';
 import type { Point, Station, Zone } from '../../lib/dm/types';
 import { kcnColorOf } from '../../lib/kcnColors';
-import { PointBadgeIcon } from './pointIcons';
+import { PointBadgeIcon, StatusTag } from './pointIcons';
 
 /**
  * Xếp điểm đo trong một trạm theo phân cấp: mỗi điểm chính kéo theo các điểm
@@ -161,17 +161,11 @@ export default function DataTree() {
         <span className={p.role === 'chinh' ? 'vl-badge-primary' : 'vl-badge-info'}>
           {ROLE_LABEL[p.role]}
         </span>
-        <span className={p.connection === 'gian_tiep' ? 'vl-badge-warning' : 'vl-badge-success'}>
-          {CONNECTION_LABEL[p.connection]}
-        </span>
+
         <span className="rounded-md bg-subtle px-2 py-0.5 text-[11px] font-bold text-soft">
           HSN {p.hsn ?? '—'}
         </span>
-        {p.status && (
-          <span className="text-[11px] font-semibold text-faint">
-            {STATUS_LABEL[p.status as keyof typeof STATUS_LABEL]}
-          </span>
-        )}
+        <StatusTag status={p.status} />
         <span className="shrink-0 text-[11px] text-soft">
           {c ? <><span className="font-mono font-bold">{c.mkh}</span> · {c.name}</> : <i className="text-faint">chưa gắn KH</i>}
         </span>

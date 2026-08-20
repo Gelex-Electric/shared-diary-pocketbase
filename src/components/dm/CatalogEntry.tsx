@@ -27,16 +27,17 @@ import { Switch } from '../ui/Switch';
 import { DatePicker } from '../ui/DateTimePickers';
 import { assets, customers, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
-import { ASSET_LABEL, CONNECTION_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
+import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
 import type {
-  AssetStatus, AssetType, Connection, Customer, Point, PointRole, PointStatus, Station, Zone,
+  AssetStatus, AssetType, Customer, Point, PointRole, Station, Zone,
 } from '../../lib/dm/types';
-import { deriveHsn, formatRatio, hsnFormula, parseRatio } from '../../lib/dm/hsn';
+import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio } from '../../lib/dm/hsn';
+import { TI_PER_SET, countAssets, derivePointStatus } from '../../lib/dm/pointStatus';
 import type { Scope } from '../../lib/scope';
 import {
   CellInput, DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
 } from './entryUi';
-import { PointBadgeChip, PointBadgeIcon } from './pointIcons';
+import { PointBadgeChip, PointBadgeIcon, StatusTag } from './pointIcons';
 import { invoicesOfSerial, loadCustomerFacts } from '../../lib/dm/invoiceRepo';
 import { isEmptyPlan, latestByMkh, planCustomerSync } from '../../lib/dm/customerSync';
 import { segmentOf, segmentsOf } from '../../lib/dm/lifecycle';
@@ -89,11 +90,11 @@ const EMPTY_S = {
 const EMPTY_C = { mkh: '', name: '', short_name: '', address: '', zone: '' };
 /** `code` cũng do hệ thống sinh; `customer` chỉ dùng khi là điểm đo phụ. */
 const EMPTY_P = {
-  station: '', role: 'chinh' as PointRole, connection: 'truc_tiep' as Connection,
+  station: '', role: 'chinh' as PointRole,
   customer: '', parent_point: '', ident: '', hsn: '1',
   /** Chỉ dùng khi điểm phụ trùng KH với điểm chính: mã nhãn, hoặc CUSTOM. */
   purpose: '', purpose_custom: '',
-  status: '' as PointStatus, note: '',
+  note: '',
   /** Vật tư khai luôn cùng điểm đo — mỗi dòng một thiết bị (ghi vào dm_asset). */
   assetRows: [] as AssetRow[],
 };
@@ -254,12 +255,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     setPForm({
       ...EMPTY_P,
       assetRows: rows,
-      station: p.station, role: p.role, connection: p.connection,
+      station: p.station, role: p.role,
       customer: p.customer ?? '', parent_point: p.parent_point ?? '',
       ident: p.ident ?? '', hsn: str(p.hsn),
       purpose: isPreset ? saved : (saved ? CUSTOM : ''),
       purpose_custom: isPreset ? '' : saved,
-      status: (p.status ?? '') as PointStatus, note: p.note ?? '',
+      note: p.note ?? '',
     });
     setModal('point');
   };
@@ -323,8 +324,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const ratioRowOf = (type: AssetType) =>
     pForm.assetRows.find(r => r.active && r.type === type && r.ratio.trim() !== '');
 
+  /**
+   * Có khai TI hay không thay cho câu hỏi "đấu nối" đã bỏ khỏi form. Xét CẢ TI
+   * đã tháo: điểm đo từng đo gián tiếp thì vẫn là gián tiếp, tháo TI ra không
+   * biến nó thành đo thẳng.
+   */
+  const hasTi = pForm.assetRows.some(r => r.type === 'TI');
   const hsnInput = {
-    connection: pForm.connection,
+    hasTi,
     ti: parseRatio(ratioRowOf('TI')?.ratio ?? ''),
     tu: parseRatio(ratioRowOf('TU')?.ratio ?? ''),
   };
@@ -384,7 +391,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    */
   const tuRow = ratioRowOf('TU');
   const tiSecondary = parseRatio(ratioRowOf('TI')?.ratio ?? '').secondary ?? 5;
-  const canFillTi = pForm.connection === 'gian_tiep' && invoiceHsn != null && !tuRow
+  const canFillTi = hasTi && invoiceHsn != null && !tuRow
     && pForm.assetRows.some(r => r.type === 'TI' && r.active);
   const suggestedTi = invoiceHsn != null ? `${invoiceHsn * tiSecondary}/${tiSecondary}` : '';
 
@@ -396,13 +403,26 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         r.type === 'TI' && r.active ? { ...r, ratio: suggestedTi } : r),
     }));
 
+  /**
+   * Mỗi dòng công tơ kèm chặng hóa đơn của đúng khách hàng của điểm đo. Liệt kê
+   * CẢ công tơ đã tháo — điểm đo ngưng hoạt động vẫn phải khớp HSN hóa đơn.
+   */
+  const meterRefs = pForm.assetRows
+    .filter(r => r.type === 'CONGTO' && r.serial.trim())
+    .map(r => {
+      const segs = invSegs[r.serial.trim()];
+      return segs ? { row: r, segs, mine: segmentOf(segs, pointMkh) } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  /** Điền một ngày lấy từ hóa đơn vào đúng dòng công tơ đó. */
+  const fillDate = (key: string, field: 'dateOn' | 'dateOff', value: string) =>
+    setRow(key, { [field]: value });
+
   /** Nhắc đối chiếu hóa đơn — tách khỏi `assetWarnings` vì đây là tham chiếu. */
   const invoiceNotes: string[] = [];
-  for (const r of pForm.assetRows) {
+  for (const { row: r, segs, mine } of meterRefs) {
     const serial = r.serial.trim();
-    const segs = r.type === 'CONGTO' ? invSegs[serial] : undefined;
-    if (!segs) continue;
-    const mine = segmentOf(segs, pointMkh);
     if (!mine) {
       if (segs.length) {
         invoiceNotes.push(`công tơ ${serial} có hóa đơn nhưng của khách khác `
@@ -420,10 +440,31 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       invoiceNotes.push(`công tơ ${serial} từng đổi HSN: ${mine.hsnHistory.join(' → ')}`);
     }
   }
-  if (invoiceHsn != null && derivedHsn != null && derivedHsn !== invoiceHsn) {
+
+  /**
+   * HSN phải khớp hóa đơn — áp cho MỌI điểm đo, kể cả đã ngưng hoạt động
+   * (user chốt 20/08). Điểm đo tháo rồi mà HSN sai thì sản lượng lịch sử vẫn sai.
+   * Lấy HSN của hóa đơn theo công tơ đang hoạt động; không có thì lấy công tơ
+   * cuối cùng từng gắn.
+   */
+  const refHsn = invoiceHsn
+    ?? meterRefs.map(m => m.mine?.hsn).filter((h): h is number => h != null).pop();
+  if (refHsn != null && derivedHsn != null && derivedHsn !== refHsn) {
     invoiceNotes.push(tuRow
-      ? `TI × TU đang ra HSN ${derivedHsn}, hóa đơn ghi ${invoiceHsn} — tích hai tỷ số phải bằng ${invoiceHsn}`
-      : `HSN khai ra ${derivedHsn} nhưng hóa đơn ghi ${invoiceHsn} — kiểm tra lại tỷ số TI`);
+      ? `TI × TU đang ra HSN ${derivedHsn}, hóa đơn ghi ${refHsn} — tích hai tỷ số phải bằng ${refHsn}`
+      : `HSN khai ra ${derivedHsn} nhưng hóa đơn ghi ${refHsn} — kiểm tra lại tỷ số TI`);
+  }
+
+  /** Tỷ số TI khai 0 (hoặc chia 0) là sai chắc chắn — HSN sẽ ra 0 hoặc vô nghĩa. */
+  const badRatioRows = pForm.assetRows.filter(r => {
+    if (!HAS_RATIO.includes(r.type as AssetType) || !r.ratio.trim()) return false;
+    const { primary, secondary } = parseRatio(r.ratio);
+    return primary === 0 || secondary === 0 || primary == null || secondary == null;
+  });
+  if (badRatioRows.length) {
+    invoiceNotes.push(`tỷ số không hợp lệ ở ${badRatioRows.length} dòng `
+      + `(${badRatioRows.map(r => `${r.type} ${r.serial.trim() || '—'}: "${r.ratio}"`).join(', ')})`
+      + ' — sơ cấp/thứ cấp đều phải khác 0');
   }
 
   /**
@@ -461,12 +502,19 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   if (filledRows.some(r => r.dateOn && r.dateOff && r.dateOff < r.dateOn)) {
     assetWarnings.push('có thiết bị khai ngày tháo trước ngày treo');
   }
-  if (pForm.connection === 'gian_tiep' && countType('TI') !== 3) {
-    assetWarnings.push(`đấu gián tiếp thường đủ 3 TI (đang có ${countType('TI')})`);
+  // Có TI = đo gián tiếp ⇒ phải đủ bộ 3. Không có TI = đo thẳng, HSN = 1.
+  if (hasTi && countType('TI') > 0 && countType('TI') !== TI_PER_SET) {
+    assetWarnings.push(`đo gián tiếp phải đủ ${TI_PER_SET} TI (đang có ${countType('TI')} cái hoạt động)`);
   }
-  if (pForm.connection === 'truc_tiep' && countType('TI') > 0) {
-    assetWarnings.push('đấu trực tiếp thì không cần TI');
-  }
+
+  /**
+   * Trạng thái điểm đo do hệ thống suy, không cho chọn tay nữa (user chốt
+   * 20/08). Tính ngay trên form để người dùng thấy tag đổi theo lúc khai.
+   */
+  const derivedStatus = derivePointStatus({
+    ...countAssets(filledRows),
+    hasInvoice: meterRefs.some(m => m.row.active && m.mine),
+  });
 
   /** Điểm đo chính trong cùng trạm — nguồn chọn cha cho điểm đo phụ. */
   const parentOpts = useMemo(
@@ -561,9 +609,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         customer: isSub ? pForm.customer : (pStation?.customer || undefined),
         parent_point: isSub ? pForm.parent_point : '',
         role: pForm.role,
-        connection: pForm.connection,
+        // `connection` không còn hỏi người dùng — suy ngược từ HSN. Vẫn ghi vì
+        // PocketBase đang để trường này bắt buộc.
+        connection: connectionOfHsn(derivedHsn),
         hsn: derivedHsn ?? undefined,
-        status: pForm.status || undefined,
+        status: derivedStatus || undefined,
         note: pForm.note.trim(),
       };
       return void persist(async () => {
@@ -1010,7 +1060,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <th className={TH_CLS}>Trạm</th>
               <th className={TH_CLS}>Khách hàng</th>
               <th className={`${TH_CLS} w-28`}>Loại</th>
-              <th className={`${TH_CLS} w-32`}>Đấu nối</th>
+              <th className={`${TH_CLS} w-36`}>Trạng thái</th>
               <th className={`${TH_CLS} w-24`}>HSN</th>
               <th className={`${TH_CLS} w-32 pr-10 text-right`}>Thao tác</th>
             </>}>
@@ -1031,15 +1081,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 <td className="px-6 py-4 font-mono text-xs text-soft">{stationCodeOf(p.station)}</td>
                 <td className="px-6 py-4 font-mono text-xs font-bold text-soft">{customerMkh(p.customer)}</td>
                 <td className="px-6 py-4"><PointBadgeChip point={p} /></td>
-                <td className="px-6 py-4">
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
-                    p.connection === 'gian_tiep'
-                      ? 'bg-[var(--warning-soft)] text-warn'
-                      : 'bg-[var(--success-soft)] text-good'
-                  }`}>
-                    {CONNECTION_LABEL[p.connection]}
-                  </span>
-                </td>
+                <td className="px-6 py-4"><StatusTag status={p.status} /></td>
                 <td className="px-6 py-4 text-sm font-bold text-dim">{p.hsn ?? '—'}</td>
                 <td className="px-6 py-4 pr-10 text-right">
                   <RowActions onEdit={() => editPoint(p)}
@@ -1197,25 +1239,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 options={stationOpts} placeholder="Chọn trạm" searchable />
             </Field>
 
-            {/* Hai thanh gạt — đúng yêu cầu user */}
-            <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Đấu nối">
-                <Toggle value={pForm.connection}
-                  onChange={v => setPForm(f => ({ ...f, connection: v, hsn: v === 'truc_tiep' ? '1' : '' }))}
-                  options={[
-                    { value: 'truc_tiep', label: CONNECTION_LABEL.truc_tiep, hex: '#10b981' },
-                    { value: 'gian_tiep', label: CONNECTION_LABEL.gian_tiep, hex: '#f97316' },
-                  ]} />
-              </Field>
-              <Field label="Loại điểm đo">
-                <Toggle value={pForm.role}
-                  onChange={v => setPForm(f => ({ ...f, role: v, customer: '', parent_point: '' }))}
-                  options={[
-                    { value: 'chinh', label: ROLE_LABEL.chinh },
-                    { value: 'phu', label: ROLE_LABEL.phu, hex: '#8b5cf6' },
-                  ]} />
-              </Field>
-            </div>
+            {/*
+              Không còn ô "Đấu nối": HSN = 1 đã là đấu trực tiếp rồi, hỏi thêm
+              chỉ tạo cơ hội khai mâu thuẫn với bảng vật tư (user chốt 20/08).
+            */}
+            <Field label="Loại điểm đo">
+              <Toggle value={pForm.role}
+                onChange={v => setPForm(f => ({ ...f, role: v, customer: '', parent_point: '' }))}
+                options={[
+                  { value: 'chinh', label: ROLE_LABEL.chinh },
+                  { value: 'phu', label: ROLE_LABEL.phu, hex: '#8b5cf6' },
+                ]} />
+            </Field>
 
             {/* Điểm đo phụ: cần KH phụ + điểm đo chính chứa nó */}
             {isSub && (
@@ -1385,18 +1420,44 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                   {invLoading && <RefreshCw className="h-3 w-3 animate-spin" />}
                 </div>
 
-                {activeSeg ? (
-                  <p className="text-soft">
-                    Công tơ <span className="font-mono font-bold text-ink">{activeMeter?.serial.trim()}</span>
-                    {' '}· khách <span className="font-mono font-bold text-ink">{activeSeg.mkh}</span>
-                    {' '}· phát sinh tiền điện{' '}
-                    <b className="text-ink">{activeSeg.from} → {activeSeg.to}</b>
-                    {' '}({activeSeg.count} HĐ){activeSeg.isCurrent && ' — còn phát sinh tháng này'}
-                    {activeSeg.hsn != null && <> · HSN hóa đơn <b className="text-ink">{activeSeg.hsn}</b></>}
-                  </p>
+                {meterRefs.filter(m => m.mine).length ? (
+                  <div className="space-y-2">
+                    {meterRefs.filter(m => m.mine).map(({ row, mine }) => (
+                      <div key={row.key} className={`space-y-1 ${row.active ? '' : 'opacity-70'}`}>
+                        <p className="text-soft">
+                          Công tơ <span className="font-mono font-bold text-ink">{row.serial.trim()}</span>
+                          {!row.active && <span className="ml-1 text-[10px] font-bold uppercase text-faint">đã tháo</span>}
+                          {' '}· khách <span className="font-mono font-bold text-ink">{mine!.mkh}</span>
+                          {' '}· phát sinh tiền điện{' '}
+                          <b className="text-ink">{mine!.from} → {mine!.to}</b>
+                          {' '}({mine!.count} HĐ){mine!.isCurrent && ' — còn phát sinh tháng này'}
+                          {mine!.hsn != null && <> · HSN hóa đơn <b className="text-ink">{mine!.hsn}</b></>}
+                        </p>
+                        {/*
+                          Nút điền nhanh cho trường hợp ngày treo/tháo trùng đúng
+                          mốc hóa đơn. Chỉ hiện khi ô đang khác giá trị đó — điền
+                          rồi thì nút biến mất, khỏi bấm nhầm lần nữa.
+                        */}
+                        <div className="flex flex-wrap gap-2">
+                          {row.dateOn !== mine!.from && (
+                            <button type="button" onClick={() => fillDate(row.key, 'dateOn', mine!.from)}
+                              className="vl-btn vl-btn-secondary vl-btn-sm">
+                              Ngày treo = {mine!.from}
+                            </button>
+                          )}
+                          {row.dateOff !== mine!.to && (
+                            <button type="button" onClick={() => fillDate(row.key, 'dateOff', mine!.to)}
+                              className="vl-btn vl-btn-secondary vl-btn-sm">
+                              Ngày tháo = {mine!.to}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ) : !invLoading && (
                   <p className="italic text-faint">
-                    Chưa tra được hóa đơn cho công tơ đang hoạt động của điểm đo này.
+                    Chưa tra được hóa đơn nào cho các công tơ của điểm đo này.
                   </p>
                 )}
 
@@ -1406,7 +1467,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                     Điền tỷ số TI theo hóa đơn: {suggestedTi} (HSN {invoiceHsn})
                   </button>
                 )}
-                {pForm.connection === 'gian_tiep' && invoiceHsn != null && tuRow && (
+                {hasTi && invoiceHsn != null && tuRow && (
                   <p className="text-faint">
                     Có TU nên không suy ngược được tỷ số — nhập cả TI và TU sao cho
                     tích hai tỷ số bằng <b className="text-ink">{invoiceHsn}</b>.
@@ -1421,11 +1482,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </div>
             )}
 
-            <Field label="Trạng thái">
-              <Select value={pForm.status}
-                onChange={v => setPForm(f => ({ ...f, status: v as PointStatus }))}
-                options={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
-                placeholder="Chưa xác định" />
+            {/* Trạng thái do hệ thống suy — xem `lib/dm/pointStatus.ts`. */}
+            <Field label="Trạng thái (hệ thống tự gắn)"
+              hint="Chưa gắn công tơ → Dự kiến · đủ công tơ và bộ 3 TI nhưng chưa có hóa đơn → Chưa vận hành · đã có hóa đơn → Đang vận hành · mọi vật tư đã ngưng → Đã tháo gỡ.">
+              <div className="rounded border border-dashed border-[var(--border)] bg-subtle px-4 py-3">
+                <StatusTag status={derivedStatus} />
+              </div>
             </Field>
 
             {assetWarnings.length > 0 && (
