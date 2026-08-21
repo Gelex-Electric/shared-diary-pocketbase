@@ -19,16 +19,24 @@ export * from './qlvhRules';
 
 export const C_CONTRACT = 'qlvh_contract';
 export const C_PAYMENT = 'qlvh_payment';
+export const C_ITEM = 'qlvh_item';
 
 /* ------------------------------------------------------------------ Kiểu */
 
-export type ContractStatus = 'dang_hieu_luc' | 'tam_dung' | 'da_thanh_ly';
+export type ContractStatus = 'du_thao' | 'dang_hieu_luc' | 'tam_dung' | 'da_thanh_ly';
 
 export const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = {
+  du_thao:       'Dự thảo (chưa ký)',
   dang_hieu_luc: 'Đang hiệu lực',
   tam_dung:      'Tạm dừng',
   da_thanh_ly:   'Đã thanh lý',
 };
+
+/**
+ * Hợp đồng dự thảo KHÔNG tính vào công nợ và các ô số liệu — chưa ký thì chưa
+ * có nghĩa vụ thu tiền. Vẫn hiện trong danh sách để giữ chỗ.
+ */
+export const isDraft = (c: { status_manual?: ContractStatus }) => c.status_manual === 'du_thao';
 
 /** Bản ghi danh mục dùng lại — CHỈ ĐỌC, module này không sửa dm_*. */
 export interface DmCustomer {
@@ -82,6 +90,38 @@ export interface Payment extends PaymentLike {
   invoice_no?: string;
   note?: string;
 }
+
+/**
+ * Một dòng khối lượng & đơn giá — đúng "Phụ lục 01" của hợp đồng.
+ * Đơn giá tính theo NĂM (ĐVT dạng `m/năm`, `máy/năm`).
+ */
+export interface ContractItem {
+  id: string;
+  contract: string;
+  seq: number;
+  content: string;
+  unit: string;
+  qty: number;
+  unit_price: number;
+  amount: number;
+  note?: string;
+}
+
+export type ItemInput = Omit<ContractItem, 'id' | 'contract'>;
+
+/** Tổng chi phí MỘT NĂM theo bảng khối lượng. */
+export const yearlyTotal = (items: { qty: number; unit_price: number }[]) =>
+  items.reduce((s, i) => s + Math.round((i.qty || 0) * (i.unit_price || 0)), 0);
+
+/**
+ * Giá trị hợp đồng trước thuế suy từ bảng khối lượng:
+ *   tổng/năm × (thời hạn tính bằng tháng / 12)
+ * Đúng cách Phụ lục 01 làm: 19.285.715 × 1,5 = 28.928.573 cho hợp đồng 18 tháng.
+ */
+export const valueFromItems = (
+  items: { qty: number; unit_price: number }[],
+  months: number,
+) => Math.round((yearlyTotal(items) * (months || 12)) / 12);
 
 /** Hợp đồng kèm lịch đợt và số liệu tổng hợp — thứ các màn hình thật sự dùng. */
 export interface ContractWithSchedule {
@@ -154,6 +194,13 @@ export async function fetchContracts(zoneName?: string): Promise<ContractWithSch
   });
 }
 
+/** Bảng khối lượng & đơn giá của một hợp đồng. */
+export async function fetchItems(contractId: string): Promise<ContractItem[]> {
+  return pb.collection(C_ITEM).getFullList<ContractItem>({
+    filter: `contract = "${contractId}"`, sort: 'seq',
+  });
+}
+
 export async function fetchContract(id: string): Promise<ContractWithSchedule> {
   const contract = await pb.collection(C_CONTRACT).getOne<Contract>(id, { expand: 'customer,zone' });
   const payments = await pb.collection(C_PAYMENT).getFullList<Payment>({
@@ -188,6 +235,7 @@ export async function saveContract(
   input: ContractInput,
   schedule: PaymentInput[],
   contractId?: string,
+  items?: ItemInput[],
 ): Promise<string> {
   const saved = contractId
     ? await pb.collection(C_CONTRACT).update<Contract>(contractId, input)
@@ -216,6 +264,17 @@ export async function saveContract(
     const body = { ...row, contract: saved.id };
     if (old) await pb.collection(C_PAYMENT).update(old.id, body);
     else await pb.collection(C_PAYMENT).create(body);
+  }
+
+  /* Bảng khối lượng: thay nguyên bảng (không có ràng buộc lịch sử như đợt thu). */
+  if (items) {
+    const oldItems = contractId ? await fetchItems(saved.id) : [];
+    for (const o of oldItems) await pb.collection(C_ITEM).delete(o.id);
+    for (const it of items) {
+      await pb.collection(C_ITEM).create({
+        ...it, contract: saved.id, amount: Math.round((it.qty || 0) * (it.unit_price || 0)),
+      });
+    }
   }
 
   return saved.id;

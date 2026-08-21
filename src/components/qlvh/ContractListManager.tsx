@@ -24,7 +24,7 @@ import PaymentScheduleTable from './PaymentScheduleTable';
 import ContractDialog from './ContractDialog';
 import {
   CONTRACT_STATUS_LABEL, STATUS_BADGE, STATUS_LABEL,
-  deleteContract, fetchContracts, paymentStatus, summarize,
+  deleteContract, fetchContracts, isDraft, paymentStatus, summarize,
   type ContractWithSchedule, type PaymentStatus,
 } from '../../lib/qlvh';
 
@@ -136,8 +136,13 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
     });
   }, [scoped, area, filter, query]);
 
-  /* KPI tính trên phần đang hiện, để con số luôn khớp cái mắt đang nhìn. */
-  const kpi = useMemo(() => summarize(visible.flatMap(r => r.payments)), [visible]);
+  /* KPI tính trên phần đang hiện, để con số luôn khớp cái mắt đang nhìn.
+     Trừ hợp đồng DỰ THẢO — chưa ký thì chưa có nghĩa vụ thu tiền. */
+  const kpi = useMemo(
+    () => summarize(visible.filter(r => !isDraft(r.contract)).flatMap(r => r.payments)),
+    [visible],
+  );
+  const draftCount = useMemo(() => visible.filter(r => isDraft(r.contract)).length, [visible]);
 
   const areaOptions = useMemo(
     () => [{ value: '', label: allLabel }, ...areas.map(a => ({ value: a, label: a }))],
@@ -165,7 +170,10 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatTile
           label="Tổng giá trị" value={money(kpi.valueTotal)} unit="đ"
-          sub={`${visible.length} hợp đồng`} icon={FileText} loading={loading}
+          sub={draftCount > 0
+            ? `${visible.length} hợp đồng · ${draftCount} dự thảo không tính`
+            : `${visible.length} hợp đồng`}
+          icon={FileText} loading={loading}
         />
         <StatTile
           label="Đã thu" value={money(kpi.paid)} unit="đ" tone="ok"

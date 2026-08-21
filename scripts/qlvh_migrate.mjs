@@ -104,10 +104,38 @@ function contractFields(customerId, zoneId) {
   { name: 'value_vat',        type: 'number' },
   { name: 'value_total',      type: 'number' },
   { name: 'payment_terms',    type: 'text' },
-  { name: 'status_manual',    type: 'select', maxSelect: 1, values: ['dang_hieu_luc', 'tam_dung', 'da_thanh_ly'] },
+  // 'du_thao' = hợp đồng chưa có số / chưa ký, nhập trước để giữ chỗ; KHÔNG tính
+  // vào công nợ. Thêm giá trị vào ô chọn là NỚI danh sách — an toàn; thu hẹp mới
+  // nguy hiểm (bản ghi cũ rơi vào giá trị không còn tồn tại).
+  { name: 'status_manual',    type: 'select', maxSelect: 1, values: ['du_thao', 'dang_hieu_luc', 'tam_dung', 'da_thanh_ly'] },
   { name: 'note',             type: 'text' },
   { name: 'created',          type: 'autodate', onCreate: true,  onUpdate: false },
   { name: 'updated',          type: 'autodate', onCreate: true,  onUpdate: true  },
+  ];
+}
+
+/**
+ * Bảng con: khối lượng & đơn giá — đúng "Phụ lục 01" của hợp đồng.
+ *
+ * Đây là CƠ SỞ hình thành giá trị hợp đồng (vd: cáp ngầm 22kV 20m × 4.438đ/m/năm
+ * + MBA 400kVA 1 máy × 19.196.955đ/máy/năm = 19.285.715đ/năm). Điều 11.2 của hợp
+ * đồng quy định khối lượng thay đổi thì phải ký phụ lục, nên phần này phải nằm
+ * trong hệ thống chứ không để trong file Word.
+ *
+ * Đơn giá tính THEO NĂM; giá trị hợp đồng = tổng/năm × (thời hạn / 12).
+ */
+function itemFields(contractId) {
+  return [
+    { name: 'contract',   type: 'relation', required: true, maxSelect: 1, cascadeDelete: true, collectionId: contractId },
+    { name: 'seq',        type: 'number' },
+    { name: 'content',    type: 'text' },
+    { name: 'unit',       type: 'text' },   // ĐVT: m/năm, máy/năm...
+    { name: 'qty',        type: 'number' },
+    { name: 'unit_price', type: 'number' },
+    { name: 'amount',     type: 'number' }, // = qty × unit_price, lưu sẵn cho báo cáo
+    { name: 'note',       type: 'text' },
+    { name: 'created',    type: 'autodate', onCreate: true, onUpdate: false },
+    { name: 'updated',    type: 'autodate', onCreate: true, onUpdate: true },
   ];
 }
 
@@ -139,17 +167,33 @@ async function ensureCollection(def) {
     // Collection đã có: KHÔNG ghi đè, chỉ BỔ SUNG field còn thiếu. Ghi đè cả
     // định nghĩa là mất dữ liệu của field không nằm trong bản mới.
     const full = await api(`/api/collections/${existing.id}`);
-    const have = new Set(full.fields.map(f => f.name));
+    const have = new Map(full.fields.map(f => [f.name, f]));
     const missing = def.fields.filter(f => !have.has(f.name));
-    if (missing.length === 0) {
+
+    /* Ô chọn được NỚI thêm giá trị (không bao giờ thu hẹp ở đây). */
+    const widened = [];
+    const fields = full.fields.map(f => {
+      const want = def.fields.find(d => d.name === f.name);
+      if (!want || want.type !== 'select' || !Array.isArray(want.values)) return f;
+      const add = want.values.filter(v => !(f.values || []).includes(v));
+      if (add.length === 0) return f;
+      widened.push(`${f.name} += ${add.join(',')}`);
+      return { ...f, values: [...(f.values || []), ...add] };
+    });
+
+    if (missing.length === 0 && widened.length === 0) {
       console.log(`  ✓ đã tồn tại, đủ field: ${def.name} (${existing.id})`);
       return existing.id;
     }
-    console.log(`  ~ ${COMMIT ? '' : '[dry-run] '}${def.name}: thêm field còn thiếu → ${missing.map(f => f.name).join(', ')}`);
+    const what = [
+      missing.length ? `thêm field → ${missing.map(f => f.name).join(', ')}` : '',
+      widened.length ? `nới ô chọn → ${widened.join('; ')}` : '',
+    ].filter(Boolean).join(' | ');
+    console.log(`  ~ ${COMMIT ? '' : '[dry-run] '}${def.name}: ${what}`);
     if (COMMIT) {
       await api(`/api/collections/${existing.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ fields: [...full.fields, ...missing] }),
+        body: JSON.stringify({ fields: [...fields, ...missing] }),
       });
     }
     return existing.id;
@@ -190,6 +234,18 @@ async function main() {
     indexes: [`CREATE UNIQUE INDEX idx_qlvh_contract_no ON ${PREFIX}contract (contract_no)`],
     listRule: READ_CONTRACT,
     viewRule: READ_CONTRACT,
+    createRule: OFFICE_ONLY,
+    updateRule: OFFICE_ONLY,
+    deleteRule: OFFICE_ONLY,
+  });
+
+  await ensureCollection({
+    name: `${PREFIX}item`,
+    type: 'base',
+    fields: itemFields(contractId),
+    indexes: [`CREATE INDEX idx_qlvh_item_contract ON ${PREFIX}item (contract)`],
+    listRule: READ_PAYMENT,
+    viewRule: READ_PAYMENT,
     createRule: OFFICE_ONLY,
     updateRule: OFFICE_ONLY,
     deleteRule: OFFICE_ONLY,

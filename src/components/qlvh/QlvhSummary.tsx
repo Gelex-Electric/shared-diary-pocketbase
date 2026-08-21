@@ -18,7 +18,7 @@ import { useScopeAreas, type Scope } from '../../lib/scope';
 import { zoneHexOf } from '../../lib/kcnColors';
 import {
   STATUS_BADGE, STATUS_LABEL, daysBetween, dayOf, fetchContracts, overdueDays,
-  paymentStatus, remainingOf, summarize, todayStr,
+  isDraft, paymentStatus, remainingOf, summarize, todayStr,
   type ContractWithSchedule, type Payment,
 } from '../../lib/qlvh';
 
@@ -33,7 +33,7 @@ const dateVN = (v?: string) => {
 /** Cửa sổ nhìn tới của bảng "sắp đến hạn" — rộng hơn ngưỡng badge 15 ngày. */
 const HORIZON_DAYS = 30;
 /** Hợp đồng hết hiệu lực trong ngần này ngày thì nhắc tái ký. */
-const RENEW_DAYS = 90;
+const RENEW_DAYS = 30;
 
 interface DueRow {
   payment: Payment;
@@ -77,11 +77,14 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
     [rows, areas, area],
   );
 
-  const kpi = useMemo(() => summarize(visible.flatMap(r => r.payments), today), [visible, today]);
+  /* Hợp đồng DỰ THẢO (chưa ký) không tính vào số liệu lẫn công nợ. */
+  const active = useMemo(() => visible.filter(r => !isDraft(r.contract)), [visible]);
+
+  const kpi = useMemo(() => summarize(active.flatMap(r => r.payments), today), [active, today]);
 
   /** Mọi đợt chưa thu đủ, kèm thông tin hợp đồng — nguồn cho 2 bảng dưới. */
   const dueRows = useMemo<DueRow[]>(
-    () => visible.flatMap(r => r.payments
+    () => active.flatMap(r => r.payments
       .filter(p => remainingOf(p) > 0)
       .map(p => ({
         payment: p,
@@ -91,7 +94,7 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
         zoneName: r.zoneName,
         zoneCode: r.zoneCode,
       }))),
-    [visible],
+    [active],
   );
 
   const overdue = useMemo(
