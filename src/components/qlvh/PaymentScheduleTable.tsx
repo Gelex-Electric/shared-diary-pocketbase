@@ -135,7 +135,13 @@ export default function PaymentScheduleTable({
                   {editable && onEdit ? (
                     <DatePicker
                       value={String(p.paid_date || '').slice(0, 10)}
-                      onChange={v => onEdit(orig.id, { paid_date: v })}
+                      /* Nhập ngày = đã thu trọn đợt → điền luôn số tiền cho hai
+                         cột khỏi mâu thuẫn; xoá ngày thì trả về 0. Vẫn sửa tay
+                         được nếu thực tế thu khác. */
+                      onChange={v => onEdit(orig.id, {
+                        paid_date: v,
+                        amount_paid: v ? p.amount_due : 0,
+                      })}
                       usePortal
                     />
                   ) : (

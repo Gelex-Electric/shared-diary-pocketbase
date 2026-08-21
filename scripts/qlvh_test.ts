@@ -6,7 +6,7 @@
  */
 
 import {
-  addYears, allocatePayment, buildSchedule, computeVat, durationMonths,
+  addYears, buildSchedule, computeVat, durationMonths,
   isLocked, overdueDays, paymentStatus, remainingOf, scheduleWarning, summarize,
   withVat, withoutVat,
   type PaymentLike,
@@ -86,67 +86,30 @@ eq(durationMonths('2026-12-31', '2026-01-01'), 0, 'durationMonths: ngày ngượ
 
 /* -------------------------------------------------------- paymentStatus */
 
-const TODAY = '2026-08-21';
 const mk = (o: Partial<PaymentLike>): PaymentLike => ({ seq: 1, due_date: '2026-08-01', amount_due: 100, ...o });
+const TODAY = '2026-08-21';
+/* Luật mới (21/08/2026): NGÀY THANH TOÁN quyết định — có ngày = đã thu. */
+eq(paymentStatus(mk({ paid_date: '2026-08-10', amount_paid: 100 }), TODAY), 'da_thu', 'status: có ngày thanh toán ⇒ đã thu');
+eq(paymentStatus(mk({ paid_date: '2026-08-10', amount_paid: 0 }), TODAY), 'da_thu',
+   'status: có ngày nhưng chưa điền tiền vẫn là ĐÃ THU (ngày quyết định)');
+eq(paymentStatus(mk({ due_date: '2026-01-01', paid_date: '2026-08-10' }), TODAY), 'da_thu',
+   'status: quá hạn nhưng đã có ngày thanh toán ⇒ đã thu, không báo quá hạn nữa');
 
-eq(paymentStatus(mk({ paid_date: '2026-08-10', amount_paid: 100 }), TODAY), 'da_thu', 'status: thu đủ ⇒ đã thu');
-eq(paymentStatus(mk({ paid_date: '2026-08-10', amount_paid: 150 }), TODAY), 'da_thu', 'status: thu dư vẫn tính đã thu');
-eq(paymentStatus(mk({ paid_date: '2026-08-10', amount_paid: 40 }), TODAY), 'thu_thieu', 'status: thu thiếu');
 eq(paymentStatus(mk({ due_date: '2026-08-01' }), TODAY), 'qua_han', 'status: quá hạn khi chưa thu và đã qua ngày');
 eq(paymentStatus(mk({ due_date: '2026-08-30' }), TODAY), 'sap_den_han', 'status: còn 9 ngày ⇒ sắp đến hạn');
 eq(paymentStatus(mk({ due_date: '2026-09-30' }), TODAY), 'chua_den_han', 'status: còn 40 ngày ⇒ chưa đến hạn');
 eq(paymentStatus(mk({ due_date: '2026-08-21' }), TODAY), 'sap_den_han', 'status: đến hạn đúng hôm nay chưa tính quá hạn');
 eq(paymentStatus(mk({ due_date: '2026-09-05' }), TODAY), 'sap_den_han', 'status: đúng ngưỡng 15 ngày vẫn là sắp đến hạn');
 eq(paymentStatus(mk({ due_date: '2026-09-06' }), TODAY), 'chua_den_han', 'status: quá ngưỡng 1 ngày ⇒ chưa đến hạn');
-eq(paymentStatus(mk({ due_date: '2026-08-01', amount_paid: 40 }), TODAY), 'thu_thieu',
-   'status: đã thu một phần thì KHÔNG còn báo quá hạn (có tiền vào là đã động tới)');
+eq(paymentStatus(mk({ due_date: '2026-08-01', amount_paid: 40 }), TODAY), 'qua_han',
+   'status: có tiền nhưng CHƯA có ngày thanh toán ⇒ vẫn là chưa thu / quá hạn');
 eq(paymentStatus(mk({ due_date: '2026-08-01 00:00:00.000Z', paid_date: '' }), TODAY), 'qua_han',
    'status: chịu được định dạng ngày của PocketBase');
 
 eq(overdueDays(mk({ due_date: '2026-08-01' }), TODAY), 20, 'overdueDays: quá hạn 20 ngày');
 eq(overdueDays(mk({ due_date: '2026-09-30' }), TODAY), 0, 'overdueDays: chưa quá hạn ⇒ 0');
-eq(remainingOf(mk({ amount_paid: 40 })), 60, 'remainingOf: còn phải thu');
-eq(remainingOf(mk({ amount_paid: 150 })), 0, 'remainingOf: thu dư không ra số âm');
-
-/* ------------------------------------------------------ allocatePayment */
-
-const sched = (): PaymentLike[] => [
-  { id: 'a', seq: 1, due_date: '2026-01-01', amount_due: 100 },
-  { id: 'b', seq: 2, due_date: '2027-01-01', amount_due: 100 },
-  { id: 'c', seq: 3, due_date: '2028-01-01', amount_due: 100 },
-];
-
-const exact = allocatePayment(sched(), 100, '2026-01-05');
-eq(exact.changes.length, 1, 'allocate: thu đúng 1 đợt ⇒ chỉ đụng đợt 1');
-eq(exact.changes[0], { id: 'a', seq: 1, amount_paid: 100, paid_date: '2026-01-05' }, 'allocate: đợt 1 thu đủ');
-eq(exact.leftover, 0, 'allocate: không thừa tiền');
-
-const over = allocatePayment(sched(), 250, '2026-01-05');
-eq(over.changes.map(c => [c.seq, c.amount_paid]), [[1, 100], [2, 100], [3, 50]],
-   'allocate: một cục tiền tràn qua nhiều đợt, đợt cuối thành thu thiếu');
-eq(over.leftover, 0, 'allocate: 250 rải hết vào 3 đợt');
-
-const under = allocatePayment(sched(), 30, '2026-01-05');
-eq(under.changes, [{ id: 'a', seq: 1, amount_paid: 30, paid_date: '2026-01-05' }], 'allocate: thu thiếu thì dừng ở đợt 1');
-
-const partial: PaymentLike[] = [
-  { id: 'a', seq: 1, due_date: '2026-01-01', amount_due: 100, amount_paid: 40, paid_date: '2026-01-02' },
-  { id: 'b', seq: 2, due_date: '2027-01-01', amount_due: 100 },
-];
-const topUp = allocatePayment(partial, 80, '2026-02-01');
-eq(topUp.changes.map(c => [c.seq, c.amount_paid]), [[1, 100], [2, 20]],
-   'allocate: đợt đang thu thiếu được CỘNG DỒN (40+60), phần dư sang đợt sau');
-
-const done: PaymentLike[] = [{ id: 'a', seq: 1, due_date: '2026-01-01', amount_due: 100, amount_paid: 100 }];
-eq(allocatePayment(done, 50, '2026-02-01'), { changes: [], leftover: 50 },
-   'allocate: mọi đợt đã thu đủ ⇒ không đụng gì, báo tiền thừa 50');
-
-const unordered: PaymentLike[] = [
-  { id: 'c', seq: 3, due_date: '2028-01-01', amount_due: 100 },
-  { id: 'a', seq: 1, due_date: '2026-01-01', amount_due: 100 },
-];
-eq(allocatePayment(unordered, 100, '2026-01-05').changes[0].seq, 1,
-   'allocate: dữ liệu vào lộn xộn vẫn trả đợt theo thứ tự seq');
+eq(remainingOf(mk({ amount_paid: 40 })), 100, 'remainingOf: chưa có ngày thanh toán ⇒ nợ TRỌN đợt');
+eq(remainingOf(mk({ paid_date: '2026-08-10', amount_paid: 0 })), 0, 'remainingOf: có ngày thanh toán ⇒ hết nợ');
 
 /* -------------------------------------------------------------- tổng hợp */
 
@@ -159,6 +122,10 @@ const totals = summarize([
 eq([totals.valueTotal, totals.paid, totals.remaining], [400, 100, 300], 'summarize: tổng / đã thu / còn lại');
 eq([totals.overdueCount, totals.overdueAmount], [1, 100], 'summarize: đếm đúng đợt quá hạn');
 eq([totals.dueSoonCount, totals.dueSoonAmount], [1, 100], 'summarize: đếm đúng đợt sắp đến hạn');
+eq(summarize([{ seq: 1, due_date: "2026-01-01", amount_due: 100, amount_paid: 40 }], TODAY).paid, 0,
+   "summarize: có tiền nhưng chưa có ngày thanh toán ⇒ CHƯA tính là đã thu");
+eq(summarize([{ seq: 1, due_date: "2026-01-01", amount_due: 100, paid_date: "2026-01-05" }], TODAY).paid, 100,
+   "summarize: có ngày thanh toán ⇒ tính đã thu TRỌN đợt dù ô tiền để trống");
 
 /* ------------------------------------------------------- cảnh báo & khoá */
 

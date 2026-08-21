@@ -208,80 +208,30 @@ export function paymentStatus(
   soonDays: number = SOON_DAYS,
 ): PaymentStatus {
   const due = dayOf(p.due_date);
-  const paid = dayOf(p.paid_date);
-  const amountPaid = p.amount_paid || 0;
 
-  if (paid || amountPaid > 0) {
-    return amountPaid >= (p.amount_due || 0) ? 'da_thu' : 'thu_thieu';
-  }
+  /* NGÀY THANH TOÁN quyết định tất cả (user chốt 21/08/2026): có ngày = đã thu,
+     chưa có ngày = chưa thu. Trước đây còn so số tiền đã thu với công nợ, nhưng
+     thực tế khách trả trọn đợt nên một mốc ngày là đủ và đỡ nhập liệu. */
+  if (dayOf(p.paid_date)) return 'da_thu';
+
   if (due && due < today) return 'qua_han';
   if (due && daysBetween(today, due) <= soonDays) return 'sap_den_han';
   return 'chua_den_han';
 }
 
-/** Số tiền còn phải thu của một đợt. */
+/**
+ * Số tiền còn phải thu của một đợt — cũng theo ngày thanh toán: đã có ngày thì
+ * hết nợ, chưa có ngày thì nợ trọn đợt. Không lấy hiệu công nợ − đã thu, để con
+ * số công nợ không mâu thuẫn với trạng thái đang hiện.
+ */
 export function remainingOf(p: PaymentLike): number {
-  return Math.max(0, (p.amount_due || 0) - (p.amount_paid || 0));
+  return dayOf(p.paid_date) ? 0 : (p.amount_due || 0);
 }
 
 /** Số ngày quá hạn (0 nếu chưa quá hạn). */
 export function overdueDays(p: PaymentLike, today: string = todayStr()): number {
   if (paymentStatus(p, today) !== 'qua_han') return 0;
   return daysBetween(dayOf(p.due_date), today);
-}
-
-/* -------------------------------------------------- Phân bổ tiền thu vào đợt */
-
-export interface AllocationChange {
-  id?: string;
-  seq: number;
-  amount_paid: number;
-  paid_date: string;
-}
-
-export interface AllocationResult {
-  changes: AllocationChange[];
-  /** Tiền thừa sau khi đã trả hết mọi đợt — phải hiện cho người nhập biết. */
-  leftover: number;
-}
-
-/**
- * Rải một khoản tiền thu vào các đợt chưa thu đủ, **theo thứ tự đợt**.
- *
- * Nghiệp vụ thật: khách chuyển một cục cho nhiều đợt. Ba nhánh:
- *  - tiền ≥ phần còn thiếu của đợt → đóng đợt đó, mang phần dư sang đợt kế;
- *  - tiền < phần còn thiếu → cộng vào đợt đó (thành "thu thiếu"), dừng;
- *  - đợt vốn đã thu thiếu → tính trên **phần còn lại** và **cộng dồn** vào số đã
- *    thu cũ, không ghi đè.
- *
- * (Mô hình lấy từ `morghim/contract-payment` — đọc logic, viết lại bằng TS; repo
- * đó không có giấy phép nên không chép code.)
- */
-export function allocatePayment(
-  payments: PaymentLike[],
-  amount: number,
-  paidDate: string = todayStr(),
-): AllocationResult {
-  const changes: AllocationChange[] = [];
-  let left = Math.round(amount || 0);
-
-  const queue = [...payments].sort((a, b) => a.seq - b.seq);
-  for (const p of queue) {
-    if (left <= 0) break;
-    const remaining = remainingOf(p);
-    if (remaining <= 0) continue;
-
-    const pay = Math.min(left, remaining);
-    left -= pay;
-    changes.push({
-      id: p.id,
-      seq: p.seq,
-      amount_paid: (p.amount_paid || 0) + pay,
-      paid_date: dayOf(paidDate),
-    });
-  }
-
-  return { changes, leftover: left };
 }
 
 /* ------------------------------------------------------------- Tổng hợp KPI */
@@ -306,7 +256,8 @@ export function summarize(
   };
   for (const p of payments) {
     t.valueTotal += p.amount_due || 0;
-    t.paid += p.amount_paid || 0;
+    /* Đã thu = trọn đợt khi có ngày thanh toán, khớp luật ở `paymentStatus`. */
+    t.paid += dayOf(p.paid_date) ? (p.amount_due || 0) : 0;
     const st = paymentStatus(p, today);
     if (st === 'qua_han') { t.overdueCount++; t.overdueAmount += remainingOf(p); }
     if (st === 'sap_den_han') { t.dueSoonCount++; t.dueSoonAmount += remainingOf(p); }

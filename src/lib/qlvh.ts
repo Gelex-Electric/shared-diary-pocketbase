@@ -11,8 +11,8 @@
 
 import { pb } from './pocketbase';
 import {
-  allocatePayment, dayOf, summarize,
-  type AllocationResult, type ContractTotals, type PaymentLike,
+  dayOf, summarize,
+  type ContractTotals, type PaymentLike,
 } from './qlvhRules';
 
 export * from './qlvhRules';
@@ -300,30 +300,6 @@ export async function saveContract(
   }
 
   return saved.id;
-}
-
-/**
- * Ghi nhận một khoản thu và rải vào các đợt chưa thu đủ.
- * Trả về kết quả phân bổ để giao diện báo lại (nhất là `leftover` — tiền thừa).
- */
-export async function recordPayment(
-  contractId: string,
-  amount: number,
-  paidDate: string,
-  invoiceNo?: string,
-): Promise<AllocationResult> {
-  const payments = await pb.collection(C_PAYMENT).getFullList<Payment>({
-    filter: `contract = "${contractId}"`, sort: 'seq',
-  });
-
-  const result = allocatePayment(payments, amount, paidDate);
-  for (const ch of result.changes) {
-    if (!ch.id) continue;
-    const body: Record<string, unknown> = { amount_paid: ch.amount_paid, paid_date: ch.paid_date };
-    if (invoiceNo) body.invoice_no = invoiceNo;
-    await pb.collection(C_PAYMENT).update(ch.id, body);
-  }
-  return result;
 }
 
 /**
