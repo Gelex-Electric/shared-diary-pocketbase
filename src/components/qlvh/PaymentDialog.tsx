@@ -12,7 +12,7 @@ import { AlertTriangle, ArrowRight, RefreshCw, Wallet, X } from 'lucide-react';
 import { DatePicker } from '../ui/DateTimePickers';
 import { toast as notify } from '../../lib/toast';
 import {
-  allocatePayment, recordPayment, remainingOf, todayStr,
+  allocatePayment, recordPayment, remainingOf, todayStr, withVat, withoutVat,
   type ContractWithSchedule,
 } from '../../lib/qlvh';
 
@@ -42,18 +42,24 @@ export default function PaymentDialog({
   const [invoiceNo, setInvoiceNo] = useState('');
   const [saving, setSaving] = useState(false);
 
+  /**
+   * `amount` ở đây là số SAU THUẾ — đúng số khách chuyển khoản. Các đợt lưu
+   * theo trước thuế nên phải quy ngược trước khi rải.
+   */
+  const vatRate = row?.contract.vat_rate || 0;
+
   /* Mở lại hộp thoại thì điền sẵn đúng số còn phải thu — thao tác hay gặp nhất. */
   useEffect(() => {
     if (!open || !row) return;
-    setAmount(row.totals.remaining);
+    setAmount(withVat(row.totals.remaining, row.contract.vat_rate || 0));
     setPaidDate(todayStr());
     setInvoiceNo('');
   }, [open, row]);
 
   /* Xem trước bằng CHÍNH hàm sẽ chạy khi lưu — không viết lại logic lần hai. */
   const preview = useMemo(
-    () => (row ? allocatePayment(row.payments, amount, paidDate) : { changes: [], leftover: 0 }),
-    [row, amount, paidDate],
+    () => (row ? allocatePayment(row.payments, withoutVat(amount, vatRate), paidDate) : { changes: [], leftover: 0 }),
+    [row, amount, paidDate, vatRate],
   );
 
   if (!row) return null;
@@ -65,10 +71,10 @@ export default function PaymentDialog({
     if (!paidDate) { notify.error('Chưa chọn ngày thu.'); return; }
     setSaving(true);
     try {
-      const res = await recordPayment(row.contract.id, amount, paidDate, invoiceNo.trim() || undefined);
+      const res = await recordPayment(row.contract.id, withoutVat(amount, vatRate), paidDate, invoiceNo.trim() || undefined);
       notify.success(
         res.leftover > 0
-          ? `Đã ghi nhận ${money(amount - res.leftover)}đ vào ${res.changes.length} đợt; thừa ${money(res.leftover)}đ chưa phân bổ.`
+          ? `Đã ghi nhận ${money(amount - withVat(res.leftover, vatRate))}đ vào ${res.changes.length} đợt; thừa ${money(withVat(res.leftover, vatRate))}đ chưa phân bổ.`
           : `Đã ghi nhận ${money(amount)}đ vào ${res.changes.length} đợt.`,
       );
       onSaved();
@@ -120,7 +126,7 @@ export default function PaymentDialog({
                 </div>
                 <div className="vl-card p-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-faint">Còn phải thu</p>
-                  <p className="text-lg font-bold text-ink tabular-nums mt-1">{money(row.totals.remaining)}đ</p>
+                  <p className="text-lg font-bold text-ink tabular-nums mt-1">{money(withVat(row.totals.remaining, vatRate))}đ</p>
                 </div>
               </div>
 
@@ -182,13 +188,13 @@ export default function PaymentDialog({
                                 <td className="py-2 px-4 text-center font-bold tabular-nums text-ink">{ch.seq}</td>
                                 <td className="py-2 px-4 text-center tabular-nums text-soft">{dateVN(p.due_date)}</td>
                                 <td className="py-2 px-4 text-right tabular-nums">
-                                  <span className="text-faint">{money(p.amount_paid || 0)}</span>
+                                  <span className="text-faint">{money(withVat(p.amount_paid || 0, vatRate))}</span>
                                   <ArrowRight className="w-3 h-3 inline mx-1.5 text-faint" />
-                                  <span className="font-semibold text-ink">{money(ch.amount_paid)}</span>
-                                  <span className="text-faint"> / {money(p.amount_due)}</span>
+                                  <span className="font-semibold text-ink">{money(withVat(ch.amount_paid, vatRate))}</span>
+                                  <span className="text-faint"> / {money(withVat(p.amount_due, vatRate))}</span>
                                 </td>
                                 <td className="py-2 px-4 text-right tabular-nums font-semibold text-ink">
-                                  {after > 0 ? money(after) : '—'}
+                                  {after > 0 ? money(withVat(after, vatRate)) : '—'}
                                 </td>
                               </tr>
                             );
@@ -202,7 +208,7 @@ export default function PaymentDialog({
                     <p className="vl-alert vl-alert-light-warning flex items-start gap-2 text-xs">
                       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                       <span>
-                        Thừa <b>{money(preview.leftover)}đ</b> so với tổng các đợt còn phải thu —
+                        Thừa <b>{money(withVat(preview.leftover, vatRate))}đ</b> so với tổng các đợt còn phải thu —
                         khoản này sẽ KHÔNG được ghi vào đâu cả. Kiểm tra lại số tiền, hoặc thêm đợt
                         mới trong phần sửa hợp đồng trước khi ghi nhận.
                       </span>

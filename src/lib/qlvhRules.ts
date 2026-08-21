@@ -339,6 +339,20 @@ export function isLocked(p: PaymentLike): boolean {
   return Boolean(dayOf(p.paid_date)) || (p.amount_paid || 0) > 0;
 }
 
+/**
+ * Quy đổi giữa trước thuế và sau thuế.
+ *
+ * Các đợt LƯU theo giá trị TRƯỚC THUẾ (khớp bảng theo dõi và hợp đồng), nhưng
+ * số khách hàng thực trả là số SAU THUẾ — nên màn hình hiển thị sau thuế còn
+ * dưới CSDL vẫn giữ nguyên gốc. Đổi ở tầng hiển thị thay vì đổi dữ liệu để
+ * không phải nhân/chia lại toàn bộ 130 đợt đã nhập.
+ */
+export const withVat = (amount: number, rate: number) =>
+  Math.round((amount || 0) * (1 + (rate || 0) / 100));
+
+export const withoutVat = (amount: number, rate: number) =>
+  Math.round((amount || 0) / (1 + (rate || 0) / 100));
+
 /** Tính VAT — form gọi hàm này, không cho gõ tay hai ô dẫn xuất. */
 export function computeVat(valueBeforeVat: number, vatRate: number) {
   const before = Math.round(valueBeforeVat || 0);

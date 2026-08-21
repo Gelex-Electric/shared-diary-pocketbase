@@ -8,6 +8,7 @@
 import {
   addYears, allocatePayment, buildSchedule, computeVat, durationMonths,
   isLocked, overdueDays, paymentStatus, remainingOf, scheduleWarning, summarize,
+  withVat, withoutVat,
   type PaymentLike,
 } from '../src/lib/qlvhRules';
 
@@ -174,6 +175,13 @@ eq(isLocked({ seq: 1, due_date: '', amount_due: 100, amount_paid: 10 }), true, '
 eq(computeVat(100_000_000, 8), { value_vat: 8_000_000, value_total: 108_000_000 }, 'computeVat: VAT 8%');
 eq(computeVat(100_000_000, 0), { value_vat: 0, value_total: 100_000_000 }, 'computeVat: không thuế');
 
+/* --------------------------------------------------- quy đổi trước/sau thuế */
+
+eq(withVat(108_000_000, 8), 116_640_000, 'withVat: 108tr + 8% = 116,64tr');
+eq(withVat(108_000_000, 0), 108_000_000, 'withVat: chế xuất 0% giữ nguyên');
+eq(withoutVat(116_640_000, 8), 108_000_000, 'withoutVat: quay ngược đúng số gốc');
+eq(withoutVat(withVat(28_928_573, 8), 8), 28_928_573, 'withVat rồi withoutVat về đúng số cũ');
+eq(withVat(0, 8), 0, 'withVat: 0 vẫn là 0');
 /* ------------------------------------------------------------------ báo */
 
 console.log(`\nQLVH rules: ${pass} ca xanh, ${fails.length} ca đỏ`);

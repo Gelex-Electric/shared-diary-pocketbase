@@ -15,6 +15,7 @@ import { CheckCircle2, Clock } from 'lucide-react';
 import { DatePicker } from '../ui/DateTimePickers';
 import {
   STATUS_BADGE, STATUS_LABEL, overdueDays, paymentStatus, remainingOf,
+  withVat, withoutVat,
   type Payment,
 } from '../../lib/qlvh';
 
@@ -40,12 +41,19 @@ const CELL_INPUT =
 
 export default function PaymentScheduleTable({
   payments,
+  vatRate = 0,
   emptyHint = 'Hợp đồng chưa có đợt thanh toán nào.',
   editable = false,
   edits = {},
   onEdit,
 }: {
   payments: Payment[];
+  /**
+   * Thuế suất của hợp đồng. Các đợt LƯU theo trước thuế (khớp hợp đồng và bảng
+   * theo dõi), còn bảng này HIỆN SAU THUẾ — đúng số khách hàng thực trả. Ô sửa
+   * cũng nhận số sau thuế rồi quy ngược về trước thuế lúc ghi.
+   */
+  vatRate?: number;
   emptyHint?: string;
   /** Cho sửa tại chỗ 3 ô: Đã thu / Ngày thu / Ngày xuất hoá đơn. */
   editable?: boolean;
@@ -63,6 +71,9 @@ export default function PaymentScheduleTable({
 
   /** Giá trị đang hiện = bản nháp nếu có, không thì lấy từ dữ liệu gốc. */
   const view = (p: Payment): Payment => ({ ...p, ...(edits[p.id] || {}) });
+
+  /** Số lưu (trước thuế) → số hiện lên màn hình (sau thuế). */
+  const gross = (v: number) => withVat(v, vatRate);
 
   return (
     <div className="overflow-x-auto">
@@ -91,22 +102,25 @@ export default function PaymentScheduleTable({
                 className={`border-b border-[var(--border)] last:border-0 ${touched ? 'bg-accent-soft/40' : ''}`}>
                 <td className="py-3 px-4 text-center font-bold text-ink tabular-nums">{p.seq}</td>
                 <td className="py-3 px-4 text-center tabular-nums text-soft">{dateVN(p.due_date)}</td>
-                <td className="py-3 px-4 text-right tabular-nums font-semibold text-ink">{money(p.amount_due)}</td>
+                <td className="py-3 px-4 text-right tabular-nums font-semibold text-ink">{money(gross(p.amount_due))}</td>
 
                 <td className="py-2 px-4 text-right">
                   {editable && onEdit ? (
                     <input
-                      value={p.amount_paid ? money(p.amount_paid) : ''}
+                      value={p.amount_paid ? money(gross(p.amount_paid || 0)) : ''}
                       inputMode="numeric" placeholder="0"
-                      onChange={e => onEdit(orig.id, { amount_paid: parseMoney(e.target.value) })}
+                      onChange={e => onEdit(orig.id, {
+                        // người dùng gõ số SAU thuế → quy về trước thuế để lưu
+                        amount_paid: withoutVat(parseMoney(e.target.value), vatRate),
+                      })}
                       className={`${CELL_INPUT} text-right tabular-nums`}
                     />
                   ) : (
-                    <span className="tabular-nums text-soft">{p.amount_paid ? money(p.amount_paid) : '—'}</span>
+                    <span className="tabular-nums text-soft">{p.amount_paid ? money(gross(p.amount_paid || 0)) : '—'}</span>
                   )}
                 </td>
 
-                <td className="py-3 px-4 text-right tabular-nums font-semibold text-ink">{left ? money(left) : '—'}</td>
+                <td className="py-3 px-4 text-right tabular-nums font-semibold text-ink">{left ? money(gross(left)) : '—'}</td>
 
                 <td className="py-2 px-4 text-center">
                   {editable && onEdit ? (

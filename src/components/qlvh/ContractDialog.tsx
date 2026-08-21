@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  AlertTriangle, CalendarClock, FileSignature, ListTree, Lock, Plus, RefreshCw, Trash2, Wand2, X,
+  AlertTriangle, CalendarClock, FileSignature, Lock, Plus, RefreshCw, Trash2, Wand2, X,
 } from 'lucide-react';
 import { Select } from '../ui/Select';
 import { DatePicker } from '../ui/DateTimePickers';
@@ -21,7 +21,7 @@ import { toast as notify } from '../../lib/toast';
 import {
   CONTRACT_STATUS_LABEL, buildSchedule, computeVat, durationMonths, fetchContract,
   fetchCustomers, fetchItems, fetchZones, isLocked, saveContract, scheduleWarning,
-  valueFromItems, yearlyTotal,
+
   type ContractStatus, type DmCustomer, type DmZone, type ItemInput, type PaymentInput,
 } from '../../lib/qlvh';
 
@@ -109,11 +109,6 @@ export default function ContractDialog({
   const months = useMemo(() => (from && to ? durationMonths(from, to) : 0), [from, to]);
   const hasLocked = rows.some(r => r.locked);
 
-  /* Phụ lục 01: đơn giá theo NĂM; giá trị HĐ = tổng/năm × (thời hạn / 12). */
-  const perYear = useMemo(() => yearlyTotal(items), [items]);
-  const itemsValue = useMemo(() => valueFromItems(items, months), [items, months]);
-  const itemsMismatch = items.length > 0 && Math.abs(itemsValue - beforeVat) > 1000;
-
   /* Danh mục nạp một lần khi mở hộp thoại. */
   useEffect(() => {
     if (!open) return;
@@ -193,18 +188,6 @@ export default function ContractDialog({
         : `Đã sinh ${draft.length} đợt — sửa lại từng dòng nếu hợp đồng có điều khoản riêng.`,
     );
   };
-
-  const patchItem = (i: number, patch: Partial<ItemInput>) =>
-    setItems(is => is.map((it, k) => (k === i ? { ...it, ...patch } : it)));
-
-  const addItem = () =>
-    setItems(is => [...is, {
-      seq: is.length + 1, content: '', unit: '', qty: 0, unit_price: 0, amount: 0,
-    }]);
-
-  const removeItem = (i: number) =>
-    setItems(is => is.filter((_, k) => k !== i).map((it, k) => ({ ...it, seq: k + 1 })));
-
   const patchRow = (i: number, patch: Partial<Row>) =>
     setRows(rs => rs.map((r, k) => (k === i ? { ...r, ...patch } : r)));
 
@@ -334,104 +317,6 @@ export default function ContractDialog({
                       </Field>
                     </div>
 
-                    {/* Khối lượng & đơn giá — Phụ lục 01 của hợp đồng */}
-                    <div className="vl-card overflow-hidden">
-                      <div className="flex flex-wrap items-center gap-3 px-5 py-3.5 border-b border-[var(--border)] bg-subtle/40">
-                        <ListTree className="w-4 h-4 text-accent shrink-0" />
-                        <span className="font-bold text-sm text-ink flex-1">
-                          Khối lượng &amp; đơn giá <span className="font-normal text-faint">(Phụ lục 01 — đơn giá theo năm)</span>
-                        </span>
-                        <button onClick={addItem} className="vl-btn vl-btn-secondary vl-btn-sm" type="button">
-                          <Plus className="w-3.5 h-3.5" /> Thêm dòng
-                        </button>
-                      </div>
-
-                      {items.length === 0 ? (
-                        <p className="px-5 py-6 text-center text-sm text-faint">
-                          Chưa nhập khối lượng. Thêm từng dòng theo Phụ lục 01 của hợp đồng
-                          (vd: <i>QLVH máy biến áp 400kVA — máy/năm — 1 — 19.196.955</i>).
-                        </p>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="vl-table w-full text-left border-collapse min-w-[720px]">
-                            <thead>
-                              <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
-                                <th className="py-2.5 px-3 w-[46px] text-center">TT</th>
-                                <th className="py-2.5 px-3">Nội dung</th>
-                                <th className="py-2.5 px-3 w-[110px]">ĐVT</th>
-                                <th className="py-2.5 px-3 w-[100px] text-right">Khối lượng</th>
-                                <th className="py-2.5 px-3 w-[150px] text-right">Đơn giá</th>
-                                <th className="py-2.5 px-3 w-[150px] text-right">Thành tiền</th>
-                                <th className="py-2.5 px-3 w-[52px]" />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {items.map((it, i) => (
-                                <tr key={i} className="border-b border-[var(--border)] last:border-0">
-                                  <td className="py-2 px-3 text-center tabular-nums text-soft">{i + 1}</td>
-                                  <td className="py-2 px-3">
-                                    <input value={it.content} onChange={e => patchItem(i, { content: e.target.value })}
-                                      placeholder="QLVH máy biến áp…" className={INPUT} />
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <input value={it.unit} onChange={e => patchItem(i, { unit: e.target.value })}
-                                      placeholder="máy/năm" className={INPUT} />
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <input value={it.qty || ''} inputMode="decimal"
-                                      onChange={e => patchItem(i, { qty: Number(e.target.value.replace(/[^\d.]/g, '')) || 0 })}
-                                      placeholder="0" className={`${INPUT} text-right tabular-nums`} />
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <input value={it.unit_price ? money(it.unit_price) : ''} inputMode="numeric"
-                                      onChange={e => patchItem(i, { unit_price: parseMoney(e.target.value) })}
-                                      placeholder="0" className={`${INPUT} text-right tabular-nums`} />
-                                  </td>
-                                  <td className="py-2 px-3 text-right tabular-nums font-semibold text-ink">
-                                    {money((it.qty || 0) * (it.unit_price || 0))}
-                                  </td>
-                                  <td className="py-2 px-3 text-center">
-                                    <button type="button" onClick={() => removeItem(i)}
-                                      className="p-1.5 rounded text-faint hover:text-[var(--danger)] hover:bg-subtle">
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                              <tr className="bg-subtle/40 font-bold">
-                                <td colSpan={5} className="py-2.5 px-3 text-right text-soft">
-                                  Tổng chi phí QLVH 1 năm (chưa thuế)
-                                </td>
-                                <td className="py-2.5 px-3 text-right tabular-nums text-ink">{money(perYear)}</td>
-                                <td />
-                              </tr>
-                              {months > 0 && months !== 12 && (
-                                <tr className="bg-subtle/40 font-bold">
-                                  <td colSpan={5} className="py-2.5 px-3 text-right text-soft">
-                                    Tổng {(months / 12).toLocaleString('vi-VN')} năm ({months} tháng)
-                                  </td>
-                                  <td className="py-2.5 px-3 text-right tabular-nums text-ink">{money(itemsValue)}</td>
-                                  <td />
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                      {itemsMismatch && (
-                        <p className="vl-alert vl-alert-light-warning m-4 flex items-start gap-2 text-xs">
-                          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                          <span>
-                            Bảng khối lượng ra <b>{money(itemsValue)}đ</b> nhưng giá trị hợp đồng đang là{' '}
-                            <b>{money(beforeVat)}đ</b>.
-                            <button type="button" onClick={() => setBeforeVat(itemsValue)}
-                              className="ml-2 underline font-bold">Lấy theo bảng khối lượng</button>
-                          </span>
-                        </p>
-                      )}
-                    </div>
-
                     {/* Giá trị */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                       <Field label="Giá trị trước thuế (đ)">
@@ -443,10 +328,10 @@ export default function ContractDialog({
                         <Select value={String(effectiveVat)} onChange={v => setVatRate(Number(v))}
                           options={VAT_OPTIONS} disabled={cheXuat} />
                       </Field>
-                      <Field label="Tiền thuế (tự tính)">
+                      <Field label="Tiền thuế">
                         <input value={money(value_vat)} disabled className={`${INPUT} text-right tabular-nums`} />
                       </Field>
-                      <Field label="Tổng sau thuế (tự tính)">
+                      <Field label="Tổng sau thuế">
                         <input value={money(value_total)} disabled
                           className={`${INPUT} text-right tabular-nums font-bold text-ink`} />
                       </Field>

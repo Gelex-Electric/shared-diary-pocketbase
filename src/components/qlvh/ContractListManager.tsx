@@ -24,7 +24,7 @@ import PaymentScheduleTable, { type PaymentEdit } from './PaymentScheduleTable';
 import ContractDialog from './ContractDialog';
 import {
   CONTRACT_STATUS_LABEL, STATUS_BADGE, STATUS_LABEL,
-  deleteContract, fetchContracts, isDraft, paymentStatus, savePaymentEdits, summarize,
+  deleteContract, fetchContracts, isDraft, paymentStatus, savePaymentEdits, summarize, withVat,
   type ContractWithSchedule, type PaymentStatus,
 } from '../../lib/qlvh';
 
@@ -124,7 +124,7 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
     const ok = await confirm({
       title: `Xoá hợp đồng ${row.contract.contract_no}?`,
       message: paid
-        ? `Hợp đồng đã ghi nhận thu ${money(row.totals.paid)}đ. Xoá là mất luôn toàn bộ ${row.payments.length} đợt và số đã thu.`
+        ? `Hợp đồng đã ghi nhận thu ${money(withVat(row.totals.paid, row.contract.vat_rate || 0))}đ. Xoá là mất luôn toàn bộ ${row.payments.length} đợt và số đã thu.`
         : `Toàn bộ ${row.payments.length} đợt thanh toán sẽ bị xoá theo.`,
       confirmLabel: 'Xoá hợp đồng',
       variant: 'danger',
@@ -171,10 +171,24 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
 
   /* KPI tính trên phần đang hiện, để con số luôn khớp cái mắt đang nhìn.
      Trừ hợp đồng DỰ THẢO — chưa ký thì chưa có nghĩa vụ thu tiền. */
-  const kpi = useMemo(
-    () => summarize(visible.filter(r => !isDraft(r.contract)).flatMap(r => r.payments)),
-    [visible],
-  );
+  const kpi = useMemo(() => {
+    /* Cộng theo TỪNG hợp đồng rồi mới quy sau thuế: mỗi hợp đồng một thuế suất
+       (chế xuất 0%, còn lại 8%), gộp hết rồi nhân một lần là sai. */
+    const t = { valueTotal: 0, paid: 0, remaining: 0, overdueCount: 0, overdueAmount: 0, dueSoonCount: 0, dueSoonAmount: 0 };
+    for (const r of visible) {
+      if (isDraft(r.contract)) continue;
+      const rate = r.contract.vat_rate || 0;
+      const s = summarize(r.payments);
+      t.valueTotal += withVat(s.valueTotal, rate);
+      t.paid += withVat(s.paid, rate);
+      t.remaining += withVat(s.remaining, rate);
+      t.overdueCount += s.overdueCount;
+      t.overdueAmount += withVat(s.overdueAmount, rate);
+      t.dueSoonCount += s.dueSoonCount;
+      t.dueSoonAmount += withVat(s.dueSoonAmount, rate);
+    }
+    return t;
+  }, [visible]);
   const draftCount = useMemo(() => visible.filter(r => isDraft(r.contract)).length, [visible]);
 
   /**
@@ -201,7 +215,7 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       g.rows.push(r);
       if (!isDraft(r.contract)) {
         g.value += r.contract.value_total || 0;
-        g.remaining += r.totals.remaining;
+        g.remaining += withVat(r.totals.remaining, r.contract.vat_rate || 0);
       }
       map.set(key, g);
     }
@@ -371,7 +385,7 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                             <span className="text-xs font-semibold tabular-nums text-ink">
                               {money(c.value_total)}đ
                               {row.totals.remaining > 0 && (
-                                <span className="text-faint font-normal"> · còn {money(row.totals.remaining)}đ</span>
+                                <span className="text-faint font-normal"> · còn {money(withVat(row.totals.remaining, c.vat_rate || 0))}đ</span>
                               )}
                             </span>
                             {rowSt && <span className={STATUS_BADGE[rowSt]}>{STATUS_LABEL[rowSt]}</span>}
@@ -379,6 +393,7 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
 
                           <PaymentScheduleTable
                             payments={row.payments}
+                            vatRate={c.vat_rate || 0}
                             editable={canEdit}
                             edits={edits}
                             onEdit={editRow}

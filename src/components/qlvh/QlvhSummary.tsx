@@ -18,7 +18,7 @@ import { useScopeAreas, type Scope } from '../../lib/scope';
 import { zoneHexOf } from '../../lib/kcnColors';
 import {
   STATUS_BADGE, STATUS_LABEL, daysBetween, dayOf, fetchContracts, overdueDays,
-  isDraft, paymentStatus, remainingOf, summarize, todayStr,
+  isDraft, paymentStatus, remainingOf, summarize, todayStr, withVat,
   type ContractWithSchedule, type Payment,
 } from '../../lib/qlvh';
 
@@ -37,6 +37,8 @@ const RENEW_DAYS = 30;
 
 interface DueRow {
   payment: Payment;
+  /** Thuế suất của hợp đồng — bảng hiện SAU THUẾ còn dữ liệu lưu trước thuế. */
+  vatRate: number;
   contractNo: string;
   customerName: string;
   customerCode: string;
@@ -80,7 +82,23 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
   /* Hợp đồng DỰ THẢO (chưa ký) không tính vào số liệu lẫn công nợ. */
   const active = useMemo(() => visible.filter(r => !isDraft(r.contract)), [visible]);
 
-  const kpi = useMemo(() => summarize(active.flatMap(r => r.payments), today), [active, today]);
+  /* Số hiện lên là SAU THUẾ — quy đổi theo từng hợp đồng vì thuế suất khác nhau
+     (chế xuất 0%, còn lại 8%). Dữ liệu dưới CSDL vẫn là trước thuế. */
+  const kpi = useMemo(() => {
+    const t = { valueTotal: 0, paid: 0, remaining: 0, overdueCount: 0, overdueAmount: 0, dueSoonCount: 0, dueSoonAmount: 0 };
+    for (const r of active) {
+      const rate = r.contract.vat_rate || 0;
+      const s = summarize(r.payments, today);
+      t.valueTotal += withVat(s.valueTotal, rate);
+      t.paid += withVat(s.paid, rate);
+      t.remaining += withVat(s.remaining, rate);
+      t.overdueCount += s.overdueCount;
+      t.overdueAmount += withVat(s.overdueAmount, rate);
+      t.dueSoonCount += s.dueSoonCount;
+      t.dueSoonAmount += withVat(s.dueSoonAmount, rate);
+    }
+    return t;
+  }, [active, today]);
 
   /** Mọi đợt chưa thu đủ, kèm thông tin hợp đồng — nguồn cho 2 bảng dưới. */
   const dueRows = useMemo<DueRow[]>(
@@ -88,6 +106,7 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
       .filter(p => remainingOf(p) > 0)
       .map(p => ({
         payment: p,
+        vatRate: r.contract.vat_rate || 0,
         contractNo: r.contract.contract_no,
         customerName: r.customerName,
         customerCode: r.customerCode,
@@ -164,7 +183,7 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
                 <td className="py-3 px-4 text-center tabular-nums text-soft">Đợt {d.payment.seq}</td>
                 <td className="py-3 px-4 text-center tabular-nums text-soft">{dateVN(d.payment.due_date)}</td>
                 <td className="py-3 px-4 text-right tabular-nums font-bold text-ink">
-                  {money(remainingOf(d.payment))}đ
+                  {money(withVat(remainingOf(d.payment), d.vatRate))}đ
                 </td>
                 <td className="py-3 px-4 text-center">
                   <span className={STATUS_BADGE[st]}>
@@ -229,7 +248,7 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
       </Panel>
 
       <Panel title={`Sắp đến hạn trong ${HORIZON_DAYS} ngày`} icon={CalendarClock}
-        sub={upcoming.length > 0 ? `${upcoming.length} đợt · ${money(upcoming.reduce((s, d) => s + remainingOf(d.payment), 0))}đ` : undefined}>
+        sub={upcoming.length > 0 ? `${upcoming.length} đợt · ${money(upcoming.reduce((s, d) => s + withVat(remainingOf(d.payment), d.vatRate), 0))}đ` : undefined}>
         {upcoming.length === 0
           ? <EmptyState icon={CalendarClock} title="Chưa có đợt nào đến hạn" hint={`Không có đợt thanh toán nào trong ${HORIZON_DAYS} ngày tới.`} />
           : renderDueTable(upcoming, false)}
