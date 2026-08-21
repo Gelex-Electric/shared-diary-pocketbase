@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, Building2, CalendarClock, ChevronRight, FileText, Pencil, Plus,
-  RefreshCw, Search, Trash2, Wallet,
+  RefreshCw, Save, Search, Trash2, Wallet,
 } from 'lucide-react';
 import PaymentDialog from './PaymentDialog';
 import { Select } from '../ui/Select';
@@ -20,11 +20,11 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { zoneHexOf } from '../../lib/kcnColors';
 import { toast as notify } from '../../lib/toast';
 import { useScopeAreas, type Scope } from '../../lib/scope';
-import PaymentScheduleTable from './PaymentScheduleTable';
+import PaymentScheduleTable, { type PaymentEdit } from './PaymentScheduleTable';
 import ContractDialog from './ContractDialog';
 import {
   CONTRACT_STATUS_LABEL, STATUS_BADGE, STATUS_LABEL,
-  deleteContract, fetchContracts, isDraft, paymentStatus, summarize,
+  deleteContract, fetchContracts, isDraft, paymentStatus, savePaymentEdits, summarize,
   type ContractWithSchedule, type PaymentStatus,
 } from '../../lib/qlvh';
 
@@ -57,6 +57,13 @@ function worstStatus(row: ContractWithSchedule): PaymentStatus | null {
   return null;
 }
 
+/** Trạng thái nặng nhất của cả nhóm hợp đồng cùng khách — nhãn cho thẻ. */
+function worstOfGroup(rows: ContractWithSchedule[]): PaymentStatus | null {
+  const found = rows.flatMap(r => r.payments).map(p => paymentStatus(p));
+  for (const s of SEVERITY) if (found.includes(s)) return s;
+  return null;
+}
+
 export default function ContractListManager({ scope }: { scope: Scope }) {
   const { areas, canPickArea, allLabel, isOffice } = useScopeAreas(scope);
   const { confirm, dialog } = useConfirm();
@@ -72,6 +79,32 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
   const [editing, setEditing] = useState<string | null>(null);
   /** Hợp đồng đang ghi nhận thu tiền. */
   const [paying, setPaying] = useState<ContractWithSchedule | null>(null);
+  /** Bản nháp sửa tại chỗ (Đã thu / Ngày thu), theo id đợt. Chưa lưu thì còn ở đây. */
+  const [edits, setEdits] = useState<Record<string, PaymentEdit>>({});
+  const [savingEdits, setSavingEdits] = useState(false);
+
+  const editRow = (id: string, patch: PaymentEdit) =>
+    setEdits(e => ({ ...e, [id]: { ...e[id], ...patch } }));
+
+  /** Chỉ giữ bản nháp thuộc hợp đồng đang mở — đóng thẻ là bỏ, khỏi lưu nhầm. */
+  const editsOf = (row: ContractWithSchedule) =>
+    row.payments.filter(p => edits[p.id]).map(p => ({ id: p.id, ...edits[p.id] }));
+
+  const saveEdits = async (row: ContractWithSchedule) => {
+    const list = editsOf(row);
+    if (list.length === 0) return;
+    setSavingEdits(true);
+    try {
+      await savePaymentEdits(list);
+      notify.success(`Đã lưu ${list.length} đợt.`);
+      setEdits({});
+      setReload(n => n + 1);
+    } catch (err: any) {
+      notify.error(err?.message || 'Lưu thất bại.');
+    } finally {
+      setSavingEdits(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -144,6 +177,47 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
   );
   const draftCount = useMemo(() => visible.filter(r => isDraft(r.contract)).length, [visible]);
 
+  /**
+   * Gom hợp đồng theo KHÁCH HÀNG — một khách nhiều hợp đồng (gia hạn từng năm,
+   * nhiều trạm) thì nằm chung một thẻ, mở ra mới tách từng hợp đồng.
+   *
+   * Khoá gom: mã khách nếu có, không thì tên đã chuẩn hoá — 8 khách chưa có
+   * trong danh mục vẫn gom đúng thay vì mỗi hợp đồng một thẻ.
+   */
+  const groups = useMemo(() => {
+    const map = new Map<string, {
+      key: string; customerName: string; customerCode: string;
+      zoneName: string; zoneCode: string;
+      rows: ContractWithSchedule[]; value: number; remaining: number;
+    }>();
+
+    for (const r of visible) {
+      const key = r.customerCode || r.customerName.trim().toLowerCase();
+      const g = map.get(key) || {
+        key, customerName: r.customerName, customerCode: r.customerCode,
+        zoneName: r.zoneName, zoneCode: r.zoneCode,
+        rows: [], value: 0, remaining: 0,
+      };
+      g.rows.push(r);
+      if (!isDraft(r.contract)) {
+        g.value += r.contract.value_total || 0;
+        g.remaining += r.totals.remaining;
+      }
+      map.set(key, g);
+    }
+
+    for (const g of map.values()) {
+      /* Hợp đồng mới nhất lên trước — cái đang chạy thường là cái cần xem. */
+      g.rows.sort((a, b) => String(b.contract.sign_date).localeCompare(String(a.contract.sign_date)));
+    }
+
+    return [...map.values()].sort((a, b) => {
+      if (!a.customerCode !== !b.customerCode) return a.customerCode ? -1 : 1;
+      return a.customerCode.localeCompare(b.customerCode, 'vi', { numeric: true })
+        || a.customerName.localeCompare(b.customerName, 'vi');
+    });
+  }, [visible]);
+
   const areaOptions = useMemo(
     () => [{ value: '', label: allLabel }, ...areas.map(a => ({ value: a, label: a }))],
     [areas, allLabel],
@@ -171,8 +245,8 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
         <StatTile
           label="Tổng giá trị" value={money(kpi.valueTotal)} unit="đ"
           sub={draftCount > 0
-            ? `${visible.length} hợp đồng · ${draftCount} dự thảo không tính`
-            : `${visible.length} hợp đồng`}
+            ? `${groups.length} khách · ${visible.length} hợp đồng · ${draftCount} dự thảo không tính`
+            : `${groups.length} khách · ${visible.length} hợp đồng`}
           icon={FileText} loading={loading}
         />
         <StatTile
@@ -240,45 +314,37 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
         />
       ) : (
         <div className="vl-accordion">
-          {visible.map(row => {
-            const c = row.contract;
-            const open = openId === c.id;
-            const st = worstStatus(row);
-            const zColor = zoneHexOf(row.zoneCode);
+          {groups.map(g => {
+            const open = openId === g.key;
+            const zColor = zoneHexOf(g.zoneCode);
+            const st = worstOfGroup(g.rows);
             return (
-              <div key={c.id} className={`vl-accordion-item ${open ? 'is-open' : ''}`}
+              <div key={g.key} className={`vl-accordion-item ${open ? 'is-open' : ''}`}
                 style={{ borderLeft: `4px solid ${zColor}` }}>
                 <button
                   className="vl-accordion-header"
-                  onClick={() => setOpenId(open ? null : c.id)}
+                  onClick={() => { setOpenId(open ? null : g.key); setEdits({}); }}
                 >
-                  <span className="font-mono text-xs font-bold bg-subtle text-soft px-2 py-0.5 rounded shrink-0">
-                    {c.contract_no}
-                  </span>
-
                   <span className="flex-1 min-w-0 text-left">
-                    <span className="block font-bold truncate">{row.customerName}</span>
+                    <span className="block font-bold truncate">{g.customerName}</span>
                     <span className="text-[11px] text-faint mt-0.5 flex items-center gap-2 flex-wrap">
-                      {row.customerCode && (
+                      {g.customerCode && (
                         <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent font-bold">
-                          MKH: {row.customerCode}
+                          MKH: {g.customerCode}
                         </span>
                       )}
                       <span className="px-1.5 py-0.5 rounded font-bold"
                         style={{ backgroundColor: `${zColor}1a`, color: zColor }}>
-                        {row.zoneName}
+                        {g.zoneName}
                       </span>
-                      <span className="truncate">
-                        ký {dateVN(c.sign_date)} · hiệu lực {dateVN(c.effective_from)}–{dateVN(c.effective_to)}
-                        {c.status_manual !== 'dang_hieu_luc' && ` · ${CONTRACT_STATUS_LABEL[c.status_manual]}`}
-                      </span>
+                      <span>{g.rows.length} hợp đồng</span>
                     </span>
                   </span>
 
                   <span className="hidden md:block text-right shrink-0">
-                    <span className="block text-sm font-semibold tabular-nums">{money(c.value_total)}đ</span>
+                    <span className="block text-sm font-semibold tabular-nums">{money(g.value)}đ</span>
                     <span className="block text-[11px] text-faint tabular-nums mt-0.5">
-                      {row.totals.remaining > 0 ? `còn ${money(row.totals.remaining)}đ` : 'đã thu đủ'}
+                      {g.remaining > 0 ? `còn ${money(g.remaining)}đ` : 'đã thu đủ'}
                     </span>
                   </span>
 
@@ -288,28 +354,68 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
 
                 {open && (
                   <div className="vl-accordion-body">
-                    <PaymentScheduleTable payments={row.payments} />
-                    {c.payment_terms && (
-                      <p className="px-5 py-3 text-xs text-soft border-t border-[var(--border)]">
-                        <span className="font-semibold text-faint uppercase tracking-wider mr-2">Điều khoản</span>
-                        {c.payment_terms}
-                      </p>
-                    )}
-                    {canEdit && (
-                      <div className="flex justify-end gap-2 px-5 py-3 border-t border-[var(--border)]">
-                        {row.totals.remaining > 0 && (
-                          <button onClick={() => setPaying(row)} className="vl-btn vl-btn-success vl-btn-sm" type="button">
-                            <Wallet className="w-3.5 h-3.5" /> Ghi nhận thu tiền
-                          </button>
-                        )}
-                        <button onClick={() => setEditing(c.id)} className="vl-btn vl-btn-secondary vl-btn-sm" type="button">
-                          <Pencil className="w-3.5 h-3.5" /> Sửa hợp đồng
-                        </button>
-                        <button onClick={() => askDelete(row)} className="vl-btn vl-btn-danger vl-btn-sm" type="button">
-                          <Trash2 className="w-3.5 h-3.5" /> Xoá
-                        </button>
-                      </div>
-                    )}
+                    {g.rows.map((row, idx) => {
+                      const c = row.contract;
+                      const rowSt = worstStatus(row);
+                      return (
+                        <div key={c.id} className={idx > 0 ? 'border-t-4 border-[var(--border)]' : ''}>
+                          {/* Tiêu đề từng hợp đồng trong thẻ khách hàng */}
+                          <div className="flex flex-wrap items-center gap-2.5 px-5 py-3 bg-subtle/40 border-b border-[var(--border)]">
+                            <span className="font-mono text-xs font-bold bg-surface text-soft px-2 py-0.5 rounded border border-[var(--border)]">
+                              {c.contract_no}
+                            </span>
+                            <span className="text-[11px] text-faint flex-1 min-w-0 truncate">
+                              ký {dateVN(c.sign_date)} · hiệu lực {dateVN(c.effective_from)}–{dateVN(c.effective_to)}
+                              {c.status_manual !== 'dang_hieu_luc' && ` · ${CONTRACT_STATUS_LABEL[c.status_manual]}`}
+                            </span>
+                            <span className="text-xs font-semibold tabular-nums text-ink">
+                              {money(c.value_total)}đ
+                              {row.totals.remaining > 0 && (
+                                <span className="text-faint font-normal"> · còn {money(row.totals.remaining)}đ</span>
+                              )}
+                            </span>
+                            {rowSt && <span className={STATUS_BADGE[rowSt]}>{STATUS_LABEL[rowSt]}</span>}
+                          </div>
+
+                          <PaymentScheduleTable
+                            payments={row.payments}
+                            editable={canEdit}
+                            edits={edits}
+                            onEdit={editRow}
+                          />
+
+                          {c.payment_terms && (
+                            <p className="px-5 py-3 text-xs text-soft border-t border-[var(--border)]">
+                              <span className="font-semibold text-faint uppercase tracking-wider mr-2">Điều khoản</span>
+                              {c.payment_terms}
+                            </p>
+                          )}
+
+                          {canEdit && (
+                            <div className="flex justify-end gap-2 px-5 py-3 border-t border-[var(--border)]">
+                              {editsOf(row).length > 0 && (
+                                <button onClick={() => saveEdits(row)} disabled={savingEdits}
+                                  className="vl-btn vl-btn-primary vl-btn-sm mr-auto" type="button">
+                                  {savingEdits ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                  Lưu {editsOf(row).length} đợt vừa sửa
+                                </button>
+                              )}
+                              {row.totals.remaining > 0 && (
+                                <button onClick={() => setPaying(row)} className="vl-btn vl-btn-success vl-btn-sm" type="button">
+                                  <Wallet className="w-3.5 h-3.5" /> Ghi nhận thu tiền
+                                </button>
+                              )}
+                              <button onClick={() => setEditing(c.id)} className="vl-btn vl-btn-secondary vl-btn-sm" type="button">
+                                <Pencil className="w-3.5 h-3.5" /> Sửa hợp đồng
+                              </button>
+                              <button onClick={() => askDelete(row)} className="vl-btn vl-btn-danger vl-btn-sm" type="button">
+                                <Trash2 className="w-3.5 h-3.5" /> Xoá
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -46,7 +46,12 @@ const VAT_OPTIONS = [
   { value: '10', label: '10%' },
 ];
 
-const STATUS_OPTIONS = (Object.keys(CONTRACT_STATUS_LABEL) as ContractStatus[])
+/**
+ * 'tam_dung' cố ý KHÔNG có trong ô chọn (user chốt 21/08/2026) — thực tế hợp
+ * đồng chỉ có 3 trạng thái này. Nhãn vẫn giữ trong `CONTRACT_STATUS_LABEL` để
+ * bản ghi cũ (nếu có) còn hiện đúng chữ thay vì hiện mã trơ.
+ */
+const STATUS_OPTIONS = (['du_thao', 'dang_hieu_luc', 'da_thanh_ly'] as ContractStatus[])
   .map(v => ({ value: v, label: CONTRACT_STATUS_LABEL[v] }));
 
 /** Dòng lịch trong form — thêm cờ `locked` để giao diện biết khoá ô nào. */
@@ -304,14 +309,17 @@ export default function ContractDialog({
                       </Field>
                       <Field label="Trạng thái hợp đồng">
                         <Select value={status} onChange={v => setStatus(v as ContractStatus)} options={STATUS_OPTIONS} />
-                        <label className="flex items-center gap-2 mt-2 text-xs text-soft cursor-pointer select-none">
-                          <input type="checkbox" checked={cheXuat}
-                            onChange={e => setCheXuat(e.target.checked)}
-                            className="w-4 h-4 accent-[var(--accent)]" />
-                          Doanh nghiệp chế xuất (thuế GTGT 0%)
-                        </label>
                       </Field>
                     </div>
+
+                    {/* Ô tích để riêng một dòng: nằm trong ô Trạng thái thì nó đội
+                        chiều cao cột và làm lệch hàng các ô tiền phía dưới. */}
+                    <label className="flex items-center gap-2.5 text-sm text-dim cursor-pointer select-none">
+                      <input type="checkbox" checked={cheXuat}
+                        onChange={e => setCheXuat(e.target.checked)}
+                        className="w-4 h-4 accent-[var(--accent)]" />
+                      Doanh nghiệp chế xuất (thuế GTGT 0%)
+                    </label>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <Field label="Ngày ký">
@@ -431,7 +439,7 @@ export default function ContractDialog({
                           onChange={e => setBeforeVat(parseMoney(e.target.value))}
                           placeholder="0" className={`${INPUT} text-right tabular-nums`} />
                       </Field>
-                      <Field label="Thuế suất" hint={cheXuat ? 'Chế xuất → GTGT 0%' : undefined}>
+                      <Field label="Thuế suất">
                         <Select value={String(effectiveVat)} onChange={v => setVatRate(Number(v))}
                           options={VAT_OPTIONS} disabled={cheXuat} />
                       </Field>

@@ -304,6 +304,26 @@ export async function recordPayment(
   return result;
 }
 
+/**
+ * Sửa thẳng số đã thu / ngày thu của từng đợt (sửa nhanh ngay trên thẻ hợp đồng).
+ *
+ * Khác `recordPayment`: ở đây người dùng tự quyết đợt nào bao nhiêu, không rải
+ * tự động — dùng khi chỉnh lại số liệu cũ chứ không phải ghi nhận khoản thu mới.
+ */
+export async function savePaymentEdits(
+  edits: { id: string; amount_paid?: number; paid_date?: string }[],
+): Promise<void> {
+  for (const e of edits) {
+    /* CHỈ ghi đúng ô người dùng đã đụng. Gửi cả hai ô kèm giá trị mặc định thì
+       sửa mỗi ngày thu sẽ xoá mất số đã thu — đã dính đúng lỗi này khi thử. */
+    const body: Record<string, unknown> = {};
+    if ('amount_paid' in e) body.amount_paid = e.amount_paid ?? 0;
+    if ('paid_date' in e) body.paid_date = e.paid_date || '';
+    if (Object.keys(body).length === 0) continue;
+    await pb.collection(C_PAYMENT).update(e.id, body);
+  }
+}
+
 export async function deleteContract(id: string): Promise<void> {
   // qlvh_payment.contract có cascadeDelete → các đợt tự xoá theo.
   await pb.collection(C_CONTRACT).delete(id);

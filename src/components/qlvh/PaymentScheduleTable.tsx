@@ -3,15 +3,22 @@
  *
  * Dùng lại ở cả màn danh sách (mở accordion) lẫn hộp thoại sửa hợp đồng, nên
  * không tự gọi dữ liệu — nhận `payments` từ ngoài.
+ *
+ * Ở màn danh sách, hai ô **Đã thu** và **Ngày thu** sửa được ngay tại chỗ
+ * (`editable`): sửa xong bấm Lưu ở hàng nút phía dưới thẻ. Component này chỉ
+ * giữ bản nháp qua `edits`/`onEdit`, việc ghi do nơi gọi quyết định — bảng
+ * không tự ý ghi xuống PocketBase.
  */
 
 import { CheckCircle2, Clock } from 'lucide-react';
+import { DatePicker } from '../ui/DateTimePickers';
 import {
   STATUS_BADGE, STATUS_LABEL, overdueDays, paymentStatus, remainingOf,
   type Payment,
 } from '../../lib/qlvh';
 
 const money = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v || 0));
+const parseMoney = (s: string) => Number(String(s).replace(/[^\d]/g, '')) || 0;
 const dateVN = (v?: string) => {
   const d = String(v || '').slice(0, 10);
   if (!d) return '—';
@@ -19,12 +26,30 @@ const dateVN = (v?: string) => {
   return dd ? `${dd}/${m}/${y}` : d;
 };
 
+/** Bản nháp đang sửa của một đợt. */
+export interface PaymentEdit {
+  amount_paid?: number;
+  paid_date?: string;
+}
+
+const CELL_INPUT =
+  'w-full px-2 py-1 bg-surface border border-[var(--border)] rounded text-sm ' +
+  'focus:ring-2 focus:ring-accent outline-none';
+
 export default function PaymentScheduleTable({
   payments,
   emptyHint = 'Hợp đồng chưa có đợt thanh toán nào.',
+  editable = false,
+  edits = {},
+  onEdit,
 }: {
   payments: Payment[];
   emptyHint?: string;
+  /** Cho sửa tại chỗ 2 ô Đã thu / Ngày thu. */
+  editable?: boolean;
+  /** Bản nháp theo id đợt — nơi gọi giữ, để còn biết có gì chưa lưu. */
+  edits?: Record<string, PaymentEdit>;
+  onEdit?: (id: string, patch: PaymentEdit) => void;
 }) {
   if (payments.length === 0) {
     return (
@@ -34,35 +59,64 @@ export default function PaymentScheduleTable({
     );
   }
 
+  /** Giá trị đang hiện = bản nháp nếu có, không thì lấy từ dữ liệu gốc. */
+  const view = (p: Payment): Payment => ({ ...p, ...(edits[p.id] || {}) });
+
   return (
     <div className="overflow-x-auto">
-      <table className="vl-table w-full text-left border-collapse min-w-[760px]">
+      <table className="vl-table w-full text-left border-collapse min-w-[680px]">
         <thead>
           <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
             <th className="py-3 px-4 w-[70px] text-center">Đợt</th>
             <th className="py-3 px-4 w-[130px] text-center">Đến hạn</th>
             <th className="py-3 px-4 text-right">Phải thu</th>
-            <th className="py-3 px-4 text-right">Đã thu</th>
+            <th className="py-3 px-4 text-right w-[170px]">Đã thu</th>
             <th className="py-3 px-4 text-right">Còn lại</th>
-            <th className="py-3 px-4 w-[130px] text-center">Ngày thu</th>
-            <th className="py-3 px-4 w-[140px]">Số hoá đơn</th>
+            <th className="py-3 px-4 w-[180px] text-center">Ngày thu</th>
             <th className="py-3 px-4 w-[150px] text-center">Trạng thái</th>
           </tr>
         </thead>
         <tbody>
-          {payments.map(p => {
+          {payments.map(orig => {
+            const p = view(orig);
             const st = paymentStatus(p);
             const late = overdueDays(p);
             const left = remainingOf(p);
+            const touched = Boolean(edits[orig.id]);
             return (
-              <tr key={p.id || p.seq} className="border-b border-[var(--border)] last:border-0">
+              <tr key={orig.id || orig.seq}
+                className={`border-b border-[var(--border)] last:border-0 ${touched ? 'bg-accent-soft/40' : ''}`}>
                 <td className="py-3 px-4 text-center font-bold text-ink tabular-nums">{p.seq}</td>
                 <td className="py-3 px-4 text-center tabular-nums text-soft">{dateVN(p.due_date)}</td>
                 <td className="py-3 px-4 text-right tabular-nums font-semibold text-ink">{money(p.amount_due)}</td>
-                <td className="py-3 px-4 text-right tabular-nums text-soft">{p.amount_paid ? money(p.amount_paid) : '—'}</td>
+
+                <td className="py-2 px-4 text-right">
+                  {editable && onEdit ? (
+                    <input
+                      value={p.amount_paid ? money(p.amount_paid) : ''}
+                      inputMode="numeric" placeholder="0"
+                      onChange={e => onEdit(orig.id, { amount_paid: parseMoney(e.target.value) })}
+                      className={`${CELL_INPUT} text-right tabular-nums`}
+                    />
+                  ) : (
+                    <span className="tabular-nums text-soft">{p.amount_paid ? money(p.amount_paid) : '—'}</span>
+                  )}
+                </td>
+
                 <td className="py-3 px-4 text-right tabular-nums font-semibold text-ink">{left ? money(left) : '—'}</td>
-                <td className="py-3 px-4 text-center tabular-nums text-soft">{dateVN(p.paid_date)}</td>
-                <td className="py-3 px-4 text-soft truncate">{p.invoice_no || '—'}</td>
+
+                <td className="py-2 px-4 text-center">
+                  {editable && onEdit ? (
+                    <DatePicker
+                      value={String(p.paid_date || '').slice(0, 10)}
+                      onChange={v => onEdit(orig.id, { paid_date: v })}
+                      usePortal
+                    />
+                  ) : (
+                    <span className="tabular-nums text-soft">{dateVN(p.paid_date)}</span>
+                  )}
+                </td>
+
                 <td className="py-3 px-4 text-center">
                   <span className={STATUS_BADGE[st]}>
                     {st === 'da_thu' && <CheckCircle2 className="w-3 h-3 inline mr-1 -mt-0.5" />}
