@@ -88,6 +88,15 @@ export function addYears(day: string, years: number): string {
   return `${targetYear}-${p(m)}-${p(Math.min(d, lastDay))}`;
 }
 
+/** Cộng thêm `days` ngày. */
+export function addDays(day: string, days: number): string {
+  const d = dayOf(day);
+  if (!d) return '';
+  const t = Date.parse(`${d}T00:00:00Z`);
+  if (Number.isNaN(t)) return '';
+  return new Date(t + days * 86400000).toISOString().slice(0, 10);
+}
+
 /** Số ngày từ `from` đến `to` (âm = đã qua). Chỉ dùng để hiển thị "quá N ngày". */
 export function daysBetween(from: string, to: string): number {
   const a = Date.parse(`${dayOf(from)}T00:00:00Z`);
@@ -121,19 +130,33 @@ export interface ScheduleRow {
   seq: number;
   due_date: string;
   amount_due: number;
+  /** Số tháng đợt này phủ — để giao diện giải thích được vì sao đợt cuối ít hơn. */
+  months: number;
 }
 
 /**
- * Sinh lịch thanh toán: **thu 1 lần/năm**, số đợt suy ra từ thời hạn hợp đồng
- * (user chốt 21/08/2026 — 12 tháng ⇒ 1 đợt, 24 ⇒ 2, 36 ⇒ 3).
+ * Số ngày ân hạn của đợt 1 — điều khoản chung của hợp đồng QLVH: đợt đầu đến
+ * hạn sau ngày hiệu lực 7 ngày (user xác nhận 21/08/2026; đúng 70/70 hợp đồng
+ * trong file theo dõi đang dùng). Các đợt sau rơi đúng mốc kỷ niệm năm.
+ */
+export const GRACE_DAYS = 7;
+
+/**
+ * Sinh lịch thanh toán: **thu 1 lần/năm**, tiền tính theo **ĐƠN GIÁ THÁNG**.
  *
- * Cách đếm: đợt 1 đến hạn ngay ngày hiệu lực, sau đó **mỗi mốc kỷ niệm năm còn
- * nằm TRONG thời hạn là thêm một đợt**. Đếm bằng mốc kỷ niệm thay vì chia số
- * tháng cho 12 để khỏi phải xử lý các ca lẻ ngày/tháng: hợp đồng 01/01/26 →
- * 31/12/26 ra đúng 1 đợt, còn 01/01/26 → 30/06/27 (18 tháng) ra 2 đợt.
+ *   đơn giá tháng = giá trị (trước thuế) / thời hạn tính bằng tháng
+ *   đợt k phủ min(12, số tháng còn lại) tháng → tiền = số tháng đó × đơn giá
+ *   đợt 1 đến hạn = ngày hiệu lực + GRACE_DAYS; đợt k≥2 = mốc kỷ niệm năm
  *
- * Tiền chia đều, **phần lẻ dồn vào đợt cuối** để tổng luôn khớp tuyệt đối giá
- * trị hợp đồng — không đẻ ra lệch làm tròn.
+ * Vì sao KHÔNG chia đều cho số đợt: với 12/24/36 tháng hai cách cho cùng kết
+ * quả, nhưng thời hạn lẻ thì khác hẳn. Hợp đồng 18 tháng phải là 12 tháng +
+ * 6 tháng (đợt 2 bằng nửa đợt 1), chia đôi là sai. Đối chiếu 70 hợp đồng thật:
+ * quy luật đơn giá tháng khớp 68/70, hai ca lệch đúng là hai dòng gõ nhầm
+ * trong bảng tính (một hợp đồng 18 tháng ghi đợt 2 bằng cả năm → thừa 9,6 tr;
+ * một hợp đồng 7 tháng chỉ ghi 6 tháng → thiếu 1 tháng tiền).
+ *
+ * Tiền tính trên **giá trị TRƯỚC THUẾ** — đây là con số hợp đồng và bảng theo
+ * dõi đang dùng cho từng đợt. Phần lẻ dồn vào đợt cuối để tổng khớp tuyệt đối.
  *
  * Kết quả chỉ là BẢN NHÁP: form vẫn cho sửa tay từng dòng, vì hợp đồng thật hay
  * có điều khoản riêng ("đợt 1 thu 30% ngay khi ký").
@@ -141,24 +164,33 @@ export interface ScheduleRow {
 export function buildSchedule(
   effectiveFrom: string,
   effectiveTo: string,
-  valueTotal: number,
+  valueBeforeVat: number,
+  graceDays: number = GRACE_DAYS,
 ): ScheduleRow[] {
   const from = dayOf(effectiveFrom);
-  const to = dayOf(effectiveTo);
   if (!from) return [];
 
-  let n = 1;
-  if (to) {
-    while (n < 50 && addYears(from, n) < to) n++;
+  const months = durationMonths(from, effectiveTo) || 12;
+
+  /** Mỗi đợt phủ bao nhiêu tháng: 18 → [12, 6]; 36 → [12, 12, 12]; 7 → [7]. */
+  const chunks: number[] = [];
+  for (let left = months; left > 0; left -= Math.min(12, left)) {
+    chunks.push(Math.min(12, left));
   }
 
-  const total = Math.round(valueTotal || 0);
-  const base = Math.floor(total / n);
-  return Array.from({ length: n }, (_, i) => ({
-    seq: i + 1,
-    due_date: addYears(from, i),
-    amount_due: i === n - 1 ? total - base * (n - 1) : base,
-  }));
+  const total = Math.round(valueBeforeVat || 0);
+  let acc = 0;
+  return chunks.map((m, i) => {
+    const last = i === chunks.length - 1;
+    const amount = last ? total - acc : Math.round((total * m) / months);
+    acc += amount;
+    return {
+      seq: i + 1,
+      due_date: i === 0 ? addDays(from, graceDays) : addYears(from, i),
+      amount_due: amount,
+      months: m,
+    };
+  });
 }
 
 /* ------------------------------------------------------ Trạng thái thu tiền */

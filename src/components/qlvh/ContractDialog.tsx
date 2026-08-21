@@ -86,13 +86,19 @@ export default function ContractDialog({
   const [to, setTo] = useState('');
   const [beforeVat, setBeforeVat] = useState(0);
   const [vatRate, setVatRate] = useState(8);
+  const [cheXuat, setCheXuat] = useState(false);
   const [terms, setTerms] = useState('');
   const [status, setStatus] = useState<ContractStatus>('dang_hieu_luc');
   const [note, setNote] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
 
-  const { value_vat, value_total } = useMemo(() => computeVat(beforeVat, vatRate), [beforeVat, vatRate]);
-  const warning = useMemo(() => scheduleWarning(rows, value_total), [rows, value_total]);
+  /* Chế xuất (EPE) ⇒ thuế GTGT 0%, không cho chọn thuế suất khác. */
+  const effectiveVat = cheXuat ? 0 : vatRate;
+  const { value_vat, value_total } = useMemo(
+    () => computeVat(beforeVat, effectiveVat), [beforeVat, effectiveVat],
+  );
+  /* Các đợt theo dõi theo giá trị TRƯỚC THUẾ — khớp bảng theo dõi đang dùng. */
+  const warning = useMemo(() => scheduleWarning(rows, beforeVat), [rows, beforeVat]);
   const months = useMemo(() => (from && to ? durationMonths(from, to) : 0), [from, to]);
   const hasLocked = rows.some(r => r.locked);
 
@@ -109,7 +115,7 @@ export default function ContractDialog({
     if (!open) return;
     if (!contractId) {
       setContractNo(''); setCustomer(''); setZone(''); setSignDate(''); setFrom(''); setTo('');
-      setBeforeVat(0); setVatRate(8); setTerms(''); setStatus('dang_hieu_luc'); setNote(''); setRows([]);
+      setBeforeVat(0); setVatRate(8); setCheXuat(false); setTerms(''); setStatus('dang_hieu_luc'); setNote(''); setRows([]);
       return;
     }
     setLoading(true);
@@ -123,6 +129,7 @@ export default function ContractDialog({
         setTo(String(c.effective_to || '').slice(0, 10));
         setBeforeVat(c.value_before_vat || 0);
         setVatRate(c.vat_rate ?? 8);
+        setCheXuat(Boolean(c.che_xuat));
         setTerms(c.payment_terms || '');
         setStatus(c.status_manual || 'dang_hieu_luc');
         setNote(c.note || '');
@@ -164,9 +171,14 @@ export default function ContractDialog({
       });
       if (!ok) return;
     }
-    const draft = buildSchedule(from, to, value_total);
-    setRows(draft.map(d => ({ ...d, locked: false })));
-    notify.success(`Đã sinh ${draft.length} đợt — sửa lại từng dòng nếu hợp đồng có điều khoản riêng.`);
+    const draft = buildSchedule(from, to, beforeVat);
+    setRows(draft.map(({ months: _months, ...d }) => ({ ...d, locked: false })));
+    const last = draft[draft.length - 1];
+    notify.success(
+      draft.length > 1 && last.months < 12
+        ? `Đã sinh ${draft.length} đợt — đợt cuối chỉ phủ ${last.months} tháng nên ít tiền hơn.`
+        : `Đã sinh ${draft.length} đợt — sửa lại từng dòng nếu hợp đồng có điều khoản riêng.`,
+    );
   };
 
   const patchRow = (i: number, patch: Partial<Row>) =>
@@ -182,7 +194,7 @@ export default function ContractDialog({
 
   /** Nhập % thì tự quy ra tiền — nhưng vẫn LƯU RA TIỀN để báo cáo khỏi tính lại. */
   const setPct = (i: number, pct: number) =>
-    patchRow(i, { pct, amount_due: Math.round((value_total * pct) / 100) });
+    patchRow(i, { pct, amount_due: Math.round((beforeVat * pct) / 100) });
 
   const save = async () => {
     if (!contractNo.trim()) { notify.error('Chưa nhập số hợp đồng.'); return; }
@@ -197,7 +209,7 @@ export default function ContractDialog({
         {
           contract_no: contractNo.trim(), customer, zone,
           sign_date: signDate, effective_from: from, effective_to: to,
-          value_before_vat: beforeVat, vat_rate: vatRate, value_vat, value_total,
+          value_before_vat: beforeVat, vat_rate: effectiveVat, value_vat, value_total, che_xuat: cheXuat,
           payment_terms: terms, status_manual: status, note,
         },
         rows.map(({ locked: _locked, ...r }) => r),
@@ -272,6 +284,12 @@ export default function ContractDialog({
                       </Field>
                       <Field label="Trạng thái hợp đồng">
                         <Select value={status} onChange={v => setStatus(v as ContractStatus)} options={STATUS_OPTIONS} />
+                        <label className="flex items-center gap-2 mt-2 text-xs text-soft cursor-pointer select-none">
+                          <input type="checkbox" checked={cheXuat}
+                            onChange={e => setCheXuat(e.target.checked)}
+                            className="w-4 h-4 accent-[var(--accent)]" />
+                          Doanh nghiệp chế xuất (thuế GTGT 0%)
+                        </label>
                       </Field>
                     </div>
 
@@ -295,8 +313,9 @@ export default function ContractDialog({
                           onChange={e => setBeforeVat(parseMoney(e.target.value))}
                           placeholder="0" className={`${INPUT} text-right tabular-nums`} />
                       </Field>
-                      <Field label="Thuế suất">
-                        <Select value={String(vatRate)} onChange={v => setVatRate(Number(v))} options={VAT_OPTIONS} />
+                      <Field label="Thuế suất" hint={cheXuat ? 'Chế xuất → GTGT 0%' : undefined}>
+                        <Select value={String(effectiveVat)} onChange={v => setVatRate(Number(v))}
+                          options={VAT_OPTIONS} disabled={cheXuat} />
                       </Field>
                       <Field label="Tiền thuế (tự tính)">
                         <input value={money(value_vat)} disabled className={`${INPUT} text-right tabular-nums`} />

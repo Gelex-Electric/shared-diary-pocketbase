@@ -88,6 +88,9 @@ const READ_PAYMENT = '@request.auth.id != "" && (@request.auth.area = "" || @req
 function contractFields(customerId, zoneId) {
   return [
   { name: 'contract_no',      type: 'text',   required: true },
+  // Doanh nghiệp chế xuất (EPE) → thuế GTGT 0%. 20/70 hợp đồng trong file theo
+  // dõi hiện hành thuộc diện này, nên để cờ riêng thay vì bắt nhớ chọn 0%.
+  { name: 'che_xuat',         type: 'bool' },
   { name: 'customer',         type: 'relation', maxSelect: 1, cascadeDelete: false, collectionId: customerId },
   { name: 'zone',             type: 'relation', maxSelect: 1, cascadeDelete: false, collectionId: zoneId },
   { name: 'sign_date',        type: 'date' },
@@ -130,7 +133,22 @@ async function ensureCollection(def) {
     .then(r => r.items.find(c => c.name === def.name));
 
   if (existing) {
-    console.log(`  ✓ đã tồn tại: ${def.name} (${existing.id}) — bỏ qua, không ghi đè`);
+    // Collection đã có: KHÔNG ghi đè, chỉ BỔ SUNG field còn thiếu. Ghi đè cả
+    // định nghĩa là mất dữ liệu của field không nằm trong bản mới.
+    const full = await api(`/api/collections/${existing.id}`);
+    const have = new Set(full.fields.map(f => f.name));
+    const missing = def.fields.filter(f => !have.has(f.name));
+    if (missing.length === 0) {
+      console.log(`  ✓ đã tồn tại, đủ field: ${def.name} (${existing.id})`);
+      return existing.id;
+    }
+    console.log(`  ~ ${COMMIT ? '' : '[dry-run] '}${def.name}: thêm field còn thiếu → ${missing.map(f => f.name).join(', ')}`);
+    if (COMMIT) {
+      await api(`/api/collections/${existing.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: [...full.fields, ...missing] }),
+      });
+    }
     return existing.id;
   }
   if (!COMMIT) {

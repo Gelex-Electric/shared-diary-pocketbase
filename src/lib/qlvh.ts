@@ -62,6 +62,7 @@ export interface Contract {
   vat_rate: number;
   value_vat: number;
   value_total: number;
+  che_xuat?: boolean;
   payment_terms?: string;
   status_manual: ContractStatus;
   note?: string;

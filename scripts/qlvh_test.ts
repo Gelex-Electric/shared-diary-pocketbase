@@ -29,29 +29,47 @@ eq(addYears('2028-02-29', 4), '2032-02-29', 'addYears: 29/02 + 4 năm vẫn là 
 eq(addYears('2026-08-21', 0), '2026-08-21', 'addYears: cộng 0 năm giữ nguyên');
 
 /* -------------------------------------------------------- buildSchedule */
+/* Luật: đợt 1 = ngày hiệu lực + 7 ngày (điều khoản HĐ); đợt sau = mốc kỷ niệm
+   năm. Tiền = số tháng đợt phủ × đơn giá tháng, tính trên giá trị TRƯỚC THUẾ. */
 
 const s12 = buildSchedule('2026-01-01', '2026-12-31', 120_000_000);
 eq(s12.length, 1, 'buildSchedule: 12 tháng ⇒ 1 đợt');
-eq(s12[0], { seq: 1, due_date: '2026-01-01', amount_due: 120_000_000 }, 'buildSchedule: 12 tháng, đợt 1 đúng ngày + đủ tiền');
+eq(s12[0], { seq: 1, due_date: '2026-01-08', amount_due: 120_000_000, months: 12 },
+   'buildSchedule: 12 tháng — đợt 1 đến hạn sau ngày hiệu lực 7 ngày, đủ tiền');
 
 const s24 = buildSchedule('2026-01-01', '2027-12-31', 240_000_000);
-eq(s24.map(r => r.due_date), ['2026-01-01', '2027-01-01'], 'buildSchedule: 24 tháng ⇒ 2 đợt, cách nhau 1 năm');
+eq(s24.map(r => r.due_date), ['2026-01-08', '2027-01-01'],
+   'buildSchedule: đợt 1 +7 ngày, đợt 2 đúng mốc kỷ niệm (KHÔNG +7)');
 eq(s24.map(r => r.amount_due), [120_000_000, 120_000_000], 'buildSchedule: 24 tháng chia đôi');
 
 const s36 = buildSchedule('2026-03-15', '2029-03-14', 300_000_000);
 eq(s36.length, 3, 'buildSchedule: 36 tháng ⇒ 3 đợt');
-eq(s36.map(r => r.due_date), ['2026-03-15', '2027-03-15', '2028-03-15'], 'buildSchedule: 36 tháng, mốc kỷ niệm hằng năm');
+eq(s36.map(r => r.due_date), ['2026-03-22', '2027-03-15', '2028-03-15'],
+   'buildSchedule: 36 tháng, mốc kỷ niệm hằng năm');
+eq(s36.map(r => r.amount_due), [100_000_000, 100_000_000, 100_000_000], 'buildSchedule: 36 tháng chia ba');
 
-const s18 = buildSchedule('2026-01-01', '2027-06-30', 180_000_000);
-eq(s18.length, 2, 'buildSchedule: 18 tháng (lẻ) ⇒ 2 đợt');
+/* Ca lẻ — chỗ "chia đều" sai và "đơn giá tháng" đúng. Số liệu lấy từ 2 hợp đồng
+   thật trong file theo dõi (SOL E&C 18 tháng, An T 7 tháng). */
+const s18 = buildSchedule('2025-10-03', '2027-04-03', 28_928_573);
+eq(s18.length, 2, 'buildSchedule: 18 tháng ⇒ 2 đợt');
+eq(s18.map(r => r.months), [12, 6], 'buildSchedule: 18 tháng phủ 12 + 6 tháng');
+eq(s18.map(r => r.amount_due), [19_285_715, 9_642_858],
+   'buildSchedule: 18 tháng — đợt 2 chỉ bằng NỬA đợt 1 (chia đều là sai)');
+eq(s18.reduce((s, r) => s + r.amount_due, 0), 28_928_573, 'buildSchedule: 18 tháng, Σ khớp tuyệt đối');
+
+const s7 = buildSchedule('2024-12-19', '2025-07-19', 13_696_865);
+eq(s7.length, 1, 'buildSchedule: 7 tháng ⇒ 1 đợt');
+eq(s7[0].amount_due, 13_696_865, 'buildSchedule: 7 tháng thu trọn 7 tháng, không phải 6');
 
 const sOdd = buildSchedule('2026-01-01', '2028-12-31', 100_000_000);
-eq(sOdd.map(r => r.amount_due), [33_333_333, 33_333_333, 33_333_334], 'buildSchedule: chia lẻ, phần dư dồn vào đợt cuối');
-eq(sOdd.reduce((s, r) => s + r.amount_due, 0), 100_000_000, 'buildSchedule: tổng đợt luôn khớp tuyệt đối giá trị HĐ');
+eq(sOdd.reduce((s, r) => s + r.amount_due, 0), 100_000_000, 'buildSchedule: chia lẻ, Σ vẫn khớp tuyệt đối');
 
 const sLeap = buildSchedule('2028-02-29', '2030-02-28', 100_000_000);
-eq(sLeap.map(r => r.due_date), ['2028-02-29', '2029-02-28'], 'buildSchedule: hiệu lực từ 29/02 vẫn sinh đúng mốc');
+eq(sLeap.map(r => r.due_date), ['2028-03-07', '2029-02-28'],
+   'buildSchedule: hiệu lực 29/02 — đợt 1 +7 ngày sang tháng 3, đợt 2 kẹp về 28/02');
 
+eq(buildSchedule('2026-01-01', '2026-12-31', 120_000_000, 0)[0].due_date, '2026-01-01',
+   'buildSchedule: cho phép tắt ân hạn (graceDays = 0)');
 eq(buildSchedule('', '2027-12-31', 10).length, 0, 'buildSchedule: thiếu ngày hiệu lực ⇒ rỗng');
 eq(buildSchedule('2026-01-01', '', 10).length, 1, 'buildSchedule: vô thời hạn ⇒ 1 đợt');
 
