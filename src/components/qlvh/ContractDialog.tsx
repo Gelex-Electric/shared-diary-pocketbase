@@ -21,7 +21,7 @@ import { toast as notify } from '../../lib/toast';
 import {
   CONTRACT_STATUS_LABEL, buildSchedule, computeVat, durationMonths, fetchContract,
   fetchCustomers, fetchItems, fetchZones, isLocked, saveContract, scheduleWarning,
-
+  withVat, withoutVat,
   type ContractStatus, type DmCustomer, type DmZone, type ItemInput, type PaymentInput,
 } from '../../lib/qlvh';
 
@@ -104,8 +104,25 @@ export default function ContractDialog({
   const { value_vat, value_total } = useMemo(
     () => computeVat(beforeVat, effectiveVat), [beforeVat, effectiveVat],
   );
-  /* Các đợt theo dõi theo giá trị TRƯỚC THUẾ — khớp bảng theo dõi đang dùng. */
-  const warning = useMemo(() => scheduleWarning(rows, beforeVat), [rows, beforeVat]);
+
+  /**
+   * NHẬP theo giá trị SAU THUẾ (user chốt 21/08/2026) — đúng con số trên uỷ
+   * nhiệm chi. Trước thuế và tiền thuế thành ô dẫn xuất chỉ hiện.
+   * CSDL vẫn lưu trước thuế nên state gốc vẫn là `beforeVat`; ô nhập chỉ là lớp
+   * quy đổi, tránh nhân/chia lại 130 đợt đã có.
+   */
+  const setGrossValue = (gross: number) => setBeforeVat(withoutVat(gross, effectiveVat));
+  const grossOf = (net: number) => withVat(net, effectiveVat);
+
+  /* Cảnh báo lệch tổng so sánh trên số SAU THUẾ để khớp cái mắt đang nhìn. */
+  const warning = useMemo(
+    () => scheduleWarning(
+      rows.map(r => ({ ...r, amount_due: grossOf(r.amount_due) })),
+      value_total,
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, value_total, effectiveVat],
+  );
   const months = useMemo(() => (from && to ? durationMonths(from, to) : 0), [from, to]);
   const hasLocked = rows.some(r => r.locked);
 
@@ -319,10 +336,10 @@ export default function ContractDialog({
 
                     {/* Giá trị */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                      <Field label="Giá trị trước thuế (đ)">
-                        <input value={beforeVat ? money(beforeVat) : ''} inputMode="numeric"
-                          onChange={e => setBeforeVat(parseMoney(e.target.value))}
-                          placeholder="0" className={`${INPUT} text-right tabular-nums`} />
+                      <Field label="Giá trị sau thuế (đ)">
+                        <input value={value_total ? money(value_total) : ''} inputMode="numeric"
+                          onChange={e => setGrossValue(parseMoney(e.target.value))}
+                          placeholder="0" className={`${INPUT} text-right tabular-nums font-bold text-ink`} />
                       </Field>
                       <Field label="Thuế suất">
                         <Select value={String(effectiveVat)} onChange={v => setVatRate(Number(v))}
@@ -331,9 +348,8 @@ export default function ContractDialog({
                       <Field label="Tiền thuế">
                         <input value={money(value_vat)} disabled className={`${INPUT} text-right tabular-nums`} />
                       </Field>
-                      <Field label="Tổng sau thuế">
-                        <input value={money(value_total)} disabled
-                          className={`${INPUT} text-right tabular-nums font-bold text-ink`} />
+                      <Field label="Giá trị trước thuế">
+                        <input value={money(beforeVat)} disabled className={`${INPUT} text-right tabular-nums`} />
                       </Field>
                     </div>
 
@@ -371,7 +387,7 @@ export default function ContractDialog({
                                 <th className="py-2.5 px-3 w-[64px] text-center">Đợt</th>
                                 <th className="py-2.5 px-3 w-[190px]">Đến hạn</th>
                                 <th className="py-2.5 px-3 w-[110px] text-right">% giá trị</th>
-                                <th className="py-2.5 px-3 text-right">Số tiền (đ)</th>
+                                <th className="py-2.5 px-3 text-right">Số tiền sau thuế (đ)</th>
                                 <th className="py-2.5 px-3 w-[60px]" />
                               </tr>
                             </thead>
@@ -395,9 +411,13 @@ export default function ContractDialog({
                                       placeholder="—" className={`${INPUT} text-right tabular-nums`} />
                                   </td>
                                   <td className="py-2 px-3">
-                                    <input value={r.amount_due ? money(r.amount_due) : ''} inputMode="numeric"
+                                    <input value={r.amount_due ? money(grossOf(r.amount_due)) : ''} inputMode="numeric"
                                       disabled={r.locked}
-                                      onChange={e => patchRow(i, { amount_due: parseMoney(e.target.value), pct: undefined })}
+                                      onChange={e => patchRow(i, {
+                                        // gõ số sau thuế → lưu trước thuế
+                                        amount_due: withoutVat(parseMoney(e.target.value), effectiveVat),
+                                        pct: undefined,
+                                      })}
                                       placeholder="0" className={`${INPUT} text-right tabular-nums`} />
                                   </td>
                                   <td className="py-2 px-3 text-center">

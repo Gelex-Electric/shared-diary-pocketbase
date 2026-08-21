@@ -77,17 +77,22 @@ export default function PaymentScheduleTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="vl-table w-full text-left border-collapse min-w-[860px]">
+      {/*
+        `table-fixed` + đặt bề rộng cho MỌI cột: một thẻ khách hàng có nhiều hợp
+        đồng nghĩa là nhiều bảng xếp chồng nhau. Để cột tự co theo nội dung thì
+        mỗi bảng rộng một kiểu và các cột không thẳng hàng giữa các hợp đồng.
+      */}
+      <table className="vl-table w-full text-left border-collapse table-fixed min-w-[1040px]">
         <thead>
           <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
-            <th className="py-3 px-4 w-[70px] text-center">Đợt</th>
-            <th className="py-3 px-4 w-[130px] text-center">Đến hạn</th>
-            <th className="py-3 px-4 text-right">Phải thu</th>
-            <th className="py-3 px-4 text-right w-[170px]">Đã thu</th>
-            <th className="py-3 px-4 text-right">Còn lại</th>
-            <th className="py-3 px-4 w-[180px] text-center">Ngày thu</th>
-            <th className="py-3 px-4 w-[180px] text-center">Ngày xuất hoá đơn</th>
-            <th className="py-3 px-4 w-[150px] text-center">Trạng thái</th>
+            <th className="py-3 px-4 w-[64px] text-center">Đợt</th>
+            <th className="py-3 px-4 w-[120px] text-center">Đến hạn</th>
+            <th className="py-3 px-4 w-[150px] text-right">Phải thu</th>
+            <th className="py-3 px-4 w-[170px] text-right">Đã thu</th>
+            <th className="py-3 px-4 w-[150px] text-right">Còn lại</th>
+            <th className="py-3 px-4 w-[170px] text-center">Ngày thu</th>
+            <th className="py-3 px-4 w-[170px] text-center">Ngày xuất hoá đơn</th>
+            <th className="py-3 px-4 w-[146px] text-center">Trạng thái</th>
           </tr>
         </thead>
         <tbody>
