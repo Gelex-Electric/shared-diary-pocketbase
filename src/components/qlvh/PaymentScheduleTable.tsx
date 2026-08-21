@@ -4,7 +4,7 @@
  * Dùng lại ở cả màn danh sách (mở accordion) lẫn hộp thoại sửa hợp đồng, nên
  * không tự gọi dữ liệu — nhận `payments` từ ngoài.
  *
- * Ở màn danh sách, ba ô **Đã thu**, **Ngày thu** và **Ngày xuất hoá đơn** sửa
+ * Ở màn danh sách, hai ô **Đã thanh toán** và **Ngày thanh toán** sửa
  * được ngay tại chỗ
  * (`editable`): sửa xong bấm Lưu ở hàng nút phía dưới thẻ. Component này chỉ
  * giữ bản nháp qua `edits`/`onEdit`, việc ghi do nơi gọi quyết định — bảng
@@ -28,11 +28,16 @@ const dateVN = (v?: string) => {
   return dd ? `${dd}/${m}/${y}` : d;
 };
 
-/** Bản nháp đang sửa của một đợt. */
+/**
+ * Bản nháp đang sửa của một đợt.
+ *
+ * Không còn `invoice_date`: user bỏ ô "Ngày xuất hoá đơn" khỏi thẻ (21/08/2026).
+ * Field vẫn còn trong `qlvh_payment` và trong type `Payment` — chỉ gỡ khỏi giao
+ * diện, dữ liệu đã nhập không mất.
+ */
 export interface PaymentEdit {
   amount_paid?: number;
   paid_date?: string;
-  invoice_date?: string;
 }
 
 const CELL_INPUT =
@@ -55,7 +60,7 @@ export default function PaymentScheduleTable({
    */
   vatRate?: number;
   emptyHint?: string;
-  /** Cho sửa tại chỗ 3 ô: Đã thu / Ngày thu / Ngày xuất hoá đơn. */
+  /** Cho sửa tại chỗ 2 ô: Đã thanh toán / Ngày thanh toán. */
   editable?: boolean;
   /** Bản nháp theo id đợt — nơi gọi giữ, để còn biết có gì chưa lưu. */
   edits?: Record<string, PaymentEdit>;
@@ -82,17 +87,16 @@ export default function PaymentScheduleTable({
         đồng nghĩa là nhiều bảng xếp chồng nhau. Để cột tự co theo nội dung thì
         mỗi bảng rộng một kiểu và các cột không thẳng hàng giữa các hợp đồng.
       */}
-      <table className="vl-table w-full text-left border-collapse table-fixed min-w-[1040px]">
+      <table className="vl-table w-full text-left border-collapse table-fixed min-w-[900px]">
         <thead>
           <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
             <th className="py-3 px-4 w-[64px] text-center">Đợt</th>
-            <th className="py-3 px-4 w-[120px] text-center">Đến hạn</th>
-            <th className="py-3 px-4 w-[150px] text-right">Phải thu</th>
-            <th className="py-3 px-4 w-[170px] text-right">Đã thu</th>
-            <th className="py-3 px-4 w-[150px] text-right">Còn lại</th>
-            <th className="py-3 px-4 w-[170px] text-center">Ngày thu</th>
-            <th className="py-3 px-4 w-[170px] text-center">Ngày xuất hoá đơn</th>
-            <th className="py-3 px-4 w-[146px] text-center">Trạng thái</th>
+            <th className="py-3 px-4 w-[150px] text-center">Hạn thanh toán</th>
+            <th className="py-3 px-4 w-[160px] text-right">Công nợ</th>
+            <th className="py-3 px-4 w-[180px] text-right">Đã thanh toán</th>
+            <th className="py-3 px-4 w-[160px] text-right">Còn lại</th>
+            <th className="py-3 px-4 w-[180px] text-center">Ngày thanh toán</th>
+            <th className="py-3 px-4 w-[150px] text-center">Trạng thái</th>
           </tr>
         </thead>
         <tbody>
@@ -136,18 +140,6 @@ export default function PaymentScheduleTable({
                     />
                   ) : (
                     <span className="tabular-nums text-soft">{dateVN(p.paid_date)}</span>
-                  )}
-                </td>
-
-                <td className="py-2 px-4 text-center">
-                  {editable && onEdit ? (
-                    <DatePicker
-                      value={String(p.invoice_date || '').slice(0, 10)}
-                      onChange={v => onEdit(orig.id, { invoice_date: v })}
-                      usePortal
-                    />
-                  ) : (
-                    <span className="tabular-nums text-soft">{dateVN(p.invoice_date)}</span>
                   )}
                 </td>
 
