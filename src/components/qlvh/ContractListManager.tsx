@@ -13,6 +13,7 @@ import {
   AlertTriangle, Building2, CalendarClock, ChevronRight, FileText, Pencil, Plus,
   RefreshCw, Search, Trash2, Wallet,
 } from 'lucide-react';
+import PaymentDialog from './PaymentDialog';
 import { Select } from '../ui/Select';
 import { StatTile, EmptyState } from '../ui/dashboard';
 import { useConfirm } from '../ui/ConfirmDialog';
@@ -68,6 +69,8 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
   const [reload, setReload] = useState(0);
   /** null = đóng; '' = thêm mới; id = sửa hợp đồng đó. */
   const [editing, setEditing] = useState<string | null>(null);
+  /** Hợp đồng đang ghi nhận thu tiền. */
+  const [paying, setPaying] = useState<ContractWithSchedule | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -263,6 +266,11 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                     )}
                     {canEdit && (
                       <div className="flex justify-end gap-2 px-5 py-3 border-t border-[var(--border)]">
+                        {row.totals.remaining > 0 && (
+                          <button onClick={() => setPaying(row)} className="vl-btn vl-btn-success vl-btn-sm" type="button">
+                            <Wallet className="w-3.5 h-3.5" /> Ghi nhận thu tiền
+                          </button>
+                        )}
                         <button onClick={() => setEditing(c.id)} className="vl-btn vl-btn-secondary vl-btn-sm" type="button">
                           <Pencil className="w-3.5 h-3.5" /> Sửa hợp đồng
                         </button>
@@ -283,6 +291,12 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
         open={editing !== null}
         contractId={editing || undefined}
         onClose={() => setEditing(null)}
+        onSaved={() => setReload(n => n + 1)}
+      />
+      <PaymentDialog
+        open={paying !== null}
+        row={paying}
+        onClose={() => setPaying(null)}
         onSaved={() => setReload(n => n + 1)}
       />
       {dialog}
