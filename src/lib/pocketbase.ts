@@ -1,8 +1,18 @@
 import PocketBase from 'pocketbase';
 
-// `?.` để file này còn nạp được ngoài Vite (script kiểm thử chạy bằng tsx, nơi
-// `import.meta.env` không tồn tại) — trong trình duyệt vẫn đọc biến như cũ.
-const pbUrl = import.meta.env?.VITE_PB_URL || process.env.VITE_PB_URL || 'https://getc.up.railway.app/pb';
+/**
+ * URL PocketBase.
+ *
+ * Đọc được ở CẢ HAI môi trường, và phải kiểm tra bằng `typeof` chứ không dùng
+ * thẳng tên biến:
+ *  - trong trình duyệt (Vite) có `import.meta.env`, KHÔNG có `process`
+ *    → viết thẳng `process.env` là ReferenceError, trắng trang toàn app;
+ *  - trong script chạy bằng tsx thì ngược lại.
+ * Cả hai đều thiếu thì rơi về URL production.
+ */
+const viteUrl = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_PB_URL : undefined;
+const nodeUrl = typeof process !== 'undefined' ? process.env?.VITE_PB_URL : undefined;
+const pbUrl = viteUrl || nodeUrl || 'https://getc.up.railway.app/pb';
 
 export const pb = new PocketBase(pbUrl);
 

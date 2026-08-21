@@ -57,9 +57,13 @@ eq(buildSchedule('2026-01-01', '', 10).length, 1, 'buildSchedule: vô thời h�
 
 /* ------------------------------------------------------ durationMonths */
 
-eq(durationMonths('2026-01-01', '2026-12-31'), 12, 'durationMonths: 01/01→31/12 = 12 tháng');
+eq(durationMonths('2026-01-01', '2026-12-31'), 12, 'durationMonths: ghi tới ngày cuối năm = 12 tháng');
 eq(durationMonths('2026-01-01', '2027-12-31'), 24, 'durationMonths: 2 năm = 24 tháng');
 eq(durationMonths('2026-03-15', '2027-03-14'), 12, 'durationMonths: tròn năm lệch ngày = 12 tháng');
+eq(durationMonths('2025-07-17', '2028-07-17'), 36, 'durationMonths: ghi tới ngày kỷ niệm = 36 tháng (không phải 37)');
+eq(durationMonths('2026-01-01', '2027-06-30'), 18, 'durationMonths: 18 tháng');
+eq(durationMonths('2026-01-01', ''), 0, 'durationMonths: thiếu ngày ⇒ 0');
+eq(durationMonths('2026-12-31', '2026-01-01'), 0, 'durationMonths: ngày ngược ⇒ 0, không ra số âm');
 
 /* -------------------------------------------------------- paymentStatus */
 

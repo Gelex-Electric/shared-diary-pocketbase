@@ -29,6 +29,12 @@ const INPUT =
   'focus:ring-2 focus:ring-accent outline-none disabled:opacity-60 disabled:cursor-not-allowed';
 
 const money = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v || 0));
+const dateVN = (v?: string) => {
+  const d = String(v || '').slice(0, 10);
+  if (!d) return '—';
+  const [y, m, dd] = d.split('-');
+  return dd ? `${dd}/${m}/${y}` : d;
+};
 /** Ô tiền: gõ gì cũng chỉ giữ chữ số, hiện lại có dấu phân cách. */
 const parseMoney = (s: string) => Number(String(s).replace(/[^\d]/g, '')) || 0;
 
@@ -348,7 +354,7 @@ export default function ContractDialog({
                                   </td>
                                   <td className="py-2 px-3">
                                     {r.locked ? (
-                                      <span className="tabular-nums text-soft">{r.due_date}</span>
+                                      <span className="tabular-nums text-soft">{dateVN(r.due_date)}</span>
                                     ) : (
                                       <DatePicker value={r.due_date} onChange={v => patchRow(i, { due_date: v })} usePortal />
                                     )}

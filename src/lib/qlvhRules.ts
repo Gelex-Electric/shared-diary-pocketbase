@@ -96,12 +96,23 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((b - a) / 86400000);
 }
 
-/** Thời hạn hợp đồng tính theo tháng — chỉ để hiển thị, không dùng chia đợt. */
+/**
+ * Thời hạn hợp đồng tính theo tháng — chỉ để HIỂN THỊ, không dùng chia đợt.
+ *
+ * Tính theo số ngày rồi quy về tháng trung bình (30,4375 ngày) thay vì trừ chỉ
+ * số tháng: hai cách ghi hạn đều rất phổ biến và cách trừ tháng chỉ đúng một
+ * trong hai.
+ *   01/01/2026 → 31/12/2026 (ghi tới ngày cuối)     = 365 ngày → 12 tháng
+ *   17/07/2025 → 17/07/2028 (ghi tới ngày kỷ niệm)  = 1096 ngày → 36 tháng
+ * Cách trừ tháng cộng 1 cho ca đầu thì ca sau thành 37 tháng — sai một tháng.
+ */
 export function durationMonths(from: string, to: string): number {
-  const [y1, m1, d1] = dayOf(from).split('-').map(Number);
-  const [y2, m2, d2] = dayOf(to).split('-').map(Number);
-  if (!y1 || !y2) return 0;
-  return (y2 - y1) * 12 + (m2 - m1) + (d2 >= d1 ? 1 : 0);
+  const f = dayOf(from);
+  const t = dayOf(to);
+  if (!f || !t) return 0;
+  const days = daysBetween(f, t);
+  if (days <= 0) return 0;
+  return Math.round(days / 30.4375);
 }
 
 /* --------------------------------------------------- Sinh lịch thanh toán */
