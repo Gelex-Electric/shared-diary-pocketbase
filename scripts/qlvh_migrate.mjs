@@ -1,0 +1,195 @@
+#!/usr/bin/env node
+/**
+ * Tạo 2 collection của module QLVH (hợp đồng quản lý vận hành) trên PocketBase.
+ *
+ *   node scripts/qlvh_migrate.mjs            # DRY-RUN: chỉ in ra sẽ làm gì
+ *   node scripts/qlvh_migrate.mjs --commit   # ghi thật
+ *
+ * Biến môi trường:
+ *   PB_URL             (mặc định https://getc.up.railway.app/pb)
+ *   PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD   — tài khoản superuser
+ *
+ * RANH GIỚI CỨNG (user chốt 21/08/2026): script chạy thẳng trên PB production,
+ * chỉ được đụng collection có tiền tố `qlvh_`. Mọi collection sẵn có chỉ ĐỌC.
+ * Ranh giới này cưỡng chế bằng assertOwned() ở mọi lời gọi ghi — không dựa vào
+ * trí nhớ người chạy, vì một lệnh xoá nhầm trên production là mất dữ liệu thật.
+ */
+
+const PB_URL = (process.env.PB_URL || 'https://getc.up.railway.app/pb').replace(/\/$/, '');
+const COMMIT = process.argv.includes('--commit');
+const PREFIX = 'qlvh_';
+
+/**
+ * Danh mục dùng lại của app (CHỈ ĐỌC, không đụng vào):
+ *   dm_customer — 100 khách hàng (mkh / name / short_name / zone)
+ *   dm_zone     — 5 KCN (code / name)
+ * Hợp đồng trỏ quan hệ tới hai bảng này thay vì chép tên khách/KCN thành chuỗi:
+ * một nguồn sự thật, đổi tên khách ở danh mục thì hợp đồng không lệch theo.
+ */
+const CUSTOMER_COLLECTION = 'dm_customer';
+const ZONE_COLLECTION = 'dm_zone';
+
+/* ---------------------------------------------------------------- chốt chặn */
+
+function assertOwned(name, what) {
+  if (typeof name !== 'string' || !name.startsWith(PREFIX)) {
+    throw new Error(
+      `CHẶN: từ chối ${what} trên collection "${name}". Script này chỉ được đụng ` +
+      `collection có tiền tố "${PREFIX}". Mọi collection khác là dữ liệu vận hành thật, chỉ được đọc.`
+    );
+  }
+}
+
+/* ------------------------------------------------------------------ PB API */
+
+let token = '';
+
+async function api(path, init = {}) {
+  const res = await fetch(`${PB_URL}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: token } : {}),
+      ...(init.headers || {}),
+    },
+  });
+  const text = await res.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  if (!res.ok) {
+    throw new Error(`${init.method || 'GET'} ${path} → ${res.status}\n${JSON.stringify(body, null, 2)}`);
+  }
+  return body;
+}
+
+async function login() {
+  const identity = process.env.PB_ADMIN_EMAIL;
+  const password = process.env.PB_ADMIN_PASSWORD;
+  if (!identity || !password) {
+    throw new Error('Thiếu PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD trong biến môi trường.');
+  }
+  const out = await api('/api/collections/_superusers/auth-with-password', {
+    method: 'POST',
+    body: JSON.stringify({ identity, password }),
+  });
+  token = out.token;
+}
+
+/* -------------------------------------------------------------- định nghĩa */
+
+/**
+ * Quyền: khối Văn phòng (users.area rỗng) toàn quyền; khối Đội chỉ ĐỌC hợp đồng
+ * thuộc KCN của mình. users.area là chuỗi có thể chứa nhiều KCN nên dùng `~`.
+ */
+const OFFICE_ONLY = '@request.auth.id != "" && @request.auth.area = ""';
+const READ_CONTRACT = '@request.auth.id != "" && (@request.auth.area = "" || @request.auth.area ~ zone.name)';
+const READ_PAYMENT = '@request.auth.id != "" && (@request.auth.area = "" || @request.auth.area ~ contract.zone.name)';
+
+function contractFields(customerId, zoneId) {
+  return [
+  { name: 'contract_no',      type: 'text',   required: true },
+  { name: 'customer',         type: 'relation', maxSelect: 1, cascadeDelete: false, collectionId: customerId },
+  { name: 'zone',             type: 'relation', maxSelect: 1, cascadeDelete: false, collectionId: zoneId },
+  { name: 'sign_date',        type: 'date' },
+  { name: 'effective_from',   type: 'date' },
+  { name: 'effective_to',     type: 'date' },
+  { name: 'value_before_vat', type: 'number' },
+  { name: 'vat_rate',         type: 'number' },
+  { name: 'value_vat',        type: 'number' },
+  { name: 'value_total',      type: 'number' },
+  { name: 'payment_terms',    type: 'text' },
+  { name: 'status_manual',    type: 'select', maxSelect: 1, values: ['dang_hieu_luc', 'tam_dung', 'da_thanh_ly'] },
+  { name: 'note',             type: 'text' },
+  { name: 'created',          type: 'autodate', onCreate: true,  onUpdate: false },
+  { name: 'updated',          type: 'autodate', onCreate: true,  onUpdate: true  },
+  ];
+}
+
+/** Bảng con: n đợt / hợp đồng. KHÔNG có field trạng thái — trạng thái là dẫn xuất. */
+function paymentFields(contractId) {
+  return [
+    { name: 'contract',    type: 'relation', required: true, maxSelect: 1, cascadeDelete: true, collectionId: contractId },
+    { name: 'seq',         type: 'number' },
+    { name: 'due_date',    type: 'date' },
+    { name: 'pct',         type: 'number' },
+    { name: 'amount_due',  type: 'number' },
+    { name: 'paid_date',   type: 'date' },
+    { name: 'amount_paid', type: 'number' },
+    { name: 'invoice_no',  type: 'text' },
+    { name: 'note',        type: 'text' },
+    { name: 'created',     type: 'autodate', onCreate: true, onUpdate: false },
+    { name: 'updated',     type: 'autodate', onCreate: true, onUpdate: true  },
+  ];
+}
+
+/* ------------------------------------------------------------------- chạy */
+
+async function ensureCollection(def) {
+  assertOwned(def.name, 'tạo/sửa');
+  const existing = await api(`/api/collections?perPage=200&fields=id,name`)
+    .then(r => r.items.find(c => c.name === def.name));
+
+  if (existing) {
+    console.log(`  ✓ đã tồn tại: ${def.name} (${existing.id}) — bỏ qua, không ghi đè`);
+    return existing.id;
+  }
+  if (!COMMIT) {
+    console.log(`  + [dry-run] sẽ tạo: ${def.name} (${def.fields.length} field)`);
+    return `DRYRUN_${def.name}`;
+  }
+  const out = await api('/api/collections', { method: 'POST', body: JSON.stringify(def) });
+  console.log(`  + đã tạo: ${out.name} (${out.id})`);
+  return out.id;
+}
+
+async function main() {
+  console.log(`PocketBase: ${PB_URL}`);
+  console.log(COMMIT ? 'CHẾ ĐỘ: GHI THẬT (--commit)' : 'CHẾ ĐỘ: DRY-RUN (thêm --commit để ghi thật)');
+
+  await login();
+
+  const all = (await api('/api/collections?perPage=200&fields=id,name')).items;
+  const before = all.map(c => c.name).sort();
+  console.log(`\nCollection hiện có (${before.length}): ${before.join(', ')}`);
+  console.log('→ Toàn bộ danh sách trên là CHỈ ĐỌC. Script chỉ tạo thêm collection qlvh_*.\n');
+
+  const idOf = (name) => {
+    const c = all.find(x => x.name === name);
+    if (!c) throw new Error(`Không tìm thấy danh mục "${name}" trên PB — cần có trước khi tạo hợp đồng.`);
+    return c.id;
+  };
+  const customerId = idOf(CUSTOMER_COLLECTION);
+  const zoneId = idOf(ZONE_COLLECTION);
+  console.log(`Quan hệ dùng lại: ${CUSTOMER_COLLECTION} (${customerId}), ${ZONE_COLLECTION} (${zoneId})\n`);
+
+  const contractId = await ensureCollection({
+    name: `${PREFIX}contract`,
+    type: 'base',
+    fields: contractFields(customerId, zoneId),
+    indexes: [`CREATE UNIQUE INDEX idx_qlvh_contract_no ON ${PREFIX}contract (contract_no)`],
+    listRule: READ_CONTRACT,
+    viewRule: READ_CONTRACT,
+    createRule: OFFICE_ONLY,
+    updateRule: OFFICE_ONLY,
+    deleteRule: OFFICE_ONLY,
+  });
+
+  await ensureCollection({
+    name: `${PREFIX}payment`,
+    type: 'base',
+    fields: paymentFields(contractId),
+    indexes: [`CREATE INDEX idx_qlvh_payment_contract ON ${PREFIX}payment (contract)`],
+    listRule: READ_PAYMENT,
+    viewRule: READ_PAYMENT,
+    createRule: OFFICE_ONLY,
+    updateRule: OFFICE_ONLY,
+    deleteRule: OFFICE_ONLY,
+  });
+
+  const after = (await api('/api/collections?perPage=200&fields=id,name')).items.map(c => c.name).sort();
+  const lost = before.filter(n => !after.includes(n));
+  if (lost.length) throw new Error(`BÁO ĐỘNG: collection biến mất sau khi chạy: ${lost.join(', ')}`);
+  console.log(`\nĐối chiếu: ${before.length} collection cũ còn nguyên ${lost.length === 0 ? '✓' : '✗'}; tổng sau khi chạy: ${after.length}`);
+}
+
+main().catch(err => { console.error(`\n${err.message}`); process.exit(1); });
