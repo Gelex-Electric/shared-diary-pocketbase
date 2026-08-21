@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { pb } from '../../lib/pocketbase';
 import {
   LogOut, X, Menu, ChevronDown,
-  FileText, LayoutDashboard, Briefcase, Activity, Package,
+  FileText, LayoutDashboard, Briefcase, Activity, Package, FileSignature,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import BusinessSummaryDashboard from './BusinessSummaryDashboard';
@@ -16,6 +16,7 @@ import TransformerLossManager from '../TransformerLossManager';
 import OfficeSldPage from './OfficeSldPage';
 import GeneralManagement from '../dm/GeneralManagement';
 import CatalogEntry from '../dm/CatalogEntry';
+import QlvhPage from '../qlvh/QlvhPage';
 import NotificationBell from '../ui/NotificationBell';
 import AssetLifecycle from '../dm/AssetLifecycle';
 import ThemeToggle from '../ui/ThemeToggle';
@@ -23,7 +24,8 @@ import ThemeToggle from '../ui/ThemeToggle';
 type Tab =
   | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
-  | 'dm-general' | 'dm-catalog' | 'dm-lifecycle';
+  | 'dm-general' | 'dm-catalog' | 'dm-lifecycle'
+  | 'qlvh';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
@@ -38,6 +40,7 @@ const TAB_LABEL: Record<Tab, string> = {
   'dm-general':    'Quản lý chung',
   'dm-catalog':    'Danh mục',
   'dm-lifecycle':  'Vòng đời vật tư',
+  qlvh:            'Quản lý vận hành',
 };
 
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
@@ -46,6 +49,8 @@ const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt'];
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
 /** Các tab con thuộc nhóm "Quản lý vật tư thiết bị điện". */
 const ASSET_TABS: Tab[] = ['dm-general', 'dm-catalog', 'dm-lifecycle'];
+/** Mục con của nhóm "Quản lý Hợp đồng" — hiện chỉ 1, giữ mảng để thêm mục sau. */
+const QLVH_TABS: Tab[] = ['qlvh'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
@@ -53,13 +58,15 @@ export default function BusinessDashboard() {
   const [isBusinessExpanded, setIsBusinessExpanded] = useState(true);
   const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
   const [isAssetExpanded, setIsAssetExpanded] = useState(false);
+  const [isQlvhExpanded, setIsQlvhExpanded] = useState(false);
 
   // Accordion: mở nhóm này thì các nhóm kia tự đóng
-  const toggleSection = (section: 'business' | 'operating' | 'asset') => {
+  const toggleSection = (section: 'business' | 'operating' | 'asset' | 'qlvh') => {
     const setters = {
       business:  [isBusinessExpanded,  setIsBusinessExpanded],
       operating: [isOperatingExpanded, setIsOperatingExpanded],
       asset:     [isAssetExpanded,     setIsAssetExpanded],
+      qlvh:      [isQlvhExpanded,      setIsQlvhExpanded],
     } as const;
     const willOpen = !setters[section][0];
     (Object.keys(setters) as (keyof typeof setters)[]).forEach(k => {
@@ -165,6 +172,45 @@ export default function BusinessDashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Nạp dữ liệu nhanh</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+                    </button>
+                  </li>
+                </motion.ul>
+              )}
+            </AnimatePresence>
+          </li>
+          {/* Quản lý Hợp đồng — khu vực riêng, vẫn thuộc khối kinh doanh */}
+          <li className="relative mt-1">
+            <button
+              id="nav-qlvh"
+              onClick={() => toggleSection('qlvh')}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                QLVH_TABS.includes(topTab) ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <FileSignature className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Quản lý Hợp đồng</span>
+              <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isQlvhExpanded ? 'rotate-180' : ''}`} />
+            </button>
+            <AnimatePresence initial={false}>
+              {isQlvhExpanded && (
+                <motion.ul
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22 }}
+                  className="overflow-hidden list-none px-0"
+                >
+                  <li>
+                    <button
+                      id="nav-qlvh-sub"
+                      onClick={() => { setTopTab('qlvh'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'qlvh' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Quản lý vận hành</span>
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
@@ -459,6 +505,8 @@ export default function BusinessDashboard() {
               <AssetLifecycle scope="vanphong" />
             ) : topTab === 'loss' ? (
               <TransformerLossManager />
+            ) : topTab === 'qlvh' ? (
+              <QlvhPage scope="vanphong" />
             ) : topTab === 'sld' ? (
               <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
                 <OfficeSldPage />

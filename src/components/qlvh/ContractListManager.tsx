@@ -1,0 +1,489 @@
+/**
+ * Màn hình danh sách hợp đồng quản lý vận hành (QLVH) — GIAI ĐOẠN 1: CHỈ ĐỌC.
+ *
+ * Một component cho cả hai khối, phân biệt bằng prop `scope` (nguyên tắc 17):
+ *  - 'vanphong' : thấy toàn bộ KCN, chọn được KCN.
+ *  - 'doi'      : chỉ KCN của tài khoản.
+ *
+ * Thêm/sửa hợp đồng và ghi nhận thu tiền làm ở Task 4–5.
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle, Building2, CalendarClock, ChevronRight, FileText, Pencil, Plus,
+  RefreshCw, Save, Search, Trash2, Wallet,
+} from 'lucide-react';
+import { Select } from '../ui/Select';
+import { StatTile, EmptyState } from '../ui/dashboard';
+import { useConfirm } from '../ui/ConfirmDialog';
+import { zoneHexOf } from '../../lib/kcnColors';
+import { toast as notify } from '../../lib/toast';
+import { useScopeAreas, type Scope } from '../../lib/scope';
+import PaymentScheduleTable, { type PaymentEdit } from './PaymentScheduleTable';
+import ContractDialog from './ContractDialog';
+import {
+  CONTRACT_STATUS_BADGE, CONTRACT_STATUS_LABEL, CONTRACT_STATUS_OPTIONS, STATUS_BADGE, STATUS_LABEL,
+  deleteContract, fetchContracts, isDraft, paymentStatus, savePaymentEdits, summarize,
+  updateContractStatus, withVat,
+  type ContractStatus, type ContractWithSchedule, type PaymentStatus,
+} from '../../lib/qlvh';
+
+const money = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v || 0));
+const dateVN = (v?: string) => {
+  const d = String(v || '').slice(0, 10);
+  if (!d) return '—';
+  const [y, m, dd] = d.split('-');
+  return dd ? `${dd}/${m}/${y}` : d;
+};
+
+/** Bộ lọc theo tình trạng thu tiền của hợp đồng (suy từ các đợt). */
+type Filter = 'all' | 'qua_han' | 'sap_den_han' | 'con_phai_thu' | 'da_thu_xong';
+
+const FILTER_OPTIONS = [
+  { value: 'all',           label: 'Tất cả hợp đồng' },
+  { value: 'qua_han',       label: 'Có đợt quá hạn' },
+  { value: 'sap_den_han',   label: 'Có đợt sắp đến hạn' },
+  { value: 'con_phai_thu',  label: 'Còn phải thu' },
+  { value: 'da_thu_xong',   label: 'Đã thu xong' },
+];
+
+/** Trạng thái nặng nhất trong các đợt — dùng làm nhãn cho cả hợp đồng. */
+const SEVERITY: PaymentStatus[] = ['qua_han', 'thu_thieu', 'sap_den_han', 'chua_den_han', 'da_thu'];
+
+function worstStatus(row: ContractWithSchedule): PaymentStatus | null {
+  if (row.payments.length === 0) return null;
+  const found = row.payments.map(p => paymentStatus(p));
+  for (const s of SEVERITY) if (found.includes(s)) return s;
+  return null;
+}
+
+/** Trạng thái nặng nhất của cả nhóm hợp đồng cùng khách — nhãn cho thẻ. */
+function worstOfGroup(rows: ContractWithSchedule[]): PaymentStatus | null {
+  const found = rows.flatMap(r => r.payments).map(p => paymentStatus(p));
+  for (const s of SEVERITY) if (found.includes(s)) return s;
+  return null;
+}
+
+export default function ContractListManager({ scope }: { scope: Scope }) {
+  const { areas, canPickArea, allLabel, isOffice } = useScopeAreas(scope);
+  const { confirm, dialog } = useConfirm();
+
+  const [rows, setRows] = useState<ContractWithSchedule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [area, setArea] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  /** null = đóng; '' = thêm mới; id = sửa hợp đồng đó. */
+  const [editing, setEditing] = useState<string | null>(null);
+  /** Hợp đồng đang ghi nhận thu tiền. */
+  /** Bản nháp sửa tại chỗ (Đã thu / Ngày thu), theo id đợt. Chưa lưu thì còn ở đây. */
+  const [edits, setEdits] = useState<Record<string, PaymentEdit>>({});
+  const [savingEdits, setSavingEdits] = useState(false);
+
+  const editRow = (id: string, patch: PaymentEdit) =>
+    setEdits(e => ({ ...e, [id]: { ...e[id], ...patch } }));
+
+  /** Chỉ giữ bản nháp thuộc hợp đồng đang mở — đóng thẻ là bỏ, khỏi lưu nhầm. */
+  const editsOf = (row: ContractWithSchedule) =>
+    row.payments.filter(p => edits[p.id]).map(p => ({ id: p.id, ...edits[p.id] }));
+
+  /** Đổi trạng thái pháp lý: ghi luôn, không cần bấm Lưu — chỉ một ô chọn. */
+  const changeStatus = async (row: ContractWithSchedule, status: ContractStatus) => {
+    if (status === row.contract.status_manual) return;
+    try {
+      await updateContractStatus(row.contract.id, status);
+      notify.success(`${row.contract.contract_no}: ${CONTRACT_STATUS_LABEL[status]}.`);
+      setReload(n => n + 1);
+    } catch (err: any) {
+      notify.error(err?.message || 'Đổi trạng thái thất bại.');
+    }
+  };
+
+  const saveEdits = async (row: ContractWithSchedule) => {
+    const list = editsOf(row);
+    if (list.length === 0) return;
+    setSavingEdits(true);
+    try {
+      await savePaymentEdits(list);
+      notify.success(`Đã lưu ${list.length} đợt.`);
+      setEdits({});
+      setReload(n => n + 1);
+    } catch (err: any) {
+      notify.error(err?.message || 'Lưu thất bại.');
+    } finally {
+      setSavingEdits(false);
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetchContracts()
+      .then(data => { if (alive) setRows(data); })
+      .catch(err => { if (alive) notify.error(`Không tải được danh sách hợp đồng: ${err.message}`); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [reload]);
+
+  /* Chỉ khối Văn phòng được thêm/sửa/xoá — khớp API rule của PocketBase. */
+  const canEdit = isOffice;
+
+  const askDelete = async (row: ContractWithSchedule) => {
+    const paid = row.totals.paid > 0;
+    const ok = await confirm({
+      title: `Xoá hợp đồng ${row.contract.contract_no}?`,
+      message: paid
+        ? `Hợp đồng đã ghi nhận thu ${money(withVat(row.totals.paid, row.contract.vat_rate || 0))}đ. Xoá là mất luôn toàn bộ ${row.payments.length} đợt và số đã thu.`
+        : `Toàn bộ ${row.payments.length} đợt thanh toán sẽ bị xoá theo.`,
+      confirmLabel: 'Xoá hợp đồng',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await deleteContract(row.contract.id);
+      notify.success('Đã xoá hợp đồng.');
+      setReload(n => n + 1);
+    } catch (err: any) {
+      notify.error(err?.message || 'Xoá hợp đồng thất bại.');
+    }
+  };
+
+  /* Khối Đội chỉ được thấy KCN của mình — lọc ngay khi vào, không đợi user chọn. */
+  const scoped = useMemo(
+    () => rows.filter(r => areas.length === 0 || areas.includes(r.zoneName)),
+    [rows, areas],
+  );
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = scoped.filter(r => {
+      if (area && r.zoneName !== area) return false;
+      if (q && !`${r.contract.contract_no} ${r.customerName}`.toLowerCase().includes(q)) return false;
+
+      const t = r.totals;
+      if (filter === 'qua_han' && t.overdueCount === 0) return false;
+      if (filter === 'sap_den_han' && t.dueSoonCount === 0) return false;
+      if (filter === 'con_phai_thu' && t.remaining <= 0) return false;
+      if (filter === 'da_thu_xong' && t.remaining > 0) return false;
+      return true;
+    });
+
+    /* Sắp theo MÃ KHÁCH HÀNG — cùng cách màn "Biên bản xác nhận chỉ số" đang
+       xếp, để hai màn đọc song song không phải dò lại. `numeric` để KCNTH-2
+       đứng trước KCNTH-10. Khách chưa có mã xuống cuối. */
+    return list.sort((a, b) => {
+      if (!a.customerCode !== !b.customerCode) return a.customerCode ? -1 : 1;
+      return a.customerCode.localeCompare(b.customerCode, 'vi', { numeric: true })
+        || a.customerName.localeCompare(b.customerName, 'vi');
+    });
+  }, [scoped, area, filter, query]);
+
+  /* KPI tính trên phần đang hiện, để con số luôn khớp cái mắt đang nhìn.
+     Trừ hợp đồng DỰ THẢO — chưa ký thì chưa có nghĩa vụ thu tiền. */
+  const kpi = useMemo(() => {
+    /* Cộng theo TỪNG hợp đồng rồi mới quy sau thuế: mỗi hợp đồng một thuế suất
+       (chế xuất 0%, còn lại 8%), gộp hết rồi nhân một lần là sai. */
+    const t = { valueTotal: 0, paid: 0, remaining: 0, overdueCount: 0, overdueAmount: 0, dueSoonCount: 0, dueSoonAmount: 0 };
+    for (const r of visible) {
+      if (isDraft(r.contract)) continue;
+      const rate = r.contract.vat_rate || 0;
+      const s = summarize(r.payments);
+      t.valueTotal += withVat(s.valueTotal, rate);
+      t.paid += withVat(s.paid, rate);
+      t.remaining += withVat(s.remaining, rate);
+      t.overdueCount += s.overdueCount;
+      t.overdueAmount += withVat(s.overdueAmount, rate);
+      t.dueSoonCount += s.dueSoonCount;
+      t.dueSoonAmount += withVat(s.dueSoonAmount, rate);
+    }
+    return t;
+  }, [visible]);
+  const draftCount = useMemo(() => visible.filter(r => isDraft(r.contract)).length, [visible]);
+
+  /**
+   * Gom hợp đồng theo KHÁCH HÀNG — một khách nhiều hợp đồng (gia hạn từng năm,
+   * nhiều trạm) thì nằm chung một thẻ, mở ra mới tách từng hợp đồng.
+   *
+   * Khoá gom: mã khách nếu có, không thì tên đã chuẩn hoá — 8 khách chưa có
+   * trong danh mục vẫn gom đúng thay vì mỗi hợp đồng một thẻ.
+   */
+  const groups = useMemo(() => {
+    const map = new Map<string, {
+      key: string; customerName: string; customerCode: string;
+      zoneName: string; zoneCode: string;
+      rows: ContractWithSchedule[]; value: number; remaining: number;
+      statuses: [ContractStatus, number][];
+    }>();
+
+    for (const r of visible) {
+      const key = r.customerCode || r.customerName.trim().toLowerCase();
+      const g = map.get(key) || {
+        key, customerName: r.customerName, customerCode: r.customerCode,
+        zoneName: r.zoneName, zoneCode: r.zoneCode,
+        rows: [], value: 0, remaining: 0, statuses: [],
+      };
+      g.rows.push(r);
+      if (!isDraft(r.contract)) {
+        g.value += r.contract.value_total || 0;
+        g.remaining += withVat(r.totals.remaining, r.contract.vat_rate || 0);
+      }
+      map.set(key, g);
+    }
+
+    for (const g of map.values()) {
+      /* Hợp đồng mới nhất lên trước — cái đang chạy thường là cái cần xem. */
+      g.rows.sort((a, b) => String(b.contract.sign_date).localeCompare(String(a.contract.sign_date)));
+
+      /* Đếm theo trạng thái để làm tag trên thẻ, giữ thứ tự hiệu lực → thanh lý. */
+      const count = new Map<ContractStatus, number>();
+      for (const r of g.rows) {
+        const s = r.contract.status_manual || 'dang_hieu_luc';
+        count.set(s, (count.get(s) || 0) + 1);
+      }
+      const ORDER: ContractStatus[] = ['dang_hieu_luc', 'du_thao', 'tam_dung', 'da_thanh_ly'];
+      g.statuses = ORDER.filter(s => count.has(s)).map(s => [s, count.get(s)!] as [ContractStatus, number]);
+    }
+
+    return [...map.values()].sort((a, b) => {
+      if (!a.customerCode !== !b.customerCode) return a.customerCode ? -1 : 1;
+      return a.customerCode.localeCompare(b.customerCode, 'vi', { numeric: true })
+        || a.customerName.localeCompare(b.customerName, 'vi');
+    });
+  }, [visible]);
+
+  const areaOptions = useMemo(
+    () => [{ value: '', label: allLabel }, ...areas.map(a => ({ value: a, label: a }))],
+    [areas, allLabel],
+  );
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl font-bold text-ink">Hợp đồng quản lý vận hành</h2>
+          <p className="text-sm text-faint mt-1">
+            Theo dõi số hợp đồng, ngày ký và lịch thanh toán từng đợt.
+          </p>
+        </div>
+        {canEdit && (
+          <button onClick={() => setEditing('')} className="vl-btn vl-btn-primary shrink-0" type="button">
+            <Plus className="w-4 h-4" /> Thêm hợp đồng
+          </button>
+        )}
+      </div>
+
+      {/* KPI */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatTile
+          label="Tổng giá trị" value={money(kpi.valueTotal)} unit="đ"
+          sub={draftCount > 0
+            ? `${groups.length} khách · ${visible.length} hợp đồng · ${draftCount} dự thảo không tính`
+            : `${groups.length} khách · ${visible.length} hợp đồng`}
+          icon={FileText} loading={loading}
+        />
+        <StatTile
+          label="Đã thu" value={money(kpi.paid)} unit="đ" tone="ok"
+          sub={kpi.valueTotal > 0 ? `${Math.round((kpi.paid / kpi.valueTotal) * 100)}% giá trị` : '—'}
+          subTone="ok" icon={Wallet} loading={loading}
+        />
+        <StatTile
+          label="Còn phải thu" value={money(kpi.remaining)} unit="đ"
+          tone={kpi.remaining > 0 ? 'warn' : 'ok'} icon={CalendarClock} loading={loading}
+          sub={kpi.dueSoonCount > 0 ? `${kpi.dueSoonCount} đợt sắp đến hạn` : 'Không có đợt sắp đến hạn'}
+          subTone={kpi.dueSoonCount > 0 ? 'warn' : 'neutral'}
+        />
+        <StatTile
+          label="Quá hạn" value={kpi.overdueCount} unit="đợt"
+          tone={kpi.overdueCount > 0 ? 'bad' : 'ok'} icon={AlertTriangle} loading={loading}
+          sub={kpi.overdueCount > 0 ? `${money(kpi.overdueAmount)}đ chưa thu` : 'Không có đợt quá hạn'}
+          subTone={kpi.overdueCount > 0 ? 'bad' : 'ok'}
+        />
+      </div>
+
+      {/* Bộ lọc */}
+      <div className="vl-card p-4 flex flex-col lg:flex-row gap-3 lg:items-end">
+        <div className="flex-1 min-w-0">
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-faint mb-1.5">
+            Tìm hợp đồng
+          </label>
+          <div className="relative">
+            <Search className="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Số hợp đồng hoặc tên khách hàng..."
+              className="w-full pl-10 pr-4 py-2 bg-surface border border-[var(--border)] rounded text-sm focus:ring-2 focus:ring-accent outline-none"
+            />
+          </div>
+        </div>
+
+        {canPickArea && (
+          <Select
+            label="Khu công nghiệp" value={area} onChange={setArea}
+            options={areaOptions} icon={Building2} className="lg:w-[240px]"
+          />
+        )}
+
+        <Select
+          label="Tình trạng thu" value={filter} onChange={v => setFilter(v as Filter)}
+          options={FILTER_OPTIONS} className="lg:w-[220px]"
+        />
+      </div>
+
+      {/* Danh sách */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-faint gap-2">
+          <RefreshCw className="w-5 h-5 animate-spin" /> Đang tải hợp đồng…
+        </div>
+      ) : visible.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title={rows.length === 0 ? 'Chưa có hợp đồng nào' : 'Không có hợp đồng khớp bộ lọc'}
+          hint={rows.length === 0
+            ? 'Hợp đồng sẽ hiện ở đây sau khi được thêm vào.'
+            : 'Thử bỏ bớt điều kiện lọc hoặc xoá từ khoá tìm kiếm.'}
+        />
+      ) : (
+        <div className="vl-accordion">
+          {groups.map(g => {
+            const open = openId === g.key;
+            const zColor = zoneHexOf(g.zoneCode);
+            const st = worstOfGroup(g.rows);
+            return (
+              <div key={g.key} className={`vl-accordion-item ${open ? 'is-open' : ''}`}
+                style={{ borderLeft: `4px solid ${zColor}` }}>
+                <button
+                  className="vl-accordion-header"
+                  onClick={() => { setOpenId(open ? null : g.key); setEdits({}); }}
+                >
+                  <span className="flex-1 min-w-0 text-left">
+                    <span className="block font-bold truncate">{g.customerName}</span>
+                    <span className="text-[11px] text-faint mt-0.5 flex items-center gap-2 flex-wrap">
+                      {g.customerCode && (
+                        <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent font-bold">
+                          MKH: {g.customerCode}
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.5 rounded font-bold"
+                        style={{ backgroundColor: `${zColor}1a`, color: zColor }}>
+                        {g.zoneName}
+                      </span>
+                      <span>{g.rows.length} hợp đồng</span>
+
+                      {/* Tag trạng thái pháp lý — thu gọn thẻ vẫn thấy ngay khách
+                          này còn hợp đồng hiệu lực hay đã thanh lý hết. */}
+                      {g.statuses.map(([st, n]) => (
+                        <span key={st} className={CONTRACT_STATUS_BADGE[st]}>
+                          {CONTRACT_STATUS_LABEL[st]}{g.rows.length > 1 && ` ×${n}`}
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+
+                  <span className="hidden md:block text-right shrink-0">
+                    <span className="block text-sm font-semibold tabular-nums">{money(g.value)}đ</span>
+                    <span className="block text-[11px] text-faint tabular-nums mt-0.5">
+                      {g.remaining > 0 ? `còn ${money(g.remaining)}đ` : 'đã thu đủ'}
+                    </span>
+                  </span>
+
+                  {st && <span className={`${STATUS_BADGE[st]} shrink-0`}>{STATUS_LABEL[st]}</span>}
+                  <ChevronRight className="w-4 h-4 vl-accordion-chevron" />
+                </button>
+
+                {open && (
+                  <div className="vl-accordion-body">
+                    {g.rows.map((row, idx) => {
+                      const c = row.contract;
+                      const rowSt = worstStatus(row);
+                      return (
+                        <div key={c.id} className={idx > 0 ? 'border-t-4 border-[var(--border)]' : ''}>
+                          {/* Tiêu đề từng hợp đồng trong thẻ khách hàng */}
+                          <div className="flex flex-wrap items-center gap-2.5 px-5 py-3 bg-subtle/40 border-b border-[var(--border)]">
+                            <span className="font-mono text-xs font-bold bg-surface text-soft px-2 py-0.5 rounded border border-[var(--border)]">
+                              {c.contract_no}
+                            </span>
+                            <span className="text-[11px] text-faint flex-1 min-w-0 truncate">
+                              ký {dateVN(c.sign_date)} · hiệu lực {dateVN(c.effective_from)}–{dateVN(c.effective_to)}
+                            </span>
+
+                            {/* Trạng thái sửa ngay tại đây — thao tác hay dùng nhất,
+                                không đáng phải mở hộp thoại sửa hợp đồng. */}
+                            {canEdit ? (
+                              <Select
+                                value={c.status_manual}
+                                onChange={v => changeStatus(row, v as ContractStatus)}
+                                options={CONTRACT_STATUS_OPTIONS}
+                                className="w-[190px]"
+                              />
+                            ) : (
+                              <span className={CONTRACT_STATUS_BADGE[c.status_manual]}>
+                                {CONTRACT_STATUS_LABEL[c.status_manual]}
+                              </span>
+                            )}
+                            <span className="text-xs font-semibold tabular-nums text-ink">
+                              {money(c.value_total)}đ
+                              {row.totals.remaining > 0 && (
+                                <span className="text-faint font-normal"> · còn {money(withVat(row.totals.remaining, c.vat_rate || 0))}đ</span>
+                              )}
+                            </span>
+                            {rowSt && <span className={STATUS_BADGE[rowSt]}>{STATUS_LABEL[rowSt]}</span>}
+                          </div>
+
+                          <PaymentScheduleTable
+                            payments={row.payments}
+                            vatRate={c.vat_rate || 0}
+                            editable={canEdit}
+                            edits={edits}
+                            onEdit={editRow}
+                          />
+
+                          {c.payment_terms && (
+                            <p className="px-5 py-3 text-xs text-soft border-t border-[var(--border)]">
+                              <span className="font-semibold text-faint uppercase tracking-wider mr-2">Điều khoản</span>
+                              {c.payment_terms}
+                            </p>
+                          )}
+
+                          {canEdit && (
+                            <div className="flex justify-end gap-2 px-5 py-3 border-t border-[var(--border)]">
+                              {editsOf(row).length > 0 && (
+                                <button onClick={() => saveEdits(row)} disabled={savingEdits}
+                                  className="vl-btn vl-btn-primary vl-btn-sm mr-auto" type="button">
+                                  {savingEdits ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                  Lưu {editsOf(row).length} đợt vừa sửa
+                                </button>
+                              )}
+                              <button onClick={() => setEditing(c.id)} className="vl-btn vl-btn-secondary vl-btn-sm" type="button">
+                                <Pencil className="w-3.5 h-3.5" /> Sửa hợp đồng
+                              </button>
+                              <button onClick={() => askDelete(row)} className="vl-btn vl-btn-danger vl-btn-sm" type="button">
+                                <Trash2 className="w-3.5 h-3.5" /> Xoá
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <ContractDialog
+        open={editing !== null}
+        contractId={editing || undefined}
+        onClose={() => setEditing(null)}
+        onSaved={() => setReload(n => n + 1)}
+      />
+      {dialog}
+    </div>
+  );
+}
