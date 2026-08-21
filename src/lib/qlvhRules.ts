@@ -15,6 +15,8 @@ export interface PaymentLike {
   seq: number;
   /** 'YYYY-MM-DD' */
   due_date: string;
+  /** % giá trị hợp đồng — chỉ để nhớ cách người dùng nhập; tiền luôn lưu ở `amount_due`. */
+  pct?: number;
   amount_due: number;
   /** 'YYYY-MM-DD' — rỗng = chưa thu đồng nào */
   paid_date?: string;

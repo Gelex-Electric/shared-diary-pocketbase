@@ -10,17 +10,19 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Building2, CalendarClock, ChevronRight, FileText,
-  RefreshCw, Search, Wallet,
+  AlertTriangle, Building2, CalendarClock, ChevronRight, FileText, Pencil, Plus,
+  RefreshCw, Search, Trash2, Wallet,
 } from 'lucide-react';
 import { Select } from '../ui/Select';
 import { StatTile, EmptyState } from '../ui/dashboard';
+import { useConfirm } from '../ui/ConfirmDialog';
 import { toast as notify } from '../../lib/toast';
 import { useScopeAreas, type Scope } from '../../lib/scope';
 import PaymentScheduleTable from './PaymentScheduleTable';
+import ContractDialog from './ContractDialog';
 import {
   CONTRACT_STATUS_LABEL, STATUS_BADGE, STATUS_LABEL,
-  fetchContracts, paymentStatus, summarize,
+  deleteContract, fetchContracts, paymentStatus, summarize,
   type ContractWithSchedule, type PaymentStatus,
 } from '../../lib/qlvh';
 
@@ -54,7 +56,8 @@ function worstStatus(row: ContractWithSchedule): PaymentStatus | null {
 }
 
 export default function ContractListManager({ scope }: { scope: Scope }) {
-  const { areas, canPickArea, allLabel } = useScopeAreas(scope);
+  const { areas, canPickArea, allLabel, isOffice } = useScopeAreas(scope);
+  const { confirm, dialog } = useConfirm();
 
   const [rows, setRows] = useState<ContractWithSchedule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +65,9 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  /** null = đóng; '' = thêm mới; id = sửa hợp đồng đó. */
+  const [editing, setEditing] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -71,7 +77,30 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       .catch(err => { if (alive) notify.error(`Không tải được danh sách hợp đồng: ${err.message}`); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, []);
+  }, [reload]);
+
+  /* Chỉ khối Văn phòng được thêm/sửa/xoá — khớp API rule của PocketBase. */
+  const canEdit = isOffice;
+
+  const askDelete = async (row: ContractWithSchedule) => {
+    const paid = row.totals.paid > 0;
+    const ok = await confirm({
+      title: `Xoá hợp đồng ${row.contract.contract_no}?`,
+      message: paid
+        ? `Hợp đồng đã ghi nhận thu ${money(row.totals.paid)}đ. Xoá là mất luôn toàn bộ ${row.payments.length} đợt và số đã thu.`
+        : `Toàn bộ ${row.payments.length} đợt thanh toán sẽ bị xoá theo.`,
+      confirmLabel: 'Xoá hợp đồng',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await deleteContract(row.contract.id);
+      notify.success('Đã xoá hợp đồng.');
+      setReload(n => n + 1);
+    } catch (err: any) {
+      notify.error(err?.message || 'Xoá hợp đồng thất bại.');
+    }
+  };
 
   /* Khối Đội chỉ được thấy KCN của mình — lọc ngay khi vào, không đợi user chọn. */
   const scoped = useMemo(
@@ -105,11 +134,18 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
 
-      <div>
-        <h2 className="text-xl font-bold text-ink">Hợp đồng quản lý vận hành</h2>
-        <p className="text-sm text-faint mt-1">
-          Theo dõi số hợp đồng, ngày ký và lịch thanh toán từng đợt.
-        </p>
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl font-bold text-ink">Hợp đồng quản lý vận hành</h2>
+          <p className="text-sm text-faint mt-1">
+            Theo dõi số hợp đồng, ngày ký và lịch thanh toán từng đợt.
+          </p>
+        </div>
+        {canEdit && (
+          <button onClick={() => setEditing('')} className="vl-btn vl-btn-primary shrink-0" type="button">
+            <Plus className="w-4 h-4" /> Thêm hợp đồng
+          </button>
+        )}
       </div>
 
       {/* KPI */}
@@ -225,6 +261,16 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                         {c.payment_terms}
                       </p>
                     )}
+                    {canEdit && (
+                      <div className="flex justify-end gap-2 px-5 py-3 border-t border-[var(--border)]">
+                        <button onClick={() => setEditing(c.id)} className="vl-btn vl-btn-secondary vl-btn-sm" type="button">
+                          <Pencil className="w-3.5 h-3.5" /> Sửa hợp đồng
+                        </button>
+                        <button onClick={() => askDelete(row)} className="vl-btn vl-btn-danger vl-btn-sm" type="button">
+                          <Trash2 className="w-3.5 h-3.5" /> Xoá
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -232,6 +278,14 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
           })}
         </div>
       )}
+
+      <ContractDialog
+        open={editing !== null}
+        contractId={editing || undefined}
+        onClose={() => setEditing(null)}
+        onSaved={() => setReload(n => n + 1)}
+      />
+      {dialog}
     </div>
   );
 }

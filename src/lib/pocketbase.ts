@@ -1,6 +1,8 @@
 import PocketBase from 'pocketbase';
 
-const pbUrl = import.meta.env.VITE_PB_URL || 'https://getc.up.railway.app/pb';
+// `?.` để file này còn nạp được ngoài Vite (script kiểm thử chạy bằng tsx, nơi
+// `import.meta.env` không tồn tại) — trong trình duyệt vẫn đọc biến như cũ.
+const pbUrl = import.meta.env?.VITE_PB_URL || process.env.VITE_PB_URL || 'https://getc.up.railway.app/pb';
 
 export const pb = new PocketBase(pbUrl);
 
