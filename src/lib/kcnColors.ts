@@ -51,3 +51,23 @@ const FALLBACK: KcnColor = {
 export function kcnColorOf(area?: string): KcnColor {
   return (area && KCN_COLOR[area]) || FALLBACK;
 }
+
+/**
+ * Bảng màu theo **MÃ KCN** (KCNTH, KCNPĐ…) dùng cho các bảng danh sách phẳng:
+ * viền trái thẻ, badge mã khách, chấm màu. Dùng mã hex + inline style vì class
+ * Tailwind động sẽ bị purge lúc build.
+ *
+ * Đây chính là bảng màu của màn "Biên bản xác nhận chỉ số" — gom ra đây để các
+ * màn khác dùng lại đúng một bộ màu, thay vì mỗi nơi khai một bản.
+ */
+export const ZONE_HEX: Record<string, string> = {
+  KCNTH:  '#0ea5e9', // sky
+  'KCNPĐ': '#10b981', // emerald
+  KCNTTI: '#8b5cf6', // violet
+  KCNYM:  '#f59e0b', // amber
+  KCN03:  '#f43f5e', // rose
+};
+
+export function zoneHexOf(code?: string): string {
+  return (code && ZONE_HEX[code]) || '#94a3b8';
+}

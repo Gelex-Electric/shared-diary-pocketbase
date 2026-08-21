@@ -17,6 +17,7 @@ import PaymentDialog from './PaymentDialog';
 import { Select } from '../ui/Select';
 import { StatTile, EmptyState } from '../ui/dashboard';
 import { useConfirm } from '../ui/ConfirmDialog';
+import { zoneHexOf } from '../../lib/kcnColors';
 import { toast as notify } from '../../lib/toast';
 import { useScopeAreas, type Scope } from '../../lib/scope';
 import PaymentScheduleTable from './PaymentScheduleTable';
@@ -113,7 +114,7 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return scoped.filter(r => {
+    const list = scoped.filter(r => {
       if (area && r.zoneName !== area) return false;
       if (q && !`${r.contract.contract_no} ${r.customerName}`.toLowerCase().includes(q)) return false;
 
@@ -123,6 +124,15 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       if (filter === 'con_phai_thu' && t.remaining <= 0) return false;
       if (filter === 'da_thu_xong' && t.remaining > 0) return false;
       return true;
+    });
+
+    /* Sắp theo MÃ KHÁCH HÀNG — cùng cách màn "Biên bản xác nhận chỉ số" đang
+       xếp, để hai màn đọc song song không phải dò lại. `numeric` để KCNTH-2
+       đứng trước KCNTH-10. Khách chưa có mã xuống cuối. */
+    return list.sort((a, b) => {
+      if (!a.customerCode !== !b.customerCode) return a.customerCode ? -1 : 1;
+      return a.customerCode.localeCompare(b.customerCode, 'vi', { numeric: true })
+        || a.customerName.localeCompare(b.customerName, 'vi');
     });
   }, [scoped, area, filter, query]);
 
@@ -226,8 +236,10 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
             const c = row.contract;
             const open = openId === c.id;
             const st = worstStatus(row);
+            const zColor = zoneHexOf(row.zoneCode);
             return (
-              <div key={c.id} className={`vl-accordion-item ${open ? 'is-open' : ''}`}>
+              <div key={c.id} className={`vl-accordion-item ${open ? 'is-open' : ''}`}
+                style={{ borderLeft: `4px solid ${zColor}` }}>
                 <button
                   className="vl-accordion-header"
                   onClick={() => setOpenId(open ? null : c.id)}
@@ -238,9 +250,20 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
 
                   <span className="flex-1 min-w-0 text-left">
                     <span className="block font-bold truncate">{row.customerName}</span>
-                    <span className="block text-[11px] text-faint mt-0.5 truncate">
-                      {row.zoneName} · ký {dateVN(c.sign_date)} · hiệu lực {dateVN(c.effective_from)}–{dateVN(c.effective_to)}
-                      {c.status_manual !== 'dang_hieu_luc' && ` · ${CONTRACT_STATUS_LABEL[c.status_manual]}`}
+                    <span className="text-[11px] text-faint mt-0.5 flex items-center gap-2 flex-wrap">
+                      {row.customerCode && (
+                        <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent font-bold">
+                          MKH: {row.customerCode}
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.5 rounded font-bold"
+                        style={{ backgroundColor: `${zColor}1a`, color: zColor }}>
+                        {row.zoneName}
+                      </span>
+                      <span className="truncate">
+                        ký {dateVN(c.sign_date)} · hiệu lực {dateVN(c.effective_from)}–{dateVN(c.effective_to)}
+                        {c.status_manual !== 'dang_hieu_luc' && ` · ${CONTRACT_STATUS_LABEL[c.status_manual]}`}
+                      </span>
                     </span>
                   </span>
 

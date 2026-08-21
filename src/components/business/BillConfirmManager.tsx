@@ -6,6 +6,7 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
 import { zoneFromArea, zoneOf, ZONE_MAP, fetchLatestInvoiceMonth } from '../../lib/invoices';
+import { zoneHexOf } from '../../lib/kcnColors';
 import PizZip from 'pizzip';
 import {
   FileCheck2, Save, Gauge, Building2, Users,
@@ -143,15 +144,9 @@ const fmtNKy = (s?: string): string => {
   return time;
 };
 
-// Màu phân biệt theo khu công nghiệp (dùng inline style — tránh Tailwind purge class động)
-const ZONE_COLOR: Record<string, string> = {
-  KCNTH: '#0ea5e9',  // sky
-  KCNPĐ: '#10b981',  // emerald
-  KCNTTI: '#8b5cf6', // violet
-  KCNYM: '#f59e0b',  // amber
-  KCN03: '#f43f5e',  // rose
-};
-const zoneColor = (mkh: string) => ZONE_COLOR[zoneOf(mkh)] || '#94a3b8';
+// Màu phân biệt theo khu công nghiệp — bảng màu đã chuyển sang `lib/kcnColors`
+// (ZONE_HEX) để màn Hợp đồng QLVH dùng đúng một bộ màu, không khai lại bản thứ hai.
+const zoneColor = (mkh: string) => zoneHexOf(zoneOf(mkh));
 
 // Gộp nhiều khoảng đổi giá của cùng công tơ thành 1 bản ghi biên bản liên tục:
 // đầu kỳ = chỉ số đầu của khoảng sớm nhất, cuối kỳ = chỉ số cuối của khoảng muộn nhất,

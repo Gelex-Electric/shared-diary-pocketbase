@@ -15,6 +15,7 @@ import { Select } from '../ui/Select';
 import { StatTile, EmptyState, Panel } from '../ui/dashboard';
 import { toast as notify } from '../../lib/toast';
 import { useScopeAreas, type Scope } from '../../lib/scope';
+import { zoneHexOf } from '../../lib/kcnColors';
 import {
   STATUS_BADGE, STATUS_LABEL, daysBetween, dayOf, fetchContracts, overdueDays,
   paymentStatus, remainingOf, summarize, todayStr,
@@ -38,7 +39,20 @@ interface DueRow {
   payment: Payment;
   contractNo: string;
   customerName: string;
+  customerCode: string;
   zoneName: string;
+  zoneCode: string;
+}
+
+/** Nhãn KCN mang màu riêng — cùng bộ màu với màn "Biên bản xác nhận chỉ số". */
+function ZoneTag({ name, code }: { name: string; code: string }) {
+  const hex = zoneHexOf(code);
+  return (
+    <span className="px-1.5 py-0.5 rounded text-[11px] font-bold whitespace-nowrap"
+      style={{ backgroundColor: `${hex}1a`, color: hex }}>
+      {name}
+    </span>
+  );
 }
 
 export default function QlvhSummary({ scope }: { scope: Scope }) {
@@ -73,7 +87,9 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
         payment: p,
         contractNo: r.contract.contract_no,
         customerName: r.customerName,
+        customerCode: r.customerCode,
         zoneName: r.zoneName,
+        zoneCode: r.zoneCode,
       }))),
     [visible],
   );
@@ -137,7 +153,10 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
                 </td>
                 <td className="py-3 px-4">
                   <span className="block font-semibold text-ink truncate">{d.customerName}</span>
-                  <span className="block text-[11px] text-faint">{d.zoneName}</span>
+                  <span className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    {d.customerCode && <span className="text-[11px] font-bold text-soft">{d.customerCode}</span>}
+                    <ZoneTag name={d.zoneName} code={d.zoneCode} />
+                  </span>
                 </td>
                 <td className="py-3 px-4 text-center tabular-nums text-soft">Đợt {d.payment.seq}</td>
                 <td className="py-3 px-4 text-center tabular-nums text-soft">{dateVN(d.payment.due_date)}</td>
@@ -235,7 +254,10 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
                       <td className="py-3 px-4 font-mono text-xs font-bold text-soft">{r.contract.contract_no}</td>
                       <td className="py-3 px-4">
                         <span className="block font-semibold text-ink truncate">{r.customerName}</span>
-                        <span className="block text-[11px] text-faint">{r.zoneName}</span>
+                        <span className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          {r.customerCode && <span className="text-[11px] font-bold text-soft">{r.customerCode}</span>}
+                          <ZoneTag name={r.zoneName} code={r.zoneCode} />
+                        </span>
                       </td>
                       <td className="py-3 px-4 text-center tabular-nums text-soft">{dateVN(r.contract.effective_to)}</td>
                       <td className="py-3 px-4 text-center tabular-nums font-semibold text-ink">

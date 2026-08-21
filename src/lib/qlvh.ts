@@ -89,7 +89,11 @@ export interface ContractWithSchedule {
   payments: Payment[];
   totals: ContractTotals;
   customerName: string;
+  /** Mã khách hàng (dm_customer.mkh) — khoá sắp xếp và nhãn hiển thị. */
+  customerCode: string;
   zoneName: string;
+  /** Mã KCN (dm_zone.code) — khoá tra màu, xem lib/kcnColors. */
+  zoneCode: string;
 }
 
 /* ------------------------------------------------------------------- Đọc */
@@ -143,7 +147,9 @@ export async function fetchContracts(zoneName?: string): Promise<ContractWithSch
       payments,
       totals: summarize(payments),
       customerName: contract.expand?.customer?.name || contract.customer_name || '—',
+      customerCode: contract.expand?.customer?.mkh || '',
       zoneName: contract.expand?.zone?.name || '—',
+      zoneCode: contract.expand?.zone?.code || '',
     };
   });
 }
@@ -159,7 +165,9 @@ export async function fetchContract(id: string): Promise<ContractWithSchedule> {
     payments,
     totals: summarize(payments),
     customerName: contract.expand?.customer?.name || contract.customer_name || '—',
+    customerCode: contract.expand?.customer?.mkh || '',
     zoneName: contract.expand?.zone?.name || '—',
+    zoneCode: contract.expand?.zone?.code || '',
   };
 }
 
