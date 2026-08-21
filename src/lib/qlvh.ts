@@ -38,6 +38,25 @@ export const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = {
  */
 export const isDraft = (c: { status_manual?: ContractStatus }) => c.status_manual === 'du_thao';
 
+/** Nhãn màu cho trạng thái pháp lý — dùng lớp badge chung của app. */
+const BADGE_BASE = 'inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded';
+
+export const CONTRACT_STATUS_BADGE: Record<ContractStatus, string> = {
+  du_thao:       `${BADGE_BASE} vl-badge-info`,
+  dang_hieu_luc: `${BADGE_BASE} vl-badge-success`,
+  tam_dung:      `${BADGE_BASE} vl-badge-warning`,
+  da_thanh_ly:   `${BADGE_BASE} bg-subtle text-faint`,
+};
+
+/** 3 trạng thái dùng thật (bỏ 'tam_dung' theo yêu cầu user 21/08/2026). */
+export const CONTRACT_STATUS_OPTIONS = (['du_thao', 'dang_hieu_luc', 'da_thanh_ly'] as ContractStatus[])
+  .map(v => ({ value: v, label: CONTRACT_STATUS_LABEL[v] }));
+
+/** Đổi riêng trạng thái pháp lý — sửa nhanh ngay trên thẻ, không mở hộp thoại. */
+export async function updateContractStatus(id: string, status: ContractStatus): Promise<void> {
+  await pb.collection(C_CONTRACT).update(id, { status_manual: status });
+}
+
 /** Bản ghi danh mục dùng lại — CHỈ ĐỌC, module này không sửa dm_*. */
 export interface DmCustomer {
   id: string;

@@ -23,9 +23,10 @@ import { useScopeAreas, type Scope } from '../../lib/scope';
 import PaymentScheduleTable, { type PaymentEdit } from './PaymentScheduleTable';
 import ContractDialog from './ContractDialog';
 import {
-  CONTRACT_STATUS_LABEL, STATUS_BADGE, STATUS_LABEL,
-  deleteContract, fetchContracts, isDraft, paymentStatus, savePaymentEdits, summarize, withVat,
-  type ContractWithSchedule, type PaymentStatus,
+  CONTRACT_STATUS_BADGE, CONTRACT_STATUS_LABEL, CONTRACT_STATUS_OPTIONS, STATUS_BADGE, STATUS_LABEL,
+  deleteContract, fetchContracts, isDraft, paymentStatus, savePaymentEdits, summarize,
+  updateContractStatus, withVat,
+  type ContractStatus, type ContractWithSchedule, type PaymentStatus,
 } from '../../lib/qlvh';
 
 const money = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v || 0));
@@ -89,6 +90,18 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
   /** Chỉ giữ bản nháp thuộc hợp đồng đang mở — đóng thẻ là bỏ, khỏi lưu nhầm. */
   const editsOf = (row: ContractWithSchedule) =>
     row.payments.filter(p => edits[p.id]).map(p => ({ id: p.id, ...edits[p.id] }));
+
+  /** Đổi trạng thái pháp lý: ghi luôn, không cần bấm Lưu — chỉ một ô chọn. */
+  const changeStatus = async (row: ContractWithSchedule, status: ContractStatus) => {
+    if (status === row.contract.status_manual) return;
+    try {
+      await updateContractStatus(row.contract.id, status);
+      notify.success(`${row.contract.contract_no}: ${CONTRACT_STATUS_LABEL[status]}.`);
+      setReload(n => n + 1);
+    } catch (err: any) {
+      notify.error(err?.message || 'Đổi trạng thái thất bại.');
+    }
+  };
 
   const saveEdits = async (row: ContractWithSchedule) => {
     const list = editsOf(row);
@@ -203,6 +216,7 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       key: string; customerName: string; customerCode: string;
       zoneName: string; zoneCode: string;
       rows: ContractWithSchedule[]; value: number; remaining: number;
+      statuses: [ContractStatus, number][];
     }>();
 
     for (const r of visible) {
@@ -210,7 +224,7 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       const g = map.get(key) || {
         key, customerName: r.customerName, customerCode: r.customerCode,
         zoneName: r.zoneName, zoneCode: r.zoneCode,
-        rows: [], value: 0, remaining: 0,
+        rows: [], value: 0, remaining: 0, statuses: [],
       };
       g.rows.push(r);
       if (!isDraft(r.contract)) {
@@ -223,6 +237,15 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
     for (const g of map.values()) {
       /* Hợp đồng mới nhất lên trước — cái đang chạy thường là cái cần xem. */
       g.rows.sort((a, b) => String(b.contract.sign_date).localeCompare(String(a.contract.sign_date)));
+
+      /* Đếm theo trạng thái để làm tag trên thẻ, giữ thứ tự hiệu lực → thanh lý. */
+      const count = new Map<ContractStatus, number>();
+      for (const r of g.rows) {
+        const s = r.contract.status_manual || 'dang_hieu_luc';
+        count.set(s, (count.get(s) || 0) + 1);
+      }
+      const ORDER: ContractStatus[] = ['dang_hieu_luc', 'du_thao', 'tam_dung', 'da_thanh_ly'];
+      g.statuses = ORDER.filter(s => count.has(s)).map(s => [s, count.get(s)!] as [ContractStatus, number]);
     }
 
     return [...map.values()].sort((a, b) => {
@@ -352,6 +375,14 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                         {g.zoneName}
                       </span>
                       <span>{g.rows.length} hợp đồng</span>
+
+                      {/* Tag trạng thái pháp lý — thu gọn thẻ vẫn thấy ngay khách
+                          này còn hợp đồng hiệu lực hay đã thanh lý hết. */}
+                      {g.statuses.map(([st, n]) => (
+                        <span key={st} className={CONTRACT_STATUS_BADGE[st]}>
+                          {CONTRACT_STATUS_LABEL[st]}{g.rows.length > 1 && ` ×${n}`}
+                        </span>
+                      ))}
                     </span>
                   </span>
 
@@ -380,8 +411,22 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                             </span>
                             <span className="text-[11px] text-faint flex-1 min-w-0 truncate">
                               ký {dateVN(c.sign_date)} · hiệu lực {dateVN(c.effective_from)}–{dateVN(c.effective_to)}
-                              {c.status_manual !== 'dang_hieu_luc' && ` · ${CONTRACT_STATUS_LABEL[c.status_manual]}`}
                             </span>
+
+                            {/* Trạng thái sửa ngay tại đây — thao tác hay dùng nhất,
+                                không đáng phải mở hộp thoại sửa hợp đồng. */}
+                            {canEdit ? (
+                              <Select
+                                value={c.status_manual}
+                                onChange={v => changeStatus(row, v as ContractStatus)}
+                                options={CONTRACT_STATUS_OPTIONS}
+                                className="w-[190px]"
+                              />
+                            ) : (
+                              <span className={CONTRACT_STATUS_BADGE[c.status_manual]}>
+                                {CONTRACT_STATUS_LABEL[c.status_manual]}
+                              </span>
+                            )}
                             <span className="text-xs font-semibold tabular-nums text-ink">
                               {money(c.value_total)}đ
                               {row.totals.remaining > 0 && (
