@@ -62,6 +62,8 @@ export interface Contract {
   vat_rate: number;
   value_vat: number;
   value_total: number;
+  /** Tên khách chụp lại lúc nhập — dùng khi chưa có trong dm_customer. */
+  customer_name?: string;
   che_xuat?: boolean;
   payment_terms?: string;
   status_manual: ContractStatus;
@@ -140,7 +142,7 @@ export async function fetchContracts(zoneName?: string): Promise<ContractWithSch
       contract,
       payments,
       totals: summarize(payments),
-      customerName: contract.expand?.customer?.name || '—',
+      customerName: contract.expand?.customer?.name || contract.customer_name || '—',
       zoneName: contract.expand?.zone?.name || '—',
     };
   });
@@ -156,7 +158,7 @@ export async function fetchContract(id: string): Promise<ContractWithSchedule> {
     contract,
     payments,
     totals: summarize(payments),
-    customerName: contract.expand?.customer?.name || '—',
+    customerName: contract.expand?.customer?.name || contract.customer_name || '—',
     zoneName: contract.expand?.zone?.name || '—',
   };
 }

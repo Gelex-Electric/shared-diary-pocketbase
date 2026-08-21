@@ -92,6 +92,9 @@ function contractFields(customerId, zoneId) {
   // dõi hiện hành thuộc diện này, nên để cờ riêng thay vì bắt nhớ chọn 0%.
   { name: 'che_xuat',         type: 'bool' },
   { name: 'customer',         type: 'relation', maxSelect: 1, cascadeDelete: false, collectionId: customerId },
+  // Tên khách CHỤP LẠI lúc nhập: dùng khi khách chưa có trong dm_customer (nhập
+  // từ file theo dõi có 8 khách như vậy) và làm dấu vết đối chiếu về sau.
+  { name: 'customer_name',    type: 'text' },
   { name: 'zone',             type: 'relation', maxSelect: 1, cascadeDelete: false, collectionId: zoneId },
   { name: 'sign_date',        type: 'date' },
   { name: 'effective_from',   type: 'date' },
