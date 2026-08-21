@@ -36,13 +36,20 @@ export const STATUS_LABEL: Record<PaymentStatus, string> = {
   chua_den_han:  'Chưa đến hạn',
 };
 
-/** Lớp badge dùng chung của app (index.css) — không tự đặt màu. */
+/**
+ * Lớp badge dùng chung của app — không tự đặt màu.
+ * `vl-badge-*` trong index.css CHỈ cấp màu, phần hình dạng do nơi gọi thêm vào
+ * (xem CustomerManager/PowerOutageManager), nên gói sẵn cả hai ở đây để mọi màn
+ * hình của module hiện giống nhau.
+ */
+const BADGE_BASE = 'inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded';
+
 export const STATUS_BADGE: Record<PaymentStatus, string> = {
-  da_thu:        'vl-badge-success',
-  thu_thieu:     'vl-badge-warning',
-  qua_han:       'vl-badge-danger',
-  sap_den_han:   'vl-badge-warning',
-  chua_den_han:  'vl-badge-info',
+  da_thu:        `${BADGE_BASE} vl-badge-success`,
+  thu_thieu:     `${BADGE_BASE} vl-badge-warning`,
+  qua_han:       `${BADGE_BASE} vl-badge-danger`,
+  sap_den_han:   `${BADGE_BASE} vl-badge-warning`,
+  chua_den_han:  `${BADGE_BASE} vl-badge-info`,
 };
 
 /** Số ngày trước hạn thì coi là "sắp đến hạn" (user chốt 21/08/2026). */
