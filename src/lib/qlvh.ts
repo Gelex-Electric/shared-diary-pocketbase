@@ -87,6 +87,9 @@ export interface Contract {
 export interface Payment extends PaymentLike {
   id: string;
   contract: string;
+  /** Ngày xuất hoá đơn — Điều 3.3 hợp đồng: hoá đơn phát hành SAU khi nhận được
+   *  thanh toán, nên đây là mốc riêng, không trùng `paid_date`. */
+  invoice_date?: string;
   invoice_no?: string;
   note?: string;
 }
@@ -311,14 +314,15 @@ export async function recordPayment(
  * tự động — dùng khi chỉnh lại số liệu cũ chứ không phải ghi nhận khoản thu mới.
  */
 export async function savePaymentEdits(
-  edits: { id: string; amount_paid?: number; paid_date?: string }[],
+  edits: { id: string; amount_paid?: number; paid_date?: string; invoice_date?: string }[],
 ): Promise<void> {
   for (const e of edits) {
-    /* CHỈ ghi đúng ô người dùng đã đụng. Gửi cả hai ô kèm giá trị mặc định thì
-       sửa mỗi ngày thu sẽ xoá mất số đã thu — đã dính đúng lỗi này khi thử. */
+    /* CHỈ ghi đúng ô người dùng đã đụng. Gửi mọi ô kèm giá trị mặc định thì sửa
+       một ô sẽ xoá các ô còn lại — đã dính đúng lỗi này khi thử. */
     const body: Record<string, unknown> = {};
     if ('amount_paid' in e) body.amount_paid = e.amount_paid ?? 0;
     if ('paid_date' in e) body.paid_date = e.paid_date || '';
+    if ('invoice_date' in e) body.invoice_date = e.invoice_date || '';
     if (Object.keys(body).length === 0) continue;
     await pb.collection(C_PAYMENT).update(e.id, body);
   }

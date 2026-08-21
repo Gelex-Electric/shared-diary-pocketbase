@@ -148,6 +148,9 @@ function paymentFields(contractId) {
     { name: 'pct',         type: 'number' },
     { name: 'amount_due',  type: 'number' },
     { name: 'paid_date',   type: 'date' },
+    // Ngày xuất hoá đơn — theo Điều 3.3 hợp đồng, hoá đơn phát hành SAU khi
+    // nhận được thanh toán, nên đây là mốc riêng chứ không trùng ngày thu.
+    { name: 'invoice_date', type: 'date' },
     { name: 'amount_paid', type: 'number' },
     { name: 'invoice_no',  type: 'text' },
     { name: 'note',        type: 'text' },
