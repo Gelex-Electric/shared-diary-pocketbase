@@ -14,15 +14,14 @@ import HesReadingManager from '../hes/HesReadingManager';
 import OfficeVoltagePowerDashboard from './OfficeVoltagePowerDashboard';
 import TransformerLossManager from '../TransformerLossManager';
 import OfficeSldPage from './OfficeSldPage';
-import ContractListManager from '../qlvh/ContractListManager';
-import QlvhSummary from '../qlvh/QlvhSummary';
+import QlvhPage from '../qlvh/QlvhPage';
 import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
   | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
-  | 'qlvh-summary' | 'qlvh-contract';
+  | 'qlvh';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
@@ -34,16 +33,15 @@ const TAB_LABEL: Record<Tab, string> = {
   opchart:         'Đồ thị điện áp & công suất',
   loss:            'Tổn thất tính toán',
   sld:             'Sơ đồ một sợi',
-  'qlvh-summary':  'Tổng hợp hợp đồng QLVH',
-  'qlvh-contract': 'Danh sách hợp đồng QLVH',
+  qlvh:            'Quản lý vận hành',
 };
 
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
 const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt'];
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
-/** Các tab con thuộc khu vực "Quản lý vận hành" (hợp đồng QLVH). */
-const QLVH_TABS: Tab[] = ['qlvh-summary', 'qlvh-contract'];
+/** Mục con của nhóm "Quản lý Hợp đồng" — hiện chỉ 1, giữ mảng để thêm mục sau. */
+const QLVH_TABS: Tab[] = ['qlvh'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
@@ -167,8 +165,7 @@ export default function BusinessDashboard() {
               )}
             </AnimatePresence>
           </li>
-
-          {/* Quản lý vận hành (hợp đồng QLVH) — khu vực riêng, vẫn thuộc khối kinh doanh */}
+          {/* Quản lý Hợp đồng — khu vực riêng, vẫn thuộc khối kinh doanh */}
           <li className="relative mt-1">
             <button
               id="nav-qlvh"
@@ -178,8 +175,7 @@ export default function BusinessDashboard() {
               }`}
             >
               <FileSignature className="w-5 h-5 shrink-0" />
-              <span className="flex-1 text-left">Quản lý vận hành</span>
-              <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
+              <span className="flex-1 text-left">Quản lý Hợp đồng</span>
               <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isQlvhExpanded ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence initial={false}>
@@ -193,26 +189,15 @@ export default function BusinessDashboard() {
                 >
                   <li>
                     <button
-                      id="nav-qlvh-summary-sub"
-                      onClick={() => { setTopTab('qlvh-summary'); onNavigate?.(); }}
+                      id="nav-qlvh-sub"
+                      onClick={() => { setTopTab('qlvh'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'qlvh-summary' ? 'text-accent' : 'text-soft hover:text-dim'
+                        topTab === 'qlvh' ? 'text-accent' : 'text-soft hover:text-dim'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
-                      <span className="flex-1">Tổng hợp hợp đồng</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      id="nav-qlvh-contract-sub"
-                      onClick={() => { setTopTab('qlvh-contract'); onNavigate?.(); }}
-                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'qlvh-contract' ? 'text-accent' : 'text-soft hover:text-dim'
-                      }`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
-                      <span className="flex-1">Danh sách hợp đồng</span>
+                      <span className="flex-1">Quản lý vận hành</span>
+                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
                 </motion.ul>
@@ -434,10 +419,8 @@ export default function BusinessDashboard() {
               <OfficeVoltagePowerDashboard />
             ) : topTab === 'loss' ? (
               <TransformerLossManager />
-            ) : topTab === 'qlvh-summary' ? (
-              <QlvhSummary scope="vanphong" />
-            ) : topTab === 'qlvh-contract' ? (
-              <ContractListManager scope="vanphong" />
+            ) : topTab === 'qlvh' ? (
+              <QlvhPage scope="vanphong" />
             ) : topTab === 'sld' ? (
               <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
                 <OfficeSldPage />
