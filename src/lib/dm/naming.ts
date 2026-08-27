@@ -161,17 +161,24 @@ export function missingPointCodeParts(p: PointCodeParts): string[] {
 }
 
 /**
- * Nhãn mục đích dùng khi điểm đo phụ TRÙNG khách hàng với điểm đo chính.
- * Viết tắt ngắn để mã không dài; ngoài danh sách này còn cho tự nhập.
+ * Nhãn mục đích làm ĐUÔI MÃ điểm đo. Viết tắt ngắn để mã không dài; ngoài danh
+ * sách này còn cho tự nhập.
+ *
+ * Từ 25/08/2026 nhãn này dùng được cho MỌI điểm đo, không riêng điểm phụ trùng
+ * khách hàng với điểm chính: một trạm có thể có vài điểm đo cùng khách mà khác
+ * mục đích, và người khai cần gọi tên chúng cho ra chuyện.
  */
 export const SUB_PURPOSES: { code: string; label: string }[] = [
   { code: 'CSCC', label: 'Chiếu sáng công cộng' },
+  { code: 'CCNS', label: 'Cung cấp nước sạch' },
   { code: 'PCCC', label: 'Phòng cháy chữa cháy' },
   { code: 'BCC', label: 'Bơm chuyển cốt' },
-  { code: 'TRAM-BOM', label: 'Trạm bơm' },
   { code: 'VP', label: 'Văn phòng' },
   { code: 'NX', label: 'Nhà xưởng' },
   { code: 'DP', label: 'Dự phòng' },
+  // Nhãn CHUNG cho điểm đo phụ không có mục đích riêng nào — vẫn cần một đuôi
+  // để mã khỏi trùng mã trạm (user chốt 27/08/2026).
+  { code: 'PHU', label: 'Điểm đo phụ' },
 ];
 
 /** Tên đầy đủ của một nhãn đuôi; nhãn tự nhập thì trả lại chính nó. */

@@ -134,9 +134,11 @@ export function DerivedValue({ value, placeholder }: { value: string; placeholde
  * Modal nhập liệu — bấm "Thêm …" mới hiện, dùng lại cho cả thêm mới lẫn sửa.
  * Nền mờ bấm ra ngoài để đóng, hệt các modal sẵn có trong app.
  */
-export function FormModal({ open, title, onClose, onSubmit, saving, wide, children }: {
+export function FormModal({ open, title, onClose, onSubmit, saving, wide, submitLabel, children }: {
   open: boolean; title: string; onClose: () => void;
   onSubmit: () => void; saving?: boolean;
+  /** Chữ trên nút xác nhận; mặc định "Lưu lại". */
+  submitLabel?: string;
   /**
    * Form có bảng bên trong thì cần rộng hơn, kẻo các cột teo lại. Nở dần theo
    * bề ngang màn hình: laptop giữ nguyên 4xl như cũ, màn lớn mới rộng thêm.
@@ -176,7 +178,7 @@ export function FormModal({ open, title, onClose, onSubmit, saving, wide, childr
                 <button type="button" onClick={onClose} className="vl-btn vl-btn-secondary">Hủy</button>
                 <button type="submit" disabled={saving} className="vl-btn vl-btn-primary flex items-center gap-2">
                   <Check className="h-4 w-4" />
-                  {saving ? 'Đang lưu…' : 'Lưu lại'}
+                  {saving ? 'Đang lưu…' : (submitLabel ?? 'Lưu lại')}
                 </button>
               </div>
             </form>

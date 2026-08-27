@@ -9,8 +9,9 @@
  * theo React/lucide.
  */
 import {
-  Gauge, Lightbulb, Flame, Droplets, Waves, Building2, Factory,
-  BatteryCharging, Users, Tag,
+  Gauge, Lightbulb, Flame, Droplets, Building2, Factory,
+  BatteryCharging, Users, Tag, GlassWater, GitBranch,
+  CircleCheck, CircleAlert, CircleDashed, CircleSlash, CircleHelp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { purposeLabelOf } from '../../lib/dm/naming';
@@ -27,14 +28,22 @@ interface PointBadge {
   title: string;
 }
 
+/**
+ * Mỗi nhãn mục đích một biểu tượng riêng. Phải phủ ĐỦ `SUB_PURPOSES` bên
+ * `lib/dm/naming.ts` — thiếu cái nào thì điểm đo đó rơi về biểu tượng khách
+ * hàng chung chung, nhìn không ra mục đích nữa.
+ */
 const PURPOSE_ICON: Record<string, { icon: LucideIcon; hex: string }> = {
   CSCC:       { icon: Lightbulb,       hex: '#f59e0b' },
+  CCNS:       { icon: GlassWater,      hex: '#0284c7' },
   PCCC:       { icon: Flame,           hex: '#ef4444' },
+  // "Trạm bơm" bỏ ngày 27/08/2026: cùng một thứ với bơm chuyển cốt, mà BCC
+  // mới là mã đang dùng thật (`TH.BQL.T1.180kVA.BCC`).
   BCC:        { icon: Droplets,        hex: '#06b6d4' },
-  'TRAM-BOM': { icon: Waves,           hex: '#0ea5e9' },
   VP:         { icon: Building2,       hex: '#6366f1' },
   NX:         { icon: Factory,         hex: '#10b981' },
   DP:         { icon: BatteryCharging, hex: '#8b5cf6' },
+  PHU:        { icon: GitBranch,       hex: '#64748b' },
 };
 
 export function pointBadge(p: Point): PointBadge {
@@ -102,6 +111,54 @@ export function StatusTag({ status }: { status?: PointStatus }) {
   return (
     <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${STATUS_STYLE[status]}`}>
       {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+/**
+ * Trạng thái dạng CHỈ BIỂU TƯỢNG — dùng trong sơ đồ cây.
+ *
+ * Cây là chỗ để duyệt và chọn, không phải chỗ đọc số liệu: bấm vào là card chi
+ * tiết bên cạnh nói đủ mọi thứ (user chốt 25/08/2026). Vì vậy mỗi hàng chỉ giữ
+ * hai biểu tượng — loại điểm đo và trạng thái — thay cho một dãy tag chữ.
+ */
+const STATUS_ICON: Record<Exclude<PointStatus, ''>, { icon: LucideIcon; hex: string }> = {
+  du_kien:       { icon: CircleDashed, hex: '#94a3b8' },
+  chua_van_hanh: { icon: CircleAlert,  hex: '#f59e0b' },
+  active:        { icon: CircleCheck,  hex: '#10b981' },
+  thao_go:       { icon: CircleSlash,  hex: '#ef4444' },
+};
+
+export function StatusIcon({ status }: { status?: PointStatus }) {
+  if (!status) {
+    return (
+      <span title="Chưa tính trạng thái" className="inline-flex shrink-0">
+        <CircleHelp className="h-4 w-4 text-faint" />
+      </span>
+    );
+  }
+  const { icon: Icon, hex } = STATUS_ICON[status];
+  return (
+    <span title={STATUS_LABEL[status]} className="inline-flex shrink-0">
+      <Icon className="h-4 w-4" style={{ color: hex }} />
+    </span>
+  );
+}
+
+/**
+ * Tag thông tin trung tính (HSN, mã khách hàng…) — CÙNG hình khối với
+ * `StatusTag` và `PointBadgeChip`: viên thuốc bo tròn, `px-3 py-1`, chữ 11px in
+ * hoa giãn nhẹ.
+ *
+ * Có mặt vì rà lại 25/08/2026: cùng một hàng đang trộn ba kiểu tag khác nhau —
+ * badge màu bó sát chữ, viên thuốc, và chữ trần không viền — nhìn như ba thứ
+ * không liên quan. Mọi tag đứng cạnh nhau phải chung một khuôn.
+ */
+export function InfoTag({ children, title }: { children: React.ReactNode; title?: string }) {
+  return (
+    <span title={title}
+      className="inline-flex shrink-0 items-center rounded-full bg-subtle px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-soft">
+      {children}
     </span>
   );
 }

@@ -11,9 +11,17 @@
 import { pb } from '../pocketbase';
 import type { Asset, Customer, Point, Station, Zone } from './types';
 
-/** Nạp hết một collection, sắp xếp theo `sort`. PocketBase batch tối đa 500/lần. */
+/**
+ * Nạp hết một collection, sắp xếp theo `sort`. PocketBase batch tối đa 500/lần.
+ *
+ * `requestKey: null` TẮT tự huỷ (auto-cancellation). SDK mặc định gộp request
+ * theo "phương thức + đường dẫn", nên hai lần nạp cùng một collection chồng
+ * nhau — hai màn cùng mở, bấm tải lại khi lần trước chưa xong — thì lần trước
+ * bị huỷ và ném lỗi "The request was aborted". Ở đây mỗi lần gọi là một việc
+ * độc lập, không có gì để gộp.
+ */
 async function all<T>(collection: string, sort: string): Promise<T[]> {
-  const items = await pb.collection(collection).getFullList({ sort, batch: 500 });
+  const items = await pb.collection(collection).getFullList({ sort, batch: 500, requestKey: null });
   return items as unknown as T[];
 }
 
@@ -73,6 +81,15 @@ export async function loadCatalog(): Promise<CatalogData> {
  * PB trả 400 kèm `data.<field>.message` khi vi phạm ràng buộc (vd trùng mã) —
  * lấy đúng thông điệp đó thay vì hiện "Something went wrong".
  */
+/**
+ * Lỗi này là do request bị HUỶ giữa chừng, không phải hỏng dữ liệu.
+ * Gọi lại lần sau sẽ có kết quả, nên màn hình không được hiện nó thành lỗi đỏ.
+ */
+export function isAbortError(err: unknown): boolean {
+  const e = err as { isAbort?: boolean; name?: string; message?: string };
+  return e?.isAbort === true || e?.name === 'AbortError' || /autocancell?ed|was aborted/i.test(e?.message ?? '');
+}
+
 export function pbErrorMessage(err: unknown): string {
   const e = err as { response?: { data?: Record<string, { message?: string }>; message?: string }; message?: string };
   const fields = e?.response?.data;

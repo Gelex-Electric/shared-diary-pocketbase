@@ -149,3 +149,49 @@ export function bySerial(invoices: InvoiceLite[]): Map<string, InvoiceLite[]> {
   }
   return map;
 }
+
+/**
+ * `"2026-08-11"` → `"11/08/2026"` — dạng ngày người Việt đọc.
+ *
+ * Tách khỏi `ymd`: `ymd` là dạng DỮ LIỆU, sắp xếp và so sánh chuỗi được nên mọi
+ * phép tính bên trong phải dùng nó. `dmy` chỉ dùng ở lớp HIỂN THỊ, không bao
+ * giờ đem đi so sánh (so `11/08` với `02/09` sẽ ra sai thứ tự).
+ */
+export const dmy = (v?: string): string => {
+  const s = ymd(v);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const [y, m, d] = s.split('-');
+  return `${d}/${m}/${y}`;
+};
+
+/** Khoảng ngày để hiển thị: `"11/08/2026 → 20/08/2026"`. Thiếu vế nào thì `—`. */
+export const dmyRange = (from?: string, to?: string): string =>
+  `${dmy(from) || '—'} → ${dmy(to) || '—'}`;
+
+/**
+ * Chặng hóa đơn ứng với ĐÚNG quãng vật tư được treo ở điểm đo này.
+ *
+ * Trước 25/08/2026 chỉ ghép theo `MKH + số công tơ`, nhưng một khách hàng có
+ * thể có nhiều điểm đo và tháo công tơ từ chỗ này lắp sang chỗ kia. Khi đó chặng
+ * hóa đơn của khách trùng số công tơ vẫn tìm ra, nhưng nó thuộc quãng công tơ
+ * nằm ở điểm đo KHÁC — lấy HSN của nó về là sai.
+ *
+ * Thêm cửa sổ `[dateOn, dateOff]`: chặng phải giao với quãng treo mới được nhận.
+ *
+ * Chưa khai ngày treo ⇒ trả `undefined`: vật tư mới nhập vào bảng mà chưa có
+ * ngày treo là VẬT TƯ DỰ KIẾN, chưa lắp thật nên không được lấy gì từ hóa đơn.
+ */
+export function segmentFor(
+  segments: Segment[],
+  mkh?: string,
+  dateOn?: string,
+  dateOff?: string,
+): Segment | undefined {
+  const seg = segmentOf(segments, mkh);
+  if (!seg) return undefined;
+  const from = ymd(dateOn);
+  if (!from) return undefined;
+  // Chưa tháo thì cửa sổ mở tới vô cùng.
+  const to = ymd(dateOff) || '9999-12-31';
+  return seg.from <= to && from <= seg.to ? seg : undefined;
+}

@@ -61,6 +61,20 @@ export interface Customer extends PbRecord {
   active?: boolean;
 }
 
+/**
+ * Một lần CHUYỂN CHỦ THỂ của điểm đo: khách hàng đứng tên đổi, còn điểm đo vật
+ * lý thì không (hợp nhất pháp nhân, chuyển nhượng nhà xưởng…).
+ */
+export interface OwnerTransfer {
+  /** Mã khách hàng cũ. Rỗng nếu trước đó chưa gắn khách nào. */
+  from?: string;
+  /** Mã khách hàng mới. */
+  to: string;
+  /** Ngày chuyển, `YYYY-MM-DD`. */
+  date: string;
+  reason?: string;
+}
+
 export interface Point extends PbRecord {
   /** Mã điểm đo do hệ thống sinh — xem `buildPointCode` trong `naming.ts`. */
   code?: string;
@@ -85,6 +99,13 @@ export interface Point extends PbRecord {
   voltage_level?: VoltageLevel;
   status?: PointStatus;
   note?: string;
+
+  /**
+   * Lịch sử chuyển chủ thể. CÓ dữ liệu ở đây còn mang nghĩa MÃ ĐIỂM ĐO ĐÃ
+   * ĐƯỢC GIỮ LẠI: mã nhúng tên tắt khách hàng nên đổi chủ sẽ làm mã tự đổi
+   * theo, mà mã điểm đo chính là `LINE_NAME` bên HES.
+   */
+  owner_history?: OwnerTransfer[];
 }
 
 /** Loại vật tư gắn ở điểm đo. */

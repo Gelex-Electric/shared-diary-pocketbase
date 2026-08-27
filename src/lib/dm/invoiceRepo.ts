@@ -11,6 +11,7 @@
  */
 import { pb } from '../pocketbase';
 import type { InvoiceLite } from './lifecycle';
+import type { InvoiceUsage } from './subDeduct';
 import type { CustomerFact } from './customerSync';
 
 /** Chỉ lấy đúng các cột cần cho vòng đời + HSN. 2110 bản ghi × 7 cột ≈ 200KB. */
@@ -31,6 +32,9 @@ export async function invoicesOfSerial(serial: string): Promise<InvoiceLite[]> {
     fields: FIELDS,
     sort: 'StartDate',
     batch: 500,
+    // Tắt tự huỷ: form điểm đo tra nhiều số công tơ một lúc, cùng đường dẫn
+    // `/collections/invoice/records` nên SDK sẽ huỷ hết chỉ giữ lần cuối.
+    requestKey: null,
   });
   return items as unknown as InvoiceLite[];
 }
@@ -44,6 +48,9 @@ export async function loadCustomerFacts(): Promise<CustomerFact[]> {
     fields: 'MKHang,NMua,DChiNMua,EndDate',
     sort: 'EndDate',
     batch: 500,
+    // Tắt tự huỷ: form điểm đo tra nhiều số công tơ một lúc, cùng đường dẫn
+    // `/collections/invoice/records` nên SDK sẽ huỷ hết chỉ giữ lần cuối.
+    requestKey: null,
   });
   return items as unknown as CustomerFact[];
 }
@@ -57,6 +64,59 @@ export async function loadAllInvoicesLite(): Promise<InvoiceLite[]> {
     fields: FIELDS,
     sort: 'StartDate',
     batch: 500,
+    // Tắt tự huỷ: form điểm đo tra nhiều số công tơ một lúc, cùng đường dẫn
+    // `/collections/invoice/records` nên SDK sẽ huỷ hết chỉ giữ lần cuối.
+    requestKey: null,
   });
   return items as unknown as InvoiceLite[];
+}
+
+/**
+ * Hóa đơn của MỘT mã khách hàng. Dùng để đối chiếu NGƯỢC: khách này trong hóa
+ * đơn đang ghi những số công tơ nào.
+ *
+ * Vì sao cần chiều ngược: `invoicesOfSerial` chỉ trả lời "số công tơ đang khai
+ * có phải của khách này không" — gõ nhầm hẳn sang một số không tồn tại thì
+ * không có hóa đơn nào, và câu hỏi đó trả lời "không biết". Hỏi từ phía khách
+ * hàng thì nói được luôn hóa đơn đang dùng số nào, tức chỉ ra chỗ sai.
+ */
+export async function invoicesOfMkh(mkh: string): Promise<InvoiceLite[]> {
+  const m = mkh.trim();
+  if (!m) return [];
+  const items = await pb.collection('invoice').getFullList({
+    filter: `MKHang="${q(m)}"`,
+    fields: FIELDS,
+    sort: 'StartDate',
+    batch: 500,
+    requestKey: null,
+  });
+  return items as unknown as InvoiceLite[];
+}
+
+/**
+ * Hóa đơn kèm CỘT SẢN LƯỢNG, chỉ lấy đúng các số công tơ cần và chỉ từ mốc
+ * `sinceYmd` trở đi — dùng cho việc đối chiếu phụ trừ (`lib/dm/subDeduct.ts`).
+ *
+ * Không nhét mấy cột này vào `FIELDS` dùng chung: mọi chỗ khác chỉ cần ngày và
+ * HSN, kéo thêm 6 cột số cho toàn bộ kho hóa đơn là phí băng thông của mọi màn.
+ */
+export async function invoicesUsageOf(serials: string[], sinceYmd: string): Promise<InvoiceUsage[]> {
+  const list = [...new Set(serials.map(s => s.trim()).filter(Boolean))];
+  if (!list.length) return [];
+
+  // PocketBase không có toán tử IN, phải ghép OR. Chia lô cho chuỗi filter khỏi
+  // dài quá mức URL chịu được.
+  const out: InvoiceUsage[] = [];
+  const CHUNK = 40;
+  for (let i = 0; i < list.length; i += CHUNK) {
+    const orSct = list.slice(i, i + CHUNK).map(s => `SCT="${q(s)}"`).join('||');
+    const items = await pb.collection('invoice').getFullList({
+      filter: `(${orSct}) && EndDate >= "${q(sinceYmd)} 00:00:00.000Z"`,
+      fields: 'SCT,StartDate,EndDate,LoaiHD,SL_BT,SL_CD,SL_TD,phu_BT,phu_CD,phu_TD',
+      batch: 500,
+      requestKey: null,
+    });
+    out.push(...(items as unknown as InvoiceUsage[]));
+  }
+  return out;
 }

@@ -12,10 +12,10 @@
  * bảng full-width bên dưới, form nhập nằm trong MODAL nổi (không đặt cố định
  * đầu trang). Thêm và Sửa dùng chung một modal.
  */
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Building2, Factory, Users, Gauge, Package,
-  Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText,
+  Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText, History, ArrowLeftRight,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import type { TabItem } from '../ui/Tabs';
@@ -23,42 +23,53 @@ import { Select } from '../ui/Select';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { toast } from '../../lib/toast';
 import { Toggle } from '../ui/Toggle';
-import { Switch } from '../ui/Switch';
 import { DatePicker } from '../ui/DateTimePickers';
-import { assets, customers, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
+import { assets, customers, isAbortError, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
 import type {
   AssetStatus, AssetType, Customer, Point, PointRole, Station, Zone,
 } from '../../lib/dm/types';
 import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio, pickRatio } from '../../lib/dm/hsn';
-import { TI_PER_SET, countAssets, derivePointStatus } from '../../lib/dm/pointStatus';
+import { REMOTE_LABEL, TI_PER_SET, countAssets, derivePointStatus, missingRemote } from '../../lib/dm/pointStatus';
 import type { Scope } from '../../lib/scope';
 import {
   CellInput, DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
 } from './entryUi';
 import { PointBadgeChip, PointBadgeIcon, StatusTag } from './pointIcons';
-import { invoicesOfSerial, loadCustomerFacts } from '../../lib/dm/invoiceRepo';
+import { invoicesOfMkh, invoicesOfSerial, loadCustomerFacts } from '../../lib/dm/invoiceRepo';
 import { isEmptyPlan, latestByMkh, planCustomerSync } from '../../lib/dm/customerSync';
-import { segmentOf, segmentsOf } from '../../lib/dm/lifecycle';
+import { bySerial, dmy, dmyRange, segmentFor, segmentOf, segmentsOf } from '../../lib/dm/lifecycle';
 import type { Segment } from '../../lib/dm/lifecycle';
-import { groupByZone, sortByMkh } from './groupByZone';
-import { ZoneGroupRow } from './ZoneGroupRow';
+
+/** Một số công tơ mà hóa đơn ghi cho một mã khách hàng, kèm quãng phát sinh. */
+interface MkhMeter { serial: string; from: string; to: string; isCurrent: boolean; }
+import { groupByZone, sortByCode, sortByMkh } from './groupByZone';
+import AssetLifecycle from './AssetLifecycle';
+import { TransferOwner } from './TransferOwner';
+import { ZoneTables } from './ZoneTables';
 import {
   SHORT_NAME_HINT, SUB_PURPOSES, buildPointCode, buildStationCode, isValidShortName,
   missingPointCodeParts, missingStationCodeParts, normalizeShortName,
 } from '../../lib/dm/naming';
 
-type CatTab = 'zone' | 'station' | 'customer' | 'point';
+/**
+ * `lifecycle` là tab TRA CỨU, không phải bảng khai báo: nó nhúng nguyên màn
+ * "Vòng đời vật tư" vào cuối dãy tab (user chốt 25/08/2026) thay vì đứng riêng
+ * ngoài menu — người dùng khai điểm đo xong là đối chiếu ngay tại chỗ.
+ */
+type CatTab = 'zone' | 'station' | 'customer' | 'point' | 'lifecycle';
 
 const TABS: TabItem<CatTab>[] = [
   { id: 'zone', label: 'Khu công nghiệp', icon: Building2, sub: 'dm_zone' },
   { id: 'station', label: 'Trạm', icon: Factory, sub: 'dm_station' },
   { id: 'customer', label: 'Khách hàng', icon: Users, sub: 'dm_customer' },
   { id: 'point', label: 'Điểm đo', icon: Gauge, sub: 'dm_point' },
+  { id: 'lifecycle', label: 'Vòng đời vật tư', icon: History, sub: 'Đối chiếu hóa đơn' },
 ];
 
-const HEAD: Record<CatTab, { title: string; desc: string; add: string }> = {
+/** Tiêu đề + nút Thêm của từng tab KHAI BÁO; tab `lifecycle` không có (chỉ tra cứu). */
+const HEAD: Record<Exclude<CatTab, 'lifecycle'>, { title: string; desc: string; add: string }> = {
   zone: {
     title: 'Khu công nghiệp',
     desc: 'Gốc của cây đơn vị — khai trước trạm và điểm đo',
@@ -132,10 +143,19 @@ const HAS_RATIO: AssetType[] = ['TI', 'TU'];
  *
  * TI/TU không nằm ở đây: một bộ gồm 3 TI cùng hoạt động song song.
  */
-const ONE_ACTIVE: AssetType[] = ['CONGTO', 'GP03'];
 
-/** Ngày hôm nay dạng `YYYY-MM-DD` — điền sẵn ngày tháo khi gạt tắt hoạt động. */
-const today = () => new Date().toISOString().slice(0, 10);
+/** `"2026-02-07 00:00:00.000Z"` → `"2026-02-07"`. */
+const ymdOf = (v?: string) => (v ?? '').slice(0, 10);
+
+/**
+ * "Đang hoạt động" KHÔNG còn là ô người dùng gạt (user chốt 25/08/2026): có
+ * ngày tháo tức là đã tháo, chưa có tức là còn treo. Hai nguồn sự thật cho cùng
+ * một việc chỉ đẻ ra mâu thuẫn — cảnh báo "đang hoạt động nhưng đã khai ngày
+ * tháo" từng phải tồn tại chính vì thế.
+ */
+const normalizeActive = (rows: AssetRow[]): AssetRow[] =>
+  rows.map(r => ({ ...r, active: !r.dateOff.trim() }));
+
 
 /** Giá trị đặc biệt của bộ chọn nhãn mục đích: cho gõ tay chuỗi bất kỳ. */
 const CUSTOM = '__custom';
@@ -167,6 +187,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   /** Modal đang mở cho bảng nào; `editingId` rỗng = thêm mới. */
   const [modal, setModal] = useState<CatTab | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** Điểm đo đang mở hộp "Chuyển chủ thể"; `null` = đóng. */
+  const [transferring, setTransferring] = useState<Point | null>(null);
+  /** Người dùng đã bấm "Sinh lại mã" cho điểm đo đang sửa. */
+  const [regenCode, setRegenCode] = useState(false);
 
   const [zForm, setZForm] = useState(EMPTY_Z);
   const [sForm, setSForm] = useState(EMPTY_S);
@@ -178,6 +202,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     try {
       setData(await loadCatalog());
     } catch (e) {
+      if (isAbortError(e)) return;
       toast.error('Không nạp được danh mục', pbErrorMessage(e));
     } finally {
       setLoading(false);
@@ -244,6 +269,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
   const editPoint = (p: Point) => {
     setEditingId(p.id);
+    setRegenCode(false);
     // Nhãn đuôi đã lưu: khớp một mục có sẵn thì chọn mục đó, không thì là tự nhập.
     const saved = p.sub_label ?? '';
     const isPreset = SUB_PURPOSES.some(x => x.code === saved);
@@ -253,11 +279,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       .map(a => ({
         key: `r${++rowSeq}`, id: a.id, type: a.type, serial: a.serial,
         ratio: formatRatio(a.ratio_primary, a.ratio_secondary),
-        // Bản ghi tạo trước đợt 7 chưa có 3 cột này: `active` mặc định TRUE vì
-        // hồi đó mọi vật tư khai ở điểm đo đều là đang treo.
         dateOn: (a.date_on ?? '').slice(0, 10),
         dateOff: (a.date_off ?? '').slice(0, 10),
-        active: a.active ?? true,
+        // `active` SUY từ ngày tháo ngay khi nạp, để form không mở ra ở trạng
+        // thái mâu thuẫn với chính luật của nó (xem `normalizeActive`).
+        active: !(a.date_off ?? '').slice(0, 10),
       }));
     setPForm({
       ...EMPTY_P,
@@ -318,13 +344,21 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const mainTenant = !isSub && !!pForm.customer && pForm.customer !== pStation?.customer;
 
   /**
-   * Đuôi mã:
-   *  - điểm phụ  : nhãn mục đích khi trùng KH điểm chính, ngược lại tên tắt KH phụ
-   *  - điểm chính: tên tắt khách thuê khi khác chủ trạm, cùng chủ trạm thì bỏ trống
+   * Đuôi mã, theo thứ tự ưu tiên:
+   *
+   *  1. **Nhãn mục đích** nếu người dùng có chọn — ô này nay LUÔN hiện, cho mọi
+   *     điểm đo (user chốt 25/08/2026). Người khai chủ động đặt tên thì tôn
+   *     trọng, không đoán hộ.
+   *  2. Không chọn nhãn thì suy như cũ:
+   *     - điểm phụ  : tên tắt KH phụ (bỏ trống nếu trùng KH với điểm chính, vì
+   *                   lấy tên tắt sẽ lặp y hệt phần đầu mã)
+   *     - điểm chính: tên tắt khách thuê khi khác chủ trạm
    */
-  const subLabel = isSub
-    ? (sameCustomer ? purposeLabel : (pSubCustomer?.short_name ?? ''))
-    : (mainTenant ? (pSubCustomer?.short_name ?? '') : '');
+  const subLabel = purposeLabel
+    ? purposeLabel
+    : isSub
+      ? (sameCustomer ? '' : (pSubCustomer?.short_name ?? ''))
+      : (mainTenant ? (pSubCustomer?.short_name ?? '') : '');
 
   const pointParts = {
     zoneCode: pStationZone?.code ?? '',
@@ -335,16 +369,43 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     subLabel,
     pointIdent: pForm.ident,
   };
-  const pointCode = buildPointCode(pointParts);
+  const generatedCode = buildPointCode(pointParts);
   const pointCodeMissing = missingPointCodeParts(pointParts);
+
+  /**
+   * Điểm đo ĐÃ TỪNG CHUYỂN CHỦ THỂ thì GIỮ NGUYÊN mã đã lưu (user chốt
+   * 27/08/2026).
+   *
+   * Mã nhúng tên tắt khách hàng, nên sau khi chuyển chủ mà mở form sửa rồi lưu
+   * là mã tự mọc thêm đuôi tên tắt chủ mới — đúng thứ vừa cố tránh. Mã điểm đo
+   * chính là `LINE_NAME` bên HES: đổi là lệch với dữ liệu đo đếm.
+   *
+   * Vẫn đổi được, nhưng phải bấm nút "Sinh lại mã" — cố ý, không âm thầm.
+   */
+  const savedPoint = editingId ? d?.points.find(p => p.id === editingId) : undefined;
+  const codeLocked = !!savedPoint?.owner_history?.length && !regenCode;
+  const lockedCode = savedPoint?.code ?? '';
+  const pointCode = codeLocked && lockedCode ? lockedCode : generatedCode;
 
   /* ------------- HSN suy từ tỷ số TI / TU trong bảng vật tư ------------- */
   /**
+   * VẬT TƯ DỰ KIẾN = dòng đã khai nhưng CHƯA CÓ NGÀY TREO (user chốt
+   * 25/08/2026). Đó là cách khai kế hoạch ngay tại điểm đo, không cần màn riêng:
+   * mua sẵn bộ TI 1500/5 để thay cho bộ 1000/5 đang chạy thì cứ thêm 3 dòng, để
+   * trống ngày treo. Chừng nào chưa có ngày treo thì dòng đó KHÔNG được:
+   *   - kéo HSN theo tỷ số của nó,
+   *   - biến điểm đo đo thẳng thành đo gián tiếp,
+   *   - lấy gì từ hóa đơn.
+   * Ngày treo là mốc duy nhất chứng minh vật tư đã ra hiện trường.
+   */
+  const isHung = (r: AssetRow) => !!r.dateOn.trim();
+
+  /**
    * Lấy dòng đầu tiên của một loại có nhập tỷ số — 3 TI cùng bộ luôn cùng tỷ số.
-   * Chỉ xét thiết bị ĐANG HOẠT ĐỘNG: TI cũ đã tháo không được kéo HSN theo.
+   * Chỉ xét thiết bị ĐÃ TREO và ĐANG HOẠT ĐỘNG.
    */
   const ratioRowOf = (type: AssetType) =>
-    pForm.assetRows.find(r => r.active && r.type === type && r.ratio.trim() !== '');
+    pForm.assetRows.find(r => r.active && isHung(r) && r.type === type && r.ratio.trim() !== '');
 
   /**
    * Tỷ số đại diện của một bộ: ưu tiên cái đang hoạt động, cả bộ đã tháo thì
@@ -353,15 +414,16 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    */
   const ratioOfSet = (type: AssetType) =>
     pickRatio(pForm.assetRows
-      .filter(r => r.type === type && r.ratio.trim() !== '')
+      .filter(r => r.type === type && isHung(r) && r.ratio.trim() !== '')
       .map(r => ({ ...parseRatio(r.ratio), active: r.active })));
 
   /**
    * Có khai TI hay không thay cho câu hỏi "đấu nối" đã bỏ khỏi form. Xét CẢ TI
    * đã tháo: điểm đo từng đo gián tiếp thì vẫn là gián tiếp, tháo TI ra không
-   * biến nó thành đo thẳng.
+   * biến nó thành đo thẳng. Nhưng KHÔNG xét TI dự kiến (chưa có ngày treo) —
+   * bộ TI mua sẵn không biến điểm đo đang đo thẳng thành đo gián tiếp.
    */
-  const hasTi = pForm.assetRows.some(r => r.type === 'TI');
+  const hasTi = pForm.assetRows.some(r => r.type === 'TI' && isHung(r));
   const hsnInput = { hasTi, ti: ratioOfSet('TI'), tu: ratioOfSet('TU') };
   const derivedHsn = deriveHsn(hsnInput);
 
@@ -407,9 +469,51 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serialKey, modal, invSegs]);
 
-  /** Công tơ ĐANG hoạt động — HSN của điểm đo phải khớp hóa đơn của cái này. */
-  const activeMeter = pForm.assetRows.find(r => r.type === 'CONGTO' && r.active && r.serial.trim());
-  const activeSeg = segmentOf(invSegs[activeMeter?.serial.trim() ?? ''] ?? [], pointMkh);
+  /* ---- Đối chiếu NGƯỢC: khách hàng này trong hóa đơn dùng công tơ nào ---- */
+  /**
+   * Tra theo số công tơ chỉ trả lời được "số đang khai có thuộc khách này
+   * không". Gõ nhầm sang một số không tồn tại thì không có hóa đơn nào và câu
+   * hỏi đó im lặng. Hỏi từ phía khách hàng mới chỉ ra được số ĐÚNG là số nào.
+   */
+  const [mkhSerials, setMkhSerials] = useState<Record<string, MkhMeter[]>>({});
+
+  useEffect(() => {
+    if (modal !== 'point' || !pointMkh || pointMkh in mkhSerials) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await invoicesOfMkh(pointMkh);
+        const out: MkhMeter[] = [];
+        for (const [serial, list] of bySerial(rows)) {
+          const seg = segmentOf(segmentsOf(list), pointMkh);
+          if (seg) out.push({ serial, from: seg.from, to: seg.to, isCurrent: seg.isCurrent });
+        }
+        out.sort((a, b) => (a.to < b.to ? 1 : -1));
+        if (!cancelled) setMkhSerials(prev => ({ ...prev, [pointMkh]: out }));
+      } catch {
+        // Tra cứu hỏng thì thôi — đối chiếu là tham chiếu, không được chặn nhập.
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pointMkh, modal, mkhSerials]);
+
+  /**
+   * Công tơ ĐANG hoạt động — HSN của điểm đo phải khớp hóa đơn của cái này.
+   *
+   * KHÔNG lọc theo `isHung` ở đây: lúc vừa gõ số công tơ thì chưa có ngày treo,
+   * mà đó chính là lúc người dùng cần khối đối chiếu để biết điền ngày nào.
+   */
+  const activeMeter = pForm.assetRows.find(r =>
+    r.type === 'CONGTO' && r.active && r.serial.trim());
+  const activeSegs = invSegs[activeMeter?.serial.trim() ?? ''] ?? [];
+  /**
+   * Ưu tiên chặng GIAO với quãng treo đã khai; chưa khai ngày, hoặc khai lệch
+   * quãng, thì vẫn lấy chặng của đúng khách hàng để hiển thị — chỗ lệch sẽ được
+   * nói riêng ở `invoiceNotes`, im lặng thì người dùng không biết đường nào mà lần.
+   */
+  const activeSeg = segmentFor(activeSegs, pointMkh, activeMeter?.dateOn, activeMeter?.dateOff)
+    ?? segmentOf(activeSegs, pointMkh);
   const invoiceHsn = activeSeg?.hsn;
 
   /**
@@ -439,7 +543,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     .filter(r => r.type === 'CONGTO' && r.serial.trim())
     .map(r => {
       const segs = invSegs[r.serial.trim()];
-      return segs ? { row: r, segs, mine: segmentOf(segs, pointMkh) } : null;
+      if (!segs) return null;
+      // Hai mức ghép: `mine` = chặng của đúng khách hàng (MKH + số công tơ),
+      // `inWindow` = chặng đó có GIAO với quãng treo đã khai hay không. Tách ra
+      // vì "sai khách" và "sai ngày" là hai lỗi khác nhau, phải nhắc khác nhau.
+      const mine = segmentOf(segs, pointMkh);
+      const inWindow = segmentFor(segs, pointMkh, r.dateOn, r.dateOff);
+      return { row: r, segs, mine, inWindow };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
@@ -448,21 +558,61 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     setRow(key, { [field]: value });
 
   /** Nhắc đối chiếu hóa đơn — tách khỏi `assetWarnings` vì đây là tham chiếu. */
+  /**
+   * Các số công tơ mà hóa đơn ghi cho ĐÚNG khách hàng này — dùng để gợi ý số
+   * đúng khi số đang khai chưa từng phát sinh hóa đơn.
+   */
+  const mkhMeters = (pointMkh ? mkhSerials[pointMkh] : undefined) ?? [];
+
   const invoiceNotes: string[] = [];
-  for (const { row: r, segs, mine } of meterRefs) {
+  for (const { row: r, segs, mine, inWindow } of meterRefs) {
     const serial = r.serial.trim();
+
+    /*
+      CẶP (MKH + số công tơ + ngày đã khai) MÀ CÓ HÓA ĐƠN ⇒ IM LẶNG HOÀN TOÀN
+      (user chốt 27/08/2026). `inWindow` chính là phép kiểm đó: chặng của đúng
+      khách hàng, và giao với quãng treo đang khai. Khớp rồi thì không còn gì
+      để nhắc về chuyện "có hóa đơn hay chưa".
+    */
     if (!mine) {
       if (segs.length) {
-        invoiceNotes.push(`công tơ ${serial} có hóa đơn nhưng của khách khác `
-          + `(${segs.map(s => `${s.mkh}: ${s.from}→${s.to}`).join(', ')})`);
+        // Có hóa đơn nhưng mang tên khách khác ⇒ nhiều khả năng gõ nhầm số.
+        invoiceNotes.push(`công tơ ${serial} có hóa đơn nhưng KHÔNG có chặng nào của ${pointMkh} `
+          + `(${segs.map(x => `${x.mkh}: ${dmyRange(x.from, x.to)}`).join(', ')})`);
+      } else if (isHung(r)) {
+        // Chưa có hóa đơn nào. Nói đúng bản chất — "chưa phát sinh", không phải
+        // "không có" — vì công tơ vừa treo thì đương nhiên chưa có.
+        const current = mkhMeters.filter(m => m.isCurrent).map(m => m.serial);
+        const list = (current.length ? current : mkhMeters.slice(0, 4).map(m => m.serial)).join(', ');
+        invoiceNotes.push(
+          `số công tơ ${serial} chưa phát sinh hóa đơn của ${pointMkh}`
+          + (list ? ` — khách này đang phát sinh trên ${list}` : ''));
       }
       continue;
     }
+
+    // Có chặng của đúng khách này, nhưng ngày khai không giao với nó. Đây là
+    // LỖI NGÀY, không phải lỗi khách — nói nhầm thành "của khách khác" thì người
+    // dùng đi kiểm tra sai chỗ.
+    if (isHung(r) && !inWindow) {
+      invoiceNotes.push(
+        `công tơ ${serial} có hóa đơn của ${pointMkh} ở quãng ${dmyRange(mine.from, mine.to)}, `
+        + `không giao với ngày treo/tháo đang khai (${dmyRange(r.dateOn, r.dateOff)}) `
+        + '— kiểm tra lại hai ngày này');
+    }
+
+    // Cùng số công tơ nhưng có chặng của khách khác ⇒ vật tư dùng lại, nói cho
+    // biết để không nhầm HSN của quãng này với quãng kia.
+    const others = segs.filter(x => x.mkh !== pointMkh);
+    if (others.length) {
+      invoiceNotes.push(`công tơ ${serial} còn được dùng cho `
+        + `${others.map(x => `${x.mkh} (${dmyRange(x.from, x.to)})`).join(', ')}`);
+    }
     if (r.dateOn && r.dateOn > mine.from) {
-      invoiceNotes.push(`công tơ ${serial} khai treo ${r.dateOn} nhưng đã phát sinh tiền điện từ ${mine.from}`);
+      invoiceNotes.push(`công tơ ${serial} khai treo ${dmy(r.dateOn)} nhưng đã phát sinh tiền điện từ ${dmy(mine.from)}`);
     }
     if (r.dateOff && r.dateOff < mine.to) {
-      invoiceNotes.push(`công tơ ${serial} khai tháo ${r.dateOff} nhưng còn phát sinh tiền điện đến ${mine.to}`);
+      invoiceNotes.push(`công tơ ${serial} khai tháo ${dmy(r.dateOff)} nhưng còn phát sinh tiền điện đến ${dmy(mine.to)}`);
     }
     if (mine.hsnHistory.length > 1) {
       invoiceNotes.push(`công tơ ${serial} từng đổi HSN: ${mine.hsnHistory.join(' → ')}`);
@@ -508,9 +658,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   }
   const dupInForm = [...serialInForm.entries()].filter(([, rows]) => rows.length > 1);
 
-  /** Bản ghi cùng số chế tạo ở điểm đo KHÁC mà vẫn đang hoạt động. */
-  const busyElsewhere = [...serialInForm.keys()]
-    .map(serial => {
+  /**
+   * Cùng số chế tạo mà HAI NƠI CÙNG ĐANG TREO — chỉ thế mới chặn.
+   *
+   * Khai một vật tư vào điểm đo CŨ trong khi nó đang chạy ở nơi khác là hợp lệ:
+   * đó là ghi lại lần lắp trước đó. Luật (4) trong `applyRowRules` đã tự điền
+   * ngày tháo ở đây = ngày treo bên kia, nên dòng này không còn "đang treo" và
+   * không có gì phải chặn (user chốt 25/08/2026).
+   */
+  const busyElsewhere = [...serialInForm.entries()]
+    .map(([serial, rows]) => {
+      // Ở form này số No đó còn đang treo (chưa khai ngày tháo) hay không.
+      if (!rows.some(r => !r.dateOff.trim())) return null;
       const other = (d?.assets ?? []).find(a =>
         a.serial === serial && a.active && a.point && a.point !== editingId);
       return other ? { serial, asset: other, code: pointCodeOf(other.point) } : null;
@@ -534,9 +693,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       `số No ${serial} bị khai ${rows.length} lần trong cùng điểm đo `
       + `(${rows.map(r => ASSET_LABEL[r.type as AssetType] ?? '—').join(', ')})`),
     ...busyElsewhere.map(b =>
-      `số No ${b.serial} đang HOẠT ĐỘNG ở ${ASSET_LABEL[b.asset.type as AssetType] ?? 'vật tư'} `
-      + `của điểm đo ${b.code} — mở điểm đo đó, gạt "Hoạt động" của dòng này sang Ngưng, `
-      + 'lưu lại rồi mới lắp sang đây'),
+      `số No ${b.serial} đang treo ở ${ASSET_LABEL[b.asset.type as AssetType] ?? 'vật tư'} `
+      + `của điểm đo ${b.code} — khai NGÀY THÁO cho nó ở điểm đo đó, `
+      + 'hoặc khai ngày tháo ngay tại dòng này nếu đây là lần lắp trước đó'),
     ...(codeClash ? [
       `mã điểm đo ${pointCode} đã thuộc về một điểm đo khác `
       + `(khách ${customerMkh(codeClash.customer)}) — đổi định danh điểm đo, `
@@ -561,33 +720,34 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    * khai dở vẫn phải lưu được.
    */
   const filledRows = pForm.assetRows.filter(r => r.type && r.serial.trim());
-  /** Chỉ đếm thiết bị đang hoạt động — cái đã tháo vẫn nằm bảng để giữ lịch sử. */
+  /**
+   * Chỉ đếm thiết bị ĐÃ TREO và đang hoạt động — cái đã tháo vẫn nằm bảng để
+   * giữ lịch sử, còn dòng chưa có ngày treo là vật tư DỰ KIẾN, chưa ra hiện
+   * trường nên không được tính vào bất cứ điều kiện nào.
+   */
   const countType = (t: AssetType) =>
-    filledRows.filter(r => r.type === t && r.active).length;
+    filledRows.filter(r => r.type === t && r.active && isHung(r)).length;
+
+  /** Các dòng dự kiến — khai rồi nhưng chưa có ngày treo. */
+  const plannedRows = filledRows.filter(r => !isHung(r));
   const assetWarnings: string[] = [];
   if (countType('CONGTO') === 0) assetWarnings.push('chưa có công tơ đang hoạt động');
   else if (countType('CONGTO') > 1) assetWarnings.push('có nhiều hơn 1 công tơ đang hoạt động');
-  // Không nhắc "thiếu GP-03" nữa: user bỏ ràng buộc bắt buộc có đo xa
-  // (20/08/2026). Luật ONE_ACTIVE vẫn giữ — vẫn chỉ được 1 GP-03 hoạt động.
+  // Không nhắc "thiếu GP-03" nữa: user bỏ ràng buộc bắt buộc có đo xa (20/08/2026).
 
   // Lệch tỷ số trong cùng một bộ TI (hoặc TU): 3 TI phải cùng tỷ số, khác nhau
   // là khai nhầm — HSN đang lấy theo dòng đầu nên phải nói rõ.
   for (const t of HAS_RATIO) {
     const kinds = new Set(
-      pForm.assetRows.filter(r => r.active && r.type === t && r.ratio.trim())
+      pForm.assetRows.filter(r => r.active && isHung(r) && r.type === t && r.ratio.trim())
         .map(r => r.ratio.trim()));
     if (kinds.size > 1) {
       assetWarnings.push(`các ${t} không cùng tỷ số (${[...kinds].join(' ≠ ')}) — HSN đang lấy theo cái đầu`);
     }
   }
 
-  // Đã tháo mà chưa khai ngày, hoặc còn hoạt động mà đã có ngày tháo.
-  if (filledRows.some(r => !r.active && !r.dateOff)) {
-    assetWarnings.push('có thiết bị đã ngưng hoạt động nhưng chưa khai ngày tháo');
-  }
-  if (filledRows.some(r => r.active && r.dateOff)) {
-    assetWarnings.push('có thiết bị đang hoạt động nhưng đã khai ngày tháo');
-  }
+  // Hai cảnh báo "ngưng mà chưa khai ngày tháo" / "còn chạy mà đã có ngày tháo"
+  // đã bỏ (25/08/2026): `active` nay SUY TỪ ngày tháo nên không thể mâu thuẫn.
   if (filledRows.some(r => r.dateOn && r.dateOff && r.dateOff < r.dateOn)) {
     assetWarnings.push('có thiết bị khai ngày tháo trước ngày treo');
   }
@@ -595,15 +755,45 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   if (hasTi && countType('TI') > 0 && countType('TI') !== TI_PER_SET) {
     assetWarnings.push(`đo gián tiếp phải đủ ${TI_PER_SET} TI (đang có ${countType('TI')} cái hoạt động)`);
   }
+  if (plannedRows.length) {
+    assetWarnings.push(
+      `${plannedRows.length} dòng chưa khai ngày treo — đang coi là VẬT TƯ DỰ KIẾN, `
+      + 'không tính vào HSN và không đối chiếu hóa đơn');
+  }
 
   /**
    * Trạng thái điểm đo do hệ thống suy, không cho chọn tay nữa (user chốt
    * 20/08). Tính ngay trên form để người dùng thấy tag đổi theo lúc khai.
    */
+  const assetCounts = countAssets(filledRows);
   const derivedStatus = derivePointStatus({
-    ...countAssets(filledRows),
-    hasRecentInvoice: meterRefs.some(m => m.row.active && m.mine?.isCurrent),
+    ...assetCounts,
+    // Dùng `inWindow`: chỉ chặng ĐÚNG quãng treo mới chứng minh điểm đo này
+    // đang phát sinh tiền điện — chặng ở quãng khác là của lần lắp khác.
+    hasRecentInvoice: meterRefs.some(m => m.row.active && m.inWindow?.isCurrent),
   });
+
+  /**
+   * Vì sao đang là trạng thái đó — nói ngay dưới tag, vì "Dự kiến" trong khi đã
+   * khai đủ vật tư trông như lỗi nếu không nói rõ còn thiếu ngày treo.
+   */
+  /**
+   * Đang vận hành mà thiếu GP-03 hoặc SIM ⇒ mất đo xa, phải đọc chỉ số bằng tay.
+   * Đặt SAU `derivedStatus` vì luật chỉ áp cho điểm đo đang vận hành.
+   */
+  const remoteMissing = derivedStatus === 'active' ? missingRemote(filledRows) : [];
+  if (remoteMissing.length) {
+    assetWarnings.push(
+      `điểm đo đang vận hành nhưng thiếu ${remoteMissing.map(t => REMOTE_LABEL[t]).join(' và ')} `
+      + '— không đẩy được chỉ số về HES, phải đọc tay');
+  }
+
+  const statusReason =
+    derivedStatus !== 'du_kien' ? ''
+      : assetCounts.meters === 0 ? 'Chưa khai công tơ nào.'
+      : assetCounts.metersWithoutDateOn > 0
+        ? `Còn ${assetCounts.metersWithoutDateOn} công tơ đang hoạt động chưa khai ngày treo.`
+        : '';
 
   /** Điểm đo chính trong cùng trạm — nguồn chọn cha cho điểm đo phụ. */
   const parentOpts = useMemo(
@@ -633,7 +823,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       .filter(Boolean);
     if (clashes.length) {
       return `Trùng số chế tạo: ${clashes.join('; ')}. `
-        + 'Mở điểm đo đó, gạt "Hoạt động" sang Ngưng rồi lưu, sau đó mới lắp sang đây.';
+        + 'Mở điểm đo đó khai NGÀY THÁO cho vật tư này rồi lưu, sau đó mới lắp sang đây.';
     }
 
     const dupPoint = d?.points.find(p => p.code === pointCode && p.id !== editingId);
@@ -847,8 +1037,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   };
 
   /** Cụm nút sửa/xóa cuối mỗi hàng — khuôn giống các màn cũ. */
-  const RowActions = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) => (
+  const RowActions = ({ onEdit, onDelete, extra }: {
+    onEdit: () => void; onDelete: () => void;
+    /** Nút phụ đứng trước Sửa — hiện chỉ bảng Điểm đo dùng (chuyển chủ thể). */
+    extra?: { icon: typeof Edit2; title: string; onClick: () => void };
+  }) => (
     <div className="flex justify-end gap-2">
+      {extra && (
+        <button onClick={extra.onClick} title={extra.title}
+          className="rounded p-2 text-soft transition-colors hover:bg-accent-soft hover:text-blue-600">
+          <extra.icon className="h-5 w-5" />
+        </button>
+      )}
       <button onClick={onEdit} title="Sửa"
         className="rounded p-2 text-soft transition-colors hover:bg-accent-soft hover:text-blue-600">
         <Edit2 className="h-5 w-5" />
@@ -898,18 +1098,39 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   /* ------------- thao tác trên bảng vật tư của form điểm đo ------------- */
 
   /**
-   * Sửa một dòng rồi áp 2 luật nghiệp vụ lên các dòng còn lại:
+   * Vật tư CÙNG SỐ NO đang hoạt động ở điểm đo KHÁC — dùng để suy ngày tháo.
+   *
+   * Một số chế tạo chỉ có thể đang đo ở đúng một chỗ. Nếu nó đang treo ở nơi
+   * khác mà giờ được khai vào điểm đo này, thì lần lắp ở đây phải đã KẾT THÚC
+   * đúng vào ngày nó được treo ở nơi kia (user chốt 25/08/2026).
+   */
+  const liveElsewhere = (serial: string) => {
+    const sn = serial.trim();
+    if (!sn) return undefined;
+    return (d?.assets ?? []).find(a =>
+      a.serial === sn && a.active && a.point && a.point !== editingId && a.date_on);
+  };
+
+  /**
+   * Sửa một dòng rồi áp các luật nghiệp vụ lên những dòng còn lại.
    *
    * 1. **Tỷ số dùng chung theo loại** — 3 TI của một bộ luôn cùng tỷ số, TU
    *    cũng vậy. Nhập tỷ số cho một cái thì các dòng cùng loại CÒN TRỐNG tự
    *    điền theo; dòng đã có tỷ số khác thì KHÔNG đè, chỉ cảnh báo lệch.
-   * 2. **Một cái hoạt động mỗi loại** (công tơ, GP-03) — bật cái mới thì cái
-   *    cũ tự tắt và điền sẵn ngày tháo là hôm nay.
+   * 2. **Ngày treo lan cho cả bộ** — khai điểm đo lần đầu thì công tơ, 3 TI và
+   *    đo xa đều lên cùng một ngày. Chỉ điền vào dòng CÒN TRỐNG ngày treo, nên
+   *    vật tư lắp bổ sung sau này không bị đè.
+   * 3. **Vật tư mới thay vật tư cũ** — dòng cùng loại đang treo từ TRƯỚC ngày
+   *    treo của cái mới thì tự nhận ngày tháo = ngày treo của cái mới. Không
+   *    đụng dòng cùng ngày (cả bộ lắp một lượt) và không đè ngày tháo đã khai.
+   * 4. **Số No đang treo ở nơi khác** — điền sẵn ngày tháo = ngày treo bên đó.
+   *
+   * Cuối cùng CHUẨN HOÁ active = chưa có ngày tháo — xem ghi chú ở cột bảng.
    */
   const applyRowRules = (rows: AssetRow[], key: string, patch: Partial<AssetRow>): AssetRow[] => {
     const next = rows.map(r => (r.key === key ? { ...r, ...patch } : r));
     const me = next.find(r => r.key === key);
-    if (!me || !me.type) return next;
+    if (!me || !me.type) return normalizeActive(next);
     const type = me.type as AssetType;
 
     // Đổi loại sang TI/TU mà chưa có tỷ số → thừa hưởng tỷ số của bộ cùng loại.
@@ -925,25 +1146,39 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
           r.key !== key && r.type === type && !r.ratio.trim() ? { ...r, ratio: patch.ratio! } : r)
       : inherited;
 
-    // Bật hoạt động (hoặc chuyển sang loại độc nhất) → tắt các cái cùng loại cũ.
-    const turnsOn = patch.active === true || (patch.type !== undefined && me.active);
-    if (turnsOn && ONE_ACTIVE.includes(type)) {
-      return spread.map(r =>
-        r.key !== key && r.type === type && r.active
-          ? { ...r, active: false, dateOff: r.dateOff || today() }
-          : r);
+    const on = me.dateOn.trim();
+
+    // Vừa khai ngày treo → lan cho các dòng chưa có ngày treo nào (lắp cùng đợt),
+    // rồi đóng các dòng cùng loại đang treo từ trước đó (thay thế vật tư).
+    let dated = spread;
+    if (patch.dateOn !== undefined && on) {
+      dated = spread.map(r => {
+        if (r.key === key) return r;
+        // Dòng trắng tinh thì bỏ qua; dòng đã bắt đầu khai (có loại hoặc có số No)
+        // thì coi là cùng đợt lắp.
+        if (!r.type && !r.serial.trim()) return r;
+        // (2) cả bộ lên cùng ngày
+        if (!r.dateOn.trim() && !r.dateOff.trim()) return { ...r, dateOn: on };
+        // (3) cái cũ cùng loại nhường chỗ cho cái mới
+        if (r.type === type && r.dateOn.trim() && r.dateOn.trim() < on && !r.dateOff.trim()) {
+          return { ...r, dateOff: on };
+        }
+        return r;
+      });
     }
-    return spread;
+
+    // (4) Số No này đang treo ở điểm đo khác ⇒ lần lắp ở đây đã kết thúc từ ngày
+    // nó sang bên kia. Chỉ điền khi ô ngày tháo còn trống.
+    const busy = liveElsewhere(me.serial);
+    const withOff = busy && !me.dateOff.trim()
+      ? dated.map(r => (r.key === key ? { ...r, dateOff: ymdOf(busy.date_on) } : r))
+      : dated;
+
+    return normalizeActive(withOff);
   };
 
   const setRow = (key: string, patch: Partial<AssetRow>) =>
-    setPForm(f => {
-      // Gạt TẮT một dòng: điền sẵn ngày tháo, nhưng không đè ngày đã khai.
-      const cur = f.assetRows.find(r => r.key === key);
-      const p = patch.active === false && cur && !cur.dateOff
-        ? { ...patch, dateOff: today() } : patch;
-      return { ...f, assetRows: applyRowRules(f.assetRows, key, p) };
-    });
+    setPForm(f => ({ ...f, assetRows: applyRowRules(f.assetRows, key, patch) }));
 
   const addRow = (type: AssetType | '' = '') =>
     setPForm(f => {
@@ -977,40 +1212,39 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
   /**
    * Điểm đo giữ nguyên phân cấp: mỗi điểm chính kéo theo đàn điểm phụ của nó
-   * (thụt lề). Vì vậy phải sắp xếp theo CỤM — xếp các điểm chính theo MKH rồi
-   * mới trải phẳng, chứ không xếp từng dòng, kẻo điểm phụ bị tách khỏi cha.
+   * (thụt lề). Vì vậy phải sắp xếp theo CỤM — xếp các điểm chính theo MÃ ĐIỂM ĐO
+   * rồi mới trải phẳng, chứ không xếp từng dòng, kẻo điểm phụ bị tách khỏi cha.
    *
    * Điểm phụ mất cha, hoặc chưa gán cha, thành cụm một dòng xếp cuối để không
    * biến mất khỏi danh sách.
    */
   const pointGroups = useMemo(() => {
     const all = d?.points ?? [];
+    /** Mã để xếp: điểm đo cũ chưa có `code` thì lấy tạm `line_name` bên HES. */
+    const codeOfPoint = (p: Point) => p.code || p.line_name || '';
     const placed = new Set<string>();
     const clusters: { head: Point; rows: { point: Point; isChild: boolean }[] }[] = [];
 
-    // Điểm đo chính xếp theo MKH của chủ trạm, cùng MKH thì theo mã cho ổn định.
-    const mains = sortByMkh(all.filter(x => x.role === 'chinh'), p => mkhOf(p.customer))
-      .sort((a, b) => {
-        const ma = mkhOf(a.customer) ?? '￿', mb = mkhOf(b.customer) ?? '￿';
-        return ma === mb ? (a.code ?? '').localeCompare(b.code ?? '', 'vi', { numeric: true }) : 0;
-      });
+    // Điểm đo chính xếp theo mã điểm đo (user chốt 22/08/2026) — cột đầu của
+    // bảng chính là cột này, xếp theo nó thì mắt dò xuôi được.
+    const mains = sortByCode(all.filter(x => x.role === 'chinh'), codeOfPoint);
 
     for (const p of mains) {
       const rows = [{ point: p, isChild: false }];
       placed.add(p.id);
-      // Điểm phụ trong cùng cụm cũng xếp theo MKH của chính nó.
-      for (const child of sortByMkh(all.filter(x => x.parent_point === p.id), c => mkhOf(c.customer))) {
+      // Điểm phụ trong cùng cụm cũng xếp theo mã của chính nó.
+      for (const child of sortByCode(all.filter(x => x.parent_point === p.id), codeOfPoint)) {
         rows.push({ point: child, isChild: true });
         placed.add(child.id);
       }
       clusters.push({ head: p, rows });
     }
-    for (const p of sortByMkh(all.filter(x => !placed.has(x.id)), x => mkhOf(x.customer))) {
+    for (const p of sortByCode(all.filter(x => !placed.has(x.id)), codeOfPoint)) {
       clusters.push({ head: p, rows: [{ point: p, isChild: false }] });
     }
 
-    // Cụm giữ nguyên thứ tự đã xếp ở trên; `sortByMkh` ổn định nên không đảo lại.
-    const sorted = sortByMkh(clusters, c => mkhOf(c.head.customer));
+    // Cụm giữ nguyên thứ tự đã xếp ở trên; `sortByCode` ổn định nên không đảo lại.
+    const sorted = sortByCode(clusters, c => codeOfPoint(c.head));
     // KCN của cụm lấy theo trạm của điểm chính (điểm đo không giữ KCN riêng).
     const zoneOfCluster = (c: (typeof clusters)[number]) =>
       d?.stations.find(s => s.id === c.head.station)?.zone;
@@ -1049,16 +1283,26 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, zoneRows, stationGroups, customerGroups, pointGroups]);
-  const head = HEAD[tab];
+  /**
+   * Tab `lifecycle` không có mục trong `HEAD` (nó chỉ tra cứu, không khai báo),
+   * mà dòng này chạy ở MỌI lần render — lấy thẳng `HEAD[tab]` là `undefined` rồi
+   * vỡ ngay khi đọc `.title`. Rơi về tab KCN cho an toàn; thanh tiêu đề dùng
+   * `head` vốn đã bị ẩn ở tab này nên người dùng không thấy gì khác.
+   */
+  const headOf = (t: CatTab) => HEAD[t === 'lifecycle' ? 'zone' : t];
+  const head = headOf(tab);
   const modalTitle = editingId
-    ? `Chỉnh sửa ${HEAD[modal ?? tab].title.toLowerCase()}`
-    : HEAD[modal ?? tab].add;
+    ? `Chỉnh sửa ${headOf(modal ?? tab).title.toLowerCase()}`
+    : headOf(modal ?? tab).add;
 
   return (
     <div className="relative space-y-6">
       {dialog}
 
       {/* ---------- Đầu trang: tiêu đề + hành động ---------- */}
+      {/* Tab Vòng đời tự mang tiêu đề và nút Nạp lại riêng, và không có gì để
+          "Thêm" — nên ẩn hẳn thanh này thay vì hiện một thanh nửa vời. */}
+      {tab !== 'lifecycle' && (
       <div className="mb-2 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h2 className="text-2xl font-bold text-ink">{head.title}</h2>
@@ -1089,8 +1333,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
           </button>
         </div>
       </div>
+      )}
 
       <Tabs tabs={TABS} value={tab} onChange={t => setTab(t)} />
+
+      {/* ======================= Vòng đời vật tư ======================= */}
+      {tab === 'lifecycle' && <AssetLifecycle scope={_scope} />}
+
 
       {/* ============================ KCN ============================ */}
       {tab === 'zone' && (
@@ -1131,8 +1380,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               Phải khai ít nhất một KCN ở tab "Khu công nghiệp" trước khi thêm trạm.
             </div>
           )}
-          <TableCard fixed loading={loading} isEmpty={byFilterZone(stationGroups).length === 0}
+          <ZoneTables groups={byFilterZone(stationGroups)} unit="trạm" loading={loading}
             empty={filterZone ? 'Không có trạm nào trong KCN đang lọc.' : 'Chưa có trạm nào được khai.'}
+            rowKey={s => s.id}
             columns={<>
               <th className={`${TH_CLS} w-[27%] pl-10`}>Mã trạm</th>
               <th className={`${TH_CLS} w-[20%]`}>Khu công nghiệp</th>
@@ -1141,12 +1391,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <th className={`${TH_CLS} w-[12%]`}>P0 / Pk (W)</th>
               <th className={`${TH_CLS} w-[8%]`}>Điểm đo</th>
               <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
-            </>}>
-            {byFilterZone(stationGroups).map(g => (
-              <Fragment key={g.zone?.id ?? '__no_zone'}>
-                <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="trạm" colSpan={7} />
-                {g.rows.map(s => (
-              <tr key={s.id} className="transition-colors hover:bg-subtle/50">
+            </>}
+            renderRow={s => (
+              <tr className="transition-colors hover:bg-subtle/50">
                 <td className="truncate px-6 py-4 pl-10 font-mono text-sm font-bold text-ink" title={s.code}>{s.code}</td>
                 <td className="px-6 py-4">
                   <span className="inline-flex items-center rounded-full bg-accent-soft px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-blue-600">
@@ -1167,17 +1414,15 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                         : undefined)} />
                 </td>
               </tr>
-                ))}
-              </Fragment>
-            ))}
-          </TableCard>
+            )} />
         </>
       )}
 
       {/* ========================= Khách hàng ========================= */}
       {tab === 'customer' && (
-        <TableCard fixed loading={loading} isEmpty={byFilterZone(customerGroups).length === 0}
+        <ZoneTables groups={byFilterZone(customerGroups)} unit="khách hàng" loading={loading}
           empty={filterZone ? 'Không có khách hàng nào trong KCN đang lọc.' : 'Chưa có khách hàng nào được khai.'}
+          rowKey={c => c.id}
           columns={<>
             <th className={`${TH_CLS} w-[12%] pl-10`}>Mã KH</th>
             <th className={`${TH_CLS} w-[27%]`}>Tên khách hàng</th>
@@ -1186,12 +1431,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             <th className={`${TH_CLS} w-[20%]`}>Địa chỉ</th>
             <th className={`${TH_CLS} w-[8%]`}>Điểm đo</th>
             <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
-          </>}>
-          {byFilterZone(customerGroups).map(g => (
-            <Fragment key={g.zone?.id ?? '__no_zone'}>
-              <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="khách hàng" colSpan={7} />
-              {g.rows.map(c => (
-            <tr key={c.id} className="transition-colors hover:bg-subtle/50">
+          </>}
+          renderRow={c => (
+            <tr className="transition-colors hover:bg-subtle/50">
               <td className="px-6 py-4 pl-10">
                 <span className="rounded-md bg-subtle px-2.5 py-1 font-mono text-xs font-bold text-soft">{c.mkh}</span>
               </td>
@@ -1212,10 +1454,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                       : undefined)} />
               </td>
             </tr>
-              ))}
-            </Fragment>
-          ))}
-        </TableCard>
+          )} />
       )}
 
       {/* ============================ Điểm đo ============================ */}
@@ -1226,8 +1465,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               Phải khai ít nhất một trạm ở tab "Trạm" trước khi thêm điểm đo.
             </div>
           )}
-          <TableCard fixed loading={loading} isEmpty={byFilterZone(pointGroups).length === 0}
+          <ZoneTables groups={byFilterZone(pointGroups)} unit="điểm đo" loading={loading}
             empty={filterZone ? 'Không có điểm đo nào trong KCN đang lọc.' : 'Chưa có điểm đo nào được khai.'}
+            rowKey={r => r.point.id}
             columns={<>
               <th className={`${TH_CLS} w-[28%] pl-10`}>Mã điểm đo</th>
               <th className={`${TH_CLS} w-[22%]`}>Trạm</th>
@@ -1236,12 +1476,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <th className={`${TH_CLS} w-[13%]`}>Trạng thái</th>
               <th className={`${TH_CLS} w-[6%]`}>HSN</th>
               <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
-            </>}>
-            {byFilterZone(pointGroups).map(g => (
-              <Fragment key={g.zone?.id ?? '__no_zone'}>
-                <ZoneGroupRow zone={g.zone} count={g.rows.length} unit="điểm đo" colSpan={7} />
-                {g.rows.map(({ point: p, isChild }) => (
-              <tr key={p.id} className="transition-colors hover:bg-subtle/50">
+            </>}
+            renderRow={({ point: p, isChild }) => (
+              <tr className="transition-colors hover:bg-subtle/50">
                 <td className={`px-6 py-4 ${isChild ? 'pl-16' : 'pl-10'}`}>
                   <span className="flex min-w-0 items-center gap-2">
                     {isChild && <CornerDownRight className="h-4 w-4 shrink-0 text-faint" />}
@@ -1259,18 +1496,24 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 <td className="px-6 py-4 text-sm font-bold text-dim">{p.hsn ?? '—'}</td>
                 <td className="px-6 py-4 pr-10 text-right">
                   <RowActions onEdit={() => editPoint(p)}
+                    extra={{
+                      icon: ArrowLeftRight,
+                      title: 'Chuyển chủ thể (giữ nguyên mã điểm đo)',
+                      onClick: () => setTransferring(p),
+                    }}
                     onDelete={() => void del(`điểm đo ${p.code || p.line_name}`, () => points.remove(p.id),
                       childrenOf(p.id) > 0
                         ? `Điểm đo này đang có ${childrenOf(p.id)} điểm đo phụ. Xóa nó KHÔNG xóa các điểm phụ — chúng sẽ mất điểm đo chính.`
                         : undefined)} />
                 </td>
               </tr>
-                ))}
-              </Fragment>
-            ))}
-          </TableCard>
+            )} />
         </>
       )}
+
+      {/* Chuyển chủ thể — hộp riêng, KHÔNG đụng vào mã điểm đo. */}
+      <TransferOwner point={transferring} d={d}
+        onClose={() => setTransferring(null)} onDone={() => void load()} />
 
       {/* ============================ Modal ============================ */}
       <FormModal open={modal !== null} title={modalTitle} onClose={closeModal} onSubmit={submit}
@@ -1394,8 +1637,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
           <>
             {/* Mã điểm đo đứng ĐẦU form: nó là kết quả của mọi ô bên dưới, để
                 trên cùng thì vừa gõ vừa thấy mã đổi theo, khỏi cuộn xuống. */}
-            <Field label="Mã điểm đo (hệ thống tự sinh)"
-              hint={isSub
+            <Field label={codeLocked ? 'Mã điểm đo (đang giữ nguyên)' : 'Mã điểm đo (hệ thống tự sinh)'}
+              hint={codeLocked
+                ? 'Điểm đo đã chuyển chủ thể nên mã được giữ nguyên để khớp LINE_NAME bên HES.'
+                : isSub
                 ? `Ghép: mã trạm . ${sameCustomer ? 'nhãn mục đích' : 'tên tắt KH phụ'}(định danh điểm đo)`
                 : mainTenant
                   ? 'Ghép: mã trạm . tên tắt khách thuê(định danh điểm đo) — điểm đo khác chủ trạm'
@@ -1403,6 +1648,23 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <DerivedValue value={pointCodeMissing.length ? '' : pointCode}
                 placeholder={pForm.station ? pointCode : 'Chọn trạm trước'} />
             </Field>
+
+            {/*
+              Mã đang bị giữ mà dữ liệu hiện tại sinh ra mã khác ⇒ nói rõ hai mã,
+              và cho đổi nhưng phải bấm — không âm thầm đổi định danh của điểm đo.
+            */}
+            {codeLocked && generatedCode !== pointCode && (
+              <div className="-mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-subtle px-4 py-3">
+                <span className="text-[12px] text-soft">
+                  Theo dữ liệu hiện tại, mã sẽ là{' '}
+                  <b className="font-mono text-dim">{generatedCode}</b>. Đang giữ mã cũ.
+                </span>
+                <button type="button" onClick={() => setRegenCode(true)}
+                  className="vl-btn vl-btn-secondary vl-btn-sm">
+                  Sinh lại mã
+                </button>
+              </div>
+            )}
             {pointCodeMissing.length > 0 && (
               <p className="-mt-3 ml-1 text-[11px] font-semibold text-warn">
                 Còn thiếu: {pointCodeMissing.join(', ')}. Các mảnh này lấy từ hồ sơ trạm và khách hàng.
@@ -1460,38 +1722,54 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                     disabled={!parentOpts.length} searchable />
                 </Field>
 
-                {/* Trùng KH với điểm chính → tên tắt sẽ lặp, phải chọn nhãn mục đích */}
-                {sameCustomer && (
-                  <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
-                    <p className="mb-3 text-[12px] text-soft">
-                      Điểm đo phụ này <b className="text-dim">trùng khách hàng</b> với điểm đo chính,
-                      nên tên tắt sẽ lặp lại phần đầu mã. Chọn nhãn mục đích để phân biệt.
-                    </p>
-                    <div className="grid gap-6 sm:grid-cols-2">
-                      <Field label="Mục đích điểm đo phụ" required>
-                        <Select value={pForm.purpose} onChange={v => setPForm(f => ({ ...f, purpose: v }))}
-                          options={[
-                            ...SUB_PURPOSES.map(x => ({ value: x.code, label: `${x.label} (${x.code})` })),
-                            { value: CUSTOM, label: 'Tự nhập ký tự…' },
-                          ]}
-                          placeholder="Chọn mục đích" />
-                      </Field>
-                      {pForm.purpose === CUSTOM && (
-                        <Field label="Ký tự tự nhập" required hint={SHORT_NAME_HINT}>
-                          <TextInput value={pForm.purpose_custom} mono placeholder="KHO-LANH-2"
-                            onChange={v => setPForm(f => ({ ...f, purpose_custom: normalizeShortName(v) }))} />
-                        </Field>
-                      )}
-                    </div>
-                  </div>
-                )}
               </>
             )}
 
-            <Field label="Định danh điểm đo" hint="Không bắt buộc. Gõ 0,4 → mã có đuôi (0,4)">
-              <TextInput value={pForm.ident} mono placeholder="0,4"
-                onChange={v => setPForm(f => ({ ...f, ident: v }))} />
-            </Field>
+            {/*
+              Nhãn mục đích + định danh: hai mảnh đuôi của mã điểm đo, để cạnh
+              nhau cho thấy ngay mã sẽ ra thế nào. Nhãn LUÔN hiện, không còn chỉ
+              bật khi điểm phụ trùng khách hàng (user chốt 25/08/2026).
+            */}
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label="Nhãn mục đích (đuôi mã)"
+                required={isSub && sameCustomer}
+                hint={isSub && sameCustomer
+                  ? 'Trùng khách hàng với điểm đo chính nên phải có nhãn để phân biệt.'
+                  : 'Không bắt buộc. Bỏ trống thì đuôi mã lấy theo tên tắt khách hàng.'}>
+                <Select value={pForm.purpose} onChange={v => setPForm(f => ({ ...f, purpose: v }))}
+                  options={[
+                    { value: '', label: 'Không có nhãn' },
+                    ...SUB_PURPOSES.map(x => ({ value: x.code, label: `${x.label} (${x.code})` })),
+                    { value: CUSTOM, label: 'Tự nhập ký tự…' },
+                  ]}
+                  placeholder="Không có nhãn" searchable />
+              </Field>
+
+              <Field label="Định danh điểm đo" hint="Không bắt buộc. Gõ 0,4 → mã có đuôi (0,4)">
+                <TextInput value={pForm.ident} mono placeholder="0,4"
+                  onChange={v => setPForm(f => ({ ...f, ident: v }))} />
+              </Field>
+
+              {/*
+                Ô tự nhập nằm NGAY DƯỚI bộ chọn nhãn (ô thứ 3 của lưới 2 cột), để
+                chọn "Tự nhập ký tự…" xong là thấy ngay chỗ gõ.
+
+                KHÔNG chuẩn hoá lúc gõ nữa: `normalizeShortName` viết hoa và xoá
+                mọi ký tự ngoài [A-Z0-9-] ngay từng phím một, nên gõ dấu tiếng
+                Việt hay khoảng trắng là chữ biến mất trước mắt — cảm giác "gõ
+                không ăn gì". Giữ nguyên chữ người dùng gõ, chỉ chuẩn hoá khi
+                GHÉP MÃ, và hiện luôn kết quả bên dưới cho thấy mã sẽ ra sao.
+              */}
+              {pForm.purpose === CUSTOM && (
+                <Field label="Ký tự tự nhập" required
+                  hint={purposeLabel
+                    ? `Đuôi mã sẽ là: ${purposeLabel}`
+                    : SHORT_NAME_HINT}>
+                  <TextInput value={pForm.purpose_custom} mono placeholder="KHO-LANH-2"
+                    onChange={v => setPForm(f => ({ ...f, purpose_custom: v }))} />
+                </Field>
+              )}
+            </div>
 
             {/* ---------------- Bảng vật tư gắn ở điểm đo ---------------- */}
             <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
@@ -1526,14 +1804,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                       <th className="px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
                       <th className="px-2 py-3 text-left font-bold text-soft">Ngày treo</th>
                       <th className="px-2 py-3 text-left font-bold text-soft">Ngày tháo</th>
-                      <th className="px-2 py-3 text-left font-bold text-soft">Hoạt động</th>
                       <th className="px-2 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
                     {pForm.assetRows.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-[13px] italic text-faint">
+                        <td colSpan={6} className="px-4 py-8 text-center text-[13px] italic text-faint">
                           Chưa khai thiết bị nào — bấm "Thêm dòng" bên dưới.
                         </td>
                       </tr>
@@ -1546,6 +1823,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                             onChange={v => setRow(r.key, { type: v as AssetType })}
                             options={Object.entries(ASSET_LABEL).map(([value, label]) => ({ value, label }))}
                             placeholder="Chọn thiết bị" />
+                          {/* Chưa có ngày treo = vật tư dự kiến. Nói ngay tại dòng,
+                              vì đây là thứ quyết định nó có kéo HSN hay không. */}
+                          {r.type && r.serial.trim() && !r.dateOn.trim() && (
+                            <span className="mt-1 inline-flex items-center rounded-full bg-subtle px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-faint">
+                              dự kiến
+                            </span>
+                          )}
                         </td>
                         <td className="p-2">
                           <CellInput value={r.serial} mono placeholder="Nhập số chế tạo"
@@ -1567,11 +1851,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                         <td className="p-2">
                           <DatePicker value={r.dateOff} usePortal
                             onChange={v => setRow(r.key, { dateOff: v })} />
-                        </td>
-                        <td className="p-2">
-                          <Switch checked={r.active} label={r.active ? 'Có' : 'Ngưng'}
-                            title={r.active ? 'Đang đo tại điểm đo này' : 'Đã ngưng — giữ lại làm lịch sử'}
-                            onChange={v => setRow(r.key, { active: v })} />
                         </td>
                         <td className="p-2 text-center">
                           <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"
@@ -1618,7 +1897,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                           {!row.active && <span className="ml-1 text-[10px] font-bold uppercase text-faint">đã tháo</span>}
                           {' '}· khách <span className="font-mono font-bold text-ink">{mine!.mkh}</span>
                           {' '}· phát sinh tiền điện{' '}
-                          <b className="text-ink">{mine!.from} → {mine!.to}</b>
+                          <b className="text-ink">{dmyRange(mine!.from, mine!.to)}</b>
                           {' '}({mine!.count} HĐ){mine!.isCurrent && ' — còn phát sinh gần đây'}
                           {mine!.hsn != null && <> · HSN hóa đơn <b className="text-ink">{mine!.hsn}</b></>}
                         </p>
@@ -1631,13 +1910,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                           {row.dateOn !== mine!.from && (
                             <button type="button" onClick={() => fillDate(row.key, 'dateOn', mine!.from)}
                               className="vl-btn vl-btn-secondary vl-btn-sm">
-                              Ngày treo = {mine!.from}
+                              Ngày treo = {dmy(mine!.from)}
                             </button>
                           )}
                           {row.dateOff !== mine!.to && (
                             <button type="button" onClick={() => fillDate(row.key, 'dateOff', mine!.to)}
                               className="vl-btn vl-btn-secondary vl-btn-sm">
-                              Ngày tháo = {mine!.to}
+                              Ngày tháo = {dmy(mine!.to)}
                             </button>
                           )}
                         </div>
@@ -1673,9 +1952,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
             {/* Trạng thái do hệ thống suy — xem `lib/dm/pointStatus.ts`. */}
             <Field label="Trạng thái (hệ thống tự gắn)"
-              hint="Chưa gắn công tơ → Dự kiến · đủ công tơ và bộ 3 TI nhưng chưa có hóa đơn → Chưa vận hành · đã có hóa đơn → Đang vận hành · mọi vật tư đã ngưng → Đã tháo gỡ.">
+              hint="Chưa gắn công tơ, hoặc công tơ chưa khai ngày treo → Dự kiến · đã treo nhưng chưa có hóa đơn → Chưa vận hành · đã có hóa đơn → Đang vận hành · mọi vật tư đã ngưng → Đã tháo gỡ.">
               <div className="rounded border border-dashed border-[var(--border)] bg-subtle px-4 py-3">
                 <StatusTag status={derivedStatus} />
+                {statusReason && (
+                  <div className="mt-2 text-[12px] text-muted">{statusReason}</div>
+                )}
               </div>
             </Field>
 

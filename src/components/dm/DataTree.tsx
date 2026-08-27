@@ -8,18 +8,34 @@
  * Không mô tả schema — mỗi nút là một BẢN GHI thật. Bản ghi mất cha (trạm không
  * còn KCN, điểm đo không còn trạm) gom vào nhánh "Chưa gắn" ở cuối để không bị
  * khuất — quan hệ đặt `cascadeDelete=false` nên tình huống này có thể xảy ra.
+ *
+ * BỐ CỤC: hai card cạnh nhau — cây chiếm 1/3 bên TRÁI, chi tiết chiếm 2/3 bên
+ * PHẢI. Bấm một nút bên cây thì card chi tiết đổi nội dung theo (`TreeDetail`).
+ * Bản đầu 25/08 đặt ngược lại (cây bên phải) theo đúng nguyên văn yêu cầu,
+ * nhưng user xem thực tế rồi chốt để cây bên trái cho dễ nhìn — mắt đọc từ
+ * trái sang, chỗ CHỌN nên đứng trước chỗ XEM.
+ *
+ * Dưới 1024px không xếp chồng hai card mà cho chi tiết TRƯỢT LÊN từ dưới dạng
+ * drawer, vì panel chi tiết dài, xếp dọc thì mỗi lần bấm lại phải cuộn đi tìm.
+ *
+ * MÀU KCN chạy suốt cả nhánh (user chốt 25/08/2026): đường dẫn hướng dọc và
+ * biểu tượng trạm đều lấy màu của KCN cha, nhạt dần theo từng cấp. Cuộn tới
+ * giữa danh sách 45 điểm đo mà đầu KCN đã trôi khỏi màn hình thì màu là thứ
+ * duy nhất còn nói cho biết đang đứng ở KCN nào.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Building2, Factory, Gauge, ChevronRight, RefreshCw, Search,
   FoldVertical, UnfoldVertical, AlertTriangle, CornerDownRight,
 } from 'lucide-react';
-import { loadCatalog, pbErrorMessage } from '../../lib/dm/repo';
+import { isAbortError, loadCatalog, pbErrorMessage } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
-import { ROLE_LABEL } from '../../lib/dm/types';
 import type { Point, Station, Zone } from '../../lib/dm/types';
 import { kcnColorOf } from '../../lib/kcnColors';
-import { PointBadgeIcon, StatusTag } from './pointIcons';
+import { PointBadgeIcon, StatusIcon } from './pointIcons';
+import { TreeDetail } from './TreeDetail';
+import type { Sel } from './TreeDetail';
 
 /**
  * Xếp điểm đo trong một trạm theo phân cấp: mỗi điểm chính kéo theo các điểm
@@ -67,6 +83,18 @@ export default function DataTree() {
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  /** Phần tử đang chọn — quyết định nội dung card chi tiết. */
+  const [sel, setSel] = useState<Sel>(null);
+  /** Drawer chi tiết ở màn nhỏ. Màn lớn không dùng biến này. */
+  const [drawer, setDrawer] = useState(false);
+
+  /** Bấm một nút cây: vừa chọn (đổi card chi tiết) vừa đóng/mở nhánh như cũ. */
+  const pick = (kind: NonNullable<Sel>['kind'], id: string) => {
+    setSel({ kind, id });
+    setDrawer(true);
+  };
+  const isSel = (kind: NonNullable<Sel>['kind'], id: string) =>
+    sel?.kind === kind && sel.id === id;
 
   const load = async () => {
     setLoading(true);
@@ -77,6 +105,9 @@ export default function DataTree() {
       // Mở sẵn cấp KCN để nhìn thấy ngay có gì.
       setOpenIds(new Set(d.zones.map(z => z.id)));
     } catch (e) {
+      // Request bị huỷ giữa chừng thì giữ nguyên màn hình cũ: lần nạp mới đang
+      // chạy sẽ đổ dữ liệu vào, hiện lỗi đỏ ở đây chỉ làm người dùng hoang mang.
+      if (isAbortError(e)) return;
       setError(pbErrorMessage(e));
       setData(null);
     } finally {
@@ -146,30 +177,21 @@ export default function DataTree() {
     && orphanStations.length === 0 && orphanPoints.length === 0;
 
   /* -------------------------- hàng điểm đo -------------------------- */
-  const PointRow = ({ p, isChild }: { p: Point; isChild?: boolean }) => {
+  const PointRow = ({ p, isChild, hex }: { p: Point; isChild?: boolean; hex: string }) => {
     const c = customerOf(p);
     return (
-      <div className={`flex flex-wrap items-center gap-2 rounded-lg py-2 pr-3 transition-colors hover:bg-subtle ${
-        isChild ? 'pl-9' : 'pl-3'
-      }`}>
-        {isChild && <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-faint" />}
+      <button type="button" onClick={() => pick('point', p.id)}
+        className={`flex w-full flex-wrap items-center gap-2 rounded-lg border-l-2 py-2 pr-3 text-left transition-colors ${
+          isSel('point', p.id) ? 'border-accent bg-accent-soft' : 'border-transparent hover:bg-subtle'
+        } ${isChild ? 'pl-9' : 'pl-3'}`}>
+        {isChild && <CornerDownRight className="h-3.5 w-3.5 shrink-0" style={{ color: `${hex}99` }} />}
         <PointBadgeIcon point={p} />
-        <span className={`min-w-0 flex-1 truncate text-[13px] ${isChild ? 'text-dim' : 'font-semibold text-ink'}`}>
+        <span className={`min-w-0 flex-1 truncate text-[13px] ${isChild ? 'text-dim' : 'font-semibold text-ink'}`}
+          title={c ? `${c.mkh} · ${c.name}` : 'chưa gắn khách hàng'}>
           {p.code || p.line_name || p.line_id}
         </span>
-
-        <span className={p.role === 'chinh' ? 'vl-badge-primary' : 'vl-badge-info'}>
-          {ROLE_LABEL[p.role]}
-        </span>
-
-        <span className="rounded-md bg-subtle px-2 py-0.5 text-[11px] font-bold text-soft">
-          HSN {p.hsn ?? '—'}
-        </span>
-        <StatusTag status={p.status} />
-        <span className="shrink-0 text-[11px] text-soft">
-          {c ? <><span className="font-mono font-bold">{c.mkh}</span> · {c.name}</> : <i className="text-faint">chưa gắn KH</i>}
-        </span>
-      </div>
+        <StatusIcon status={p.status} />
+      </button>
     );
   };
 
@@ -222,7 +244,16 @@ export default function DataTree() {
           </p>
         </div>
       ) : (
-        <div className="vl-card space-y-1">
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* ---- Card chi tiết (2/3, bên PHẢI) — chỉ từ lg trở lên ---- */}
+          <div className="hidden lg:order-2 lg:col-span-2 lg:block">
+            <div className="vl-card max-h-[calc(100vh-12rem)] overflow-y-auto p-5">
+              <TreeDetail sel={sel} d={data} />
+            </div>
+          </div>
+
+          {/* ---- Card sơ đồ cây (1/3, bên TRÁI) ---- */}
+          <div className="vl-card max-h-[calc(100vh-12rem)] space-y-1 overflow-y-auto lg:order-1 lg:col-span-1">
           {visibleTree.length === 0 && !!q && (
             <p className="py-10 text-center text-[13px] italic text-faint">
               Không có kết quả cho “{query}”.
@@ -237,8 +268,10 @@ export default function DataTree() {
             return (
               <div key={zone.id}>
                 {/* --- Cấp 1: KCN --- */}
-                <button onClick={() => toggle(zone.id)}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-subtle">
+                <button onClick={() => { toggle(zone.id); pick('zone', zone.id); }}
+                  className={`flex w-full items-center gap-2.5 rounded-lg border-l-2 px-2 py-2.5 text-left transition-colors ${
+                    isSel('zone', zone.id) ? 'border-accent bg-accent-soft' : 'border-transparent hover:bg-subtle'
+                  }`}>
                   <Caret open={zOpen} />
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color.hex }} />
                   <Building2 className="h-4 w-4 shrink-0" style={{ color: color.hex }} />
@@ -249,7 +282,8 @@ export default function DataTree() {
                 </button>
 
                 {zOpen && (
-                  <div className="ml-[13px] border-l border-[var(--border)] pl-4">
+                  <div className="ml-[13px] border-l-2 pl-4"
+                    style={{ borderColor: `${color.hex}59` }}>
                     {stations.length === 0 ? (
                       <p className="px-3 py-2 text-[12px] italic text-faint">Chưa có trạm nào trong KCN này.</p>
                     ) : stations.map(({ station, points }) => {
@@ -257,10 +291,12 @@ export default function DataTree() {
                       return (
                         <div key={station.id}>
                           {/* --- Cấp 2: Trạm --- */}
-                          <button onClick={() => toggle(station.id)}
-                            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-subtle">
+                          <button onClick={() => { toggle(station.id); pick('station', station.id); }}
+                            className={`flex w-full items-center gap-2.5 rounded-lg border-l-2 px-2 py-2 text-left transition-colors ${
+                              isSel('station', station.id) ? 'border-accent bg-accent-soft' : 'border-transparent hover:bg-subtle'
+                            }`}>
                             <Caret open={sOpen} hidden={points.length === 0} />
-                            <Factory className="h-4 w-4 shrink-0 text-faint" />
+                            <Factory className="h-4 w-4 shrink-0" style={{ color: color.hex }} />
                             <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-bold text-dim">
                               {station.code}
                             </span>
@@ -274,9 +310,10 @@ export default function DataTree() {
 
                           {/* --- Cấp 3: Điểm đo --- */}
                           {sOpen && points.length > 0 && (
-                            <div className="ml-[9px] border-l border-[var(--border)] pl-4">
+                            <div className="ml-[9px] border-l-2 pl-4"
+                              style={{ borderColor: `${color.hex}40` }}>
                               {orderPoints(points).map(({ point, isChild }) => (
-                                <PointRow key={point.id} p={point} isChild={isChild} />
+                                <PointRow key={point.id} p={point} isChild={isChild} hex={color.hex} />
                               ))}
                             </div>
                           )}
@@ -314,8 +351,28 @@ export default function DataTree() {
               ))}
             </div>
           )}
+          </div>
         </div>
       )}
+
+      {/* ---- Màn nhỏ: chi tiết trượt lên từ dưới ---- */}
+      <AnimatePresence>
+        {drawer && sel && (
+          <motion.div className="fixed inset-0 z-40 flex items-end lg:hidden"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="absolute inset-0 bg-black/40" onClick={() => setDrawer(false)} />
+            <motion.div
+              className="relative max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-surface p-5 pt-6 shadow-2xl"
+              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
+            >
+              {/* Tay nắm — dấu hiệu quen thuộc rằng tấm này kéo/đóng được. */}
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[var(--border)]" />
+              <TreeDetail sel={sel} d={data} onClose={() => setDrawer(false)} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -31,6 +31,24 @@ export function sortByMkh<T>(items: T[], mkhOf: (x: T) => string | undefined): T
 }
 
 /**
+ * Xếp theo MÃ (mã trạm, mã điểm đo) tăng dần — cùng cách so sánh với
+ * `sortByMkh`: `numeric` để T2 đứng trước T10, bản ghi thiếu mã dồn xuống cuối.
+ *
+ * Bảng điểm đo dùng hàm này thay vì `sortByMkh` (user chốt 22/08/2026): mã điểm
+ * đo đã bắt đầu bằng hậu tố KCN rồi tới tên tắt khách hàng, nên xếp theo mã thì
+ * các điểm đo của cùng một khách vẫn đứng liền nhau, mà thứ tự lại khớp với thứ
+ * tự người dùng đọc trên chính cột đầu tiên của bảng.
+ */
+export function sortByCode<T>(items: T[], codeOf: (x: T) => string | undefined): T[] {
+  return [...items].sort((a, b) => {
+    const ca = codeOf(a) ?? '';
+    const cb = codeOf(b) ?? '';
+    if (!ca !== !cb) return ca ? -1 : 1;
+    return ca.localeCompare(cb, 'vi', { numeric: true });
+  });
+}
+
+/**
  * Gom theo KCN, GIỮ NGUYÊN thứ tự các phần tử bên trong mỗi nhóm — nên hãy
  * `sortByMkh` trước rồi mới gọi hàm này.
  *
