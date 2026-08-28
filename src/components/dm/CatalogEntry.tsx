@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Building2, Factory, Users, Gauge, Package,
-  Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText, History, ArrowLeftRight,
+  Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText, History, ArrowLeftRight, Search,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import type { TabItem } from '../ui/Tabs';
@@ -48,6 +48,7 @@ import { groupByZone, sortByCode, sortByMkh } from './groupByZone';
 import AssetLifecycle from './AssetLifecycle';
 import { TransferOwner } from './TransferOwner';
 import { ZoneTables } from './ZoneTables';
+import { buildTerms, matchesTerms } from '../../lib/dm/search';
 import {
   SHORT_NAME_HINT, SUB_PURPOSES, buildPointCode, buildStationCode, isValidShortName,
   missingPointCodeParts, missingStationCodeParts, normalizeShortName,
@@ -69,6 +70,14 @@ const TABS: TabItem<CatTab>[] = [
 ];
 
 /** Tiêu đề + nút Thêm của từng tab KHAI BÁO; tab `lifecycle` không có (chỉ tra cứu). */
+/** Gợi ý trong ô tìm kiếm — nói đúng cột nào tìm được, kẻo gõ mò. */
+const SEARCH_HINT: Record<Exclude<CatTab, 'lifecycle'>, string> = {
+  zone: 'Tìm mã KCN, tên, địa chỉ...',
+  station: 'Tìm mã trạm, MKH, tên khách hàng...',
+  customer: 'Tìm MKH, tên công ty, tên tắt, địa chỉ...',
+  point: 'Tìm mã điểm đo, trạm, MKH, tên khách hàng...',
+};
+
 const HEAD: Record<Exclude<CatTab, 'lifecycle'>, { title: string; desc: string; add: string }> = {
   zone: {
     title: 'Khu công nghiệp',
@@ -177,6 +186,8 @@ const str = (n?: number) => (n == null ? '' : String(n));
 
 export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: Scope }) {
   const [tab, setTab] = useState<CatTab>('zone');
+  /** Ô tìm kiếm dùng chung 4 tab danh mục. Đổi tab thì xóa — xem `setTab` dưới. */
+  const [search, setSearch] = useState('');
   /** Bộ lọc KCN của 3 bảng Trạm / Khách hàng / Điểm đo. `''` = tất cả. */
   const [filterZone, setFilterZone] = useState('');
   const [data, setData] = useState<CatalogData | null>(null);
@@ -401,11 +412,29 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const isHung = (r: AssetRow) => !!r.dateOn.trim();
 
   /**
+   * BỘ DÒNG DÙNG ĐỂ SUY HSN.
+   *
+   * Mặc định chỉ xét vật tư ĐÃ TREO — đó mới là cái đang đo thật. Nhưng khi
+   * CHƯA CÓ DÒNG NÀO ĐƯỢC TREO (điểm đo dự kiến), lấy chính các dòng dự kiến
+   * để suy HSN (user chốt 27/08/2026): khai bộ TI 200/5 cho điểm đo sắp lắp mà
+   * ô HSN vẫn trống thì không kiểm tra được gì trước khi ra hiện trường, và
+   * điểm đo dự kiến hiện HSN rỗng khắp nơi trong danh mục.
+   *
+   * KHÔNG trộn hai loại: có dù chỉ một dòng đã treo thì dòng dự kiến lại đứng
+   * ngoài như cũ — bộ TI mua sẵn 1500/5 không được kéo HSN của bộ 1000/5 đang
+   * chạy.
+   */
+  const hungRows = pForm.assetRows.filter(isHung);
+  const hsnRows = hungRows.length ? hungRows : pForm.assetRows;
+  /** HSN đang suy từ vật tư DỰ KIẾN — cần nói rõ, kẻo tưởng đã lắp xong. */
+  const hsnFromPlan = hungRows.length === 0
+    && pForm.assetRows.some(r => r.type && r.serial.trim());
+
+  /**
    * Lấy dòng đầu tiên của một loại có nhập tỷ số — 3 TI cùng bộ luôn cùng tỷ số.
-   * Chỉ xét thiết bị ĐÃ TREO và ĐANG HOẠT ĐỘNG.
    */
   const ratioRowOf = (type: AssetType) =>
-    pForm.assetRows.find(r => r.active && isHung(r) && r.type === type && r.ratio.trim() !== '');
+    hsnRows.find(r => r.active && r.type === type && r.ratio.trim() !== '');
 
   /**
    * Tỷ số đại diện của một bộ: ưu tiên cái đang hoạt động, cả bộ đã tháo thì
@@ -413,17 +442,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    * mất sạch HSN.
    */
   const ratioOfSet = (type: AssetType) =>
-    pickRatio(pForm.assetRows
-      .filter(r => r.type === type && isHung(r) && r.ratio.trim() !== '')
+    pickRatio(hsnRows
+      .filter(r => r.type === type && r.ratio.trim() !== '')
       .map(r => ({ ...parseRatio(r.ratio), active: r.active })));
 
   /**
    * Có khai TI hay không thay cho câu hỏi "đấu nối" đã bỏ khỏi form. Xét CẢ TI
    * đã tháo: điểm đo từng đo gián tiếp thì vẫn là gián tiếp, tháo TI ra không
    * biến nó thành đo thẳng. Nhưng KHÔNG xét TI dự kiến (chưa có ngày treo) —
-   * bộ TI mua sẵn không biến điểm đo đang đo thẳng thành đo gián tiếp.
+   * bộ TI mua sẵn không biến điểm đo đang đo thẳng thành đo gián tiếp — trừ khi
+   * CẢ điểm đo còn dự kiến, lúc đó không có gì khác để dựa vào.
    */
-  const hasTi = pForm.assetRows.some(r => r.type === 'TI' && isHung(r));
+  const hasTi = hsnRows.some(r => r.type === 'TI');
   const hsnInput = { hasTi, ti: ratioOfSet('TI'), tu: ratioOfSet('TU') };
   const derivedHsn = deriveHsn(hsnInput);
 
@@ -703,17 +733,47 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     ] : []),
   ];
 
-  /** Tỷ số TI khai 0 (hoặc chia 0) là sai chắc chắn — HSN sẽ ra 0 hoặc vô nghĩa. */
-  const badRatioRows = pForm.assetRows.filter(r => {
-    if (!HAS_RATIO.includes(r.type as AssetType) || !r.ratio.trim()) return false;
+  /**
+   * TỶ SỐ TI / TU LÀ BẮT BUỘC — CHẶN LƯU (user chốt 27/08/2026).
+   *
+   * HSN = (TI sơ/thứ) × (TU sơ/thứ), và HSN nhân thẳng vào chỉ số đọc từ HES:
+   * thiếu tỷ số thì điểm đo lưu xuống với HSN rỗng, mọi sản lượng tính từ nó
+   * đều sai. Trước đây chỉ NHẮC, nên đã có điểm đo lọt xuống PB không HSN.
+   *
+   * Áp cho CẢ dòng dự kiến: điểm đo dự kiến nay cũng suy HSN từ chính các dòng
+   * đó, nên bỏ trống tỷ số là bỏ trống HSN.
+   *
+   * Dòng trắng hoàn toàn (chưa gõ số No, chưa gõ tỷ số) không tính — đó là dòng
+   * người dùng vừa thêm ra chứ chưa khai gì.
+   */
+  const ratioRows = pForm.assetRows.filter(r =>
+    HAS_RATIO.includes(r.type as AssetType) && (r.serial.trim() !== '' || r.ratio.trim() !== ''));
+  const missingRatioRows = ratioRows.filter(r => r.ratio.trim() === '');
+  const badRatioRows = ratioRows.filter(r => {
+    if (!r.ratio.trim()) return false;
     const { primary, secondary } = parseRatio(r.ratio);
     return primary === 0 || secondary === 0 || primary == null || secondary == null;
   });
-  if (badRatioRows.length) {
-    invoiceNotes.push(`tỷ số không hợp lệ ở ${badRatioRows.length} dòng `
+
+  const ratioBlocks: string[] = [
+    ...(missingRatioRows.length ? [
+      `chưa nhập tỷ số cho ${missingRatioRows.length} `
+      + `${missingRatioRows.map(r => `${r.type} ${r.serial.trim() || '—'}`).join(', ')} `
+      + '— không có tỷ số thì không suy được HSN, mà HSN sai là sản lượng sai',
+    ] : []),
+    ...(badRatioRows.length ? [
+      `tỷ số không hợp lệ ở ${badRatioRows.length} dòng `
       + `(${badRatioRows.map(r => `${r.type} ${r.serial.trim() || '—'}: "${r.ratio}"`).join(', ')})`
-      + ' — sơ cấp/thứ cấp đều phải khác 0');
-  }
+      + ' — sơ cấp và thứ cấp đều phải khác 0, dạng 200/5',
+    ] : []),
+    // Có TI mà công thức vẫn không ra số: tỷ số gõ dở kiểu "200/" chẳng hạn.
+    ...(hasTi && derivedHsn == null ? [
+      'chưa suy được HSN từ tỷ số đang khai — kiểm tra lại ô tỷ số của TI / TU',
+    ] : []),
+  ];
+
+  /** Mọi thứ CHẶN lưu điểm đo: đụng độ số chế tạo + thiếu/sai tỷ số. */
+  const saveBlocks = [...serialBlocks, ...ratioBlocks];
 
   /**
    * Cảnh báo vật tư — CHỈ nhắc, không chặn lưu (user chốt 14/08). Điểm đo đang
@@ -756,9 +816,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     assetWarnings.push(`đo gián tiếp phải đủ ${TI_PER_SET} TI (đang có ${countType('TI')} cái hoạt động)`);
   }
   if (plannedRows.length) {
-    assetWarnings.push(
-      `${plannedRows.length} dòng chưa khai ngày treo — đang coi là VẬT TƯ DỰ KIẾN, `
-      + 'không tính vào HSN và không đối chiếu hóa đơn');
+    assetWarnings.push(hsnFromPlan
+      // Cả bộ còn dự kiến ⇒ HSN đang lấy từ chính mấy dòng này.
+      ? `${plannedRows.length} dòng chưa khai ngày treo — điểm đo còn DỰ KIẾN, `
+        + 'HSN đang suy từ tỷ số dự kiến và sẽ tính lại theo vật tư thực khi khai ngày treo'
+      : `${plannedRows.length} dòng chưa khai ngày treo — đang coi là VẬT TƯ DỰ KIẾN, `
+        + 'không tính vào HSN và không đối chiếu hóa đơn');
   }
 
   /**
@@ -907,9 +970,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         return toast.warning('Thiếu điểm đo chính',
           'Điểm đo phụ phải nằm trong phạm vi đo của một điểm đo chính.');
       }
-      // Đụng độ số chế tạo là lỗi thật, không phải nhắc nhở — chặn lưu.
-      if (serialBlocks.length) {
-        return toast.error('Trùng số chế tạo', `${serialBlocks.join('. ')}.`);
+      // Đụng độ số chế tạo và thiếu tỷ số là lỗi thật, không phải nhắc — chặn lưu.
+      if (saveBlocks.length) {
+        return toast.error('Chưa lưu được', `${saveBlocks.join('. ')}.`);
       }
       const body = {
         code: pointCode,
@@ -1263,6 +1326,84 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       ? groups.filter(g => (filterZone === NO_ZONE ? g.zone === null : g.zone?.id === filterZone))
       : groups;
 
+  /* ------------------------- Lọc theo tìm kiếm ------------------------- */
+  const terms = useMemo(() => buildTerms(search), [search]);
+
+  /** Tên khách hàng — tìm theo tên công ty chứ không chỉ mã. */
+  const customerName = (id?: string) => d?.customers.find(c => c.id === id)?.name;
+
+  /**
+   * Lọc trong TỪNG nhóm KCN rồi bỏ nhóm rỗng: giữ được thẻ KCN và số đếm trên
+   * đầu thẻ đúng với những gì đang hiện, thay vì đếm toàn bộ danh mục.
+   */
+  const bySearch = <T,>(
+    groups: { zone: Zone | null; rows: T[] }[],
+    textOf: (row: T) => (string | number | null | undefined)[],
+  ) => terms.length
+    ? groups
+      .map(g => ({ ...g, rows: g.rows.filter(r => matchesTerms(textOf(r), terms)) }))
+      .filter(g => g.rows.length)
+    : groups;
+
+  /**
+   * Điểm đo lọc riêng: bảng này THỤT LỀ điểm phụ dưới điểm chính, nên cắt rời
+   * một dòng khỏi cụm là mất luôn ngữ cảnh. Vì vậy giữ cả cụm quanh dòng khớp:
+   * điểm chính khớp thì kéo theo đàn con; điểm phụ khớp thì kéo theo cha.
+   */
+  const pointGroupsShown = useMemo(() => {
+    const groups = byFilterZone(pointGroups);
+    if (!terms.length) return groups;
+
+    return groups
+      .map(g => {
+        const hit = new Set(g.rows
+          .filter(r => matchesTerms([
+            r.point.code, r.point.line_name, r.point.sub_label, r.point.hsn,
+            stationCodeOf(r.point.station), customerMkh(r.point.customer),
+            customerName(r.point.customer),
+          ], terms))
+          .map(r => r.point.id));
+
+        const kept = g.rows.filter(r =>
+          hit.has(r.point.id)
+          // cha của một điểm phụ đang khớp
+          || g.rows.some(x => hit.has(x.point.id) && x.point.parent_point === r.point.id)
+          // con của một điểm chính đang khớp
+          || (r.point.parent_point ? hit.has(r.point.parent_point) : false));
+
+        return { ...g, rows: kept };
+      })
+      .filter(g => g.rows.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pointGroups, filterZone, terms, d]);
+
+  const zoneRowsShown = useMemo(
+    () => zoneRows.filter(z => matchesTerms([z.code, z.name, z.address], terms)),
+    [zoneRows, terms]);
+
+  const stationGroupsShown = useMemo(
+    () => bySearch(byFilterZone(stationGroups), s => [
+      s.code, s.sdm_kva, customerMkh(s.customer), customerName(s.customer), zoneName(s.zone),
+    ]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stationGroups, filterZone, terms, d]);
+
+  const customerGroupsShown = useMemo(
+    () => bySearch(byFilterZone(customerGroups), c => [
+      c.mkh, c.name, c.short_name, c.address, zoneName(c.zone),
+    ]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customerGroups, filterZone, terms, d]);
+
+  /**
+   * Câu báo bảng rỗng: phải phân biệt "lọc ra không có gì" với "chưa khai gì
+   * cả" — không thì người dùng tưởng mất dữ liệu.
+   */
+  const emptyText = (unit: string, none: string) =>
+    terms.length ? `Không có ${unit} nào khớp "${search.trim()}".`
+      : filterZone ? `Không có ${unit} nào trong KCN đang lọc.`
+        : none;
+
   /**
    * Liệt kê ĐỦ các KCN kèm số bản ghi ở tab hiện tại, kể cả KCN đang có 0 bản
    * ghi. Nếu chỉ liệt kê KCN có dữ liệu thì đổi tab xong lựa chọn cũ biến mất
@@ -1309,6 +1450,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
           <p className="mt-1 text-sm text-soft">{head.desc}</p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-3 md:w-auto">
+          {/* Ô tìm kiếm — khuôn lấy nguyên từ màn "Công nợ khách hàng". */}
+          <div className="relative w-full md:w-auto">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder={SEARCH_HINT[tab]}
+              className="w-full rounded-lg border border-[var(--border)] bg-surface py-2 pl-10 pr-4
+                text-sm text-dim focus:outline-none focus:ring-1 focus:ring-accent sm:w-[260px]" />
+          </div>
           {tab !== 'zone' && (
             <div className="w-full min-w-56 md:w-64">
               <Select value={filterZone} onChange={setFilterZone}
@@ -1335,7 +1484,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       </div>
       )}
 
-      <Tabs tabs={TABS} value={tab} onChange={t => setTab(t)} />
+      <Tabs tabs={TABS} value={tab} onChange={t => { setTab(t); setSearch(''); }} />
 
       {/* ======================= Vòng đời vật tư ======================= */}
       {tab === 'lifecycle' && <AssetLifecycle scope={_scope} />}
@@ -1343,8 +1492,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
       {/* ============================ KCN ============================ */}
       {tab === 'zone' && (
-        <TableCard fixed loading={loading} isEmpty={(d?.zones.length ?? 0) === 0}
-          empty="Chưa có khu công nghiệp nào được khai."
+        <TableCard fixed loading={loading} isEmpty={zoneRowsShown.length === 0}
+          empty={terms.length
+            ? `Không có khu công nghiệp nào khớp "${search.trim()}".`
+            : 'Chưa có khu công nghiệp nào được khai.'}
           columns={<>
             <th className={`${TH_CLS} w-[14%] pl-10`}>Mã KCN</th>
             <th className={`${TH_CLS} w-[26%]`}>Tên khu công nghiệp</th>
@@ -1352,7 +1503,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             <th className={`${TH_CLS} w-[10%]`}>Số trạm</th>
             <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
           </>}>
-          {zoneRows.map(z => (
+          {zoneRowsShown.map(z => (
             <tr key={z.id} className="transition-colors hover:bg-subtle/50">
               <td className="px-6 py-4 pl-10">
                 <span className="rounded-md bg-subtle px-2.5 py-1 font-mono text-xs font-bold text-soft">{z.code}</span>
@@ -1380,8 +1531,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               Phải khai ít nhất một KCN ở tab "Khu công nghiệp" trước khi thêm trạm.
             </div>
           )}
-          <ZoneTables groups={byFilterZone(stationGroups)} unit="trạm" loading={loading}
-            empty={filterZone ? 'Không có trạm nào trong KCN đang lọc.' : 'Chưa có trạm nào được khai.'}
+          <ZoneTables groups={stationGroupsShown} unit="trạm" loading={loading}
+            empty={emptyText('trạm', 'Chưa có trạm nào được khai.')}
             rowKey={s => s.id}
             columns={<>
               <th className={`${TH_CLS} w-[27%] pl-10`}>Mã trạm</th>
@@ -1420,8 +1571,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
       {/* ========================= Khách hàng ========================= */}
       {tab === 'customer' && (
-        <ZoneTables groups={byFilterZone(customerGroups)} unit="khách hàng" loading={loading}
-          empty={filterZone ? 'Không có khách hàng nào trong KCN đang lọc.' : 'Chưa có khách hàng nào được khai.'}
+        <ZoneTables groups={customerGroupsShown} unit="khách hàng" loading={loading}
+          empty={emptyText('khách hàng', 'Chưa có khách hàng nào được khai.')}
           rowKey={c => c.id}
           columns={<>
             <th className={`${TH_CLS} w-[12%] pl-10`}>Mã KH</th>
@@ -1465,8 +1616,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               Phải khai ít nhất một trạm ở tab "Trạm" trước khi thêm điểm đo.
             </div>
           )}
-          <ZoneTables groups={byFilterZone(pointGroups)} unit="điểm đo" loading={loading}
-            empty={filterZone ? 'Không có điểm đo nào trong KCN đang lọc.' : 'Chưa có điểm đo nào được khai.'}
+          <ZoneTables groups={pointGroupsShown} unit="điểm đo" loading={loading}
+            empty={emptyText('điểm đo', 'Chưa có điểm đo nào được khai.')}
             rowKey={r => r.point.id}
             columns={<>
               <th className={`${TH_CLS} w-[28%] pl-10`}>Mã điểm đo</th>
@@ -1870,8 +2021,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </button>
             </div>
 
-            {/* HSN: chỉ đọc, suy từ tỷ số vừa nhập */}
-            <Field label="HSN (suy từ tỷ số TI / TU)" hint={hsnFormula(hsnInput)}>
+            {/* HSN: chỉ đọc, suy từ tỷ số vừa nhập. Điểm đo dự kiến cũng có HSN. */}
+            <Field label={hsnFromPlan ? 'HSN dự kiến (suy từ tỷ số TI / TU)' : 'HSN (suy từ tỷ số TI / TU)'}
+              required
+              hint={hsnFromPlan
+                ? `${hsnFormula(hsnInput)} — theo vật tư DỰ KIẾN, tính lại khi khai ngày treo`
+                : hsnFormula(hsnInput)}>
               <DerivedValue value={derivedHsn == null ? '' : String(derivedHsn)}
                 placeholder="Nhập tỷ số TI ở phần vật tư" />
             </Field>
@@ -1961,10 +2116,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </div>
             </Field>
 
-            {/* Đụng độ số chế tạo: màu đỏ vì đây là thứ DUY NHẤT chặn lưu. */}
-            {serialBlocks.length > 0 && (
+            {/* Màu đỏ = thứ CHẶN lưu (đụng số chế tạo, thiếu/sai tỷ số). */}
+            {saveBlocks.length > 0 && (
               <div className="vl-alert vl-alert-light-danger text-[12px]">
-                <b>Không lưu được:</b> {serialBlocks.join('; ')}.
+                <b>Không lưu được:</b> {saveBlocks.join('; ')}.
               </div>
             )}
 
