@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AREAS } from '../lib/pocketbase';
 import { kcnColorOf } from '../lib/kcnColors';
 import { ZoneSection } from './business/ZoneSection';
-import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
+import { isAbortError, loadCatalog, pbErrorMessage } from '../lib/dm/repo';
+import { customerMetersOf } from '../lib/dm/meterRows';
+import type { CustomerMeters } from '../lib/dm/meterRows';
 import { useScopeAreas, type Scope } from '../lib/scope';
 import {
   MapPin, RefreshCw, ChevronRight,
@@ -19,7 +21,7 @@ const TOAST_TITLE: Record<ToastType, string> = {
 };
 
 /* ---- Types ---- */
-type CustomerGroup = { code: string; name: string; area: string; meters: MeterInfoRow[] };
+type CustomerGroup = CustomerMeters;
 type Zone = { area: string; groups: CustomerGroup[] };
 
 /* ================================================================
@@ -29,11 +31,15 @@ type Zone = { area: string; groups: CustomerGroup[] };
                       sách phẳng, gom KH theo mã (một KH nằm ở 2 KCN
                       vẫn là MỘT thẻ).
    scope='vanphong' — khối Văn phòng: toàn bộ KCN, chia section theo
-                      KCN, gom KH theo (KCN, mã) nên cùng một KH ở 2
-                      KCN sẽ là HAI thẻ nằm ở 2 section.
+                      KCN.
+
+   NGUỒN DỮ LIỆU: danh mục `dm_*` trên PocketBase (user chốt 25/08/2026).
+   Trước đây màn này đọc `public/metterinfo.csv` — bản kết xuất từ HES chạy
+   theo pipeline nên trễ một ngày và không thấy những gì vừa khai bên Danh mục.
+   Việc ghép dữ liệu nằm ở `lib/dm/meterRows.ts`, ở đây chỉ lọc và bày.
 ================================================================ */
 export default function CustomerManager({ scope = 'doi' }: { scope?: Scope }) {
-  const [rows, setRows] = useState<MeterInfoRow[]>([]);
+  const [all, setAll] = useState<CustomerGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterArea, setFilterArea] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,10 +61,11 @@ export default function CustomerManager({ scope = 'doi' }: { scope?: Scope }) {
   const loadRows = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await fetchMeterInfo();
-      setRows(data);
-    } catch (err: any) {
-      showToast('Lỗi tải metterinfo.csv: ' + err.message, 'error');
+      setAll(customerMetersOf(await loadCatalog()));
+    } catch (err) {
+      // Request bị huỷ giữa chừng không phải lỗi — lần nạp mới đang chạy.
+      if (isAbortError(err)) return;
+      showToast('Không đọc được danh mục: ' + pbErrorMessage(err), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -66,51 +73,41 @@ export default function CustomerManager({ scope = 'doi' }: { scope?: Scope }) {
 
   useEffect(() => { loadRows(); }, [loadRows]);
 
-  const filteredRows = React.useMemo(() => {
+  /**
+   * Lọc theo KHÁCH HÀNG. Ô tìm kiếm khớp mã/tên khách, hoặc khớp số công tơ —
+   * gõ số công tơ thì thẻ khách hàng chỉ còn đúng công tơ đó cho dễ nhìn.
+   */
+  const customerGroups = React.useMemo((): CustomerGroup[] => {
     const allowed = new Set(effectiveAreas);
     const term = searchTerm.trim().toLowerCase();
-    return rows.filter(r => {
-      if (filterArea) { if (r.ADDRESS !== filterArea) return false; }
-      // Khối Văn phòng xem hết, kể cả KCN lạ / ô trống trong CSV.
-      else if (!isOffice && !allowed.has(r.ADDRESS)) return false;
-      if (term) {
-        const hay = `${r.METER_NO} ${r.CUSTOMER_NAME} ${r.CUSTOMER_CODE}`.toLowerCase();
-        if (!hay.includes(term)) return false;
-      }
-      return true;
-    });
-  }, [rows, filterArea, effectiveAreas, isOffice, searchTerm]);
+    const out: CustomerGroup[] = [];
 
-  /** Khối Vận hành: một danh sách phẳng, gom theo mã KH. */
-  const customerGroups = React.useMemo((): CustomerGroup[] => {
-    const map = new Map<string, CustomerGroup>();
-    for (const r of filteredRows) {
-      const key = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
-      if (!map.has(key)) map.set(key, { code: r.CUSTOMER_CODE, name: r.CUSTOMER_NAME, area: r.ADDRESS, meters: [] });
-      map.get(key)!.meters.push(r);
+    for (const g of all) {
+      if (filterArea) { if (g.area !== filterArea) continue; }
+      else if (!isOffice && !allowed.has(g.area)) continue;
+
+      if (!term) { out.push(g); continue; }
+      const hitCustomer = `${g.name} ${g.code}`.toLowerCase().includes(term);
+      const meters = g.meters.filter(m => m.METER_NO.toLowerCase().includes(term));
+      if (hitCustomer) out.push(g);
+      else if (meters.length) out.push({ ...g, meters });
     }
-    return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
-  }, [filteredRows]);
+    return out;
+  }, [all, filterArea, effectiveAreas, isOffice, searchTerm]);
 
-  /** Khối Văn phòng: gom KH theo KCN → section. Giữ thứ tự KCN theo AREAS. */
+  /** Khối Văn phòng: chia section theo KCN. Giữ thứ tự KCN theo `AREAS`. */
   const zones = React.useMemo((): Zone[] => {
-    const byZone = new Map<string, Map<string, CustomerGroup>>();
-    for (const r of filteredRows) {
-      const zone = r.ADDRESS || '—';
-      if (!byZone.has(zone)) byZone.set(zone, new Map());
-      const gmap = byZone.get(zone)!;
-      const key = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
-      if (!gmap.has(key)) gmap.set(key, { code: r.CUSTOMER_CODE, name: r.CUSTOMER_NAME, area: r.ADDRESS, meters: [] });
-      gmap.get(key)!.meters.push(r);
+    const byZone = new Map<string, CustomerGroup[]>();
+    for (const g of customerGroups) {
+      const key = g.area || '—';
+      const list = byZone.get(key);
+      if (list) list.push(g); else byZone.set(key, [g]);
     }
     const order = [...AREAS, '—'];
-    return Array.from(byZone.entries())
-      .map(([area, gmap]) => ({
-        area,
-        groups: Array.from(gmap.values()).sort((a, b) => a.code.localeCompare(b.code)),
-      }))
+    return [...byZone.entries()]
+      .map(([area, groups]) => ({ area, groups }))
       .sort((a, b) => order.indexOf(a.area) - order.indexOf(b.area));
-  }, [filteredRows]);
+  }, [customerGroups]);
 
   const isEmpty = isOffice
     ? zones.every(z => z.groups.length === 0)
@@ -171,6 +168,11 @@ export default function CustomerManager({ scope = 'doi' }: { scope?: Scope }) {
               className="overflow-hidden"
             >
               <div className="vl-accordion-body">
+                {meters.length === 0 ? (
+                  <p className="px-12 py-4 text-sm italic text-faint">
+                    Khách hàng này chưa khai công tơ nào trong Danh mục.
+                  </p>
+                ) : (
                 <table className="vl-table w-full text-left border-collapse">
                   <thead>
                     <tr>
@@ -205,6 +207,7 @@ export default function CustomerManager({ scope = 'doi' }: { scope?: Scope }) {
                     })}
                   </tbody>
                 </table>
+                )}
               </div>
             </motion.div>
           )}
@@ -226,7 +229,7 @@ export default function CustomerManager({ scope = 'doi' }: { scope?: Scope }) {
         <div>
           <h2 className="text-2xl font-bold text-ink">Thông tin khách hàng &amp; Công tơ</h2>
           <p className="text-soft text-sm mt-1">
-            Danh sách khách hàng và thiết bị đo đếm{isOffice ? ' theo từng KCN' : ''} (Đồng bộ trực tiếp từ HES sau mỗi 1 ngày)
+            Danh sách khách hàng và thiết bị đo đếm{isOffice ? ' theo từng KCN' : ''} — lấy từ <b className="text-dim">Danh mục</b>, sửa ở đó thì ở đây đổi theo
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">

@@ -26,6 +26,8 @@ import { pb, ID_TO_AREA, AREAS } from '../lib/pocketbase';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { DatePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
+import { Tabs, TabItem } from './ui/Tabs';
+import CustomerPmaxTab from './CustomerPmaxTab';
 
 /* ================================================================
    CACHE CSV (module-level) — datametter.csv chỉ tải 1 lần/phiên.
@@ -211,7 +213,12 @@ interface VoltagePowerDashboardProps {
   onZoneFilterChange?: (zone: string) => void;
 }
 
+type PageTab = 'chart' | 'pmax';
+
 export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }: VoltagePowerDashboardProps = {}) {
+  /* ---- Tab đang xem ---- */
+  const [tab, setTab] = useState<PageTab>('chart');
+
   /* ---- CSV ---- */
   const [csvContent, setCsvContent] = useState<string>(_meterCsvCache ?? '');
   const [csvError, setCsvError] = useState<string>('');
@@ -476,6 +483,14 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
   const isReady = !!csvContent && !isLoadingMeters;
   const noData = isReady && chartableCustomers.length === 0;
 
+  /* ---- Tab của trang ---- */
+  const TABS: TabItem<PageTab>[] = [
+    { id: 'chart', label: 'Đồ thị theo ngày', icon: Activity },
+    { id: 'pmax', label: 'Pmax khách hàng', icon: Gauge, sub: 'Pmax theo tháng từ pmax_daily.csv' },
+  ];
+  // Danh sách khách hàng đã lọc theo KCN của tài khoản → dùng chung cho tab Pmax.
+  const pmaxCustomers = useMemo(() => Array.from(customerInfoMap.values()), [customerInfoMap]);
+
   /* ---- Render 1 thẻ biểu đồ (1 trạm: 3 đường điện áp + 1 cột P) ---- */
   const renderCard = (i: number) => {
     const meta = SLOT_META[i];
@@ -648,11 +663,22 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
               Đồ thị điện áp &amp; công suất
             </h1>
           </div>
+          {/* Câu mô tả phải nằm trong MỘT <span>: thẻ <p> là flex container, để text trần
+              thì mỗi đoạn chữ và mỗi <strong> thành một flex item riêng → câu vỡ thành cột. */}
           <p className="text-sm text-soft max-w-2xl flex items-start gap-1.5">
             <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
-            Thông số vận hành sẽ lấy dữ liệu chậm hơn so với HES khoảng{' '}
-            <strong>1 đến 2 giờ</strong> và chỉ lưu trong vòng{' '}
-            <strong>7 ngày gần nhất</strong>.
+            {tab === 'chart' ? (
+              <span>
+                Thông số vận hành sẽ lấy dữ liệu chậm hơn so với HES khoảng{' '}
+                <strong>1 đến 2 giờ</strong> và chỉ lưu trong vòng{' '}
+                <strong>7 ngày gần nhất</strong>.
+              </span>
+            ) : (
+              <span>
+                Pmax lấy từ <strong>pmax_daily.csv</strong> (đỉnh công suất từng ngày của mỗi
+                công tơ), lưu <strong>toàn bộ lịch sử</strong> nên tra được các tháng đã qua.
+              </span>
+            )}
           </p>
         </div>
 
@@ -669,31 +695,39 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
               />
             </div>
           )}
-          <div>
-            <DatePicker
-              value={selectedDate}
-              onChange={setSelectedDate}
-              label="Ngày hiển thị"
-              className="w-[200px]"
-            />
-            {dateKeys.length > 0 && (
-              <p className="text-[11px] text-faint mt-1.5 font-medium">
-                Có dữ liệu: {fmtDateVN(dateKeys[0])} – {fmtDateVN(dateKeys[dateKeys.length - 1])}
-              </p>
-            )}
-          </div>
+          {tab === 'chart' && (
+            <div>
+              <DatePicker
+                value={selectedDate}
+                onChange={setSelectedDate}
+                label="Ngày hiển thị"
+                className="w-[200px]"
+              />
+              {dateKeys.length > 0 && (
+                <p className="text-[11px] text-faint mt-1.5 font-medium">
+                  Có dữ liệu: {fmtDateVN(dateKeys[0])} – {fmtDateVN(dateKeys[dateKeys.length - 1])}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
+      {/* ---- Thanh tab ---- */}
+      <Tabs<PageTab> tabs={TABS} value={tab} onChange={setTab} />
+
+      {/* ---- Tab Pmax khách hàng (theo tháng) ---- */}
+      {tab === 'pmax' && <CustomerPmaxTab customers={pmaxCustomers} />}
+
       {/* ---- Trạng thái tải / rỗng (lỗi hiển thị bằng toast) ---- */}
-      {!isReady && !csvError && (
+      {tab === 'chart' && !isReady && !csvError && (
         <div className="vl-card flex flex-col items-center justify-center py-20 text-faint">
           <Gauge className="w-12 h-12 mb-3 animate-pulse opacity-40" />
           <p className="font-semibold">Đang tải dữ liệu đo xa &amp; danh sách công tơ…</p>
         </div>
       )}
 
-      {noData && (
+      {tab === 'chart' && noData && (
         <div className="vl-card flex flex-col items-center justify-center py-20 text-faint">
           <HelpCircle className="w-12 h-12 mb-3 opacity-30" />
           <p className="font-semibold">Không có khách hàng nào đủ điều kiện vẽ biểu đồ</p>
@@ -704,7 +738,7 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
       )}
 
       {/* ---- Lưới 6 biểu đồ kích thước bằng nhau (hàng trên: cao nhất, hàng dưới: thấp nhất) ---- */}
-      {isReady && !noData && (
+      {tab === 'chart' && isReady && !noData && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {[0, 1, 2, 3, 4, 5].map(i => renderCard(i))}
         </div>

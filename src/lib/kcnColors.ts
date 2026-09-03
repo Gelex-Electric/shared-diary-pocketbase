@@ -51,3 +51,40 @@ const FALLBACK: KcnColor = {
 export function kcnColorOf(area?: string): KcnColor {
   return (area && KCN_COLOR[area]) || FALLBACK;
 }
+
+/**
+ * Mã KCN (tiền tố của mã khách hàng) → tên KCN chuẩn.
+ *
+ * Mã khách hàng trong hóa đơn có dạng `<mã KCN>-<số thứ tự>`: `KCNTH-001`,
+ * `KCNYM-014`… nên tiền tố chính là mã KCN. Bảng này để đồng bộ khách hàng từ
+ * hóa đơn biết gắn vào KCN nào, và để tạo KCN còn thiếu với ĐÚNG tên đang dùng
+ * ở các màn khác (khoá của `KCN_COLOR` bên trên và của `AREAS` trong
+ * `lib/pocketbase.ts`) — sai một chữ là mất màu và lệch bộ lọc.
+ */
+export const KCN_CODE_TO_NAME: Record<string, string> = {
+  KCNTH: 'KCN Tiền Hải',
+  KCNPĐ: 'KCN Phong Điền',
+  KCNTTI: 'KCN Thuận Thành I',
+  KCNYM: 'KCN Yên Mỹ',
+  KCN03: 'KCN Số 3',
+};
+
+/**
+ * Bảng màu theo **MÃ KCN** (KCNTH, KCNPĐ…) dùng cho các bảng danh sách phẳng:
+ * viền trái thẻ, badge mã khách, chấm màu. Dùng mã hex + inline style vì class
+ * Tailwind động sẽ bị purge lúc build.
+ *
+ * Đây chính là bảng màu của màn "Biên bản xác nhận chỉ số" — gom ra đây để các
+ * màn khác dùng lại đúng một bộ màu, thay vì mỗi nơi khai một bản.
+ */
+export const ZONE_HEX: Record<string, string> = {
+  KCNTH:  '#0ea5e9', // sky
+  'KCNPĐ': '#10b981', // emerald
+  KCNTTI: '#8b5cf6', // violet
+  KCNYM:  '#f59e0b', // amber
+  KCN03:  '#f43f5e', // rose
+};
+
+export function zoneHexOf(code?: string): string {
+  return (code && ZONE_HEX[code]) || '#94a3b8';
+}

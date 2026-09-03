@@ -1,0 +1,57 @@
+name: Cap nhat trang thai diem do (00:00 gio VN)
+
+# Trang thai diem do phu thuoc vao viec da phat sinh hoa don hay chua, ma hoa
+# don ve theo ngay. Chay lai moi ngay de "Chua van hanh" tu chuyen sang "Dang
+# van hanh" ma khong can ai mo form ra sua.
+#
+# Luat suy trang thai nam o src/lib/dm/pointStatus.ts, script bundle thang
+# module do nen cron va giao dien luon cung mot luat.
+
+on:
+  schedule:
+    - cron: "0 17 * * *"   # 00:00 gio VN (17:00 UTC hom truoc)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Chi xem truoc, khong ghi (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dm-point-status
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TZ: Asia/Ho_Chi_Minh
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install esbuild
+        # Script bundle module TypeScript thuan bang esbuild; khong can cai ca
+        # cay phu thuoc cua app.
+        run: npm install --no-save esbuild@0.27.7
+
+      - name: Sync point status
+        env:
+          PB_URL: ${{ secrets.PB_URL }}
+          PB_ADMIN_EMAIL: ${{ secrets.PB_EMAIL }}
+          PB_ADMIN_PASSWORD: ${{ secrets.PB_PASS }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            node scripts/dm_sync_point_status.mjs
+          else
+            node scripts/dm_sync_point_status.mjs --apply
+          fi
