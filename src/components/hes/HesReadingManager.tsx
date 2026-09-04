@@ -10,9 +10,19 @@ import type { Scope } from '../../lib/scope';
 
 type HesTab = 'manual' | 'direct';
 
+/*
+  TÊN TAB TRƯỚC ĐÂY ĐẶT NGƯỢC (sửa 04/09/2026).
+
+  "Lấy trực tiếp" lại là tab ĐỌC FILE `hes_index_daily.csv` đã chốt sẵn, còn
+  "thủ công" mới là tab GỌI THẲNG API HES ngay lúc bấm. Người dùng đọc tên xong
+  chọn nhầm tab là chuyện đương nhiên.
+
+  Đặt lại theo đúng thứ chúng làm: một bên gọi HES ngay, một bên đọc số liệu
+  pipeline đã chốt hằng đêm.
+*/
 const TABS: TabItem<HesTab>[] = [
-  { id: 'manual', label: 'Lấy chỉ số thủ công', sub: 'Gọi trực tiếp HES theo thời điểm', icon: Hand },
-  { id: 'direct', label: 'Lấy trực tiếp',        sub: 'Đọc chỉ số tự động theo khoảng ngày', icon: Database },
+  { id: 'manual', label: 'Gọi HES ngay', sub: 'Chọn mốc thời gian, đọc chỉ số tức thời', icon: Hand },
+  { id: 'direct', label: 'Số liệu đã chốt', sub: 'Đọc chỉ số pipeline chốt hằng đêm, theo khoảng ngày', icon: Database },
 ];
 
 /**

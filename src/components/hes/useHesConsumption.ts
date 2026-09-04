@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { fetchMeterInfo } from '../../lib/meterInfo';
+import { loadCatalog } from '../../lib/dm/repo';
+import { hesMeterRowsOf } from '../../lib/dm/meterRows';
 import {
   fetchHesIndex, computeConsumption,
   type HesIndexData, type Consumption,
@@ -76,10 +77,18 @@ export function useHesConsumption({ allowedAreas, filterArea = '' }: UseHesConsu
   const reload = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [rows, idx] = await Promise.all([fetchMeterInfo(), fetchHesIndex()]);
+      /*
+        Danh sách công tơ lấy từ DANH MỤC trên PocketBase, không còn đọc
+        `metterinfo.csv` (user chốt 04/09/2026) — CSV là bản kết xuất từ HES
+        chạy hằng đêm nên trễ một ngày và không biết gì về những gì vừa khai.
+
+        `hes_index_daily.csv` thì GIỮ NGUYÊN: đó là CHỈ SỐ đo đếm do pipeline
+        chốt mỗi ngày, không phải danh mục.
+      */
+      const [cat, idx] = await Promise.all([loadCatalog(), fetchHesIndex()]);
+      const rows = hesMeterRowsOf(cat);
       const allowed = allowedAreas ? new Set(allowedAreas) : null;
       const filtered = rows
-        .filter(r => r.STATUS === 'Yes')
         .filter(r => (filterArea ? r.ADDRESS === filterArea : (!allowed || allowed.has(r.ADDRESS))))
         .map((r): MeterRow => ({ id: r.METER_NO, MeterNo: r.METER_NO, HSN: r.METER_NAME, Line: r.LINE_NAME, area: r.ADDRESS }))
         .sort((a, b) => (a.Line + a.MeterNo).localeCompare(b.Line + b.MeterNo));

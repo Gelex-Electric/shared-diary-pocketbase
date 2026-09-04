@@ -71,8 +71,22 @@ for (const p of points) {
   const rows = byPoint.get(p.id) ?? [];
   // Chỉ điểm đo còn DỰ KIẾN hoàn toàn — có dòng nào đã treo là HSN đã đúng.
   if (rows.some(r => (r.date_on ?? '').trim())) continue;
+  /*
+    KHÔNG CÓ TI TRONG DỮ LIỆU ⇒ BỎ QUA, không suy ra HSN = 1.
+
+    `deriveHsn` trả 1 khi `hasTi = false` vì trong FORM của app, không khai TI
+    nghĩa là người dùng chủ động nói điểm đo đo thẳng. Ở script thì khác hẳn:
+    vắng TI chỉ có nghĩa là NGUỒN NHẬP không ghi TI — 9 trạm SINTEC nạp từ sổ
+    Excel là vậy, sổ chỉ theo dõi công tơ và GP-03.
+
+    Trạm 1500–2000 kVA mà đo thẳng là chuyện không thể. Ghi HSN = 1 xuống là
+    tái tạo đúng con lỗi mà script này sinh ra để đi sửa. Thà để trống, chờ
+    khai tỷ số tay.
+  */
+  if (!rows.some(r => r.type === 'TI')) continue;
+
   const hsn = deriveHsn({
-    hasTi: rows.some(r => r.type === 'TI'),
+    hasTi: true,
     ti: ratioSet(rows, 'TI'), tu: ratioSet(rows, 'TU'),
   });
   if (hsn == null || hsn <= 0 || hsn === p.hsn) continue;

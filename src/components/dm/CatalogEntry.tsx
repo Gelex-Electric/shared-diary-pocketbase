@@ -613,10 +613,34 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       để nhắc về chuyện "có hóa đơn hay chưa".
     */
     if (!mine) {
-      if (segs.length) {
-        // Có hóa đơn nhưng mang tên khách khác ⇒ nhiều khả năng gõ nhầm số.
+      /*
+        CHẶNG CỦA KHÁCH KHÁC ĐÃ KẾT THÚC TRƯỚC NGÀY TREO Ở ĐÂY ⇒ IM LẶNG.
+
+        Đó là LẦN LẮP TRƯỚC ở một điểm đo khác, hoàn toàn bình thường — công tơ
+        tháo ở chỗ này rồi lắp sang chỗ kia là chuyện hằng ngày. Ca thật:
+        `2510203116` chạy cho GIZA (KCNTTI-002) tới 10/02/2026, rồi treo sang
+        `TTI.TITAN.NX5.1000kVA` của TITAN (KCNTTI-007) ngày 09/05/2026. Điểm đo
+        mới chưa phát sinh hóa đơn nên không có chặng nào mang tên TITAN, và
+        bản cũ kêu "có hóa đơn nhưng của khách khác" — đúng sự thật nhưng không
+        phải lỗi, mà lại làm chìm những ca gõ nhầm số thật.
+
+        Chỉ nhắc khi chặng của khách khác GIAO với quãng treo đang khai: lúc đó
+        cùng một công tơ mới thật sự bị hai nơi cùng nhận.
+      */
+      const on = ymdOf(r.dateOn);
+      const off = ymdOf(r.dateOff) || '9999-12-31';
+      const clash = on ? segs.filter(x => x.from <= off && on <= x.to) : segs;
+
+      if (clash.length) {
+        // Có hóa đơn mang tên khách khác TRONG chính quãng treo ⇒ nhiều khả
+        // năng gõ nhầm số chế tạo.
         invoiceNotes.push(`công tơ ${serial} có hóa đơn nhưng KHÔNG có chặng nào của ${pointMkh} `
-          + `(${segs.map(x => `${x.mkh}: ${dmyRange(x.from, x.to)}`).join(', ')})`);
+          + `(${clash.map(x => `${x.mkh}: ${dmyRange(x.from, x.to)}`).join(', ')})`);
+      } else if (segs.length && isHung(r)) {
+        // Lần lắp trước ở nơi khác — nói cho biết, không phải cảnh báo.
+        const last = segs[segs.length - 1];
+        invoiceNotes.push(`công tơ ${serial} trước đây chạy cho ${last.mkh} `
+          + `(${dmyRange(last.from, last.to)}) — lần lắp ở đây chưa phát sinh hóa đơn`);
       } else if (isHung(r)) {
         // Chưa có hóa đơn nào. Nói đúng bản chất — "chưa phát sinh", không phải
         // "không có" — vì công tơ vừa treo thì đương nhiên chưa có.

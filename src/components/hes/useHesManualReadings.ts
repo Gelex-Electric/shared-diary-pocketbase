@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { pb } from '../../lib/pocketbase';
-import { fetchMeterInfo } from '../../lib/meterInfo';
+import { loadCatalog } from '../../lib/dm/repo';
+import { hesMeterRowsOf } from '../../lib/dm/meterRows';
 import { AccountHes, DataMetter } from '../../types';
 import type { Consumption } from '../../lib/hesIndex';
 import { toast as notify, type ToastType } from '../../lib/toast';
@@ -121,14 +122,18 @@ export function useHesManualReadings({
     }
   };
 
-  /* ---- Danh sách công tơ (từ metterinfo.csv) ---- */
+  /* ---- Danh sách công tơ (từ danh mục dm_* trên PocketBase) ---- */
   const loadMeters = useCallback(async () => {
     setIsLoadingMeters(true);
     try {
-      const rows = await fetchMeterInfo();
+      /*
+        Đổi nguồn từ `metterinfo.csv` sang PocketBase (user chốt 04/09/2026).
+        `hesMeterRowsOf` chỉ trả công tơ ĐANG TREO — có ngày treo, chưa có
+        ngày tháo — nên không cần lọc `STATUS` nữa.
+      */
+      const rows = hesMeterRowsOf(await loadCatalog());
       const allowed = allowedAreas ? new Set(allowedAreas) : null;
       const filtered = rows
-        .filter(r => r.STATUS === 'Yes')
         .filter(r => (filterArea ? r.ADDRESS === filterArea : (!allowed || allowed.has(r.ADDRESS))))
         .map((r): MeterRow => ({ id: r.METER_NO, MeterNo: r.METER_NO, HSN: r.METER_NAME, Line: r.LINE_NAME, area: r.ADDRESS }))
         .sort((a, b) => (a.Line + a.MeterNo).localeCompare(b.Line + b.MeterNo));
