@@ -66,7 +66,13 @@ const all = [...new Set(mains.flatMap(m => [...m.serials, ...m.subs.flatMap(s =>
 const inv = [];
 for (let i = 0; i < all.length; i += 40) {
   const or = all.slice(i, i + 40).map(s => `SCT="${s}"`).join('||');
-  inv.push(...await get(`invoice/records?perPage=500&filter=${encodeURIComponent(`(${or}) && EndDate >= "${since} 00:00:00.000Z"`)}`));
+  /*
+    Lấy từ ĐẦU THÁNG chứa mốc 40 ngày, giống `invoicesUsageOf` bên app.
+    Cắt giữa tháng là so nửa tháng của điểm chính với cả tháng của điểm phụ —
+    ca `TH.BQL.T2.160kVA` tháng 07/2026 báo lệch 1840 kWh hoàn toàn giả.
+  */
+  const from = `${since.slice(0, 7)}-01`;
+  inv.push(...await get(`invoice/records?perPage=500&filter=${encodeURIComponent(`(${or}) && EndDate >= "${from} 00:00:00.000Z"`)}`));
 }
 console.log(`Hóa đơn trong phạm vi: ${inv.length} (của ${all.length} số công tơ)\n`);
 

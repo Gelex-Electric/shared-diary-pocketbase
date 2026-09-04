@@ -113,10 +113,63 @@ export type AssetType = 'CONGTO' | 'GP03' | 'TI' | 'TU' | 'SIM' | 'KHAC';
 
 export type AssetStatus = 'dang_treo' | 'kho' | 'thao_go' | 'thanh_ly' | '';
 
+/** Trạng thái của THIẾT BỊ (không phải của một lần lắp). */
+export type DeviceStatus = 'kho' | 'dang_treo' | 'thanh_ly' | '';
+
+/**
+ * MỘT THIẾT BỊ VẬT LÝ — mỗi số chế tạo đúng một bản ghi (`serial` UNIQUE).
+ *
+ * Tách khỏi `Asset` vì vòng đời có đoạn NẰM KHO giữa hai lần lắp:
+ *
+ *   nhập kho → lắp ở A → tháo → nằm kho (rất lâu) → lắp ở B → tháo → thanh lý
+ *
+ * Trạng thái "đang nằm kho" không thuộc lần lắp nào, nên phải có chỗ đứng
+ * riêng. Tỷ số TI và model cũng là thuộc tính của thiết bị chứ không phải của
+ * lần lắp — trước đây bị chép lại ở mọi dòng nên sửa một chỗ là lệch chỗ khác.
+ */
+export interface Device extends PbRecord {
+  /** Số No (số chế tạo) — định danh thật, UNIQUE ở tầng cơ sở dữ liệu. */
+  serial: string;
+  type: AssetType;
+  ratio_primary?: number;
+  ratio_secondary?: number;
+  model_desc?: string;
+  /**
+   * Ngày thanh lý. Thứ DUY NHẤT không suy được từ dữ liệu — `kho` và
+   * `dang_treo` luôn tính lại từ các lần lắp, nên không lưu cột `status`
+   * nữa (đợt schema v14): cột lưu sẵn chắc chắn sẽ lệch với thực tế.
+   */
+  liquidated_at?: string;
+  /**
+   * Dành sẵn cho ĐIỂM ĐO nào — giữ chỗ là THUỘC TÍNH của thiết bị, không phải
+   * một lần lắp chưa xảy ra.
+   */
+  hold_point?: string;
+  /** Dành sẵn cho khách hàng ĐÃ có trong danh mục. */
+  hold_for_customer?: string;
+  /** Dành sẵn cho khách CHƯA có tên — gõ tự do. */
+  hold_for_note?: string;
+  /** KCN dự định dùng. */
+  hold_zone?: string;
+  /** Ngày nhập kho. */
+  date_in?: string;
+  /** Mã lô nhập — nhập một lần vài chục cái thì lọc lại theo lô. */
+  batch?: string;
+  note?: string;
+}
+
+export const DEVICE_STATUS_LABEL: Record<Exclude<DeviceStatus, ''>, string> = {
+  kho: 'Trong kho',
+  dang_treo: 'Đang treo',
+  thanh_ly: 'Đã thanh lý',
+};
+
 export interface Asset extends PbRecord {
   /** Số No (số chế tạo) — định danh duy nhất của vật tư. */
   serial: string;
   type: AssetType;
+  /** Thiết bị vật lý tương ứng — xem `Device`. */
+  device?: string;
   /** Điểm đo đang lắp; rỗng = chưa gắn ở đâu. */
   point?: string;
   ratio_primary?: number;

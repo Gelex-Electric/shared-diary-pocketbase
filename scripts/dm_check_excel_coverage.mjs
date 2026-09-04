@@ -62,10 +62,20 @@ const J = (n) => XLSX.utils.sheet_to_json(wb.Sheets[n], { defval: null });
 const xPoints = J('Quản lý điểm đo');
 const xTrans = J('Quản lý giao dịch');
 
-/** điểm đo Excel -> tập số chế tạo từng TREO ở đó */
+/**
+ * điểm đo Excel -> tập số chế tạo ĐƯỢC GÁN cho nó, theo MỌI loại giao dịch.
+ *
+ * KHÔNG lọc `LOAIGD` theo "Treo tháo". Sổ Excel gán vật tư cho điểm đo bằng cả
+ * "Nhập kho" lẫn "Treo tháo", và ranh giới không nhất quán: bộ TI của
+ * YM.TITAN.NX10/11/12 vào bằng "Nhập kho", còn cả ba trạm TRRBW thì TOÀN BỘ
+ * 18 dòng (công tơ, TI, GP-03) đều là "Nhập kho".
+ *
+ * Bản trước lọc theo "Treo tháo" nên coi TRRBW-1/2/3 là "không có giao dịch",
+ * rồi báo nhầm rằng PB đã phủ hết điểm đo có vật tư. Đếm thiếu kiểu này còn
+ * nguy hơn không đếm, vì nó im lặng.
+ */
 const xAt = new Map();
 for (const t of xTrans) {
-  if (!/treo/i.test(String(t.LOAIGD))) continue;
   const dd = String(t.DDDK ?? '').trim();
   const id = norm(t.ID);
   if (dd && id) xAt.set(dd, new Set([...(xAt.get(dd) ?? []), id]));
@@ -138,7 +148,7 @@ const noTrans = xPoints
 
 /* ------------------------------- In ra ------------------------------- */
 console.log(`Điểm đo bên Excel      : ${xPoints.length}`);
-console.log(`  có giao dịch treo    : ${xAt.size}   → PB đủ ${xAt.size - missing.length - partial.length}, thiếu một phần ${partial.length}, chưa khai ${missing.length}`);
+console.log(`  có giao dịch vật tư  : ${xAt.size}   → PB đủ ${xAt.size - missing.length - partial.length}, thiếu một phần ${partial.length}, chưa khai ${missing.length}`);
 console.log(`  KHÔNG có giao dịch   : ${noTrans.length}   → kho ảo của Excel ${noTrans.filter(r => r.kho).length}, PB đã có ${noTrans.filter(r => r.onPb && !r.kho).length}, CHƯA THẤY ${noTrans.filter(r => !r.onPb).length}`);
 console.log(`Điểm đo trên PocketBase: ${points.length}`);
 

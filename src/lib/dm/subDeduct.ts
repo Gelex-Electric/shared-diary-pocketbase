@@ -107,8 +107,20 @@ export function buildMainsWithSubs(points: PointLite[], assets: AssetLite[]): Ma
   const out: MainWithSubs[] = [];
   for (const p of points) {
     if (p.role !== 'chinh' || p.status !== ACTIVE_STATUS) continue;
+    /*
+      ĐIỂM ĐO PHỤ thì lấy HẾT, KHÔNG lọc theo `status`.
+
+      `dm_point.status` là bản chụp lúc lưu chứ không tính lại, nên nó lạc hậu
+      được: `YM.TITAN.NX9.750kVA.ANGTROM` treo công tơ 12/08/2026 và đã có hóa
+      đơn tháng 8, nhưng cột `status` vẫn là `chua_van_hanh`. Lọc theo nó thì
+      sản lượng 489/180/67 của điểm phụ đó biến mất khỏi tổng, đẻ ra cảnh báo
+      lệch 541 kWh hoàn toàn giả.
+
+      Bỏ lọc không sinh nhiễu: điểm phụ không có hóa đơn trong tháng chỉ được
+      nhắc khi hai vế đã lệch — xem `checkSubDeduction`.
+    */
     const subs = points
-      .filter(x => x.parent_point === p.id && x.status === ACTIVE_STATUS)
+      .filter(x => x.parent_point === p.id)
       .map(x => ({ code: codeOf(x), serials: serialsOf(x.id) }));
     if (!subs.length) continue;
     out.push({ code: codeOf(p), serials: serialsOf(p.id), subs });
@@ -190,9 +202,19 @@ export function checkSubDeduction(
     const off = (a: number, b: number) => Math.abs(a - b) > TOLERANCE;
     const lech = off(declared.bt, actual.bt) || off(declared.cd, actual.cd) || off(declared.td, actual.td);
 
-    // Thiếu hóa đơn điểm phụ mà phụ trừ cũng bằng 0 thì không có gì bất thường:
-    // tháng đó điểm phụ chưa phát sinh, hóa đơn chính cũng không trừ gì.
-    if (!lech && !(missing.length && total(declared) > 0)) continue;
+    /*
+      HAI VẾ ĐÃ KHỚP thì im, kể cả khi có điểm đo phụ không ra hóa đơn tháng đó.
+
+      Khớp tuyệt đối nghĩa là những điểm phụ CÓ hóa đơn đã giải thích trọn vẹn
+      phần phụ trừ — cái không có hóa đơn đơn giản là tháng đó không tiêu thụ,
+      hoặc chưa phát hành. Ca thật: `TH.BQL.T1.180kVA` tháng 08/2026, phụ trừ
+      1045/483/1110 khớp đúng CSCC, còn BCC (bơm chuyển cốt) cả tháng 7 chỉ
+      dùng 1 kWh và tháng 8 không có hóa đơn.
+
+      Trước đây điều kiện là `missing && declared > 0` nên vẫn kêu — một cảnh
+      báo không hành động được gì, mà lại làm chìm kỳ lệch thật.
+    */
+    if (!lech) continue;
 
     const from = rows.map(i => ymd(i.StartDate)).sort()[0];
     const to = rows.map(i => ymd(i.EndDate)).sort().pop();

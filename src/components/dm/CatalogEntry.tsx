@@ -24,11 +24,11 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { toast } from '../../lib/toast';
 import { Toggle } from '../ui/Toggle';
 import { DatePicker } from '../ui/DateTimePickers';
-import { assets, customers, isAbortError, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
+import { assets, customers, devices, isAbortError, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
 import type {
-  AssetStatus, AssetType, Customer, Point, PointRole, Station, Zone,
+  AssetStatus, AssetType, Customer, Device, Point, PointRole, Station, Zone,
 } from '../../lib/dm/types';
 import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio, pickRatio } from '../../lib/dm/hsn';
 import { REMOTE_LABEL, TI_PER_SET, countAssets, derivePointStatus, missingRemote } from '../../lib/dm/pointStatus';
@@ -46,6 +46,7 @@ import type { Segment } from '../../lib/dm/lifecycle';
 interface MkhMeter { serial: string; from: string; to: string; isCurrent: boolean; }
 import { groupByZone, sortByCode, sortByMkh } from './groupByZone';
 import AssetLifecycle from './AssetLifecycle';
+import StockEntry from './StockEntry';
 import { TransferOwner } from './TransferOwner';
 import { ZoneTables } from './ZoneTables';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
@@ -59,26 +60,27 @@ import {
  * "Vòng đời vật tư" vào cuối dãy tab (user chốt 25/08/2026) thay vì đứng riêng
  * ngoài menu — người dùng khai điểm đo xong là đối chiếu ngay tại chỗ.
  */
-type CatTab = 'zone' | 'station' | 'customer' | 'point' | 'lifecycle';
+type CatTab = 'zone' | 'station' | 'customer' | 'point' | 'stock' | 'lifecycle';
 
 const TABS: TabItem<CatTab>[] = [
   { id: 'zone', label: 'Khu công nghiệp', icon: Building2, sub: 'dm_zone' },
   { id: 'station', label: 'Trạm', icon: Factory, sub: 'dm_station' },
   { id: 'customer', label: 'Khách hàng', icon: Users, sub: 'dm_customer' },
   { id: 'point', label: 'Điểm đo', icon: Gauge, sub: 'dm_point' },
-  { id: 'lifecycle', label: 'Vòng đời vật tư', icon: History, sub: 'Đối chiếu hóa đơn' },
+  { id: 'stock', label: 'Kho vật tư', icon: Package, sub: 'Thiết bị · vòng đời' },
+  { id: 'lifecycle', label: 'Rà soát', icon: History, sub: 'Đối chiếu hóa đơn' },
 ];
 
 /** Tiêu đề + nút Thêm của từng tab KHAI BÁO; tab `lifecycle` không có (chỉ tra cứu). */
 /** Gợi ý trong ô tìm kiếm — nói đúng cột nào tìm được, kẻo gõ mò. */
-const SEARCH_HINT: Record<Exclude<CatTab, 'lifecycle'>, string> = {
+const SEARCH_HINT: Record<Exclude<CatTab, 'lifecycle' | 'stock'>, string> = {
   zone: 'Tìm mã KCN, tên, địa chỉ...',
   station: 'Tìm mã trạm, MKH, tên khách hàng...',
   customer: 'Tìm MKH, tên công ty, tên tắt, địa chỉ...',
   point: 'Tìm mã điểm đo, trạm, MKH, tên khách hàng...',
 };
 
-const HEAD: Record<Exclude<CatTab, 'lifecycle'>, { title: string; desc: string; add: string }> = {
+const HEAD: Record<Exclude<CatTab, 'lifecycle' | 'stock'>, { title: string; desc: string; add: string }> = {
   zone: {
     title: 'Khu công nghiệp',
     desc: 'Gốc của cây đơn vị — khai trước trạm và điểm đo',
@@ -242,6 +244,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     return p?.code || p?.line_name || '(không rõ)';
   };
   const stationsOfZone = (id: string) => d?.stations.filter(s => s.zone === id).length ?? 0;
+
+  /** Thiết bị trong kho mang số No này — nguồn của loại và tỷ số. */
+  const deviceOf = (serial: string) => {
+    const sn = serial.trim();
+    return sn ? (d?.devices ?? []).find(x => x.serial.trim() === sn) : undefined;
+  };
   const pointsOfStation = (id: string) => d?.points.filter(p => p.station === id).length ?? 0;
   const pointsOfCustomer = (id: string) => d?.points.filter(p => p.customer === id).length ?? 0;
 
@@ -696,7 +704,23 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    * ngày tháo ở đây = ngày treo bên kia, nên dòng này không còn "đang treo" và
    * không có gì phải chặn (user chốt 25/08/2026).
    */
-  const busyElsewhere = [...serialInForm.entries()]
+  /**
+   * Điểm đo đó còn HOÀN TOÀN DỰ KIẾN hay không: không vật tư nào của nó có
+   * ngày treo.
+   *
+   * Ngày treo là mốc duy nhất chứng minh vật tư đã ra hiện trường, nên chưa
+   * dòng nào có ngày treo tức là cả điểm đo mới nằm trên giấy.
+   */
+  const isPlannedPoint = (pointId?: string) => {
+    if (!pointId) return false;
+    const rows = (d?.assets ?? []).filter(a => a.point === pointId);
+    return rows.length > 0 && !rows.some(a => (a.date_on ?? '').trim());
+  };
+
+  /** Điểm đo ĐANG KHAI còn dự kiến: không dòng nào trên form có ngày treo. */
+  const thisPlanned = hungRows.length === 0;
+
+  const serialConflicts = [...serialInForm.entries()]
     .map(([serial, rows]) => {
       // Ở form này số No đó còn đang treo (chưa khai ngày tháo) hay không.
       if (!rows.some(r => !r.dateOff.trim())) return null;
@@ -705,6 +729,37 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       return other ? { serial, asset: other, code: pointCodeOf(other.point) } : null;
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  /**
+   * HAI ĐIỂM ĐO CÙNG DỰ KIẾN thì ĐỔI CHỖ số No cho nhau (user chốt 28/08/2026,
+   * sửa lại chiều tối cùng ngày: đổi chỗ chứ không xoá bên kia).
+   *
+   * Vật tư dự kiến mới là dự định phân bổ, chưa có gì ngoài hiện trường. Tình
+   * huống thật gần như luôn là GÁN NHẦM CHÉO: định cho A số S2 và cho B số S1,
+   * nhưng lỡ gõ ngược. Người dùng vào A sửa thành S2 — thứ họ muốn là B nhận
+   * lại S1, chứ không phải B mất trắng vật tư.
+   *
+   * Vì vậy lấy SỐ CŨ CỦA CHÍNH DÒNG ĐANG SỬA làm vế đối ứng. Không có số cũ
+   * (dòng vừa thêm mới) thì không có gì để đổi — lúc đó là CHUYỂN, bên kia mất
+   * dòng đó; câu nhắc nói rõ hai trường hợp khác nhau.
+   *
+   * Điều kiện vẫn NGẶT: cả hai điểm đo đều chưa vật tư nào được treo. Chỉ cần
+   * một bên đã lắp thật thì chặn như cũ, vì số No lúc đó chỉ một thiết bị có
+   * thật ngoài lưới.
+   */
+  const reclaim = serialConflicts
+    .filter(b => thisPlanned && isPlannedPoint(b.asset.point))
+    .map(b => {
+      // Dòng trên form đang mang số No này, và số No nó giữ TRƯỚC khi sửa.
+      const row = pForm.assetRows.find(r => r.serial.trim() === b.serial);
+      const saved = row?.id ? (d?.assets ?? []).find(a => a.id === row.id) : undefined;
+      const swapTo = (saved?.serial ?? '').trim();
+      // Chỉ đổi chỗ khi số cũ thật sự khác và không đang nằm ở đâu khác.
+      const canSwap = !!swapTo && swapTo !== b.serial
+        && !(d?.assets ?? []).some(a => a.serial.trim() === swapTo && a.id !== saved?.id && a.point);
+      return { ...b, swapTo: canSwap ? swapTo : '' };
+    });
+  const busyElsewhere = serialConflicts.filter(b => !reclaim.some(r => r.serial === b.serial));
 
   /**
    * Mã điểm đo trùng một điểm đo khác. `dm_point.code` là UNIQUE nên PocketBase
@@ -815,6 +870,40 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   if (hasTi && countType('TI') > 0 && countType('TI') !== TI_PER_SET) {
     assetWarnings.push(`đo gián tiếp phải đủ ${TI_PER_SET} TI (đang có ${countType('TI')} cái hoạt động)`);
   }
+  /*
+    Số No lấy từ KHO — nói rõ để người dùng biết nó không phải thiết bị mới, và
+    biết mình có đang lấy nhầm cái đang dành cho nơi khác không.
+
+    Chỉ nhắc khi thiết bị đang RẢNH (chưa treo ở đâu); còn đang treo nơi khác
+    thì đã có `busyElsewhere` / `reclaim` lo, nói thêm chỉ nhiễu.
+  */
+  for (const r of pForm.assetRows) {
+    const dev = deviceOf(r.serial);
+    if (!dev) continue;
+    const live = (d?.assets ?? []).some(a =>
+      a.serial.trim() === r.serial.trim() && a.date_on && !a.date_off && a.point !== editingId);
+    if (live) continue;
+    const holdFor = dev.hold_point && dev.hold_point !== editingId
+      ? pointCodeOf(dev.hold_point)
+      : [customerMkh(dev.hold_for_customer), dev.hold_for_note].filter(x => x && x !== '—').join(' · ');
+    assetWarnings.push(`số No ${r.serial.trim()} lấy từ kho`
+      + (holdFor ? ` — đang dành cho ${holdFor}` : ''));
+  }
+
+  /*
+    Nói TRƯỚC khi lưu rằng số No sẽ bị gỡ khỏi điểm đo kia. Đây là thao tác
+    XOÁ dữ liệu ở một bản ghi người dùng không mở ra — im lặng làm là không
+    được, dù cả hai bên đều mới chỉ là dự kiến.
+  */
+  for (const b of reclaim) {
+    assetWarnings.push(b.swapTo
+      // Đổi chỗ: nói rõ bên kia nhận lại số nào, kẻo tưởng họ mất vật tư.
+      ? `số No ${b.serial} đang được ${b.code} giữ chỗ — khi lưu sẽ ĐỔI CHỖ: `
+        + `${b.serial} về đây, còn ${b.code} nhận ${b.swapTo}`
+      : `số No ${b.serial} đang được ${b.code} giữ chỗ — khi lưu sẽ CHUYỂN về đây `
+        + `và ${b.code} mất dòng đó (dòng này chưa có số No cũ nào để đổi lại)`);
+  }
+
   if (plannedRows.length) {
     assetWarnings.push(hsnFromPlan
       // Cả bộ còn dự kiến ⇒ HSN đang lấy từ chính mấy dòng này.
@@ -997,6 +1086,31 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         note: pForm.note.trim(),
       };
       return void persist(async () => {
+        /*
+          ĐỔI CHỖ (hoặc chuyển) SỐ NO VỚI ĐIỂM ĐO DỰ KIẾN KIA — LÀM TRƯỚC.
+
+          Phải trước `syncAssets`: cặp `(serial, point)` là UNIQUE, để nguyên
+          bản ghi cũ thì PocketBase từ chối ngay khi ghi dòng mới ở đây.
+
+          Có số cũ để đưa lại ⇒ ĐỔI CHỖ: bên kia nhận số cũ của dòng này, kèm
+          đúng thiết bị tương ứng (loại và tỷ số nằm trên `dm_device`, không
+          phải trên lần lắp).
+          Không có ⇒ CHUYỂN: gỡ dòng bên kia, vì không còn gì để trả lại.
+        */
+        for (const b of reclaim) {
+          if (!b.swapTo) { await assets.remove(b.asset.id); continue; }
+          const dev = (d?.devices ?? []).find(x => x.serial.trim() === b.swapTo);
+          await assets.update(b.asset.id, {
+            serial: b.swapTo,
+            ...(dev ? {
+              device: dev.id, type: dev.type,
+              ratio_primary: dev.ratio_primary, ratio_secondary: dev.ratio_secondary,
+            } : {}),
+          });
+          // Giữ chỗ đi theo thiết bị: số cũ nay dành cho điểm đo bên kia.
+          if (dev) await devices.update(dev.id, { hold_point: b.asset.point ?? '' });
+        }
+
         const rec = editingId
           ? await points.update(editingId, body)
           : await points.create(body);
@@ -1134,15 +1248,56 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
     // Dòng bị xoá khỏi bảng → gỡ bản ghi tương ứng.
     for (const old of d?.assets.filter(a => a.point === pointId) ?? []) {
-      if (!keptIds.has(old.id)) await assets.remove(old.id);
+      if (keptIds.has(old.id)) continue;
+      await assets.remove(old.id);
+      /*
+        Gỡ luôn giữ chỗ nếu thiết bị đang dành cho chính điểm đo này. Bỏ sót
+        thì thiết bị quay về kho mà vẫn mang nhãn "đang giữ cho <điểm đo>" của
+        một dòng không còn tồn tại.
+      */
+      const dev = (d?.devices ?? []).find(x => x.serial.trim() === old.serial.trim());
+      if (dev?.hold_point === pointId) await devices.update(dev.id, { hold_point: '' });
     }
 
     for (const r of rows) {
       const hasRatio = HAS_RATIO.includes(r.type as AssetType);
       const { primary, secondary } = parseRatio(r.ratio);
+      const serial = r.serial.trim();
+
+      /*
+        MỖI SỐ NO PHẢI CÓ ĐÚNG MỘT THIẾT BỊ trong `dm_device`.
+
+        Có sẵn trong kho thì DÙNG LẠI bản ghi đó — đây là chỗ dễ đẻ dữ liệu rác
+        nhất: gõ lại số No ở form điểm đo mà tạo thiết bị thứ hai thì kho có hai
+        dòng cùng số, `serial` UNIQUE sẽ chặn và người dùng nhận một câu lỗi
+        không hiểu gì. Chưa có thì tạo mới ngay tại đây, không bắt phải vào màn
+        Kho khai trước.
+
+        Tỷ số ghi lên thiết bị chứ không chỉ lên lần lắp: đó là thuộc tính của
+        thiết bị (schema v13).
+      */
+      const dev = (d?.devices ?? []).find(x => x.serial.trim() === serial)
+        ?? await devices.create({
+          serial, type: r.type as AssetType,
+          ratio_primary: hasRatio ? (primary ?? undefined) : undefined,
+          ratio_secondary: hasRatio ? (secondary ?? undefined) : undefined,
+        }) as unknown as Device;
+
+      /*
+        GIỮ CHỖ đồng bộ ngay: dòng chưa có ngày treo nghĩa là thiết bị mới chỉ
+        được dành cho điểm đo này, chưa lắp. Khai ngày treo thì bỏ giữ chỗ —
+        nó đã có chỗ thật rồi, để cả hai là hai thông tin đá nhau.
+
+        Trạng thái kho/đang treo KHÔNG ghi ở đây: `deriveDeviceStatus` tính lại
+        từ các lần lắp, nên tháo xuống là tự về kho, không cần thao tác nào.
+      */
+      const hold = r.dateOn.trim() ? '' : pointId;
+      if ((dev.hold_point ?? '') !== hold) await devices.update(dev.id, { hold_point: hold });
+
       const body = {
-        serial: r.serial.trim(),
+        serial,
         type: r.type as AssetType,
+        device: dev.id,
         point: pointId,
         ratio_primary: hasRatio ? (primary ?? undefined) : undefined,
         ratio_secondary: hasRatio ? (secondary ?? undefined) : undefined,
@@ -1237,7 +1392,26 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       ? dated.map(r => (r.key === key ? { ...r, dateOff: ymdOf(busy.date_on) } : r))
       : dated;
 
-    return normalizeActive(withOff);
+    /*
+      (5) SỐ NO CÓ SẴN TRONG KHO ⇒ LẤY LOẠI VÀ TỶ SỐ TỪ THIẾT BỊ.
+
+      Thiết bị đã khai một lần trong kho thì không việc gì phải gõ lại loại và
+      tỷ số — vừa mất công vừa là cơ hội gõ lệch với bản ghi gốc.
+
+      Chỉ điền vào ô CÒN TRỐNG: người dùng đã tự chọn khác thì tôn trọng, và
+      chênh lệch tỷ số đã có cảnh báo riêng lo.
+    */
+    const fromStock = patch.serial !== undefined ? deviceOf(me.serial) : undefined;
+    const filled = fromStock
+      ? withOff.map(r => (r.key === key ? {
+        ...r,
+        type: r.type || fromStock.type,
+        ratio: r.ratio.trim() || (fromStock.ratio_primary != null
+          ? `${fromStock.ratio_primary}/${fromStock.ratio_secondary ?? ''}` : ''),
+      } : r))
+      : withOff;
+
+    return normalizeActive(filled);
   };
 
   const setRow = (key: string, patch: Partial<AssetRow>) =>
@@ -1430,7 +1604,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    * vỡ ngay khi đọc `.title`. Rơi về tab KCN cho an toàn; thanh tiêu đề dùng
    * `head` vốn đã bị ẩn ở tab này nên người dùng không thấy gì khác.
    */
-  const headOf = (t: CatTab) => HEAD[t === 'lifecycle' ? 'zone' : t];
+  const headOf = (t: CatTab) => HEAD[t === 'lifecycle' || t === 'stock' ? 'zone' : t];
   const head = headOf(tab);
   const modalTitle = editingId
     ? `Chỉnh sửa ${headOf(modal ?? tab).title.toLowerCase()}`
@@ -1443,7 +1617,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       {/* ---------- Đầu trang: tiêu đề + hành động ---------- */}
       {/* Tab Vòng đời tự mang tiêu đề và nút Nạp lại riêng, và không có gì để
           "Thêm" — nên ẩn hẳn thanh này thay vì hiện một thanh nửa vời. */}
-      {tab !== 'lifecycle' && (
+      {tab !== 'lifecycle' && tab !== 'stock' && (
       <div className="mb-2 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h2 className="text-2xl font-bold text-ink">{head.title}</h2>
@@ -1488,6 +1662,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
       {/* ======================= Vòng đời vật tư ======================= */}
       {tab === 'lifecycle' && <AssetLifecycle scope={_scope} />}
+
+      {/* ======================== Kho vật tư ======================== */}
+      {tab === 'stock' && <StockEntry />}
 
 
       {/* ============================ KCN ============================ */}

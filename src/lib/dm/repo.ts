@@ -9,7 +9,7 @@
  * KHÔNG áp cách này cho dữ liệu đo đếm — bulk data phải query theo filter.
  */
 import { pb } from '../pocketbase';
-import type { Asset, Customer, Point, Station, Zone } from './types';
+import type { Asset, Customer, Device, Point, Station, Zone } from './types';
 
 /**
  * Nạp hết một collection, sắp xếp theo `sort`. PocketBase batch tối đa 500/lần.
@@ -60,20 +60,32 @@ export const assets = {
   remove: (id: string) => pb.collection('dm_asset').delete(id),
 };
 
+/**
+ * Thiết bị vật lý — mỗi số No một bản ghi. Xếp theo `serial` để bảng kho có
+ * thứ tự ổn định; lọc/nhóm làm ở tầng trên.
+ */
+export const devices = {
+  list: () => all<Device>('dm_device', 'serial'),
+  create: (data: Partial<Device>) => pb.collection('dm_device').create(data),
+  update: (id: string, data: Partial<Device>) => pb.collection('dm_device').update(id, data),
+  remove: (id: string) => pb.collection('dm_device').delete(id),
+};
+
 export interface CatalogData {
   zones: Zone[];
   stations: Station[];
   customers: Customer[];
   points: Point[];
   assets: Asset[];
+  devices: Device[];
 }
 
-/** Nạp cả 5 bảng song song — dùng cho cả sơ đồ cây lẫn màn nhập liệu. */
+/** Nạp cả 6 bảng song song — dùng cho cả sơ đồ cây lẫn màn nhập liệu. */
 export async function loadCatalog(): Promise<CatalogData> {
-  const [z, s, c, p, a] = await Promise.all([
-    zones.list(), stations.list(), customers.list(), points.list(), assets.list(),
+  const [z, s, c, p, a, d] = await Promise.all([
+    zones.list(), stations.list(), customers.list(), points.list(), assets.list(), devices.list(),
   ]);
-  return { zones: z, stations: s, customers: c, points: p, assets: a };
+  return { zones: z, stations: s, customers: c, points: p, assets: a, devices: d };
 }
 
 /**

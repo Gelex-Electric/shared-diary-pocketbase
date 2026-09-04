@@ -21,10 +21,8 @@
  * lỗi, còn "ngày tháo khai SAU hóa đơn cuối" là bình thường.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ListChecks, RefreshCw, Recycle } from 'lucide-react';
+import { ChevronDown, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Tabs } from '../ui/Tabs';
-import type { TabItem } from '../ui/Tabs';
 import { toast } from '../../lib/toast';
 import { isAbortError, loadCatalog, pbErrorMessage } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
@@ -34,19 +32,19 @@ import { buildMainsWithSubs, checkSubDeduction } from '../../lib/dm/subDeduct';
 import type { SubDeductIssue } from '../../lib/dm/subDeduct';
 import type { InvoiceLite, Segment } from '../../lib/dm/lifecycle';
 import type { Scope } from '../../lib/scope';
-import { ASSET_LABEL } from '../../lib/dm/types';
-import type { AssetType } from '../../lib/dm/types';
 import { TH_CLS } from './entryUi';
-import { buildPool, REUSE_MIN } from '../../lib/dm/assetPool';
 import { REMOTE_LABEL, missingRemote } from '../../lib/dm/pointStatus';
 import { SegmentBar, Warn } from './lifecycleUi';
 
-type LcTab = 'pool' | 'audit';
+/*
+  Bảng "Luân chuyển vật tư" đã chuyển sang màn KHO VẬT TƯ (user chốt
+  28/08/2026): một thiết bị chỉ có MỘT vòng đời, mà kho đã liệt kê sẵn toàn bộ
+  thiết bị — tra ở hai màn khác nhau thì phải nhớ sang màn nào.
 
-const TABS: TabItem<LcTab>[] = [
-  { id: 'pool', label: 'Luân chuyển vật tư', icon: Recycle, sub: 'Tái sử dụng · nằm không · dự kiến' },
-  { id: 'audit', label: 'Rà soát', icon: ListChecks, sub: 'Chỉ những chỗ đang lệch' },
-];
+  Ở đó nó thành ba chip lọc (tái sử dụng ≥2 lần / đã tháo chưa dùng lại / chưa
+  từng lắp) cộng hàng mở rộng in ra từng lần lắp. Màn này chỉ còn RÀ SOÁT nên
+  bỏ luôn thanh tab.
+*/
 
 
 /** Sắc thái đầu thẻ theo mức nghiêm trọng của nhóm cảnh báo. */
@@ -105,7 +103,7 @@ function IssueSection({ id, title, desc, tone, count, open, onToggle, children }
 }
 
 export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?: Scope }) {
-  const [tab, setTab] = useState<LcTab>('audit');
+
   const [d, setD] = useState<CatalogData | null>(null);
   const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -259,19 +257,6 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
   const issueCount = subIssues.length + mismatch.length + noInvoice.length
     + orphans.length + noRemote.length;
 
-  /**
-   * Ba nhóm vòng đời lắp đặt. Xét MỌI loại vật tư, không riêng công tơ: TI, TU,
-   * GP-03 cũng luân chuyển và cũng nằm kho.
-   */
-  const pool = useMemo(() => buildPool(d?.assets ?? []), [d]);
-
-  /** Mã điểm đo + mã khách của một lần lắp, để hiện trong bảng. */
-  const whereOf = (pointId?: string) => {
-    const p = pointId ? pointById.get(pointId) : undefined;
-    if (!p) return { code: '—', mkh: '' };
-    return { code: p.code || p.line_name || p.id, mkh: mkhOf(p.customer) ?? '' };
-  };
-
   /* ------------------------------ giao diện ------------------------------ */
 
   return (
@@ -290,8 +275,6 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
         </button>
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={t => setTab(t)} />
-
       {!loading && (
         <div className="flex flex-wrap gap-3 text-[12px] text-soft">
           <span><b className="text-ink">{invoices.length}</b> hóa đơn</span>
@@ -302,161 +285,8 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
         </div>
       )}
 
-      {/* ================== 1. Luân chuyển vật tư ================== */}
-      {tab === 'pool' && (
-        <div className="space-y-4">
-          <p className="text-[12px] text-soft">
-            Vòng đời LẮP ĐẶT của vật tư, suy từ các bản ghi trong danh mục. Một vật tư có thể
-            nằm ở nhiều bảng: từng luân chuyển vài nơi mà hiện đang tháo xuống thì có mặt ở cả
-            bảng 1 lẫn bảng 2.
-          </p>
-
-          {/* ---- 1a. Tái sử dụng nhiều nơi ---- */}
-          <IssueSection id="reused" title={`Đã tái sử dụng (từ ${REUSE_MIN} nơi trở lên)`} tone="info"
-            count={pool.reused.length}
-            desc="Vật tư từng lắp ở nhiều điểm đo khác nhau — mỗi lần lắp là một bản ghi riêng, giữ nguyên lịch sử."
-            open={openSection} onToggle={setOpenSection}>
-            <table className="vl-table w-full table-fixed border-collapse text-left">
-              <thead>
-                <tr className="border-b border-[var(--border)]">
-                  <th className={`${TH_CLS} w-[16%] pl-8`}>Số chế tạo</th>
-                  <th className={`${TH_CLS} w-[14%]`}>Thiết bị</th>
-                  <th className={`${TH_CLS} w-[8%] text-center`}>Số nơi</th>
-                  <th className={`${TH_CLS} w-[62%] pr-8`}>Đã lắp ở đâu, khi nào</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {pool.reused.map(x => (
-                  <tr key={x.serial} className="transition-colors hover:bg-subtle/50">
-                    <td className="px-4 py-3 pl-8 font-mono text-[13px] font-bold text-ink">{x.serial}</td>
-                    <td className="px-4 py-3 text-[12px] font-semibold text-dim">
-                      {ASSET_LABEL[x.type as AssetType] ?? x.type}
-                      {x.ratio && <div className="font-mono text-[11px] font-normal text-faint">{x.ratio}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-center text-[13px] font-black text-ink">{x.installs.length}</td>
-                    <td className="px-4 py-3 pr-8">
-                      <div className="space-y-1">
-                        {x.installs.map(i => {
-                          const w = whereOf(i.pointId);
-                          return (
-                            <div key={i.id} className="flex flex-wrap items-center gap-2 text-[11px]">
-                              <span className="font-mono font-bold text-dim">{w.code}</span>
-                              {w.mkh && <span className="font-mono text-faint">{w.mkh}</span>}
-                              <span className="font-mono text-soft">{dmyRange(i.from, i.to)}</span>
-                              {i.active && (
-                                <span className="rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[10px] font-bold uppercase text-good">
-                                  đang treo
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </IssueSection>
-
-          {/* ---- 1b. Đã tháo, chưa lắp lại ---- */}
-          <IssueSection id="idle" title="Đã tháo xuống, chưa lắp lại" tone="warn" count={pool.idle.length}
-            desc="Không còn hoạt động ở điểm đo nào — đang nằm không, có thể dùng lại. Xếp theo ngày tháo mới nhất."
-            open={openSection} onToggle={setOpenSection}>
-            <table className="vl-table w-full table-fixed border-collapse text-left">
-              <thead>
-                <tr className="border-b border-[var(--border)]">
-                  <th className={`${TH_CLS} w-[18%] pl-8`}>Số chế tạo</th>
-                  <th className={`${TH_CLS} w-[16%]`}>Thiết bị</th>
-                  <th className={`${TH_CLS} w-[14%]`}>Ngày tháo</th>
-                  <th className={`${TH_CLS} w-[52%] pr-8`}>Tháo khỏi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {pool.idle.map(x => {
-                  const last = [...x.installs].sort((a, b) => (a.to < b.to ? -1 : 1)).pop()!;
-                  const w = whereOf(last.pointId);
-                  return (
-                    <tr key={x.serial} className="transition-colors hover:bg-subtle/50">
-                      <td className="px-4 py-3 pl-8 font-mono text-[13px] font-bold text-ink">
-                        {x.serial}
-                        {x.installs.length >= REUSE_MIN && (
-                          <div className="text-[10px] font-normal text-faint">đã qua {x.installs.length} nơi</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-[12px] font-semibold text-dim">
-                        {ASSET_LABEL[x.type as AssetType] ?? x.type}
-                        {x.ratio && <div className="font-mono text-[11px] font-normal text-faint">{x.ratio}</div>}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-[12px] text-soft">{dmy(last.to) || '—'}</td>
-                      <td className="px-4 py-3 pr-8">
-                        <span className="font-mono text-[12px] font-bold text-dim">{w.code}</span>
-                        {w.mkh && <span className="ml-2 font-mono text-[11px] text-faint">{w.mkh}</span>}
-                        <div className="font-mono text-[11px] text-faint">{dmyRange(last.from, last.to)}</div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </IssueSection>
-
-          {/* ---- 1c. Dự kiến ---- */}
-          <IssueSection id="planned" title="Vật tư dự kiến" tone="info" count={pool.planned.length}
-            desc="Đã khai vào điểm đo nhưng CHƯA có ngày treo — chưa tính vào HSN, chưa đối chiếu hóa đơn."
-            open={openSection} onToggle={setOpenSection}>
-            <table className="vl-table w-full table-fixed border-collapse text-left">
-              <thead>
-                <tr className="border-b border-[var(--border)]">
-                  <th className={`${TH_CLS} w-[18%] pl-8`}>Số chế tạo</th>
-                  <th className={`${TH_CLS} w-[16%]`}>Thiết bị</th>
-                  <th className={`${TH_CLS} w-[40%]`}>Dự kiến lắp tại</th>
-                  <th className={`${TH_CLS} w-[26%] pr-8`}>Đang lắp ở đâu</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {pool.planned.map(x => {
-                  const live = x.installs.filter(i => i.active);
-                  return (
-                    <tr key={x.serial} className="transition-colors hover:bg-subtle/50">
-                      <td className="px-4 py-3 pl-8 font-mono text-[13px] font-bold text-ink">{x.serial}</td>
-                      <td className="px-4 py-3 text-[12px] font-semibold text-dim">
-                        {ASSET_LABEL[x.type as AssetType] ?? x.type}
-                        {x.ratio && <div className="font-mono text-[11px] font-normal text-faint">{x.ratio}</div>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="space-y-1">
-                          {x.plannedAt.map(i => {
-                            const w = whereOf(i.pointId);
-                            return (
-                              <div key={i.id} className="flex flex-wrap items-center gap-2 text-[11px]">
-                                <span className="font-mono font-bold text-dim">{w.code}</span>
-                                {w.mkh && <span className="font-mono text-faint">{w.mkh}</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 pr-8 text-[11px]">
-                        {live.length
-                          ? live.map(i => (
-                              <div key={i.id} className="font-mono text-warn">
-                                {whereOf(i.pointId).code} — còn đang treo
-                              </div>
-                            ))
-                          : <span className="italic text-faint">không ở đâu</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </IssueSection>
-        </div>
-      )}
-
       {/* ======================= 2. Rà soát ======================= */}
-      {tab === 'audit' && (
+      {(
         <div className="space-y-4">
           <p className="text-[12px] text-soft">
             Chỉ liệt kê những chỗ danh mục và hóa đơn KHÔNG khớp nhau. Bảng nào không có

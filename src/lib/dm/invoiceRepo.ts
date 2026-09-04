@@ -104,6 +104,17 @@ export async function invoicesUsageOf(serials: string[], sinceYmd: string): Prom
   const list = [...new Set(serials.map(s => s.trim()).filter(Boolean))];
   if (!list.length) return [];
 
+  /*
+    LẤY TỪ ĐẦU THÁNG chứa `sinceYmd`, không phải từ đúng ngày đó.
+
+    Phép đối chiếu gộp theo THÁNG CHỐT, nên cắt giữa tháng là so nửa tháng bên
+    này với cả tháng bên kia. Đúng ca `TH.BQL.T2.160kVA` tháng 07/2026: mốc 40
+    ngày rơi vào 26/07, làm rụng hóa đơn 01→19/07 của điểm đo chính (công tơ
+    thay ngày 19/07) trong khi hóa đơn cả tháng của điểm phụ vẫn còn — báo lệch
+    1840 kWh trong khi cộng đủ hai hóa đơn thì khớp tuyệt đối.
+  */
+  const from = `${sinceYmd.slice(0, 7)}-01`;
+
   // PocketBase không có toán tử IN, phải ghép OR. Chia lô cho chuỗi filter khỏi
   // dài quá mức URL chịu được.
   const out: InvoiceUsage[] = [];
@@ -111,7 +122,7 @@ export async function invoicesUsageOf(serials: string[], sinceYmd: string): Prom
   for (let i = 0; i < list.length; i += CHUNK) {
     const orSct = list.slice(i, i + CHUNK).map(s => `SCT="${q(s)}"`).join('||');
     const items = await pb.collection('invoice').getFullList({
-      filter: `(${orSct}) && EndDate >= "${q(sinceYmd)} 00:00:00.000Z"`,
+      filter: `(${orSct}) && EndDate >= "${q(from)} 00:00:00.000Z"`,
       fields: 'SCT,StartDate,EndDate,LoaiHD,SL_BT,SL_CD,SL_TD,phu_BT,phu_CD,phu_TD',
       batch: 500,
       requestKey: null,
