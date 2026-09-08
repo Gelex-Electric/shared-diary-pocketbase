@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
 import QuickImportManager from './QuickImportManager';
+import InvoiceExportManager from './InvoiceExportManager';
 import CustomerDebtManager from './CustomerDebtManager';
 import CustomerManager from '../CustomerManager';
 import HesReadingManager from '../hes/HesReadingManager';
@@ -21,7 +22,7 @@ import NotificationBell from '../ui/NotificationBell';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
-  | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt'
+  | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'invoice-export'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
   | 'dm-general' | 'dm-catalog'
   | 'qlvh';
@@ -31,6 +32,7 @@ const TAB_LABEL: Record<Tab, string> = {
   'bill-confirm':  'Biên bản xác nhận chỉ số',
   'quick-import':  'Nạp dữ liệu nhanh',
   'customer-debt': 'Công nợ khách hàng',
+  'invoice-export': 'Xuất dữ liệu',
   operating:       'Thông số vận hành',
   hes:             'Lấy chỉ số HES',
   opchart:         'Đồ thị điện áp & công suất',
@@ -42,7 +44,7 @@ const TAB_LABEL: Record<Tab, string> = {
 };
 
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
-const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt'];
+const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt', 'invoice-export'];
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
 /** Các tab con thuộc nhóm "Quản lý vật tư thiết bị điện". */
@@ -169,6 +171,18 @@ export default function BusinessDashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Nạp dữ liệu nhanh</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      id="nav-invoice-export-sub"
+                      onClick={() => { setTopTab('invoice-export'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'invoice-export' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Xuất dữ liệu</span>
                     </button>
                   </li>
                 </motion.ul>
@@ -472,6 +486,8 @@ export default function BusinessDashboard() {
               <BusinessSummaryDashboard />
             ) : topTab === 'quick-import' ? (
               <QuickImportManager />
+            ) : topTab === 'invoice-export' ? (
+              <InvoiceExportManager />
             ) : topTab === 'customer-debt' ? (
               <CustomerDebtManager />
             ) : topTab === 'operating' ? (

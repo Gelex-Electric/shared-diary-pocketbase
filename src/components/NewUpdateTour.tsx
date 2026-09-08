@@ -22,10 +22,16 @@ interface UpdateItem {
 }
 
 // Phiên bản & ngày phát hành hiển thị trên header
-const VERSION      = '1.6';
-const RELEASE_DATE = '08/07/2026';
+const VERSION      = '1.7';
+const RELEASE_DATE = '04/09/2026';
 
 const UPDATES: UpdateItem[] = [
+  {
+    title: 'Sơ đồ một sợi (SLD) — bản vẽ CAD tương tác',
+    desc: 'Bản vẽ mỗi khu công nghiệp nay là bản vẽ CAD tương tác thay cho file PDF: phóng to không vỡ nét, kéo di chuyển, bật/tắt từng lớp, đo khoảng cách và ghi chú ngay trên bản vẽ.',
+    tag: 'Cải tiến',
+    link: { tab: 'sld', label: 'Mở Sơ đồ một sợi' },
+  },
   {
     title: 'Tổn thất tính toán máy biến áp',
     desc: 'Tính tổn thất kỹ thuật từng trạm (ΔP = P0 + Pk·(S/Sdm)²) theo thời gian thực đo, gom theo khu công nghiệp. 3 chế độ xem: theo ngày, theo tháng, và biểu đồ mức tải & tỷ lệ tổn thất theo từng trạm.',
@@ -37,12 +43,6 @@ const UPDATES: UpdateItem[] = [
     desc: 'Xem đường điện áp 3 pha và cột công suất của từng trạm theo từng mốc 30 phút trong ngày, tự phát hiện và tô vùng thời gian mất điện.',
     tag: 'Mới',
     link: { tab: 'opchart', label: 'Mở Đồ thị điện áp & công suất' },
-  },
-  {
-    title: 'Sơ đồ một sợi (SLD)',
-    desc: 'Xem sơ đồ một sợi (ảnh và PDF) của từng khu vực ngay trong ứng dụng, không cần tải file rời.',
-    tag: 'Mới',
-    link: { tab: 'sld', label: 'Mở Sơ đồ một sợi' },
   },
   {
     title: 'Dữ liệu đo xa đầy đủ hơn — dòng điện & công suất phản kháng',
