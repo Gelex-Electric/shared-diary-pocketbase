@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Building2, Factory, Users, Gauge, Package,
   Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText, History, ArrowLeftRight, Search,
+  CaseLower,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import type { TabItem } from '../ui/Tabs';
@@ -39,6 +40,8 @@ import {
 import { PointBadgeChip, PointBadgeIcon, StatusTag } from './pointIcons';
 import { invoicesOfMkh, invoicesOfSerial, loadCustomerFacts } from '../../lib/dm/invoiceRepo';
 import { isEmptyPlan, latestByMkh, planCustomerSync } from '../../lib/dm/customerSync';
+import { ISSUE_LABEL, checkLowName, planLowNameFix, toLowName } from '../../lib/dm/lowName';
+import type { LowNameRow } from '../../lib/dm/lowName';
 import { bySerial, dmy, dmyRange, segmentFor, segmentOf, segmentsOf } from '../../lib/dm/lifecycle';
 import type { Segment } from '../../lib/dm/lifecycle';
 
@@ -109,7 +112,7 @@ const EMPTY_S = {
   zone: '', customer: '', ident: '',
   sdm_kva: '', p0_w: '', pk_w: '', note: '',
 };
-const EMPTY_C = { mkh: '', name: '', short_name: '', address: '', zone: '' };
+const EMPTY_C = { mkh: '', name: '', low_name: '', short_name: '', address: '', zone: '' };
 /** `code` cũng do hệ thống sinh; `customer` chỉ dùng khi là điểm đo phụ. */
 const EMPTY_P = {
   station: '', role: 'chinh' as PointRole,
@@ -208,6 +211,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const [zForm, setZForm] = useState(EMPTY_Z);
   const [sForm, setSForm] = useState(EMPTY_S);
   const [cForm, setCForm] = useState(EMPTY_C);
+  /** Soát ngay trong form: hiện lý do lệch dưới ô, và bật/tắt nút "Lấy từ tên". */
+  const lowNameCheck = useMemo(
+    () => checkLowName({ name: cForm.name, low_name: cForm.low_name }),
+    [cForm.name, cForm.low_name],
+  );
   const [pForm, setPForm] = useState(EMPTY_P);
 
   const load = async () => {
@@ -280,7 +288,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const editCustomer = (c: Customer) => {
     setEditingId(c.id);
     setCForm({
-      mkh: c.mkh, name: c.name, short_name: c.short_name ?? '',
+      mkh: c.mkh, name: c.name, low_name: c.low_name ?? '',
+      short_name: c.short_name ?? '',
       address: c.address ?? '', zone: c.zone ?? '',
     });
     setModal('customer');
@@ -1062,8 +1071,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       if (shortName && !isValidShortName(shortName)) {
         return toast.warning('Tên tắt không hợp lệ', SHORT_NAME_HINT);
       }
+      const name = cForm.name.trim();
       const body = {
-        mkh: cForm.mkh.trim(), name: cForm.name.trim(), short_name: shortName,
+        mkh: cForm.mkh.trim(), name, short_name: shortName,
+        // Bỏ trống ô viết thường thì suy ra từ tên, không lưu rỗng để bộ soát
+        // khỏi báo `missing` ngay sau khi vừa khai xong.
+        low_name: cForm.low_name.trim() || toLowName(name),
         address: cForm.address.trim(), zone: cForm.zone || undefined, active: true,
       };
       return void persist(
@@ -1154,6 +1167,70 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
    * nhật, KHÔNG BAO GIỜ xoá; chạy lại không nhân bản.
    */
   const [syncing, setSyncing] = useState(false);
+
+  /* ---------- Soát tên viết thường (`low_name`) ----------
+   *
+   * `low_name` là cột LƯU SẴN bản viết thường của `name` (PocketBase không có
+   * `lower()` trong filter). Lưu sẵn thì lệch được: sửa `name` ở nơi khác, gõ
+   * tay thiếu chữ, hoặc bản ghi cũ có trước khi cột ra đời.
+   *
+   * `null` = chưa soát lần nào; `[]` = đã soát và không có gì lệch.
+   */
+  const [lowNameRows, setLowNameRows] = useState<LowNameRow[] | null>(null);
+  const [lowNameOpen, setLowNameOpen] = useState(false);
+  const [fixingLowName, setFixingLowName] = useState(false);
+
+  const auditLowName = () => {
+    if (!d) return;
+    const rows = planLowNameFix(d.customers);
+    if (!rows.length) {
+      toast.success('Khớp hết',
+        `Đã soát ${d.customers.length} khách hàng — tên viết thường khớp đủ chữ với tên gốc.`);
+      return;
+    }
+    setLowNameRows(rows);
+    setLowNameOpen(true);
+  };
+
+  /**
+   * Ghi `low_name = name.toLowerCase()` cho các dòng lệch.
+   *
+   * Ghi thẳng vào dữ liệu THẬT (staging dùng chung PocketBase với production)
+   * ⇒ đã xem trước ở bảng, còn hỏi thêm một lần nữa. Chỉ `update`, không xóa;
+   * chạy lại lần nữa cũng ra cùng kết quả.
+   */
+  const fixAllLowName = async () => {
+    const rows = lowNameRows ?? [];
+    if (!rows.length) return;
+
+    const ok = await confirm({
+      title: `Sửa tên viết thường cho ${rows.length} khách hàng?`,
+      message: `Ghi đè cột "tên viết thường" bằng tên gốc hạ chữ hoa, cho ${rows.length} bản ghi `
+        + `đang lệch. Không đụng tên gốc, không xóa bản ghi nào. Ghi thẳng vào dữ liệu thật.`,
+      confirmLabel: 'Sửa tất cả', variant: 'warning',
+    });
+    if (!ok) return;
+
+    setFixingLowName(true);
+    let done = 0;
+    try {
+      for (const r of rows) {
+        await customers.update(r.id, { low_name: r.expected });
+        done++;
+      }
+      setLowNameOpen(false);
+      setLowNameRows(null);
+      toast.success('Đã sửa', `Cập nhật tên viết thường cho ${done} khách hàng.`);
+      await load();
+    } catch (err) {
+      // Dừng giữa chừng thì nói rõ đã ghi được bao nhiêu — bấm soát lại là ra
+      // phần còn lại, không sợ ghi trùng.
+      toast.error(`Dừng sau ${done}/${rows.length} bản ghi`, pbErrorMessage(err));
+      await load();
+    } finally {
+      setFixingLowName(false);
+    }
+  };
 
   const syncCustomers = async () => {
     if (!d) return;
@@ -1667,6 +1744,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             Nạp lại
           </button>
           {tab === 'customer' && (
+            <button onClick={auditLowName} disabled={loading || !d}
+              title="Đối chiếu tên viết thường với tên gốc — đúng và đủ chữ chưa"
+              className="vl-btn vl-btn-secondary flex items-center gap-2">
+              <CaseLower className="h-4 w-4" />
+              Soát tên viết thường
+            </button>
+          )}
+          {tab === 'customer' && (
             <button onClick={() => void syncCustomers()} disabled={syncing || loading}
               title="Lấy tên và địa chỉ theo hóa đơn có ngày chốt mới nhất"
               className="vl-btn vl-btn-secondary flex items-center gap-2">
@@ -1975,13 +2060,36 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             </div>
             <div className="grid gap-6 sm:grid-cols-2">
               <Field label="Tên khách hàng" required>
+                {/* Gõ tên thì ô viết thường chạy theo — NHƯNG chỉ khi nó còn
+                    đang khớp tên cũ. Đã sửa tay thì giữ nguyên bản sửa tay. */}
                 <TextInput value={cForm.name} placeholder="CÔNG TY TNHH…"
-                  onChange={v => setCForm(f => ({ ...f, name: v }))} />
+                  onChange={v => setCForm(f => ({
+                    ...f, name: v,
+                    low_name: f.low_name === toLowName(f.name) ? toLowName(v) : f.low_name,
+                  }))} />
               </Field>
               <Field label="Địa chỉ">
                 <TextInput value={cForm.address} onChange={v => setCForm(f => ({ ...f, address: v }))} />
               </Field>
             </div>
+            <Field label="Tên viết thường"
+              hint={lowNameCheck.issue === 'ok'
+                ? 'Tự chạy theo "Tên khách hàng"; sửa đè được nếu cần ngoại lệ.'
+                : `${ISSUE_LABEL[lowNameCheck.issue]} — ${lowNameCheck.detail}`}>
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <TextInput value={cForm.low_name} placeholder="công ty tnhh…"
+                    onChange={v => setCForm(f => ({ ...f, low_name: v }))} />
+                </div>
+                <button type="button" title="Lấy lại từ tên khách hàng"
+                  disabled={lowNameCheck.issue === 'ok'}
+                  onClick={() => setCForm(f => ({ ...f, low_name: toLowName(f.name) }))}
+                  className="vl-btn vl-btn-secondary flex shrink-0 items-center gap-2">
+                  <RefreshCw className="h-4 w-4" />
+                  Lấy từ tên
+                </button>
+              </div>
+            </Field>
           </>
         )}
 
@@ -2336,6 +2444,48 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             </Field>
           </>
         )}
+      </FormModal>
+
+      {/* ============ Kết quả soát tên viết thường ============ */}
+      {/* Dùng lại FormModal: nút xác nhận của nó chính là "Sửa tất cả". */}
+      <FormModal wide open={lowNameOpen}
+        title={`Soát tên viết thường — ${lowNameRows?.length ?? 0} khách hàng lệch`}
+        onClose={() => setLowNameOpen(false)}
+        onSubmit={() => void fixAllLowName()}
+        saving={fixingLowName}
+        submitLabel={`Sửa tất cả (${lowNameRows?.length ?? 0})`}>
+        <p className="text-sm text-soft">
+          Đối chiếu cột <b>tên viết thường</b> với <b>tên khách hàng</b> hạ chữ hoa. "Sửa tất cả"
+          ghi cột đề nghị vào toàn bộ các dòng dưới đây — không đụng tên gốc, không xóa gì.
+          Muốn giữ một ngoại lệ thì đóng bảng này và sửa riêng khách hàng đó.
+        </p>
+        <TableCard fixed loading={false} isEmpty={!lowNameRows?.length} empty="Không có dòng nào lệch."
+          columns={<>
+            <th className={`${TH_CLS} w-[12%] pl-6`}>Mã KH</th>
+            <th className={`${TH_CLS} w-[16%]`}>Lý do</th>
+            <th className={`${TH_CLS} w-[24%]`}>Tên khách hàng</th>
+            <th className={`${TH_CLS} w-[24%]`}>Đang lưu</th>
+            <th className={`${TH_CLS} w-[24%] pr-6`}>Đề nghị</th>
+          </>}>
+          {(lowNameRows ?? []).map(r => (
+            <tr key={r.id} className="transition-colors hover:bg-subtle/50">
+              <td className="px-6 py-3 pl-6">
+                <span className="rounded-md bg-subtle px-2.5 py-1 font-mono text-xs font-bold text-soft">{r.mkh}</span>
+              </td>
+              <td className="px-6 py-3">
+                <span className={`text-xs font-bold ${r.issue === 'chars' ? 'text-bad' : 'text-warn'}`}>
+                  {ISSUE_LABEL[r.issue]}
+                </span>
+                <p className="mt-0.5 text-[11px] leading-snug text-faint">{r.detail}</p>
+              </td>
+              <td className="truncate px-6 py-3 text-sm font-bold text-ink" title={r.name}>{r.name}</td>
+              <td className="truncate px-6 py-3 text-sm text-soft" title={r.current}>
+                {r.current || <span className="text-[11px] italic text-warn">chưa có</span>}
+              </td>
+              <td className="truncate px-6 py-3 pr-6 text-sm text-dim" title={r.expected}>{r.expected}</td>
+            </tr>
+          ))}
+        </TableCard>
       </FormModal>
     </div>
   );
