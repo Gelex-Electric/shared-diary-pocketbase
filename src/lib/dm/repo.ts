@@ -10,6 +10,7 @@
  */
 import { pb } from '../pocketbase';
 import type { Asset, Customer, Device, Point, Station, Zone } from './types';
+import { toLowName } from './lowName';
 
 /**
  * Nạp hết một collection, sắp xếp theo `sort`. PocketBase batch tối đa 500/lần.
@@ -39,10 +40,22 @@ export const stations = {
   remove: (id: string) => pb.collection('dm_station').delete(id),
 };
 
+/**
+ * Điền `low_name` khi ghi `name` mà caller KHÔNG tự truyền giá trị.
+ *
+ * Không ghi đè khi caller đã truyền: form Khách hàng cho phép sửa tay ô tên
+ * viết thường, ghi đè ở đây thì bản sửa tay bị xóa ngay lúc lưu.
+ */
+const withLowName = (data: Partial<Customer>): Partial<Customer> =>
+  data.name === undefined || data.low_name !== undefined
+    ? data
+    : { ...data, low_name: toLowName(data.name) };
+
 export const customers = {
   list: () => all<Customer>('dm_customer', 'mkh'),
-  create: (data: Partial<Customer>) => pb.collection('dm_customer').create(data),
-  update: (id: string, data: Partial<Customer>) => pb.collection('dm_customer').update(id, data),
+  create: (data: Partial<Customer>) => pb.collection('dm_customer').create(withLowName(data)),
+  update: (id: string, data: Partial<Customer>) =>
+    pb.collection('dm_customer').update(id, withLowName(data)),
   remove: (id: string) => pb.collection('dm_customer').delete(id),
 };
 

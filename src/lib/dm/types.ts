@@ -54,6 +54,8 @@ export interface Station extends PbRecord {
 export interface Customer extends PbRecord {
   mkh: string;
   name: string;
+  /** `name` viết thường (giữ dấu). Repo tự sinh khi tạo/sửa — dùng lọc, tìm phía server. */
+  low_name?: string;
   /** Tên tắt: viết liền, không dấu, chỉ cho phép thêm dấu '-'. Dùng sinh mã trạm. */
   short_name?: string;
   address?: string;
