@@ -26,7 +26,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from '../../lib/toast';
 import { isAbortError, loadCatalog, pbErrorMessage } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
-import { invoicesUsageOf, loadAllInvoicesLite } from '../../lib/dm/invoiceRepo';
+import { invoicesUsageOf, loadAllInvoicesLite, loadCustomerFacts } from '../../lib/dm/invoiceRepo';
+import { latestByMkh } from '../../lib/dm/customerSync';
+import type { LatestCustomer } from '../../lib/dm/customerSync';
+import { NAME_ISSUE_LABEL, auditCustomerNames, countNameIssues } from '../../lib/dm/customerNameAudit';
 import { bySerial, dmy, dmyRange, overlaps, recentSince, segmentOf, segmentsOf, ymd } from '../../lib/dm/lifecycle';
 import { buildMainsWithSubs, checkSubDeduction } from '../../lib/dm/subDeduct';
 import type { SubDeductIssue } from '../../lib/dm/subDeduct';
@@ -106,6 +109,12 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
 
   const [d, setD] = useState<CatalogData | null>(null);
   const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
+  /**
+   * Tên + địa chỉ khách hàng theo hóa đơn MỚI NHẤT của từng mã khách.
+   * Tra riêng vì `InvoiceLite` không kéo cột `NMua` (chuỗi dài, chỉ việc soát
+   * tên mới cần tới).
+   */
+  const [latestCustomers, setLatestCustomers] = useState<LatestCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   /** Cảnh báo phụ trừ — tra riêng vì cần các cột sản lượng, xem `subDeduct.ts`. */
   const [subIssues, setSubIssues] = useState<SubDeductIssue[]>([]);
@@ -117,9 +126,12 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
     try {
       // Màn này buộc phải quét hết hóa đơn (đối chiếu toàn bộ), khác form nhập
       // liệu chỉ tra một số công tơ.
-      const [catalog, inv] = await Promise.all([loadCatalog(), loadAllInvoicesLite()]);
+      const [catalog, inv, facts] = await Promise.all([
+        loadCatalog(), loadAllInvoicesLite(), loadCustomerFacts(),
+      ]);
       setD(catalog);
       setInvoices(inv);
+      setLatestCustomers(latestByMkh(facts));
     } catch (e) {
       if (isAbortError(e)) return;
       toast.error('Không nạp được dữ liệu', pbErrorMessage(e));
@@ -254,8 +266,16 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
       .sort((a, b) => (a.point.code ?? '').localeCompare(b.point.code ?? '', 'vi', { numeric: true }));
   }, [d]);
 
+  /**
+   * Bộ ba tên khách hàng (`name` / `low_name` / `short_name`) có khớp nhau và
+   * khớp hóa đơn mới nhất không. Luật nằm ở `customerNameAudit.ts`.
+   */
+  const nameAudit = useMemo(
+    () => auditCustomerNames(d?.customers ?? [], latestCustomers),
+    [d, latestCustomers]);
+
   const issueCount = subIssues.length + mismatch.length + noInvoice.length
-    + orphans.length + noRemote.length;
+    + orphans.length + noRemote.length + countNameIssues(nameAudit);
 
   /* ------------------------------ giao diện ------------------------------ */
 
@@ -369,7 +389,55 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
             </table>
           </IssueSection>
 
-          {/* ---- 2c. Đã khai nhưng chưa có hóa đơn ---- */}
+          {/* ---- 2c. Tên khách hàng ---- */}
+          {/* Một khách có thể lệch nhiều chỗ ⇒ mỗi CHỖ LỆCH một dòng, gộp ô mã
+              khách theo rowSpan để đọc theo khách chứ không theo dòng rời rạc. */}
+          <IssueSection id="names" title="Tên khách hàng chưa khớp nhau" tone="warn"
+            count={countNameIssues(nameAudit)}
+            desc="Tên đầy đủ phải khớp hóa đơn mới nhất; tên viết thường phải đúng và đủ chữ so với tên đầy đủ. CHỈ BÁO — sửa tên ở tab Khách hàng (nút Đồng bộ từ hóa đơn / Soát tên viết thường)."
+            open={openSection} onToggle={setOpenSection}>
+            <table className="vl-table w-full table-fixed border-collapse text-left">
+              <thead>
+                <tr className="border-b border-[var(--border)]">
+                  <th className={`${TH_CLS} w-[12%] pl-8`}>Mã KH</th>
+                  <th className={`${TH_CLS} w-[26%]`}>Tên đang khai</th>
+                  <th className={`${TH_CLS} w-[18%]`}>Chỗ lệch</th>
+                  <th className={`${TH_CLS} w-[22%]`}>Đang lưu</th>
+                  <th className={`${TH_CLS} w-[22%] pr-8`}>Đối chiếu</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {nameAudit.flatMap(r => r.issues.map((x, i) => (
+                  <tr key={`${r.id}-${x.kind}`} className="transition-colors hover:bg-subtle/50">
+                    {i === 0 && (
+                      <>
+                        <td rowSpan={r.issues.length} className="px-4 py-3 pl-8 align-top">
+                          <span className="rounded-md bg-subtle px-2.5 py-1 font-mono text-[11px] font-bold text-soft">{r.mkh}</span>
+                        </td>
+                        <td rowSpan={r.issues.length} className="truncate px-4 py-3 align-top text-[13px] font-bold text-ink" title={r.name}>
+                          {r.name || <span className="italic text-faint">—</span>}
+                        </td>
+                      </>
+                    )}
+                    <td className="px-4 py-3 align-top text-[11px] font-bold text-warn">
+                      {NAME_ISSUE_LABEL[x.kind]}
+                    </td>
+                    <td className="truncate px-4 py-3 align-top text-[12px] text-soft" title={x.current}>
+                      {x.current || <span className="italic text-faint">chưa có</span>}
+                    </td>
+                    <td className="px-4 py-3 pr-8 align-top">
+                      {x.expected
+                        ? <p className="truncate text-[12px] text-dim" title={x.expected}>{x.expected}</p>
+                        : null}
+                      <Warn>{x.detail}</Warn>
+                    </td>
+                  </tr>
+                )))}
+              </tbody>
+            </table>
+          </IssueSection>
+
+          {/* ---- 2d. Đã khai nhưng chưa có hóa đơn ---- */}
           <IssueSection id="noinv" title="Đã khai nhưng chưa có hóa đơn" tone="info" count={noInvoice.length}
             desc="Công tơ có trong danh mục nhưng chưa xuất hiện ở hóa đơn nào — bình thường nếu vừa treo, đáng ngờ nếu đã treo lâu."
             open={openSection} onToggle={setOpenSection}>
@@ -400,7 +468,7 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
             </table>
           </IssueSection>
 
-          {/* ---- 2d. Đang vận hành nhưng mất đo xa ---- */}
+          {/* ---- 2e. Đang vận hành nhưng mất đo xa ---- */}
           <IssueSection id="remote" title="Đang vận hành nhưng thiếu đo xa" tone="warn" count={noRemote.length}
             desc="Điểm đo đang vận hành phải có đủ GP-03 và SIM. Thiếu một trong hai là không đẩy được chỉ số về HES."
             open={openSection} onToggle={setOpenSection}>
@@ -440,7 +508,7 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
             </table>
           </IssueSection>
 
-          {/* ---- 2e. Có hóa đơn nhưng chưa khai ---- */}
+          {/* ---- 2f. Có hóa đơn nhưng chưa khai ---- */}
           <IssueSection id="orphan" title="Có hóa đơn nhưng chưa khai" tone="warn" count={orphans.length}
             desc="Số công tơ đang phát sinh hóa đơn nhưng chưa có bản ghi vật tư nào. Khai bổ sung ở Danh mục → Điểm đo."
             open={openSection} onToggle={setOpenSection}>
