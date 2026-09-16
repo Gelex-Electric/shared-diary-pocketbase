@@ -91,8 +91,8 @@ export function customerMetersOf(d: CatalogData): CustomerMeters[] {
  * mục, và (c) là nguồn thứ hai chạy song song với `dm_*` — đối chiếu ngày
  * 04/09 đã lộ ra hai công tơ lệch HSN giữa hai nguồn.
  *
- * `hes_index_daily.csv` thì GIỮ NGUYÊN: đó là chỉ số đo đếm do pipeline chốt
- * mỗi ngày, không phải danh mục, và không có nguồn nào khác thay được.
+ * CHỈ SỐ đo đếm cũng đã chuyển sang PocketBase (collection `hes_index`, chốt
+ * 16/09/2026) — xem `src/lib/hesIndex.ts`. Danh mục và chỉ số giờ cùng một nhà.
  *
  * "Đang treo" ở đây là CÓ ngày treo và CHƯA có ngày tháo — chặt hơn cờ `active`,
  * vì vật tư dự kiến cũng mang `active = true` mà chưa hề ra hiện trường.
