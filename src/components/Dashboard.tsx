@@ -19,15 +19,16 @@ import SldPage from './sld/SldPage';
 import BillConfirmManager from './business/BillConfirmManager';
 import CustomerDebtManager from './business/CustomerDebtManager';
 import NotificationBell from './ui/NotificationBell';
-import NotificationCenter from './notifications/NotificationCenter';
-import { useUnreadCount } from './notifications/useUnreadCount';
+import AlertCenter from './alerts/AlertCenter';
+import { useUnresolvedAlerts } from './alerts/useUnresolvedAlerts';
+import { ALERT_KINDS } from '../lib/alerts';
 import ThemeToggle from './ui/ThemeToggle';
 
-type Tab = 'summary' | 'notifications' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
+type Tab = 'summary' | 'alerts' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
-  notifications: 'Thông báo',
+  alerts: 'Cảnh báo',
   journal:   'Hồ sơ vận hành',
   outage:            'Thông báo ngừng cấp điện',
   'handover-record': 'Biên bản treo tháo',
@@ -74,10 +75,11 @@ const subItemV = {
 
 export default function Dashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
-  /** Số chưa đọc cho badge sidebar — dùng chung một nguồn với chuông. */
-  const unreadNotif = useUnreadCount();
-  /** Nhóm cần mở khi bấm một dòng ở chuông; đổi mỗi lần bấm để màn nhảy đúng tab. */
-  const [notifKind, setNotifKind] = useState<string | undefined>(undefined);
+  /** Cảnh báo CHƯA XỬ LÝ — badge sidebar và số trên từng sub-side. */
+  const { total: openAlerts, byKind: alertCounts } = useUnresolvedAlerts();
+  /** Nhóm cảnh báo đang xem; các nhóm là sub-side nên nằm ở state chứ không ở Tab. */
+  const [alertKind, setAlertKind] = useState<string>(ALERT_KINDS[0].kind);
+  const [isAlertsExpanded, setIsAlertsExpanded] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isJournalExpanded, setIsJournalExpanded] = useState(true);
   const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
@@ -343,23 +345,60 @@ export default function Dashboard() {
               )}
             </AnimatePresence>
           </li>
-          {/* Thông báo — badge là số CHƯA ĐỌC, mở màn là về 0 */}
+          {/*
+            Cảnh báo — mỗi NHÓM một sub-side (user chốt 16/09/2026), thay cho
+            thanh tab ngang trong màn. Badge là số CHƯA XỬ LÝ, không phải chưa
+            đọc: liếc qua không làm chỉ số hết chạy lùi.
+
+            KHÔNG có mục "Thanh toán" ở đây — thanh toán là việc hằng ngày, nằm
+            ở chuông trên thanh trên.
+          */}
           <li className="relative mt-1">
             <button
-              id="nav-notifications"
-              onClick={() => { setTopTab('notifications'); onNavigate?.(); }}
+              id="nav-alerts"
+              onClick={() => setIsAlertsExpanded(v => !v)}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'notifications' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+                topTab === 'alerts' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <Bell className="w-5 h-5 shrink-0" />
-              <span className="flex-1 text-left">Thông báo</span>
-              {unreadNotif > 0 && (
+              <span className="flex-1 text-left">Cảnh báo</span>
+              {openAlerts > 0 && (
                 <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
-                  {unreadNotif > 99 ? '99+' : unreadNotif}
+                  {openAlerts > 99 ? '99+' : openAlerts}
                 </span>
               )}
+              <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isAlertsExpanded ? 'rotate-180' : ''}`} />
             </button>
+            <AnimatePresence initial={false}>
+              {isAlertsExpanded && (
+                <motion.ul
+                  initial="closed" animate="open" exit="closed" variants={subMenuV}
+                  className="overflow-hidden list-none px-0"
+                >
+                  {ALERT_KINDS.map(k => (
+                    <motion.li key={k.kind} variants={subItemV}>
+                      <button
+                        id={`nav-alert-${k.kind}`}
+                        onClick={() => { setAlertKind(k.kind); setTopTab('alerts'); onNavigate?.(); }}
+                        className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                          topTab === 'alerts' && alertKind === k.kind ? 'text-accent' : 'text-soft hover:text-dim'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                        <span className="flex-1">{k.label}</span>
+                        {/* Số chưa xử lý của riêng nhóm — biết ngay chỗ nào cần vào. */}
+                        {(alertCounts[k.kind] ?? 0) > 0 && (
+                          <span className="shrink-0 text-[10px] font-black text-[#ff5b5c]">
+                            {alertCounts[k.kind]}
+                          </span>
+                        )}
+                      </button>
+                    </motion.li>
+                  ))}
+                </motion.ul>
+              )}
+            </AnimatePresence>
           </li>
         </ul>
 
@@ -486,7 +525,7 @@ export default function Dashboard() {
             </a>
 
             {/* Thông báo */}
-            <NotificationBell onOpen={kind => { setNotifKind(kind); setTopTab('notifications'); }} />
+            <NotificationBell />
 
             {/* Theme */}
             <ThemeToggle />
@@ -532,8 +571,8 @@ export default function Dashboard() {
               <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
                 <SldPage />
               </div>
-            ) : topTab === 'notifications' ? (
-              <NotificationCenter initialKind={notifKind} />
+            ) : topTab === 'alerts' ? (
+              <AlertCenter kind={alertKind} />
             ) : topTab === 'journal' ? (
               <JournalManager />
             ) : topTab === 'outage' ? (
