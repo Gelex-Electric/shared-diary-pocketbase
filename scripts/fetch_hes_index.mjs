@@ -161,56 +161,67 @@ export function boundariesOf(recs, day) {
 
 /* ------------------------------ thụt lùi ------------------------------ */
 /**
- * Dung sai khi so chỉ số — chênh dưới mức này coi như sai số làm tròn của công
- * tơ, không phải thụt lùi.
+ * MỌI thanh ghi chỉ số lũy kế mà HES trả về — cả chiều giao lẫn chiều nhận.
+ *
+ * Bản đầu chỉ soi 5 trường chiều giao nên bỏ sót hẳn các ca lùi ở "vô công
+ * nhận" (phát hiện khi đối chiếu báo cáo của user ngày 16/09/2026).
  */
-const EPS = Number(process.env.REGRESS_EPS || 0.001);
+const REGISTERS = {
+  'Hữu công giao – tổng':   'ACTIVE_KW_INDICATE_TOTAL',
+  'Hữu công giao – biểu 1': 'ACTIVE_KW_INDICATE_RATE1',
+  'Hữu công giao – biểu 2': 'ACTIVE_KW_INDICATE_RATE2',
+  'Hữu công giao – biểu 3': 'ACTIVE_KW_INDICATE_RATE3',
+  'Hữu công nhận – tổng':   'NEGACTIVE_KW_INDICATE_TOTAL',
+  'Hữu công nhận – biểu 1': 'NEGACTIVE_KW_INDICATE_RATE1',
+  'Hữu công nhận – biểu 2': 'NEGACTIVE_KW_INDICATE_RATE2',
+  'Hữu công nhận – biểu 3': 'NEGACTIVE_KW_INDICATE_RATE3',
+  'Vô công giao – tổng':    'REACTIVE_KVAR_INDICATE_TOTAL',
+  'Vô công nhận – tổng':    'NEGACTIVE_KVAR_INDICATE_TOTAL',
+};
 
 /**
- * Các chỉ số CHẠY THỤT LÙI của một dòng, dạng "PG,VC". Rỗng = bình thường.
+ * Bước của chữ số cuối cùng mà HES trả về (3 chữ số thập phân).
  *
- * Chỉ số lũy kế chỉ được phép tăng, nên xét hai chiều:
- *   1. Trong ngày : X_END < X_START
- *   2. Liên ngày  : X_START hôm nay < X_END hôm qua
+ * Lùi ĐÚNG một bước là sai số làm tròn của hệ thống, không phải công tơ chạy
+ * ngược: đối chiếu 21 ngày (27/08–16/09/2026) cho 102 ca lùi thì CẢ 102 đều
+ * đúng −0.001, và dồn vào vài mốc giờ (76 ca cùng lúc 15/09 02:30) — dấu hiệu
+ * của tác vụ nền bên HES, không phải hỏng công tơ.
  *
- * Công tơ vừa THAY hoặc vừa RESET cũng rơi vào trường hợp 2 và KHÔNG phân biệt
- * được tự động — dữ liệu không mang thông tin đó. Vì vậy `REGRESS` là tín hiệu
- * để người dùng tra, KHÔNG phải kết luận công tơ lỗi. Dòng vẫn lưu số liệu thật
- * (user chốt 16/09/2026), không xoá, không sửa.
- *
- * Ô rỗng (thiếu chỉ số) thì bỏ qua, không coi là thụt lùi — đã có `NO_DATA` lo.
+ * Quy ra sản lượng, 0.001 × HSN lớn nhất (3000) = 3 kWh, không ảnh hưởng hóa đơn.
  */
-export function regressOf(cur, prev) {
-  const has = (v) => v !== undefined && v !== null && String(v).trim() !== '';
-  const bad = [];
-  /*
-    So liên ngày chỉ có nghĩa khi hai mốc KHÔNG chồng nhau. Cuối kỳ hôm qua có
-    thể rơi vào 00:30 (lúc chạy chưa có bản ghi 00:00, cửa sổ nới rộng vớt được
-    bản muộn hơn) trong khi đầu kỳ hôm nay là 00:00 — chỉ số hôm nay thấp hơn là
-    ĐƯƠNG NHIÊN, không phải thụt lùi. Xem `overlapOf`.
-  */
-  const overlapped = overlapOf(cur, prev);
-  for (const k of KEYS) {
-    const s = cur[`${k}_START`], e = cur[`${k}_END`];
-    if (has(s) && has(e) && Number(e) < Number(s) - EPS) { bad.push(k); continue; }
-    if (overlapped) continue;
-    const p = prev?.[`${k}_END`];
-    if (has(s) && has(p) && Number(s) < Number(p) - EPS) bad.push(k);
+const ROUNDING_STEP = Number(process.env.REGRESS_ROUNDING || 0.001);
+/** Nới một chút cho sai số dấu phẩy động khi trừ hai số thập phân. */
+const FLOAT_SLOP = 1e-9;
+
+const _n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : null; };
+
+/**
+ * Soi TỪNG CẶP MỐC LIÊN TIẾP trong ngày, trên mọi thanh ghi. Chỉ số lũy kế chỉ
+ * được phép tăng; giảm là bất thường.
+ *
+ * Quan trọng: KHÔNG dùng dung sai để bỏ qua. Bản đầu đặt `EPS = 0.001` với điều
+ * kiện `b < a - EPS`, mà mức lùi thực tế đúng bằng 0.001 → không ca nào lọt
+ * lưới, soát 249 ngày vẫn ra 0. Giờ so thẳng `b < a` rồi mới PHÂN LOẠI theo mức.
+ *
+ * Bản đầu còn chỉ so hai mốc biên của ngày (00:00 và 00:00 hôm sau) nên chỉ số
+ * tụt rồi phục hồi trong ngày là mất dấu. Soi hết 48 mốc thì không.
+ */
+export function scanRegress(recs) {
+  const out = [];
+  for (let i = 1; i < recs.length; i++) {
+    for (const [label, src] of Object.entries(REGISTERS)) {
+      const a = _n(recs[i - 1][src]);
+      const b = _n(recs[i][src]);
+      if (a === null || b === null || b >= a) continue;
+      const gap = a - b;
+      out.push({
+        label, at: recTime(recs[i]), from: a, to: b, gap,
+        /* Lùi đúng một bước chữ số cuối = sai số làm tròn của HES, không phải công tơ ngược. */
+        rounding: gap <= ROUNDING_STEP + FLOAT_SLOP,
+      });
+    }
   }
-  return bad.join(',');
-}
-
-/**
- * Hai kỳ liên tiếp có CHỒNG MỐC không: cuối kỳ hôm qua muộn hơn đầu kỳ hôm nay.
- *
- * Khi đó khoảng [đầu hôm nay → cuối hôm qua] bị tính vào CẢ HAI ngày, tức sản
- * lượng cộng trùng. Đây là lỗi dữ liệu riêng, không phải thụt lùi, nên chỉ cảnh
- * báo chứ không gắn cờ `REGRESS`.
- */
-export function overlapOf(cur, prev) {
-  const a = prev?.END_TIME, b = cur?.START_TIME;
-  if (!a || !b) return false;
-  return new Date(String(a).replace(' ', 'T')) > new Date(String(b).replace(' ', 'T'));
+  return out;
 }
 
 /**
@@ -376,31 +387,78 @@ const results = await mapLimit(meters, CONCURRENCY, async (m) => {
     for (const [k, src] of Object.entries(FIELD_MAP)) row[k] = r[src] ?? '';
     return row;
   });
-  return { daily: buildRow(m.serial, m.hsn, day, s, e), detail };
+  return { daily: buildRow(m.serial, m.hsn, day, s, e), detail, drops: scanRegress(recs) };
 });
 
 const rows = results.filter(r => r?.daily?.METER_NO).map(r => r.daily);
 const rows30 = results.flatMap(r => r?.detail ?? []);
 
-/* Cờ thụt lùi — cần chỉ số ngày liền trước, nên làm sau khi đã có cả mẻ. */
-const { prev, rows: prevRows, src } = prevDayRows(day);
-console.log(`Chỉ số ngày liền trước (${prev}): ${prevRows.size} công tơ, nguồn ${src}.`);
-for (const r of rows) r.REGRESS = regressOf(r, prevRows.get(r.METER_NO));
+/* ---------------------------- Soát thụt lùi ---------------------------- */
+/*
+  Soi từng cặp mốc liên tiếp trong ngày trên MỌI thanh ghi (xem `scanRegress`),
+  rồi tách hai loại: lùi đúng một bước chữ số cuối là sai số làm tròn của HES,
+  lùi nhiều hơn mới đáng gọi là công tơ chạy ngược.
+*/
+const drops = results.flatMap((r, i) =>
+  (r?.drops ?? []).map(d => ({ ...d, serial: meters[i].serial, hsn: meters[i].hsn })));
+const real = drops.filter(d => !d.rounding);
+const rounding = drops.filter(d => d.rounding);
 
-const overlapped = rows.filter(r => overlapOf(r, prevRows.get(r.METER_NO)));
-if (overlapped.length) {
-  console.log(`\n[CẢNH BÁO] ${overlapped.length} công tơ CHỒNG MỐC với ngày ${prev}: cuối kỳ hôm đó `
-    + 'muộn hơn đầu kỳ hôm nay, nên phần chồng bị tính sản lượng vào cả hai ngày.');
-  for (const r of overlapped) {
-    console.log(`   ${r.METER_NO.padEnd(12)} cuối ${prevRows.get(r.METER_NO).END_TIME} > đầu ${r.START_TIME}`);
+/* Cờ REGRESS chỉ mang các thanh ghi lùi THẬT — ca làm tròn mà gắn cờ thì cờ mất giá trị. */
+const realBySerial = new Map();
+for (const d of real) realBySerial.set(d.serial, [...(realBySerial.get(d.serial) ?? []), d]);
+for (const r of rows) {
+  r.REGRESS = [...new Set((realBySerial.get(r.METER_NO) ?? []).map(d => d.label))].join(' · ');
+}
+
+if (rounding.length) {
+  const meterCount = new Set(rounding.map(d => d.serial)).size;
+  console.log(`\nSai số làm tròn: ${rounding.length} lần lùi đúng ${ROUNDING_STEP} trên ${meterCount} công tơ `
+    + '— của hệ thống HES, không phải công tơ chạy ngược.');
+}
+
+if (real.length) {
+  console.log(`\n[CẢNH BÁO] ${realBySerial.size} công tơ có chỉ số CHẠY THỤT LÙI thật `
+    + `(${real.length} lần, lùi hơn ${ROUNDING_STEP}) — có thể do thay/reset công tơ, cần tra:`);
+  for (const [serial, list] of realBySerial) {
+    for (const d of list.slice(0, 5)) {
+      console.log(`   ${serial.padEnd(12)} ${d.at}  ${d.label.padEnd(24)} `
+        + `${d.from} → ${d.to}  (−${d.gap.toFixed(3)}, ≈${Math.round(d.gap * (d.hsn || 1))} sau ×HSN)`);
+    }
+    if (list.length > 5) console.log(`   ${' '.repeat(12)} … và ${list.length - 5} lần nữa`);
   }
 }
 
-const regressed = rows.filter(r => r.REGRESS);
-if (regressed.length) {
-  console.log(`\n[CẢNH BÁO] ${regressed.length} công tơ có chỉ số CHẠY THỤT LÙI `
-    + '(có thể do thay/reset công tơ — cần tra, không phải kết luận lỗi):');
-  for (const r of regressed) console.log(`   ${r.METER_NO.padEnd(12)} ${r.REGRESS}`);
+/*
+  Nối ngày: `scanRegress` chỉ soi trong mẻ của HÔM NAY, nên chỗ nối với hôm qua
+  (23:30 hôm qua → 00:00 hôm nay) phải xét riêng. Đây chính là chỗ bắt được công
+  tơ bị thay hoặc reset trong đêm.
+
+  Chỉ so được 5 thanh ghi mà file 30 phút lưu — chiều nhận không nằm trong file.
+*/
+const { prev, rows: prevRows, src } = prevDayRows(day);
+console.log(`Mốc cuối ngày liền trước (${prev}): ${prevRows.size} công tơ, nguồn ${src}.`);
+const crossDay = [];
+for (const r of rows) {
+  const p = prevRows.get(r.METER_NO);
+  if (!p) continue;
+  for (const k of KEYS) {
+    const a = Number(p[`${k}_END`]), b = Number(r[`${k}_START`]);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b >= a) continue;
+    const gap = a - b;
+    crossDay.push({ serial: r.METER_NO, k, gap, from: a, to: b, at: p.END_TIME,
+      rounding: gap <= ROUNDING_STEP + FLOAT_SLOP });
+  }
+}
+const crossReal = crossDay.filter(d => !d.rounding);
+if (crossReal.length) {
+  console.log(`\n[CẢNH BÁO] ${new Set(crossReal.map(d => d.serial)).size} công tơ lùi chỉ số Ở CHỖ NỐI `
+    + `với ngày ${prev} — dấu hiệu thay/reset công tơ trong đêm:`);
+  for (const d of crossReal) {
+    console.log(`   ${d.serial.padEnd(12)} ${d.k.padEnd(3)} ${d.from} (${d.at}) → ${d.to}  (−${d.gap.toFixed(3)})`);
+  }
+} else if (crossDay.length) {
+  console.log(`Nối ngày: ${crossDay.length} ca lùi nhưng đều ở mức làm tròn.`);
 }
 
 const noData = rows.filter(r => r.NO_DATA === '1');
