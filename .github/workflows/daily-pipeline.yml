@@ -43,6 +43,13 @@ jobs:
       - name: Install dependencies
         run: pip install --quiet requests
 
+      # Buoc 4 da chuyen sang Node (.mjs) — xem CLAUDE.md: script moi viet bang
+      # Node de chay duoc tren ca hai may. Cac buoc con lai van la Python.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       # 1) Danh sach cong to + HSN + LINE_ID/CODE/ROLE + canh bao (tram, HSN)
       - name: Refresh meter info (GetMeterAccount + GetLineList + GetMeter)
         env:
@@ -61,9 +68,18 @@ jobs:
       - name: Compute daily Pmax
         run: python scripts/daily_pmax.py
 
-      # 4) Chi so HES dau/cuoi ky
+      # 4) Chi so HES: chi tiet 30 phut (giu 30 ngay) + dau/cuoi ky theo ngay.
+      # Ban Node thay ban Python tu 16/09/2026. Khac hai cho:
+      #   - danh sach cong to lay tu DANH MUC PocketBase (cong to dang treo),
+      #     khong phai metterinfo.csv;
+      #   - HSN lay tu dm_point.hsn, khong phai METER_NAME cua HES.
+      # Script chi dung thu vien co san cua Node, khong can npm install.
       - name: Fetch HES index
-        run: python scripts/fetch_hes_index.py
+        env:
+          PB_URL: ${{ secrets.PB_URL }}
+          PB_EMAIL: ${{ secrets.PB_EMAIL }}
+          PB_PASS: ${{ secrets.PB_PASS }}
+        run: node scripts/fetch_hes_index.mjs
 
       # 5) + 6) TAM DUNG tu 16/09/2026 (user chot): ca chuoi ton that dang lay HSN
       # tu METER_NAME cua HES, khong phai dm_point.hsn cua Danh muc -> sai ca P, Q
@@ -85,7 +101,7 @@ jobs:
           # Ba file transformer_loss_*.csv da bo khoi day tu 16/09/2026 (buoc 5+6
           # tam dung). File cu van nam trong repo, chi khong sinh/commit them.
           git add public/metterinfo.csv public/line_info.csv public/mba_info.csv public/datametter.csv public/pmax_daily.csv \
-                  public/hes_index_daily.csv
+                  public/hes_index_daily.csv public/hes_index_30min.csv
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
