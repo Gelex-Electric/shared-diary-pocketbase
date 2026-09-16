@@ -130,6 +130,17 @@ const KIND_ALIASES: Record<string, string[]> = {
 };
 const kindsOf = (kind: string): string[] => KIND_ALIASES[kind] ?? [kind];
 
+/**
+ * Các nhóm KHÔNG đếm vào badge (user chốt 16/09/2026).
+ *
+ * HES sinh ca làm tròn gần như mỗi ngày, nên đếm vào badge thì badge lúc nào
+ * cũng có số — và con số lúc nào cũng có thì không còn báo được điều gì. Badge
+ * chỉ nên sáng khi có việc thật sự cần làm.
+ *
+ * Thẻ vẫn HIỆN trong mục "Chỉ số bất thường"; chỉ là không kêu.
+ */
+const SILENT_KINDS = new Set(['lamtron']);
+
 /** Nhãn của một nhóm; nhóm lạ thì trả về chính mã đó để không hiện ô trống. */
 export const labelOfKind = (kind: string): string =>
   ALERT_KINDS.find(k => k.kind === kind)?.label ?? kind;
@@ -162,15 +173,20 @@ export function countByKind(items: AlertRecord[]): Record<string, number> {
   const bucket = new Map<string, string>();
   for (const k of ALERT_KINDS) for (const alias of kindsOf(k.kind)) bucket.set(alias, k.kind);
   for (const r of items) {
+    if (r.resolved || SILENT_KINDS.has(r.kind)) continue;
     const b = bucket.get(r.kind);
-    if (!r.resolved && b) out[b]++;
+    if (b) out[b]++;
   }
   return out;
 }
 
-/** Tổng số cảnh báo chưa xử lý — con số trên sidebar. */
+/**
+ * Tổng số cảnh báo chưa xử lý — con số trên sidebar.
+ *
+ * Bỏ qua `SILENT_KINDS`: badge chỉ sáng khi có việc thật sự cần làm.
+ */
 export const unresolvedCount = (items: AlertRecord[]): number =>
-  items.filter(r => !r.resolved).length;
+  items.filter(r => !r.resolved && !SILENT_KINDS.has(r.kind)).length;
 
 /**
  * Các KCN đang có cảnh báo, để đổ vào bộ lọc.
