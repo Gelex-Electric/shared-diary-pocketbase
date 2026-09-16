@@ -71,9 +71,34 @@ export function groupByZone(rows: AlertDetail[]): { zone: string; rows: AlertDet
     .map(([zone, rows]) => ({ zone, rows }));
 }
 
-/** Tổng lượng bất thường; bỏ qua dòng không đo được. */
+/**
+ * Dòng này là VÔ CÔNG (công suất phản kháng) hay không.
+ *
+ * Suy từ tên biểu chứ không đọc `unit` đã lưu: bản ghi cũ ghi `unit: 'kWh'` cho
+ * mọi dòng, nên tin vào nó là tiếp tục sai.
+ */
+export const isReactive = (r: AlertDetail): boolean =>
+  /^Vô công/.test(r.register ?? '');
+
+/** Đơn vị đúng của một dòng. Vô công đo bằng kVArh, không phải kWh. */
+export const unitOf = (r: AlertDetail): string => (isReactive(r) ? 'kVArh' : 'kWh');
+
+/**
+ * Tổng lượng bất thường, tính theo kWh.
+ *
+ * BỎ dòng vô công (user chốt 16/09/2026): vô công đo bằng kVArh, cộng chung vào
+ * kWh là cộng hai đơn vị khác nhau ra một con số không có nghĩa. Dòng vô công
+ * vẫn HIỆN trong bảng kèm đơn vị của nó — chỉ không vào tổng.
+ *
+ * Bỏ luôn dòng không đo được (`value` null).
+ */
 export const sumValue = (rows: AlertDetail[]): number =>
-  rows.reduce((t, r) => t + (typeof r.value === 'number' ? r.value : 0), 0);
+  rows.reduce((t, r) =>
+    t + (!isReactive(r) && typeof r.value === 'number' ? r.value : 0), 0);
+
+/** Số dòng vô công bị loại khỏi tổng — để bảng nói rõ vì sao tổng nhỏ hơn. */
+export const reactiveCount = (rows: AlertDetail[]): number =>
+  rows.filter(r => isReactive(r) && typeof r.value === 'number').length;
 
 export interface AlertRecord {
   id: string;
@@ -150,7 +175,7 @@ export const labelOfKind = (kind: string): string =>
   ALERT_KINDS.find(k => k.kind === kind)?.label ?? kind;
 
 /**
- * Toàn bộ cảnh báo, mới nhất trước.
+ * Toàn bộ cảnh báo, NGÀY XẢY RA mới nhất trước.
  *
  * Tải MỘT lần rồi chia nhóm tại client: cảnh báo là sự cố hiếm nên dữ liệu nhỏ,
  * mà người dùng chuyển qua lại giữa các sub-side liên tục — gọi mạng mỗi lần
@@ -159,7 +184,12 @@ export const labelOfKind = (kind: string): string =>
 export async function fetchAlerts(limit = 500): Promise<AlertRecord[]> {
   try {
     const res = await pb.collection('alerts').getList<AlertRecord>(1, limit, {
-      sort: '-created',
+      /*
+        Sắp theo `day` chứ KHÔNG theo `created`: backfill tạo hàng loạt bản ghi
+        trong vài phút nên `created` gần như bằng nhau và không nói lên thứ tự
+        ngày xảy ra. `-created` chỉ để phá hoà khi cùng một ngày.
+      */
+      sort: '-day,-created',
       requestKey: null,
     });
     return res.items;

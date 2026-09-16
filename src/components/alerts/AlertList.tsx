@@ -1,7 +1,7 @@
 import { useState, Fragment } from 'react';
 import { CheckCircle2, AlertTriangle, RefreshCw, Undo2, MapPin, ChevronDown } from 'lucide-react';
 import type { AlertRecord, AlertDetail } from '../../lib/alerts';
-import { setResolved, detailsOf, groupByZone, sumValue } from '../../lib/alerts';
+import { setResolved, detailsOf, groupByZone, sumValue, isReactive, unitOf, reactiveCount } from '../../lib/alerts';
 
 /**
  * Danh sách cảnh báo của MỘT nhóm.
@@ -51,6 +51,7 @@ const fmtDay = (d: string | undefined) => {
 function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay: string }) {
   const groups = groupByZone(rows);
   const total = sumValue(rows);
+  const nReactive = reactiveCount(rows);
   /* Số cột trước cột tổng — để dòng tổng nhập ô cho đúng. */
   const LEAD = 7;
 
@@ -72,7 +73,7 @@ function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay:
             <th className="px-2.5 py-1.5 text-left font-bold whitespace-nowrap">Giờ bất thường</th>
             <th className="px-2.5 py-1.5 text-left font-bold">Biểu bất thường</th>
             <th className="px-2.5 py-1.5 text-right font-bold whitespace-nowrap">Mức bất thường</th>
-            <th className="px-2.5 py-1.5 text-right font-bold whitespace-nowrap">Lượng (kWh)</th>
+            <th className="px-2.5 py-1.5 text-right font-bold whitespace-nowrap">Lượng bất thường</th>
           </tr>
         </thead>
         <tbody>
@@ -109,8 +110,11 @@ function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay:
                   <td className="px-2.5 py-1.5 text-right font-mono text-soft whitespace-nowrap">
                     {fmtIdx(r.fromIndex)} → {fmtIdx(r.toIndex)}
                   </td>
-                  <td className="px-2.5 py-1.5 text-right font-mono font-bold text-ink whitespace-nowrap">
-                    {fmtValue(r.value)}
+                  {/* Vô công để mờ + ghi rõ kVArh: nó KHÔNG vào tổng, phải nhìn
+                      ra ngay chứ không để người đọc tự cộng nhẩm rồi thấy lệch. */}
+                  <td className={`px-2.5 py-1.5 text-right font-mono font-bold whitespace-nowrap
+                    ${isReactive(r) ? 'text-faint' : 'text-ink'}`}>
+                    {fmtValue(r.value)} <span className="font-sans font-normal text-[10px]">{unitOf(r)}</span>
                   </td>
                 </tr>
               ))}
@@ -120,7 +124,7 @@ function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay:
                     Cộng {g.zone || 'chưa rõ KCN'}
                   </td>
                   <td className="px-2.5 py-1.5 text-right font-mono font-black text-ink whitespace-nowrap">
-                    {fmtValue(sumValue(g.rows))}
+                    {fmtValue(sumValue(g.rows))} <span className="font-sans font-normal text-[10px]">kWh</span>
                   </td>
                 </tr>
               )}
@@ -129,9 +133,15 @@ function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay:
           <tr className="border-t-2 border-[var(--accent)] bg-accent-soft">
             <td colSpan={LEAD} className="px-2.5 py-2 text-right font-black text-accent">
               TỔNG ({rows.length} ca)
+              {/* Nói thẳng vì sao tổng không bằng tổng mắt thường của cột. */}
+              {nReactive > 0 && (
+                <span className="ml-1.5 font-sans font-normal text-[11px] text-soft">
+                  — không gồm {nReactive} ca vô công (kVArh)
+                </span>
+              )}
             </td>
             <td className="px-2.5 py-2 text-right font-mono font-black text-accent whitespace-nowrap">
-              {fmtValue(total)}
+              {fmtValue(total)} <span className="font-sans font-normal text-[10px]">kWh</span>
             </td>
           </tr>
         </tbody>

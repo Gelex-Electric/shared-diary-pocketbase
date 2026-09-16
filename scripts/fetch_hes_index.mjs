@@ -451,7 +451,10 @@ function detailsOfDrops(list, meters, shortNameOf) {
         fromIndex: d.from,
         toIndex: d.to,
         value: Number((d.gap * (m?.hsn || 1)).toFixed(3)),
-        unit: 'kWh',
+        /* Vô công đo bằng kVArh, KHÔNG phải kWh — ghi 'kWh' cho mọi dòng là sai
+           đơn vị, và nơi đọc cộng chung vào tổng kWh (user phát hiện 16/09/2026).
+           Nơi đọc vẫn tự suy từ tên biểu để bản ghi cũ cũng đúng. */
+        unit: /^Vô công/.test(d.label) ? 'kVArh' : 'kWh',
       };
     })
     /* Sắp theo KCN rồi công tơ rồi giờ — bảng gom nhóm theo KCN nên thứ tự này
