@@ -33,7 +33,7 @@ MBA_PATH = "public/mba_info.csv"
 # HSN (cot METER_NAME) coi la SAI khi > nguong hoac trung so cong to
 # (loi nhap so serial vao o TEN CONG TO tren HES, vd cong to 2510203126).
 HSN_MAX = float(os.environ.get("HSN_MAX", "1000000"))
-# PocketBase de gui thong bao vao collection `notifications` (bo trong = khong gui)
+# PocketBase de ghi canh bao ky thuat vao collection `alerts` (bo trong = khong ghi)
 PB_URL = os.environ.get("PB_URL", "").rstrip("/")
 PB_EMAIL = os.environ.get("PB_EMAIL", "")
 PB_PASS = os.environ.get("PB_PASS", "")
@@ -148,57 +148,51 @@ def pb_login():
     return ""
 
 
-def notify_bad_hsn(bad: list):
-    """Gui canh bao vao collection `notifications` (khop schema NotificationBell:
-    title, message, type, mkh, area). Gui cho ca khu vuc Van hanh cua KCN va
-    khoi Kinh doanh (area=''). Bo qua neu da co thong bao cung noi dung."""
-    if not bad:
-        return
-    if not (PB_URL and PB_EMAIL and PB_PASS):
-        print("[WARN] Phat hien HSN bat thuong nhung thieu PB_URL/PB_EMAIL/PB_PASS -> khong gui thong bao.")
-        return
+def raise_alert(kind: str, title: str, message: str, zone: str = "", meters: str = "") -> bool:
+    """Ghi MOT canh bao ky thuat vao collection `alerts`.
+
+    Khac `notifications` (thanh toan, tu don con 10 ban/KCN): `alerts` giu vinh
+    vien, xong viec thi dat resolved=True chu khong xoa. Xem scripts/lib/pb_alert.mjs.
+
+    MOT canh bao = MOT ban ghi, khong nhan ban theo KCN: man Canh bao ai dang
+    nhap cung xem duoc, `zone` chi de LOC.
+
+    Chong trung theo kind + day + message: chay lai trong ngay khong tao them ban.
+    """
     token = pb_login()
     if not token:
-        print("[WARN] Khong dang nhap duoc PocketBase -> khong gui thong bao.")
-        return
+        print("[WARN] Khong dang nhap duoc PocketBase -> khong ghi canh bao.")
+        return False
     headers = {"Authorization": token}
-    api = f"{PB_URL}/api/collections/notifications/records"
-    sent = 0
-    for b in bad:
-        message = (f"Công tơ khách hàng {b['customer']} số {b['no']} "
-                   f"nhập sai vào ô TÊN CÔNG TƠ trên Hes (HSN={b['hsn']:g})")
-        for area in {b["area"], ""}:
-            try:
-                # Chong trung: bo qua neu thong bao cung message + area da ton tai
-                dup = requests.get(
-                    api,
-                    params={"filter": f'message="{message}" && area="{area}"', "perPage": 1},
-                    headers=headers, timeout=30,
-                )
-                if dup.ok and dup.json().get("totalItems", 0) > 0:
-                    continue
-                r = requests.post(
-                    api,
-                    json={
-                        "title": "Cảnh báo hệ số nhân (HSN) sai",
-                        "message": message,
-                        "type": "info",
-                        # kind = NHOM nghiep vu, quyet dinh sub-side o man Thong bao
-                        "kind": "hsn",
-                        "mkh": "",
-                        "area": area,
-                    },
-                    headers=headers, timeout=30,
-                )
-                if r.ok:
-                    sent += 1
-                else:
-                    print(f"[WARN] Gui thong bao that bai ({r.status_code}): {r.text[:200]}")
-            except Exception as e:
-                print(f"[WARN] Loi gui thong bao PocketBase: {e}")
-    print(f"Canh bao HSN: {len(bad)} cong to bat thuong, da gui {sent} thong bao.")
+    api = f"{PB_URL}/api/collections/alerts/records"
+    day = datetime.now().strftime("%Y-%m-%d")
+    try:
+        dup = requests.get(
+            api,
+            params={"filter": f'kind="{kind}" && day="{day}" && message="{message}"',
+                    "perPage": 1},
+            headers=headers, timeout=30,
+        )
+        if dup.ok and dup.json().get("totalItems", 0) > 0:
+            return False
+        r = requests.post(
+            api,
+            json={"kind": kind, "title": title, "message": message,
+                  "zone": zone, "meters": meters, "day": day, "resolved": False},
+            headers=headers, timeout=30,
+        )
+        if r.ok:
+            return True
+        print(f"[WARN] Ghi canh bao that bai ({r.status_code}): {r.text[:200]}")
+    except Exception as e:  # noqa: BLE001
+        print(f"[WARN] Loi ghi canh bao PocketBase: {e}")
+    return False
 
 
+# KHONG con canh bao HSN (user chot 16/09/2026): HSN lay theo diem do trong Danh
+# muc (`dm_point.hsn`) tai thoi diem hien tai, khong con tuan theo `METER_NAME`
+# cua HES nua. HSN bat thuong ben HES khong con anh huong gi -> chi in ra man
+# hinh de tra cuu, khong day vao man Canh bao.
 def fetch_line_list(user_id: str, token: str) -> dict:
     """GetLineList -> {LINE_ID: {"LINE_NAME":..., "ADDRESS":..., "CODE":...}}."""
     r = get_retry(
@@ -329,48 +323,27 @@ def enrich_stations(meters: dict, token: str, lines: dict) -> list:
     return bad_stations
 
 
-def notify_bad_stations(bad_stations: list):
-    """Canh bao tram: CODE khong phai tien to cua LINE_NAME -> collection notifications."""
+def alert_bad_stations(bad_stations: list):
+    """Canh bao tram: CODE khong phai tien to cua LINE_NAME -> collection `alerts`.
+
+    GOP mot canh bao cho ca nhom, khong phai moi tram mot cai: lech 20 tram thi
+    man Canh bao ngap 20 dong, khong ai doc nua.
+
+    zone="" : canh bao nay suy tu GetLineList, khong biet tram thuoc KCN nao ma
+    khong nhan ban do tien-to-CODE -> KCN sang Python (dang o src/lib/invoices.ts).
+    """
     if not bad_stations:
         return
     if not (PB_URL and PB_EMAIL and PB_PASS):
-        print("[WARN] Phat hien tram bat thuong nhung thieu PB_URL/PB_EMAIL/PB_PASS -> khong gui thong bao.")
+        print("[WARN] Phat hien tram bat thuong nhung thieu PB_URL/PB_EMAIL/PB_PASS -> khong ghi canh bao.")
         return
-    token = pb_login()
-    if not token:
-        print("[WARN] Khong dang nhap duoc PocketBase -> khong gui thong bao tram.")
-        return
-    headers = {"Authorization": token}
-    api = f"{PB_URL}/api/collections/notifications/records"
-    sent = 0
-    for s in bad_stations:
-        message = (f"Trạm mã CODE \"{s['code']}\" không khớp tên trạm "
-                   f"\"{s['line_name']}\" (CODE phải là tiền tố của LINE_NAME) — kiểm tra lại HES.")
-        try:
-            dup = requests.get(
-                api,
-                params={"filter": f'message="{message}" && area=""', "perPage": 1},
-                headers=headers, timeout=30,
-            )
-            if dup.ok and dup.json().get("totalItems", 0) > 0:
-                continue
-            r = requests.post(
-                api,
-                json={"title": "Cảnh báo dữ liệu trạm (CODE/LINE_NAME)",
-                      "message": message, "type": "info", "kind": "tram",
-                      # area="" (khoi Kinh doanh): canh bao nay suy tu GetLineList,
-                      # khong biet tram thuoc KCN nao ma khong nhan ban do
-                      # tien-to-CODE -> KCN sang Python (dang o src/lib/invoices.ts).
-                      "mkh": "", "area": ""},
-                headers=headers, timeout=30,
-            )
-            if r.ok:
-                sent += 1
-            else:
-                print(f"[WARN] Gui canh bao tram that bai ({r.status_code}): {r.text[:200]}")
-        except Exception as e:  # noqa: BLE001
-            print(f"[WARN] Loi gui canh bao tram: {e}")
-    print(f"Canh bao tram: {len(bad_stations)} tram bat thuong, da gui {sent} thong bao.")
+    detail = ", ".join(f"{s['code']} / {s['line_name']}" for s in bad_stations)
+    message = (f"{len(bad_stations)} tram co ma CODE khong khop ten tram "
+               f"(CODE phai la tien to cua LINE_NAME) - kiem tra lai HES: {detail}")
+    ok = raise_alert("tram", "Cảnh báo dữ liệu trạm (CODE/LINE_NAME)", message)
+    print(f"Canh bao tram: {len(bad_stations)} tram bat thuong, "
+          + ("da ghi 1 ban." if ok else "da co ban cho hom nay -> bo qua."))
+
 
 
 def main():
@@ -430,12 +403,12 @@ def main():
     for b in bad:
         print(f"[ALERT] {b['no']} ({b['customer']}): HSN={b['hsn']:g} bat thuong "
               f"(> {HSN_MAX:g} hoac trung so cong to).")
-    notify_bad_hsn(bad)
+    # Khong day canh bao HSN nua - xem ghi chu o raise_alert.
 
     # Canh bao tram: CODE khong phai tien to cua LINE_NAME
     for s in bad_stations:
         print(f"[ALERT] Tram {s['line_id']}: CODE='{s['code']}' khong la tien to cua LINE_NAME='{s['line_name']}'.")
-    notify_bad_stations(bad_stations)
+    alert_bad_stations(bad_stations)
 
 
 if __name__ == "__main__":

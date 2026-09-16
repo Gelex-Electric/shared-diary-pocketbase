@@ -3,7 +3,7 @@
  * Đối chiếu CÔNG TƠ ĐANG TREO giữa danh mục PocketBase và HES.
  *
  * Hai câu hỏi:
- *   1. Khai ĐÚNG chưa — HSN và mã trạm hai bên có khớp không?
+ *   1. Khai ĐÚNG chưa — mã trạm hai bên có khớp không? (HSN chỉ in ra tham khảo)
  *   2. Khai ĐỦ chưa — bên nào có mà bên kia thiếu?
  *
  * Rồi gọi `GetInstantByDate` cho từng công tơ để biết nó CÒN PHÁT DỮ LIỆU hay
@@ -14,7 +14,10 @@
  * Phía PB, HSN đọc từ `dm_point.hsn` — xem `lib/pb_meters.mjs`.
  *
  * CHỈ ĐỌC cả hai phía. Thêm `--notify` thì có ghi, nhưng chỉ TẠO bản ghi mới
- * trong collection `notifications` — không sửa/xóa gì, không chạm collection khác.
+ * trong collection `alerts` — không sửa/xóa gì, không chạm collection khác.
+ *
+ * KHÔNG cảnh báo lệch HSN nữa (user chốt 16/09/2026): HSN lấy theo `dm_point`
+ * tại thời điểm hiện tại, không đối chiếu HES. Vẫn in ra để tra cứu.
  *
  * Biến môi trường (tên khớp `daily-pipeline.yml` để chạy được trong Actions):
  *   PB_URL      địa chỉ PocketBase          — mặc định https://getc.up.railway.app/pb
@@ -30,7 +33,7 @@
  */
 import { getJson, mapLimit, stamp, getToken } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
-import { notifyOnce } from './lib/pb_notify.mjs';
+import { raiseAlert, zoneOf } from './lib/pb_alert.mjs';
 
 /** Cửa sổ soi dữ liệu tức thời — đủ rộng để công tơ đọc thưa vẫn lọt. */
 const DAYS = Number(process.env.DAYS || 3);
@@ -137,25 +140,23 @@ show('LỆCH MÃ TRẠM (tham khảo — hai bên đặt tên khác nhau)', line
   staging dùng chung dữ liệu với production, nên mỗi lần chạy tay để soi số liệu
   mà tự đẩy thông báo là làm phiền người dùng thật.
 
-  Gộp MỘT thông báo cho mỗi nhóm, không phải mỗi công tơ một cái: lệch 20 công
-  tơ thì chuông ngập 20 dòng, không ai đọc nữa.
+  Gộp MỘT cảnh báo cho mỗi nhóm, không phải mỗi công tơ một cái: lệch 20 công
+  tơ thì màn Cảnh báo ngập 20 dòng, không ai đọc nữa.
 
-  Gửi cho CẢ HAI khối (user chốt 16/09): từng KCN có công tơ dính, và `area=''`
-  cho khối Kinh doanh xem toàn cục. Chuông lọc `area` khớp tuyệt đối, nên chỉ gửi
-  `''` thì chính người vận hành KCN đó lại không thấy gì.
+  MỘT bản ghi cho mỗi nhóm, KHÔNG nhân bản theo KCN (A2, 16/09/2026): màn Cảnh
+  báo ai đăng nhập cũng xem được, `zone` chỉ để lọc.
 */
 if (process.argv.includes('--notify')) {
   const list = (rows, f) => rows.map(f).join(', ');
-  /** KCN của một nhóm công tơ, bỏ trùng và bỏ rỗng. */
-  const zonesOf = (serials) => [...new Set(serials
-    .map(sn => pbBySerial.get(sn)?.zone ?? '')
-    .filter(Boolean))];
+  /** KCN của một nhóm công tơ — một khu thì ghi khu đó, nhiều khu thì để rỗng. */
+  const zoneFor = (serials) => zoneOf(serials.map(sn => pbBySerial.get(sn)?.zone ?? ''));
   const groups = [
     onlyHes.length && {
+      kind: 'congto',
       title: 'Công tơ chưa khai trong Danh mục',
       message: `Đối chiếu HES ↔ Danh mục: ${onlyHes.length} công tơ có trên HES nhưng chưa khai`
         + ` đang treo trong Danh mục — ${list(onlyHes, m => m.serial)}`,
-      type: 'info', kind: 'congto', zones: zonesOf(onlyHes.map(m => m.serial)),
+      meters: onlyHes.map(m => m.serial),
     },
     /*
       KHÔNG cảnh báo lệch HSN (user chốt 16/09/2026): HSN lấy theo điểm đo tại
@@ -164,22 +165,20 @@ if (process.argv.includes('--notify')) {
       giữ để tra cứu khi cần.
     */
     onlyPb.length && {
+      kind: 'congto',
       title: 'Công tơ đang treo mà HES không có',
       message: `Đối chiếu HES ↔ Danh mục: ${onlyPb.length} công tơ khai đang treo trong Danh mục`
         + ` nhưng HES không có — ${list(onlyPb, x => x.serial)}`,
-      type: 'info', kind: 'congto', zones: zonesOf(onlyPb.map(x => x.serial)),
+      meters: onlyPb.map(x => x.serial),
     },
   ].filter(Boolean);
 
-  /* Mỗi nhóm gửi cho TỪNG KCN liên quan VÀ cho khối Kinh doanh (area=''). */
-  let sent = 0, tried = 0;
-  for (const { zones, ...g } of groups) {
-    for (const area of [...zones, '']) {
-      tried++;
-      if (await notifyOnce(pbToken, { ...g, area })) sent++;
-    }
+  let sent = 0;
+  for (const g of groups) {
+    if (await raiseAlert(pbToken, { ...g, zone: zoneFor(g.meters) })) sent++;
   }
-  console.log(`\nThông báo: ${groups.length} nhóm lệch → ${tried} bản, đã gửi ${sent} (còn lại đã có sẵn).`);
+  console.log(`\nCảnh báo: ${groups.length} nhóm lệch → đã ghi ${sent} bản `
+    + `(còn lại đã có bản cho hôm nay).`);
 } else if (onlyHes.length || onlyPb.length) {
-  console.log('\n(Thêm --notify để đẩy các nhóm lệch trên vào chuông thông báo.)');
+  console.log('\n(Thêm --notify để đẩy các nhóm lệch trên vào màn Cảnh báo.)');
 }

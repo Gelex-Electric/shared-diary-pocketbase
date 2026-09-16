@@ -54,7 +54,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
-import { notifyOnce } from './lib/pb_notify.mjs';
+import { raiseAlert, zoneOf } from './lib/pb_alert.mjs';
 
 /**
  * Chi tiết 30 phút — 115 công tơ × 48 mốc ≈ 5.520 dòng ≈ 385 KB MỘT NGÀY.
@@ -430,48 +430,39 @@ if (real.length) {
   }
 
   /*
-    Gửi cảnh báo vào chuông / màn Thông báo — CHỈ ca lùi THẬT.
+    Ghi cảnh báo vào collection `alerts` (màn Cảnh báo) — CHỈ ca lùi THẬT.
 
     Ca sai số làm tròn (0.001) tuyệt đối không gửi: 21 ngày cuối tháng 8 có 102
     ca như vậy, gửi hết thì chuông ngập ngay ngày đầu và mất sạch tác dụng cảnh
     báo. Chúng đã có một dòng đếm ở log là đủ.
 
     Gộp MỘT thông báo cho cả mẻ, không phải mỗi công tơ một cái. Nội dung có kèm
-    NGÀY nên `notifyOnce` (chống trùng theo `message`) vẫn cho ra thông báo riêng
-    từng ngày khi sai lệch kéo dài.
+    NGÀY nên `raiseAlert` (chống trùng theo `kind` + `day` + `message`) vẫn cho
+    ra cảnh báo riêng từng ngày khi sai lệch kéo dài.
   */
   if (process.argv.includes('--notify')) {
     /*
-      Gửi cho CẢ HAI khối (user chốt 16/09): một bản cho từng KCN có công tơ
-      dính, một bản `area = ''` cho khối Kinh doanh xem toàn cục.
-
-      Chuông lọc `area` khớp tuyệt đối, nên chỉ gửi `''` thì chính người vận hành
-      KCN đó — người phải đi kiểm tra công tơ — lại không thấy gì.
+      MỘT bản ghi cho cả mẻ, không nhân bản theo KCN nữa (A2, 16/09/2026): màn
+      Cảnh báo ai đăng nhập cũng xem được và `zone` chỉ để lọc, nên nhân đôi chỉ
+      tạo ra hai bản của cùng một sự cố — đánh dấu đã xử lý một bản là lệch ngay.
     */
-    const byZone = new Map();
-    for (const serial of realBySerial.keys()) {
-      const zone = meters.find(m => m.serial === serial)?.zone ?? '';
-      byZone.set(zone, [...(byZone.get(zone) ?? []), serial]);
-    }
-    const targets = [...byZone.entries(), ['', [...realBySerial.keys()]]];
+    const serials = [...realBySerial.keys()];
+    const zones = serials.map(sn => meters.find(m => m.serial === sn)?.zone ?? '');
+    const zone = zoneOf(zones);
 
-    let sent = 0, tried = 0;
-    for (const [area, serials] of targets) {
-      if (!serials.length) continue;
-      tried++;
-      const ok = await notifyOnce(pbToken, {
-        title: 'Cảnh báo chỉ số công tơ chạy lùi',
-        message: `Ngày ${ymd(day)}: ${serials.length} công tơ có chỉ số chạy lùi`
-          + `${area ? ` tại ${area}` : ''} — ${serials.join(', ')}`,
-        type: 'info',
-        kind: 'lui',
-        area,
-      });
-      if (ok) sent++;
-    }
-    console.log(`Thông báo chỉ số lùi: gửi ${sent}/${tried} bản (bản đã có sẵn thì bỏ qua).`);
+    const ok = await raiseAlert(pbToken, {
+      kind: 'lui',
+      title: 'Cảnh báo chỉ số công tơ chạy lùi',
+      message: `Ngày ${ymd(day)}: ${serials.length} công tơ có chỉ số chạy lùi`
+        + `${zone ? ` tại ${zone}` : ''} — ${serials.join(', ')}`,
+      zone,
+      meters: serials,
+      day: ymd(day),
+    });
+    console.log(`Cảnh báo chỉ số lùi: ${ok ? 'đã ghi 1 bản' : 'bỏ qua (đã có bản cho ngày này)'}`
+      + `${zone ? ` · KCN ${zone}` : ' · trải nhiều KCN'}.`);
   } else {
-    console.log('(Thêm --notify để đẩy cảnh báo này vào chuông thông báo.)');
+    console.log('(Thêm --notify để đẩy cảnh báo này vào màn Cảnh báo.)');
   }
 }
 
