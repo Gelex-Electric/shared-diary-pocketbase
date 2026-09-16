@@ -33,8 +33,13 @@ MBA_PATH = "public/mba_info.csv"
 # HSN (cot METER_NAME) coi la SAI khi > nguong hoac trung so cong to
 # (loi nhap so serial vao o TEN CONG TO tren HES, vd cong to 2510203126).
 HSN_MAX = float(os.environ.get("HSN_MAX", "1000000"))
-# PocketBase de ghi canh bao ky thuat vao collection `alerts` (bo trong = khong ghi)
-PB_URL = os.environ.get("PB_URL", "").rstrip("/")
+# PocketBase de ghi canh bao ky thuat vao collection `alerts`.
+#
+# PB_URL co MAC DINH giong ben Node (scripts/lib/pb_meters.mjs). Truoc day de
+# rong: workflow chi truyen PB_EMAIL/PB_PASS nen canh bao tram im lang suot,
+# bao "thieu PB_URL/PB_EMAIL/PB_PASS" trong log ma khong ai doc (phat hien o
+# run #75 ngay 16/09/2026). Chi thieu tai khoan moi la ly do bo qua.
+PB_URL = os.environ.get("PB_URL", "https://getc.up.railway.app/pb").rstrip("/")
 PB_EMAIL = os.environ.get("PB_EMAIL", "")
 PB_PASS = os.environ.get("PB_PASS", "")
 API_FIELDS = ["METER_NO", "METER_NAME", "METER_MODEL_DESC", "CUSTOMER_CODE",
