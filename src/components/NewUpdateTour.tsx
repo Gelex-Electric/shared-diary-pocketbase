@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from '../lib/toast';
 
 /** Tab đích để điều hướng khi nhấn "Xem ngay" — khớp với type Tab trong Dashboard */
-export type UpdateTab = 'summary' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'loss' | 'sld' | 'later';
+export type UpdateTab = 'summary' | 'alerts' | 'journal' | 'operating' | 'hes' | 'outage' | 'opchart' | 'loss' | 'sld' | 'later';
 
 /** Đường dẫn tài liệu hướng dẫn sử dụng (mở khi đóng thông báo) */
 const GUIDE_URL = '/document.pdf';
@@ -22,54 +22,49 @@ interface UpdateItem {
 }
 
 // Phiên bản & ngày phát hành hiển thị trên header
-const VERSION      = '1.7';
-const RELEASE_DATE = '04/09/2026';
+const VERSION      = '1.8';
+const RELEASE_DATE = '16/09/2026';
 
 const UPDATES: UpdateItem[] = [
   {
-    title: 'Sơ đồ một sợi (SLD) — bản vẽ CAD tương tác',
-    desc: 'Bản vẽ mỗi khu công nghiệp nay là bản vẽ CAD tương tác thay cho file PDF: phóng to không vỡ nét, kéo di chuyển, bật/tắt từng lớp, đo khoảng cách và ghi chú ngay trên bản vẽ.',
-    tag: 'Cải tiến',
-    link: { tab: 'sld', label: 'Mở Sơ đồ một sợi' },
-  },
-  {
-    title: 'Tổn thất tính toán máy biến áp',
-    desc: 'Tính tổn thất kỹ thuật từng trạm (ΔP = P0 + Pk·(S/Sdm)²) theo thời gian thực đo, gom theo khu công nghiệp. 3 chế độ xem: theo ngày, theo tháng, và biểu đồ mức tải & tỷ lệ tổn thất theo từng trạm.',
+    title: 'Màn "Cảnh báo" — nơi tập hợp các bất thường kỹ thuật',
+    desc: 'Mục mới trên thanh menu, gom các bất thường về chỉ số công tơ và đối chiếu công tơ giữa HES với Danh mục. Mỗi cảnh báo mở ra bảng chi tiết từng công tơ: khách hàng, trạm, giờ xảy ra, biểu nào, chỉ số lùi từ bao nhiêu về bao nhiêu và sản lượng lệch, gom nhóm theo khu công nghiệp và có tổng cuối bảng.',
     tag: 'Mới',
-    link: { tab: 'loss', label: 'Xem Tổn thất tính toán' },
+    link: { tab: 'alerts', label: 'Mở màn Cảnh báo' },
   },
   {
-    title: 'Đồ thị điện áp & công suất theo thời gian thực',
-    desc: 'Xem đường điện áp 3 pha và cột công suất của từng trạm theo từng mốc 30 phút trong ngày, tự phát hiện và tô vùng thời gian mất điện.',
+    title: 'Cảnh báo được GIỮ LẠI, không xoá',
+    desc: 'Xử lý xong thì bấm "Đã xử lý" — bản ghi vẫn còn để truy vết về sau, chỉ mờ đi. Con số trên menu đếm số cảnh báo CHƯA XỬ LÝ, nên chỉ về 0 khi thực sự có người xử lý, và giống nhau trên mọi máy. Trước đây cảnh báo nằm chung hàng đợi với thông báo thanh toán nên bị xoá mất sau vài lượt thanh toán.',
+    tag: 'Cải tiến',
+  },
+  {
+    title: 'Chuông thông báo giữ nguyên cho thanh toán',
+    desc: 'Chuông ở góc trên bên phải vẫn là danh sách khách hàng đã thanh toán như cũ. Thanh toán là việc hằng ngày nên tách khỏi cảnh báo kỹ thuật.',
+    tag: 'Cải tiến',
+  },
+  {
+    title: 'Chỉ số công tơ: hai cách tra thay cho "Số liệu đã chốt"',
+    desc: '"Chỉ số theo hóa đơn" tra theo tháng, lấy từ dữ liệu hóa đơn — nguồn chuẩn cho đầu kỳ và cuối kỳ. "Chỉ số trong 30 ngày" tra theo ngày và giờ, chi tiết tới từng 30 phút. Hai bảng dùng chung bộ cột: số công tơ, khách hàng, HSN, đầu kỳ, cuối kỳ, tổng và các biểu.',
     tag: 'Mới',
-    link: { tab: 'opchart', label: 'Mở Đồ thị điện áp & công suất' },
+    link: { tab: 'hes', label: 'Mở Lấy chỉ số HES' },
   },
   {
-    title: 'Dữ liệu đo xa đầy đủ hơn — dòng điện & công suất phản kháng',
-    desc: 'Bổ sung dòng điện 3 pha và công suất phản kháng (kVAr) vào dữ liệu đo xa mỗi 30 phút, làm nền tảng tính công suất biểu kiến cho tổn thất máy biến áp.',
+    title: 'Phát hiện chỉ số chạy lùi chính xác hơn',
+    desc: 'Nay soi đủ 48 mốc 30 phút trong ngày và cả chỗ nối giữa hai ngày, trên toàn bộ các biểu kể cả chiều nhận — thay vì chỉ so hai mốc đầu và cuối kỳ. Tách riêng sai số làm tròn của hệ thống HES (giảm đúng 0,001, vô hại) khỏi trường hợp công tơ thực sự chạy lùi.',
     tag: 'Cải tiến',
   },
   {
-    title: 'Phân loại điểm đo chính / phụ theo trạm',
-    desc: 'Tự động xác định công tơ nào là điểm đo chính của mỗi trạm biến áp (dựa trên dữ liệu HES), tránh cộng trùng sản lượng giữa các điểm đo.',
-    tag: 'Cải tiến',
-  },
-  {
-    title: 'Đồng bộ dữ liệu 1 lần mỗi ngày lúc 00h00',
-    desc: 'Toàn bộ dữ liệu công tơ, chỉ số HES và tổn thất được cập nhật gọn trong một lượt chạy duy nhất mỗi ngày, giảm số lần khởi động lại hệ thống so với trước.',
-    tag: 'Cải tiến',
-  },
-  {
-    title: 'Sửa lỗi xuất Word thông báo cắt điện',
-    desc: 'Khắc phục lỗi không tải được file Word thông báo cắt điện cho khu vực Thuận Thành I.',
+    title: 'Tạm dừng phần Tổn thất tính toán',
+    desc: 'Phần tổn thất máy biến áp tạm ẩn vì đang nhân sai hệ số nhân: nó lấy HSN từ hệ thống HES, trong khi nguồn đúng là HSN theo thời điểm treo tháo công tơ trong Danh mục. Số liệu cũ vẫn được giữ, sẽ bật lại sau khi tính lại cho đúng.',
     tag: 'Sửa lỗi',
   },
   {
-    title: 'Sửa màu header đen trong PDF sổ nhật ký',
-    desc: 'Header bảng trong PDF sổ nhật ký vận hành và biên bản giao nhận ca không còn bị in màu đen, đã chuyển về màu xám nhẹ dễ đọc.',
-    tag: 'Sửa lỗi',
+    title: 'Hệ số nhân lấy theo Danh mục, không theo HES',
+    desc: 'Mọi tính toán sản lượng nay dùng HSN suy từ bộ TI/TU đang treo tại điểm đo trong Danh mục vật tư, đúng theo thời điểm treo tháo công tơ. HSN bên HES chỉ còn để tham khảo.',
+    tag: 'Cải tiến',
   },
 ];
+
 
 /** Tông màu (theo token design system) cho từng nhóm danh mục */
 const TAG_TONE: Record<string, { soft: string; color: string; Icon: React.ElementType }> = {
