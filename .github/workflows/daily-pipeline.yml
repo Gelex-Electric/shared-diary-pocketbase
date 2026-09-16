@@ -50,12 +50,16 @@ jobs:
         with:
           node-version: "20"
 
+      # PB_URL khong dat lam secret: ca hai script tu dung mac dinh
+      # https://getc.up.railway.app/pb — dung dia chi that. Ten secret la
+      # PB_ADMIN_EMAIL/PB_ADMIN_PASS (khong phai PB_EMAIL/PB_PASS), lech ten nay
+      # tung lam buoc 4 do va lam buoc 1 khong gui duoc canh bao HSN suot thoi
+      # gian dai ma khong ai biet.
       # 1) Danh sach cong to + HSN + LINE_ID/CODE/ROLE + canh bao (tram, HSN)
       - name: Refresh meter info (GetMeterAccount + GetLineList + GetMeter)
         env:
-          PB_URL: ${{ secrets.PB_URL }}
-          PB_EMAIL: ${{ secrets.PB_EMAIL }}
-          PB_PASS: ${{ secrets.PB_PASS }}
+          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
         run: python scripts/fetch_meter_info.py
 
       # 2) Du lieu do xa 30 phut (full ngay hom qua, ×HSN, them I pha + KVAR)
@@ -76,9 +80,8 @@ jobs:
       # Script chi dung thu vien co san cua Node, khong can npm install.
       - name: Fetch HES index
         env:
-          PB_URL: ${{ secrets.PB_URL }}
-          PB_EMAIL: ${{ secrets.PB_EMAIL }}
-          PB_PASS: ${{ secrets.PB_PASS }}
+          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
         run: node scripts/fetch_hes_index.mjs
 
       # 5) + 6) TAM DUNG tu 16/09/2026 (user chot): ca chuoi ton that dang lay HSN
