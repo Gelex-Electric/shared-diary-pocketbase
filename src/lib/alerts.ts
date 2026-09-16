@@ -51,7 +51,7 @@ export const ALERT_KINDS = [
   /* Mã `lui` giữ nguyên trong dữ liệu — đổi mã là mọi bản ghi cũ rơi ra ngoài
      nhóm. Chỉ đổi NHÃN: "bất thường" rộng hơn "chạy lùi", để sau này thêm được
      các kiểu sai khác của chỉ số mà không phải đặt lại tên mục. */
-  { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số công tơ giảm giữa hai mốc' },
+  { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số giảm giữa hai mốc, hoặc công tơ đang treo mà không có chỉ số' },
   { kind: 'tram', label: 'Dữ liệu trạm', desc: 'Mã trạm không khớp tên trạm bên HES' },
   { kind: 'congto', label: 'Đối chiếu công tơ', desc: 'Công tơ lệch giữa HES và Danh mục' },
 ] as const;

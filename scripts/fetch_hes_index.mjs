@@ -503,6 +503,35 @@ console.log(`Lấy được ${rows.length - noData.length}/${rows.length} công 
 if (noData.length) {
   console.log(`Thiếu chỉ số (NO_DATA=1): ${noData.map(r => r.METER_NO).join(', ')}`);
 }
+
+/*
+  CÔNG TƠ KHAI ĐANG TREO MÀ KHÔNG CÓ CHỈ SỐ — cũng là chỉ số bất thường.
+
+  Trước đây chỉ in ra log rồi thôi (sửa 16/09/2026): 17 công tơ im lặng mỗi ngày
+  mà không ai biết, vì log Actions không ai mở ra đọc. Đây đúng là thứ cần hiện
+  ở màn Cảnh báo — công tơ đang treo thì phải có chỉ số, không có nghĩa là mất
+  kết nối, hỏng, hoặc Danh mục khai sai trạng thái.
+
+  Mốc cảnh báo là TỶ LỆ chứ không phải "có cái nào thiếu là báo": vài công tơ đọc
+  thưa là chuyện thường ngày. Quá ngưỡng mới là dấu hiệu hệ thống có vấn đề.
+*/
+const NO_DATA_ALERT_RATIO = Number(process.env.NO_DATA_ALERT_RATIO || 0.05);
+if (process.argv.includes('--notify')
+    && noData.length && noData.length >= rows.length * NO_DATA_ALERT_RATIO) {
+  const serials = noData.map(r => r.METER_NO);
+  const zone = zoneOf(serials.map(sn => meters.find(m => m.serial === sn)?.zone ?? ''));
+  const ok = await raiseAlert(pbToken, {
+    kind: 'lui',
+    title: 'Công tơ đang treo nhưng không lấy được chỉ số',
+    message: `Ngày ${ymd(day)}: ${serials.length}/${rows.length} công tơ khai đang treo`
+      + ` nhưng HES không trả đủ chỉ số hai đầu${zone ? ` tại ${zone}` : ''}`
+      + ` — ${serials.join(', ')}`,
+    zone,
+    meters: serials,
+    day: ymd(day),
+  });
+  console.log(`Cảnh báo thiếu chỉ số: ${ok ? 'đã ghi 1 bản' : 'bỏ qua (đã có bản cho ngày này)'}.`);
+}
 if (rows.length === noData.length) {
   console.error('Không công tơ nào có chỉ số — dừng, không ghi đè file cũ.');
   process.exit(1);
