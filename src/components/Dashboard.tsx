@@ -76,6 +76,8 @@ export default function Dashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
   /** Số chưa đọc cho badge sidebar — dùng chung một nguồn với chuông. */
   const unreadNotif = useUnreadCount();
+  /** Nhóm cần mở khi bấm một dòng ở chuông; đổi mỗi lần bấm để màn nhảy đúng tab. */
+  const [notifKind, setNotifKind] = useState<string | undefined>(undefined);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isJournalExpanded, setIsJournalExpanded] = useState(true);
   const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
@@ -171,25 +173,6 @@ export default function Dashboard() {
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
               <span>Tổng hợp</span>
-            </button>
-          </li>
-
-          {/* Thông báo — badge là số CHƯA ĐỌC, mở màn là về 0 */}
-          <li className="relative mt-1">
-            <button
-              id="nav-notifications"
-              onClick={() => { setTopTab('notifications'); onNavigate?.(); }}
-              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'notifications' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
-              }`}
-            >
-              <Bell className="w-5 h-5 shrink-0" />
-              <span className="flex-1 text-left">Thông báo</span>
-              {unreadNotif > 0 && (
-                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
-                  {unreadNotif > 99 ? '99+' : unreadNotif}
-                </span>
-              )}
             </button>
           </li>
 
@@ -360,6 +343,24 @@ export default function Dashboard() {
               )}
             </AnimatePresence>
           </li>
+          {/* Thông báo — badge là số CHƯA ĐỌC, mở màn là về 0 */}
+          <li className="relative mt-1">
+            <button
+              id="nav-notifications"
+              onClick={() => { setTopTab('notifications'); onNavigate?.(); }}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'notifications' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <Bell className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Thông báo</span>
+              {unreadNotif > 0 && (
+                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {unreadNotif > 99 ? '99+' : unreadNotif}
+                </span>
+              )}
+            </button>
+          </li>
         </ul>
 
         {/* Tiện ích */}
@@ -485,7 +486,7 @@ export default function Dashboard() {
             </a>
 
             {/* Thông báo */}
-            <NotificationBell />
+            <NotificationBell onOpen={kind => { setNotifKind(kind); setTopTab('notifications'); }} />
 
             {/* Theme */}
             <ThemeToggle />
@@ -532,7 +533,7 @@ export default function Dashboard() {
                 <SldPage />
               </div>
             ) : topTab === 'notifications' ? (
-              <NotificationCenter />
+              <NotificationCenter initialKind={notifKind} />
             ) : topTab === 'journal' ? (
               <JournalManager />
             ) : topTab === 'outage' ? (

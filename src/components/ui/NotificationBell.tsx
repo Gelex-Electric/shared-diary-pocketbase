@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { pb } from '../../lib/pocketbase';
-import { Bell, CheckCheck, Wallet, Info } from 'lucide-react';
+import { Bell, CheckCheck, ChevronRight } from 'lucide-react';
+import { summarize } from '../../lib/notifications';
+import { zoneOf, ZONE_MAP } from '../../lib/invoices';
 
 /* ============================================================
    NotificationBell — chuông thông báo dùng chung cho cả khối
@@ -50,14 +52,10 @@ export function clearLocalNotification(id: string) {
   if (localNotifs.length !== before) emitLocal();
 }
 
-const fmtWhen = (iso: string) => {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  const p2 = (n: number) => String(n).padStart(2, '0');
-  return `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
-};
-
-export default function NotificationBell() {
+export default function NotificationBell({ onOpen }: {
+  /** Bấm một dòng tóm tắt → mở màn Thông báo, nhảy đúng nhóm đó. */
+  onOpen?: (kind?: string) => void;
+} = {}) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationRecord[]>([]);
   const [local, setLocal] = useState<NotificationRecord[]>(localNotifs);
@@ -121,6 +119,15 @@ export default function NotificationBell() {
   const merged = [...local, ...items].sort((a, b) => (b.created || '').localeCompare(a.created || ''));
   const unreadCount = merged.filter(it => !lastRead || it.created > lastRead).length;
 
+  /*
+    Tóm tắt theo nhóm — tính bằng `lib/notifications` để chuông và màn Thông báo
+    không mỗi nơi đếm một kiểu. Truyền cả thông báo cục bộ (cảnh báo công nợ)
+    vào cùng; chúng không có `kind` nên rơi về nhóm "Khác", đúng như mong đợi.
+  */
+  const lines = useMemo(
+    () => summarize(merged as any, lastRead, mkh => ZONE_MAP[zoneOf(mkh)] ?? ''),
+    [merged, lastRead]);
+
   const markAllRead = () => {
     const now = new Date().toISOString().replace('T', ' ');
     localStorage.setItem(LAST_READ_KEY, now);
@@ -154,17 +161,14 @@ export default function NotificationBell() {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-[340px] max-w-[calc(100vw-2rem)] bg-surface rounded-2xl overflow-hidden z-[200] animate-in fade-in slide-in-from-top-2 duration-150"
+          className="absolute right-0 top-full mt-2 w-[320px] max-w-[calc(100vw-2rem)] bg-surface rounded-2xl overflow-hidden z-[200] animate-in fade-in slide-in-from-top-2 duration-150"
           style={{ boxShadow: '0 12px 32px 0 rgba(25,42,70,0.18)', border: '1px solid var(--surface-inset)' }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-subtle/60">
             <div className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-accent" />
-              <span className="text-sm font-black text-dim">Thông báo</span>
-              {unreadCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-[#ff5b5c] text-white text-[9px] font-black">{unreadCount} mới</span>
-              )}
+              <span className="text-sm font-black text-dim">Có gì mới</span>
             </div>
             {unreadCount > 0 && (
               <button
@@ -176,36 +180,42 @@ export default function NotificationBell() {
             )}
           </div>
 
-          {/* List */}
-          <div className="max-h-[380px] overflow-y-auto divide-y divide-[var(--border)]">
-            {merged.length === 0 ? (
-              <div className="py-12 text-center text-faint">
-                <Bell className="w-8 h-8 text-faint mx-auto mb-2" />
-                <p className="text-xs font-semibold">Chưa có thông báo nào</p>
+          {/*
+            TÓM TẮT, không phải danh sách.
+
+            Chuông trả lời "có gì mới?"; muốn biết "cụ thể là gì?" thì bấm một
+            dòng để sang màn Thông báo — ở đó có đủ nội dung, thời gian, mã KH.
+            Trước đây chuông cố làm cả hai việc nên vừa chật vừa cụt.
+          */}
+          <div className="max-h-[320px] overflow-y-auto">
+            {lines.length === 0 ? (
+              <div className="py-10 text-center text-faint">
+                <CheckCheck className="w-7 h-7 text-[var(--success)] mx-auto mb-2" />
+                <p className="text-xs font-semibold">Không có gì mới</p>
               </div>
-            ) : merged.map(it => {
-              const isUnread = !lastRead || it.created > lastRead;
-              const isPayment = it.type === 'payment';
-              return (
-                <div
-                  key={it.id}
-                  className={`flex items-start gap-3 px-4 py-3 transition-colors ${isUnread ? 'bg-accent-soft' : 'bg-surface'} hover:bg-subtle`}
-                >
-                  <div className={`p-2 rounded-xl shrink-0 ${isPayment ? 'bg-[var(--success-soft)] text-emerald-500' : 'bg-accent-soft text-accent'}`}>
-                    {isPayment ? <Wallet className="w-4 h-4" /> : <Info className="w-4 h-4" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-[13px] font-bold text-ink truncate">{it.title}</p>
-                      {isUnread && <span className="w-1.5 h-1.5 rounded-full bg-[#ff5b5c] shrink-0" />}
-                    </div>
-                    <p className="text-[12px] text-soft leading-snug mt-0.5 break-words">{it.message}</p>
-                    <p className="text-[10px] font-semibold text-faint mt-1">{fmtWhen(it.created)}</p>
-                  </div>
-                </div>
-              );
-            })}
+            ) : lines.map((l, i) => (
+              <button
+                key={`${l.kind}-${i}`}
+                onClick={() => { setOpen(false); onOpen?.(l.kind); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-subtle transition-colors border-b border-[var(--border)] last:border-b-0"
+              >
+                <span className="shrink-0 min-w-[26px] rounded-full bg-accent-soft px-1.5 py-0.5 text-center text-[11px] font-black text-accent">
+                  {l.count}
+                </span>
+                <span className="flex-1 text-[13px] text-dim leading-snug">{l.text}</span>
+                <ChevronRight className="w-3.5 h-3.5 shrink-0 text-faint" />
+              </button>
+            ))}
           </div>
+
+          {lines.length > 0 && (
+            <button
+              onClick={() => { setOpen(false); onOpen?.(); }}
+              className="w-full px-4 py-2.5 text-[12px] font-bold text-accent hover:bg-subtle transition-colors border-t border-[var(--border)]"
+            >
+              Xem tất cả thông báo
+            </button>
+          )}
         </div>
       )}
     </div>

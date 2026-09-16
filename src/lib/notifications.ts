@@ -31,12 +31,12 @@ export interface NotificationRecord {
  * theo dõi loại cảnh báo đó và hiện chưa có gì, thay vì tưởng nó không tồn tại.
  */
 export const NOTIF_KINDS = [
-  { kind: 'thanhtoan', label: 'Thanh toán', desc: 'Khách hàng đã trả tiền điện' },
-  { kind: 'lui', label: 'Chỉ số chạy lùi', desc: 'Chỉ số công tơ giảm giữa hai mốc' },
-  { kind: 'hsn', label: 'Hệ số nhân', desc: 'HSN bất thường hoặc lệch giữa HES và Danh mục' },
-  { kind: 'tram', label: 'Dữ liệu trạm', desc: 'Mã trạm không khớp tên trạm bên HES' },
-  { kind: 'congto', label: 'Đối chiếu công tơ', desc: 'Công tơ lệch giữa HES và Danh mục' },
-  { kind: '', label: 'Khác', desc: 'Chưa phân nhóm' },
+  { kind: 'thanhtoan', label: 'Thanh toán', desc: 'Khách hàng đã trả tiền điện', countLabel: 'lượt thanh toán' },
+  { kind: 'lui', label: 'Chỉ số chạy lùi', desc: 'Chỉ số công tơ giảm giữa hai mốc', countLabel: 'cảnh báo chỉ số chạy lùi' },
+  { kind: 'hsn', label: 'Hệ số nhân', desc: 'HSN bất thường hoặc lệch giữa HES và Danh mục', countLabel: 'cảnh báo hệ số nhân' },
+  { kind: 'tram', label: 'Dữ liệu trạm', desc: 'Mã trạm không khớp tên trạm bên HES', countLabel: 'cảnh báo dữ liệu trạm' },
+  { kind: 'congto', label: 'Đối chiếu công tơ', desc: 'Công tơ lệch giữa HES và Danh mục', countLabel: 'cảnh báo đối chiếu công tơ' },
+  { kind: '', label: 'Khác', desc: 'Chưa phân nhóm', countLabel: 'thông báo khác' },
 ] as const;
 
 export type NotifKind = typeof NOTIF_KINDS[number]['kind'];
@@ -140,7 +140,7 @@ export function summarize(
   const unread = items.filter(r => isUnread(r, lastRead));
   const out: NotifSummaryLine[] = [];
 
-  for (const { kind, label } of NOTIF_KINDS) {
+  for (const { kind, countLabel } of NOTIF_KINDS) {
     const list = unread.filter(r => kindOf(r) === kind);
     if (!list.length) continue;
 
@@ -153,8 +153,11 @@ export function summarize(
       for (const [zone, n] of [...byZone].sort((a, b) => b[1] - a[1])) {
         out.push({ kind, count: n, text: `${n} khách hàng ${zone} đã thanh toán` });
       }
+    } else if (list.length === 1) {
+      /* Một cái thì đọc thẳng tiêu đề của nó — cụ thể hơn hẳn "1 cảnh báo …". */
+      out.push({ kind, count: 1, text: list[0].title });
     } else {
-      out.push({ kind, count: list.length, text: `${list.length} ${label.toLowerCase()}` });
+      out.push({ kind, count: list.length, text: `${list.length} ${countLabel}` });
     }
   }
   return out;
