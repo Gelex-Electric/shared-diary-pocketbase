@@ -9,6 +9,57 @@ import { toast as notify } from '../../lib/toast';
 
 export interface MeterRow { id: string; MeterNo: string; HSN: string; Line: string; area: string; }
 
+/** Số → chuỗi kiểu Việt Nam, `null` thành gạch ngang. */
+export const fmt = (val: number | null) =>
+  val === null ? '—' : val.toLocaleString('vi-VN', { maximumFractionDigits: 0 });
+
+/**
+ * Chuyển kết quả sang hình dạng `Consumption` mà `HesConsumptionTable` đang
+ * dùng, để tab mới xài lại nguyên bảng cũ thay vì dựng bảng thứ hai.
+ */
+export function toConsumptionMap(results: Map<string, Result30>) {
+  const map = new Map<string, { startTime: string; endTime: string; hsn: number;
+    values: Record<string, number | null> } | null>();
+  for (const [no, r] of results) {
+    map.set(no, r.value
+      ? { startTime: r.value.startAt, endTime: r.value.endAt, hsn: r.value.hsn, values: r.value.values }
+      : null);
+  }
+  return map;
+}
+
+/** Công tơ tiêu thụ lớn nhất, để tô nổi bật. '' nếu chưa có số nào. */
+export function maxTotalMeterId30(rows: MeterRow[], results: Map<string, Result30>): string {
+  let bestId = ''; let best = -Infinity;
+  for (const m of rows) {
+    const total = results.get(m.MeterNo)?.value?.values.PG ?? null;
+    if (total !== null && total > best) { best = total; bestId = m.id; }
+  }
+  return best > 0 ? bestId : '';
+}
+
+/** Một dòng cho file Excel. Giữ đúng bộ cột của tab cũ để người dùng quen mắt. */
+export const toExportRow30 = (m: MeterRow, r?: Result30) => ({
+  'Số công tơ':        m.MeterNo,
+  'Trạm':              m.Line || '',
+  'Hệ số nhân':        m.HSN || '',
+  'Mốc đầu kỳ':        r?.value?.startAt ?? '',
+  'Mốc cuối kỳ':       r?.value?.endAt ?? '',
+  'Tổng (kWh)':        r?.value?.values.PG ?? '',
+  'Biểu 1 (kWh)':      r?.value?.values.BT ?? '',
+  'Biểu 2 (kWh)':      r?.value?.values.CD ?? '',
+  'Biểu 3 (kWh)':      r?.value?.values.TD ?? '',
+  'Vô công (kVarh)':   r?.value?.values.VC ?? '',
+  'Ghi chú':           MISSING_LABEL[r?.missing ?? ''] ?? '',
+});
+
+/** Lý do không tính được, nói bằng tiếng người. */
+export const MISSING_LABEL: Record<string, string> = {
+  'no-meter': 'Không có dữ liệu đo xa trong kho 30 ngày',
+  'no-start': 'Thiếu bản ghi tại mốc đầu kỳ',
+  'no-end':   'Thiếu bản ghi tại mốc cuối kỳ',
+};
+
 export interface UseHes30MinOptions {
   /** Chỉ lấy công tơ thuộc các KCN này. `undefined` = không giới hạn (khối Văn phòng). */
   allowedAreas?: string[];
@@ -89,10 +140,18 @@ export function useHes30Min({ allowedAreas, filterArea = '' }: UseHes30MinOption
     return map;
   }, [data, meters, startAt, endAt, validRange]);
 
+  /** Đếm công tơ theo từng lý do thiếu, để màn hình báo gọn một dòng. */
+  const missingCount = useMemo(() => {
+    const c = { 'no-meter': 0, 'no-start': 0, 'no-end': 0 } as Record<string, number>;
+    for (const r of results.values()) if (r.missing) c[r.missing]++;
+    return c;
+  }, [results]);
+
   return {
     meters, isLoading, reload,
     startDate, setStartDate, startTime, setStartTime,
     endDate, setEndDate, endTime, setEndTime,
-    startTimes, endTimes, dayRange, validRange, results,
+    startTimes, endTimes, dayRange, validRange, results, missingCount,
+    startAt, endAt,
   };
 }

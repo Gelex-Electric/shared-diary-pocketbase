@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { Hand, Database } from 'lucide-react';
+import { Hand, Database, Clock } from 'lucide-react';
 import HesManualManager from './HesManualManager';
 import HesDirectManager from './HesDirectManager';
+import Hes30MinManager from './Hes30MinManager';
 import OfficeHesManualManager from '../business/OfficeHesManualManager';
 import OfficeHesDirectManager from '../business/OfficeHesDirectManager';
 import { Tabs, type TabItem } from '../ui/Tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Scope } from '../../lib/scope';
 
-type HesTab = 'manual' | 'direct';
+type HesTab = 'manual' | 'direct' | 'min30';
 
 /*
   TÊN TAB TRƯỚC ĐÂY ĐẶT NGƯỢC (sửa 04/09/2026).
@@ -23,6 +24,7 @@ type HesTab = 'manual' | 'direct';
 const TABS: TabItem<HesTab>[] = [
   { id: 'manual', label: 'Gọi HES ngay', sub: 'Chọn mốc thời gian, đọc chỉ số tức thời', icon: Hand },
   { id: 'direct', label: 'Số liệu đã chốt', sub: 'Đọc chỉ số pipeline chốt hằng đêm, theo khoảng ngày', icon: Database },
+  { id: 'min30', label: 'Chỉ số trong 30 ngày', sub: 'Chi tiết 30 phút, chọn được mốc giờ', icon: Clock },
 ];
 
 /**
@@ -48,7 +50,9 @@ export default function HesReadingManager({ scope = 'doi' }: { scope?: Scope }) 
         >
           {tab === 'manual'
             ? (office ? <OfficeHesManualManager /> : <HesManualManager />)
-            : (office ? <OfficeHesDirectManager /> : <HesDirectManager />)}
+            : tab === 'min30'
+              ? <Hes30MinManager scope={scope} />
+              : (office ? <OfficeHesDirectManager /> : <HesDirectManager />)}
         </motion.div>
       </AnimatePresence>
     </div>
