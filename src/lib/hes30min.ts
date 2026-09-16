@@ -1,6 +1,7 @@
 /**
- * Reader cho `public/hes_index_30min.csv` — chỉ số công tơ tại từng mốc 30 phút,
- * do `scripts/fetch_hes_index.mjs` sinh mỗi đêm và giữ 30 ngày gần nhất.
+ * Reader cho chỉ số công tơ tại từng mốc 30 phút, do `scripts/fetch_hes_index.mjs`
+ * sinh mỗi đêm vào `public/hes_30min/` — MỖI NGÀY MỘT FILE, giữ 30 ngày gần nhất,
+ * kèm `index.json` liệt kê các ngày đang có.
  *
  * Mỗi dòng = 1 công tơ × 1 mốc. Chỉ số lưu RAW, CHƯA nhân HSN — cột `HSN` đi
  * kèm (lấy từ `dm_point.hsn` của Danh mục) để nơi đọc tự nhân.
@@ -80,12 +81,73 @@ export function parseHes30(text: string): Hes30Data {
   return { byMeter, stamps: [...stampSet].sort() };
 }
 
-export async function fetchHes30(): Promise<Hes30Data> {
-  const res = await fetch('/hes_index_30min.csv', { cache: 'no-cache' });
-  // Chưa có file (pipeline chưa chạy lần nào) → coi như rỗng, không ném lỗi.
-  if (res.status === 404) return { byMeter: new Map(), stamps: [] };
-  if (!res.ok) throw new Error('Không tải được hes_index_30min.csv');
-  return parseHes30(await res.text());
+/** Thư mục chứa file 30 phút, mỗi ngày một file `YYYY-MM-DD.csv`. */
+const DIR = '/hes_30min';
+
+/** Danh mục ngày đang có, do pipeline ghi kèm. Nhỏ (~1 KB), tải một lần. */
+export interface Hes30Index { days: string[]; first: string; last: string }
+
+const EMPTY_INDEX: Hes30Index = { days: [], first: '', last: '' };
+
+/*
+  KHÔNG tin vào mã HTTP để biết file có tồn tại hay không.
+
+  Máy chủ phục vụ SPA trả về `index.html` kèm mã 200 cho MỌI đường dẫn không
+  khớp file nào (đã đo trên dev server: `/hes_30min/2020-01-01.csv` → 200,
+  content-type text/html). Cứ `res.ok` là parse thì ta đem HTML đi đọc như CSV
+  và ra một mớ dữ liệu rác trông như thật. Vì vậy phải KIỂM NỘI DUNG.
+*/
+export async function fetchHes30Index(): Promise<Hes30Index> {
+  try {
+    const res = await fetch(`${DIR}/index.json`, { cache: 'no-cache' });
+    if (!res.ok) return EMPTY_INDEX;
+    const text = await res.text();
+    if (!text.trimStart().startsWith('{')) return EMPTY_INDEX;   // HTML trả nhầm
+    const j = JSON.parse(text);
+    return Array.isArray(j?.days) ? j : EMPTY_INDEX;
+  } catch {
+    // Pipeline chưa chạy lần nào, hoặc file hỏng → coi như chưa có dữ liệu.
+    return EMPTY_INDEX;
+  }
+}
+
+/**
+ * Tải chỉ số của ĐÚNG những ngày cần (thường là 2: ngày đầu kỳ và ngày cuối kỳ).
+ *
+ * Đây là lý do tách mỗi ngày một file: tra một kỳ dài bao nhiêu cũng chỉ cần hai
+ * đầu mút, nên tải 2 file ~770 KB thay vì trọn 11,7 MB của 30 ngày.
+ *
+ * Ngày không có file thì bỏ qua, để `consumptionBetween` báo đúng mốc nào thiếu
+ * — chứ không làm hỏng cả lượt tải.
+ */
+export async function fetchHes30Days(days: string[]): Promise<Hes30Data> {
+  const wanted = [...new Set(days.filter(Boolean))];
+  const byMeter = new Map<string, Map<string, Hes30Row>>();
+  const stampSet = new Set<string>();
+
+  const texts = await Promise.all(wanted.map(async d => {
+    try {
+      const res = await fetch(`${DIR}/${d}.csv`, { cache: 'no-cache' });
+      if (!res.ok) return '';
+      const text = await res.text();
+      /* Chặn HTML do SPA fallback trả về kèm mã 200 — xem ghi chú ở fetchHes30Index. */
+      return text.startsWith('METER_NO,') ? text : '';
+    } catch {
+      return '';
+    }
+  }));
+
+  for (const text of texts) {
+    if (!text) continue;
+    const part = parseHes30(text);
+    for (const [no, rows] of part.byMeter) {
+      if (!byMeter.has(no)) byMeter.set(no, new Map());
+      const target = byMeter.get(no)!;
+      for (const [at, row] of rows) target.set(at, row);
+    }
+    for (const s of part.stamps) stampSet.add(s);
+  }
+  return { byMeter, stamps: [...stampSet].sort() };
 }
 
 const num = (v: string | undefined): number | null => {

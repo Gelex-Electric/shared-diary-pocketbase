@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { loadCatalog } from '../../lib/dm/repo';
 import { hesMeterRowsOf } from '../../lib/dm/meterRows';
 import {
-  fetchHes30, consumptionBetween, dayRangeOf, timesOfDay, stampOf,
-  type Hes30Data, type Result30,
+  fetchHes30Index, fetchHes30Days, consumptionBetween, timesOfDay, stampOf,
+  type Hes30Data, type Hes30Index, type Result30,
 } from '../../lib/hes30min';
 import { toast as notify } from '../../lib/toast';
 
@@ -77,6 +77,7 @@ export interface UseHes30MinOptions {
  */
 export function useHes30Min({ allowedAreas, filterArea = '' }: UseHes30MinOptions = {}) {
   const [meters, setMeters]   = useState<MeterRow[]>([]);
+  const [index, setIndex]     = useState<Hes30Index>({ days: [], first: '', last: '' });
   const [data, setData]       = useState<Hes30Data | null>(null);
   const [isLoading, setLoad]  = useState(true);
   const [startDate, setStartDate] = useState('');
@@ -84,10 +85,14 @@ export function useHes30Min({ allowedAreas, filterArea = '' }: UseHes30MinOption
   const [endDate, setEndDate]     = useState('');
   const [endTime, setEndTime]     = useState('00:00');
 
+  /*
+    Lượt tải đầu chỉ lấy DANH MỤC NGÀY (~1 KB) + danh sách công tơ. Chỉ số của
+    từng ngày tải sau, theo đúng kỳ người dùng chọn — xem effect bên dưới.
+  */
   const reload = useCallback(async () => {
     setLoad(true);
     try {
-      const [cat, idx] = await Promise.all([loadCatalog(), fetchHes30()]);
+      const [cat, idx] = await Promise.all([loadCatalog(), fetchHes30Index()]);
       const rows = hesMeterRowsOf(cat);
       const allowed = allowedAreas ? new Set(allowedAreas) : null;
       setMeters(rows
@@ -97,18 +102,13 @@ export function useHes30Min({ allowedAreas, filterArea = '' }: UseHes30MinOption
           Line: r.LINE_NAME, area: r.ADDRESS,
         }))
         .sort((a, b) => (a.Line + a.MeterNo).localeCompare(b.Line + b.MeterNo)));
-      setData(idx);
+      setIndex(idx);
 
-      /*
-        Mặc định: kỳ MỘT NGÀY mới nhất — 00:00 ngày cuối → 00:00 hôm sau không
-        có trong file, nên lấy 00:00 ngày áp chót → 00:00 ngày cuối.
-      */
-      const { first, last } = dayRangeOf(idx);
-      if (last) {
-        const prev = new Date(`${last}T00:00:00`);
-        prev.setDate(prev.getDate() - 1);
-        const prevStr = prev.toISOString().slice(0, 10);
-        setStartDate(p => p || (prevStr >= first ? prevStr : last));
+      /* Mặc định: kỳ MỘT NGÀY mới nhất — 00:00 ngày áp chót → 00:00 ngày cuối. */
+      if (idx.days.length) {
+        const last = idx.days[idx.days.length - 1];
+        const prev = idx.days[idx.days.length - 2] ?? last;
+        setStartDate(p => p || prev);
         setEndDate(p => p || last);
       }
     } catch (err: any) {
@@ -120,7 +120,22 @@ export function useHes30Min({ allowedAreas, filterArea = '' }: UseHes30MinOption
 
   useEffect(() => { reload(); }, [reload]);
 
-  const dayRange = useMemo(() => (data ? dayRangeOf(data) : { first: '', last: '' }), [data]);
+  /*
+    Đổi ngày thì tải lại đúng file của hai ngày đó. Kỳ dài bao nhiêu cũng chỉ
+    cần hai đầu mút, nên luôn là 2 file — đây chính là lý do tách file theo ngày.
+  */
+  useEffect(() => {
+    if (!startDate && !endDate) return;
+    let ok = true;
+    fetchHes30Days([startDate, endDate])
+      .then(d => { if (ok) setData(d); })
+      .catch(err => {
+        if (ok) notify.show('error', 'Lỗi', err?.message || 'Không tải được chỉ số 30 phút');
+      });
+    return () => { ok = false; };
+  }, [startDate, endDate]);
+
+  const dayRange = useMemo(() => ({ first: index.first, last: index.last }), [index]);
   const startTimes = useMemo(() => (data ? timesOfDay(data, startDate) : []), [data, startDate]);
   const endTimes   = useMemo(() => (data ? timesOfDay(data, endDate) : []), [data, endDate]);
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Lấy chỉ số công tơ từ `GetMeterDataByDate`, ghi `public/hes_index_30min.csv`
- * — chi tiết 30 phút, giữ 30 ngày gần nhất.
+ * Lấy chỉ số công tơ từ `GetMeterDataByDate`, ghi chi tiết 30 phút vào thư mục
+ * `public/hes_30min/` — MỖI NGÀY MỘT FILE `YYYY-MM-DD.csv`, giữ 30 ngày gần
+ * nhất, kèm `index.json` liệt kê các ngày đang có.
  *
  * Một lời gọi API cho mỗi công tơ trả sẵn 49 bản ghi (48 mốc 30 phút + mốc
  * 00:00 hôm sau). Bản Python cũ gọi HAI lần với hai cửa sổ nhỏ rồi vứt 47 bản
@@ -43,26 +44,25 @@
  * Biến môi trường:
  *   TARGET_DATE   rỗng = hôm qua · "YYYY-MM-DD" · số N = lùi N ngày
  *   KEEP_DAYS_30  số ngày giữ trong file 30 phút. Mặc định 30
- *   HES_30MIN_PATH  đường dẫn CSV 30 phút.  Mặc định public/hes_index_30min.csv
+ *   HES_30MIN_DIR   thư mục CSV 30 phút.   Mặc định public/hes_30min
  *   PB_EMAIL/PB_PASS (hoặc PB_ADMIN_*), API_TOKEN hoặc API_USER/API_PASS
  *
  * Vẫn cần tài khoản PocketBase, nhưng CHỈ ĐỂ ĐỌC danh mục công tơ (`dm_*`).
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
 
 /**
- * Chi tiết 30 phút — file nóng, nặng gấp 48 lần bản ngày.
+ * Chi tiết 30 phút — 115 công tơ × 48 mốc ≈ 5.520 dòng ≈ 385 KB MỘT NGÀY.
  *
- * 30 ngày ≈ 165.600 dòng ≈ 11,7 MB thô, còn ~2,1 MB sau khi máy chủ nén (đo
- * được tỷ lệ 5,7× trên chính dữ liệu chỉ số thật). App tải trọn file mỗi lần mở
- * tab tra cứu — user chốt 16/09/2026 chấp nhận mức đó, ưu tiên một file cho gọn
- * thay vì tách mỗi ngày một file.
+ * Gom 30 ngày vào một file là 11,7 MB, mà app chỉ cần 2 ngày cho mỗi lần tra.
+ * Nên tách mỗi ngày một file (user chốt 16/09/2026): tra một kỳ chỉ tải 2 file
+ * ~770 KB, và mỗi đêm Git chỉ nhận thêm một blob nhỏ thay vì ghi lại cả file.
  */
-const OUT_30_PATH = process.env.HES_30MIN_PATH || 'public/hes_index_30min.csv';
+const OUT_30_DIR = process.env.HES_30MIN_DIR || 'public/hes_30min';
 const KEEP_DAYS_30 = Number(process.env.KEEP_DAYS_30 || 30);
 const CONCURRENCY = Number(process.env.CONCURRENCY || 6);
 
@@ -225,17 +225,24 @@ function prevDayRows(day) {
   const prev = ymd(new Date(day.getTime() - 86400000));
   const out = new Map();
   /*
-    Đọc từ FILE 30 PHÚT: mốc 00:00 của ngày D chính là "cuối kỳ" của ngày D−1.
-    Trước 16/09/2026 đọc `hes_index_daily.csv`, nhưng file đó đã bỏ.
+    Lấy MỐC MUỘN NHẤT của ngày hôm trước (thường 23:30) trong file ngày đó.
+
+    Không so với "cuối kỳ hôm qua" nữa: từ khi lấy trọn ngày, cuối kỳ ngày D−1
+    và đầu kỳ ngày D là CÙNG một bản ghi 00:00 — so với chính nó thì không phát
+    hiện được gì. So với mốc 23:30 hôm trước mới bắt được công tơ bị reset hoặc
+    thay trong đêm.
   */
-  const at = `${ymd(day)} 00:00:00`;
-  for (const r of readCsv(OUT_30_PATH)) {
-    if (r.DATE_TIME !== at) continue;
+  const byMeter = new Map();
+  for (const r of readCsv(join(OUT_30_DIR, `${prev}.csv`))) {
+    const cur = byMeter.get(r.METER_NO);
+    if (!cur || r.DATE_TIME > cur.DATE_TIME) byMeter.set(r.METER_NO, r);
+  }
+  for (const [no, r] of byMeter) {
     const row = { END_TIME: r.DATE_TIME };
     for (const k of KEYS) row[`${k}_END`] = r[k];
-    out.set(r.METER_NO, row);
+    out.set(no, row);
   }
-  return { prev, rows: out, src: out.size ? 'file 30 phút' : 'không có' };
+  return { prev, rows: out, src: out.size ? `file ${prev}.csv` : 'không có' };
 }
 
 function buildRow(meterNo, hsn, day, startRec, endRec) {
@@ -267,33 +274,69 @@ export function readCsv(path) {
 }
 
 /**
- * Ghi file chi tiết 30 phút. Khóa gộp là (METER_NO, DATE_TIME) nên chạy lại
- * cùng ngày chỉ ghi đè đúng các mốc của ngày đó.
+ * Ghi chi tiết 30 phút, MỖI NGÀY MỘT FILE trong `public/hes_30min/`.
  *
- * Cắt theo `KEEP_DAYS_30` (mặc định 30): ~115 công tơ × 48 mốc = 5.520 dòng/ngày,
- * tức ~385 KB/ngày. Giữ cả năm là 137 MB trong thư mục CÔNG KHAI — không được.
+ * Vì sao tách (user chốt 16/09/2026): app chỉ cần chỉ số ở mốc đầu kỳ và mốc
+ * cuối kỳ, tức đúng HAI ngày. Gộp 30 ngày vào một file thì mỗi lần tra phải tải
+ * trọn ~11,7 MB rồi vứt 28 ngày không dùng. Tách ra, mỗi lần tra tải 2 file
+ * ~385 KB. Tổng dung lượng đĩa không đổi.
+ *
+ * Bản ghi rơi vào file theo NGÀY CỦA CHÍNH NÓ, không theo ngày đang chạy: mốc
+ * 00:00 hôm sau (bản ghi thứ 49 mà API trả kèm) thuộc file hôm sau. Nhờ vậy mỗi
+ * mốc nằm ở đúng một file, không nhân đôi giữa hai file.
+ *
+ * Trả về `{ days, rows, removed }` để nơi gọi in ra và dựng danh mục.
  */
-export function writeCsv30(path, rows) {
-  const merged = new Map();
-  for (const r of readCsv(path)) merged.set(`${r.METER_NO}|${r.DATE_TIME}`, r);
-  for (const r of rows) merged.set(`${r.METER_NO}|${r.DATE_TIME}`, r);
+export function writeCsv30ByDay(dir, rows) {
+  const byDay = new Map();
+  for (const r of rows) {
+    const d = String(r.DATE_TIME ?? '').slice(0, 10);
+    if (!d) continue;
+    if (!byDay.has(d)) byDay.set(d, []);
+    byDay.get(d).push(r);
+  }
 
-  let out = [...merged.values()];
+  mkdirSync(dir, { recursive: true });
+  let written = 0;
+  for (const [d, list] of byDay) {
+    const path = join(dir, `${d}.csv`);
+    /* Gộp với file cũ theo (METER_NO, DATE_TIME) → chạy lại cùng ngày không nhân đôi. */
+    const merged = new Map();
+    for (const r of readCsv(path)) merged.set(`${r.METER_NO}|${r.DATE_TIME}`, r);
+    for (const r of list) merged.set(`${r.METER_NO}|${r.DATE_TIME}`, r);
+    const out = [...merged.values()]
+      .sort((x, y) => (x.DATE_TIME + x.METER_NO).localeCompare(y.DATE_TIME + y.METER_NO));
+    const body = out.map(r => OUT_30_FIELDS.map(f => r[f] ?? '').join(','));
+    writeFileSync(path, [OUT_30_FIELDS.join(','), ...body].join('\n') + '\n', 'utf8');
+    written += out.length;
+  }
+
+  /* Dọn file quá hạn. Tách file nên xoá là xoá cả ngày, không phải lọc từng dòng. */
+  const removed = [];
   if (KEEP_DAYS_30 > 0) {
     const cutoff = ymd(new Date(todayVn().getTime() - KEEP_DAYS_30 * 86400000));
-    const kept = out.filter(r => String(r.DATE_TIME ?? '').slice(0, 10) >= cutoff);
-    /* Cùng chốt chặn như bản ngày: thà giữ dữ liệu cũ còn hơn ra file rỗng. */
-    if (kept.length) out = kept;
-    else if (out.length) {
-      console.log(`[CẢNH BÁO] File 30 phút: mọi mốc đều cũ hơn ${cutoff} — giữ nguyên ${out.length} dòng.`);
+    for (const f of readdirSync(dir)) {
+      const m = /^(\d{4}-\d{2}-\d{2})\.csv$/.exec(f);
+      if (m && m[1] < cutoff) { rmSync(join(dir, f)); removed.push(m[1]); }
     }
   }
-  out.sort((a, b) => (a.DATE_TIME + a.METER_NO).localeCompare(b.DATE_TIME + b.METER_NO));
 
-  mkdirSync(dirname(path), { recursive: true });
-  const body = out.map(r => OUT_30_FIELDS.map(f => r[f] ?? '').join(','));
-  writeFileSync(path, [OUT_30_FIELDS.join(','), ...body].join('\n') + '\n', 'utf8');
-  return out.length;
+  return { days: [...byDay.keys()].sort(), rows: written, removed };
+}
+
+/**
+ * Danh mục các ngày đang có, để app biết tra được từ đâu tới đâu mà không phải
+ * dò từng file. Nhỏ (~1 KB) nên tải một lần là đủ.
+ */
+export function writeIndex30(dir) {
+  const days = readdirSync(dir)
+    .map(f => /^(\d{4}-\d{2}-\d{2})\.csv$/.exec(f)?.[1])
+    .filter(Boolean)
+    .sort();
+  writeFileSync(join(dir, 'index.json'),
+    JSON.stringify({ days, first: days[0] ?? '', last: days[days.length - 1] ?? '' }, null, 0) + '\n',
+    'utf8');
+  return days;
 }
 
 /* --------------------------------- main --------------------------------- */
@@ -370,9 +413,12 @@ if (rows.length === noData.length) {
   process.exit(1);
 }
 
-const total30 = writeCsv30(OUT_30_PATH, rows30);
-console.log(`Chi tiết 30 phút: ghi ${rows30.length} mốc, giữ ${KEEP_DAYS_30} ngày. `
-  + `Tổng file: ${total30} dòng → ${OUT_30_PATH}`);
+const w = writeCsv30ByDay(OUT_30_DIR, rows30);
+console.log(`Chi tiết 30 phút: ${rows30.length} mốc → ${w.days.length} file `
+  + `(${w.days.join(', ')}), tổng ${w.rows} dòng trong ${OUT_30_DIR}/`);
+if (w.removed.length) console.log(`Đã xoá ${w.removed.length} ngày quá hạn: ${w.removed.join(', ')}`);
+const days = writeIndex30(OUT_30_DIR);
+console.log(`Danh mục: ${days.length} ngày (${days[0]} → ${days[days.length - 1]}), giữ ${KEEP_DAYS_30} ngày.`);
 
 }
 
