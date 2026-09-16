@@ -181,6 +181,19 @@ const REGISTERS = {
 };
 
 /**
+ * Cột CSV → tên biểu đọc được, suy từ FIELD_MAP + REGISTERS.
+ *
+ * Dùng cho ca lùi ở CHỖ NỐI NGÀY: chỗ đó so hai cột CSV (`PG_END` hôm trước với
+ * `PG_START` hôm nay) chứ không so bản ghi thô, nên chỉ có mã cột trong tay.
+ */
+const LABEL_OF_KEY = Object.fromEntries(
+  Object.entries(FIELD_MAP).map(([key, field]) => [
+    key,
+    Object.entries(REGISTERS).find(([, f]) => f === field)?.[0] ?? key,
+  ]));
+
+
+/**
  * Bước của chữ số cuối cùng mà HES trả về (3 chữ số thập phân).
  *
  * Lùi ĐÚNG một bước là sai số làm tròn của hệ thống, không phải công tơ chạy
@@ -575,8 +588,14 @@ for (const r of rows) {
     const a = Number(p[`${k}_END`]), b = Number(r[`${k}_START`]);
     if (!Number.isFinite(a) || !Number.isFinite(b) || b >= a) continue;
     const gap = a - b;
-    crossDay.push({ serial: r.METER_NO, k, gap, from: a, to: b, at: p.END_TIME,
-      rounding: gap <= ROUNDING_STEP + FLOAT_SLOP });
+    crossDay.push({
+      serial: r.METER_NO, gap, from: a, to: b,
+      /* Cùng hình dạng với `drops` của scanRegress để dùng chung detailsOfDrops:
+         `fromAt` là mốc cuối hôm trước, `at` là mốc đầu hôm nay. */
+      fromAt: p.END_TIME, at: r.START_TIME,
+      label: LABEL_OF_KEY[k] ?? k,
+      rounding: gap <= ROUNDING_STEP + FLOAT_SLOP,
+    });
   }
 }
 const crossReal = crossDay.filter(d => !d.rounding);
@@ -584,7 +603,33 @@ if (crossReal.length) {
   console.log(`\n[CẢNH BÁO] ${new Set(crossReal.map(d => d.serial)).size} công tơ lùi chỉ số Ở CHỖ NỐI `
     + `với ngày ${prev} — dấu hiệu thay/reset công tơ trong đêm:`);
   for (const d of crossReal) {
-    console.log(`   ${d.serial.padEnd(12)} ${d.k.padEnd(3)} ${d.from} (${d.at}) → ${d.to}  (−${d.gap.toFixed(3)})`);
+    console.log(`   ${d.serial.padEnd(12)} ${d.label.padEnd(24)} ${d.from} (${d.fromAt}) → ${d.to}  (−${d.gap.toFixed(3)})`);
+  }
+
+  /*
+    GHI CẢNH BÁO — trước đây chỗ này chỉ `console.log` rồi thôi (sửa 16/09/2026).
+
+    Đây là loại lùi NẶNG NHẤT: công tơ bị thay hoặc reset trong đêm, sản lượng cả
+    kỳ sai theo. Vậy mà nó là loại DUY NHẤT không bao giờ đến được màn Cảnh báo —
+    nhánh trong ngày thì có `raiseAlert`, nhánh nối ngày thì không. Phát hiện khi
+    backfill 19 ngày: 4 ngày (03/09, 04/09, 11/09, 14/09) có ca nối ngày mà app
+    không hiện gì.
+  */
+  if (process.argv.includes('--notify')) {
+    const serials = [...new Set(crossReal.map(d => d.serial))];
+    const zone = zoneOf(serials.map(sn => meters.find(x => x.serial === sn)?.zone ?? ''));
+    const ok = await raiseAlert(pbToken, {
+      kind: 'lui',
+      title: 'Chỉ số lùi ở chỗ nối ngày — nghi thay hoặc reset công tơ',
+      message: `Đêm ${prev} → ${ymd(day)}: ${serials.length} công tơ có chỉ số đầu ngày`
+        + ` THẤP HƠN chỉ số cuối ngày hôm trước${zone ? ` tại ${zone}` : ''}`
+        + ` — ${serials.join(', ')}`,
+      zone,
+      meters: serials,
+      details: detailsOfDrops(crossReal, meters, shortNameOf),
+      day: ymd(day),
+    });
+    console.log(`Cảnh báo nối ngày: ${ok ? 'đã ghi 1 bản' : 'bỏ qua (đã có bản cho ngày này)'}.`);
   }
 } else if (crossDay.length) {
   console.log(`Nối ngày: ${crossDay.length} ca lùi nhưng đều ở mức làm tròn.`);
