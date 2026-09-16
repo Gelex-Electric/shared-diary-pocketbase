@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Lấy chỉ số công tơ từ `GetMeterDataByDate` và ghi ra HAI file:
- *   - `public/hes_index_30min.csv`  chi tiết 30 phút, giữ 7 ngày (file nóng)
+ *   - `public/hes_index_30min.csv`  chi tiết 30 phút, giữ 30 ngày (file nóng)
  *   - `public/hes_index_daily.csv`  đầu/cuối kỳ theo ngày
  *
  * Một lời gọi API cho mỗi công tơ trả sẵn 49 bản ghi (48 mốc 30 phút + mốc
@@ -36,7 +36,7 @@
  * Biến môi trường:
  *   TARGET_DATE   rỗng = hôm qua · "YYYY-MM-DD" · số N = lùi N ngày
  *   KEEP_DAYS     0 = giữ toàn bộ lịch sử trong CSV (mặc định — xem ghi chú dưới)
- *   KEEP_DAYS_30  số ngày giữ trong file 30 phút. Mặc định 7
+ *   KEEP_DAYS_30  số ngày giữ trong file 30 phút. Mặc định 30
  *   HES_INDEX_PATH  đường dẫn CSV ngày.     Mặc định public/hes_index_daily.csv
  *   HES_30MIN_PATH  đường dẫn CSV 30 phút.  Mặc định public/hes_index_30min.csv
  *   PB_EMAIL/PB_PASS (hoặc PB_ADMIN_*), API_TOKEN hoặc API_USER/API_PASS
@@ -55,9 +55,16 @@ import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
 
 const OUT_PATH = process.env.HES_INDEX_PATH || 'public/hes_index_daily.csv';
 const KEEP_DAYS = Number(process.env.KEEP_DAYS || 0);
-/** Chi tiết 30 phút — file nóng, chỉ giữ ít ngày vì nó nặng gấp 48 lần bản ngày. */
+/**
+ * Chi tiết 30 phút — file nóng, nặng gấp 48 lần bản ngày.
+ *
+ * 30 ngày ≈ 165.600 dòng ≈ 11,7 MB thô, còn ~2,1 MB sau khi máy chủ nén (đo
+ * được tỷ lệ 5,7× trên chính dữ liệu chỉ số thật). App tải trọn file mỗi lần mở
+ * tab tra cứu — user chốt 16/09/2026 chấp nhận mức đó, ưu tiên một file cho gọn
+ * thay vì tách mỗi ngày một file.
+ */
 const OUT_30_PATH = process.env.HES_30MIN_PATH || 'public/hes_index_30min.csv';
-const KEEP_DAYS_30 = Number(process.env.KEEP_DAYS_30 || 7);
+const KEEP_DAYS_30 = Number(process.env.KEEP_DAYS_30 || 30);
 const CONCURRENCY = Number(process.env.CONCURRENCY || 6);
 
 /** Cột CSV → trường HES. Thứ tự này cũng là thứ tự cột trong file. */
@@ -285,9 +292,8 @@ export function writeCsv(path, newRows) {
  * Ghi file chi tiết 30 phút. Khóa gộp là (METER_NO, DATE_TIME) nên chạy lại
  * cùng ngày chỉ ghi đè đúng các mốc của ngày đó.
  *
- * Cắt theo `KEEP_DAYS_30` (mặc định 7): ~115 công tơ × 48 mốc = 5.520 dòng/ngày,
+ * Cắt theo `KEEP_DAYS_30` (mặc định 30): ~115 công tơ × 48 mốc = 5.520 dòng/ngày,
  * tức ~385 KB/ngày. Giữ cả năm là 137 MB trong thư mục CÔNG KHAI — không được.
- * Lịch sử dài nằm ở bản NGÀY trên PocketBase.
  */
 export function writeCsv30(path, rows) {
   const merged = new Map();
