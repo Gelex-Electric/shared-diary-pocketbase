@@ -111,18 +111,24 @@ export const ALERT_KINDS = [
      nhóm. Chỉ đổi NHÃN: "bất thường" rộng hơn "chạy lùi", để sau này thêm được
      các kiểu sai khác của chỉ số mà không phải đặt lại tên mục. */
   { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số công tơ giảm giữa hai mốc' },
-  /*
-    TÁCH khỏi `lui` (user chốt 16/09/2026). HES làm tròn chữ số cuối sinh ~80 ca
-    mỗi ngày, toàn bộ lùi đúng 0,001 và dồn vào vài mốc giờ — vô hại, nhưng cần
-    nhìn thấy để biết HES đang làm gì. Để chung với lùi thật thì ca lùi thật lẫn
-    vào giữa 80 dòng vô hại và không ai nhìn ra.
-  */
-  { kind: 'lamtron', label: 'Sai số làm tròn', desc: 'HES làm tròn chữ số cuối, chỉ số giảm đúng 0,001' },
   { kind: 'tram', label: 'Dữ liệu trạm', desc: 'Mã trạm không khớp tên trạm bên HES' },
   { kind: 'congto', label: 'Đối chiếu công tơ', desc: 'Công tơ lệch giữa HES và Danh mục' },
 ] as const;
 
 export type AlertKind = typeof ALERT_KINDS[number]['kind'];
+
+/**
+ * Các `kind` hiện chung một sub-side.
+ *
+ * `lamtron` (sai số làm tròn của HES) KHÔNG có mục riêng trên sidebar — nó là
+ * một THẺ riêng nằm trong mục "Chỉ số bất thường". Vẫn tách `kind` ở dữ liệu để
+ * phân biệt được với ca lùi thật, nhưng thêm hẳn một mục menu cho thứ vô hại là
+ * làm nặng thanh điều hướng.
+ */
+const KIND_ALIASES: Record<string, string[]> = {
+  lui: ['lui', 'lamtron'],
+};
+const kindsOf = (kind: string): string[] => KIND_ALIASES[kind] ?? [kind];
 
 /** Nhãn của một nhóm; nhóm lạ thì trả về chính mã đó để không hiện ô trống. */
 export const labelOfKind = (kind: string): string =>
@@ -152,8 +158,12 @@ export async function fetchAlerts(limit = 500): Promise<AlertRecord[]> {
 export function countByKind(items: AlertRecord[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const k of ALERT_KINDS) out[k.kind] = 0;
+  /* `lamtron` cộng vào mục `lui` — nó hiện trong mục đó chứ không có mục riêng. */
+  const bucket = new Map<string, string>();
+  for (const k of ALERT_KINDS) for (const alias of kindsOf(k.kind)) bucket.set(alias, k.kind);
   for (const r of items) {
-    if (!r.resolved && r.kind in out) out[r.kind]++;
+    const b = bucket.get(r.kind);
+    if (!r.resolved && b) out[b]++;
   }
   return out;
 }
@@ -177,7 +187,8 @@ export const zonesOf = (items: AlertRecord[]): string[] =>
  * đang xem cũng nằm trong đó — giấu đi là giấu mất sự cố đang ảnh hưởng tới họ.
  */
 export function filterAlerts(items: AlertRecord[], kind: string, zone: string): AlertRecord[] {
-  return items.filter(r => r.kind === kind && (!zone || !r.zone || r.zone === zone));
+  const kinds = kindsOf(kind);
+  return items.filter(r => kinds.includes(r.kind) && (!zone || !r.zone || r.zone === zone));
 }
 
 /**
