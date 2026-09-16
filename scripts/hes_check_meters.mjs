@@ -11,67 +11,33 @@
  * chắc còn sống.
  *
  * `METER_NAME` của HES là HỆ SỐ NHÂN, không phải tên công tơ (xem API_HES.md).
+ * Phía PB, HSN đọc từ `dm_point.hsn` — xem `lib/pb_meters.mjs`.
  *
- * CHỈ ĐỌC cả hai phía. Token lấy từ `API_TOKEN`, không tự gọi Login.
+ * CHỈ ĐỌC cả hai phía.
  *
  *   PB_ADMIN_EMAIL=... PB_ADMIN_PASSWORD=... API_TOKEN=... node scripts/hes_check_meters.mjs
  */
-const API = 'http://14.225.244.63:8899/api';
-const TOKEN = process.env.API_TOKEN;
-if (!TOKEN) { console.error('Thiếu API_TOKEN'); process.exit(1); }
-const PB = (process.env.PB_URL || 'https://getc.up.railway.app/pb').replace(/\/$/, '');
+import { getJson, mapLimit, stamp, getToken } from './lib/hes_api.mjs';
+import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
 
 /** Cửa sổ soi dữ liệu tức thời — đủ rộng để công tơ đọc thưa vẫn lọt. */
 const DAYS = Number(process.env.DAYS || 3);
-const pad = (n) => String(n).padStart(2, '0');
-const stamp = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}000000`;
+/** Mốc 00:00 của một ngày — API HES nhận `yyyyMMddHHmmss`. */
+const dayStamp = (d) => stamp(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
 const NOW = new Date();
-const FROM = stamp(new Date(NOW.getTime() - DAYS * 86400000));
-const TO = stamp(new Date(NOW.getTime() + 86400000));
+const FROM = dayStamp(new Date(NOW.getTime() - DAYS * 86400000));
+const TO = dayStamp(new Date(NOW.getTime() + 86400000));
+
+const TOKEN = await getToken();
+const N = (s) => String(s ?? '').trim();
 
 /* ----------------------------- PocketBase ----------------------------- */
-const auth = await (await fetch(`${PB}/api/collections/_superusers/auth-with-password`, {
-  method: 'POST', headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ identity: process.env.PB_ADMIN_EMAIL, password: process.env.PB_ADMIN_PASSWORD }),
-})).json();
-if (!auth.token) { console.error('Đăng nhập PocketBase thất bại'); process.exit(1); }
-const H = { Authorization: auth.token };
-
-/** Lấy HẾT bản ghi — `dm_asset` đã vượt 500, một trang là thiếu im lặng. */
-const allOf = async (col) => {
-  const o = [];
-  for (let p = 1; ; p++) {
-    const r = await (await fetch(
-      `${PB}/api/collections/${col}/records?perPage=500&page=${p}`, { headers: H })).json();
-    o.push(...(r.items ?? []));
-    if (p >= (r.totalPages ?? 1)) return o;
-  }
-};
-const [points, assets, customers, stations] = await Promise.all(
-  ['dm_point', 'dm_asset', 'dm_customer', 'dm_station'].map(allOf));
-
-const ymd = (v) => String(v ?? '').slice(0, 10);
-const N = (s) => String(s ?? '').trim();
-const pointById = new Map(points.map(p => [p.id, p]));
-const mkhOf = (id) => customers.find(c => c.id === id)?.mkh ?? '';
-const sdmOf = (id) => stations.find(s => s.id === id)?.sdm_kva;
-
-/** Công tơ ĐANG TREO: có ngày treo, chưa có ngày tháo. */
-const live = assets
-  .filter(a => a.type === 'CONGTO' && ymd(a.date_on) && !ymd(a.date_off) && a.point)
-  .map(a => {
-    const p = pointById.get(a.point);
-    return {
-      serial: N(a.serial), point: p,
-      code: p?.code || p?.line_name || '(không rõ)',
-      hsn: p?.hsn, mkh: mkhOf(p?.customer), status: p?.status, sdm: sdmOf(p?.station),
-      dateOn: ymd(a.date_on),
-    };
-  });
+const pbToken = await pbLogin();
+const { meters: live } = await liveMeters(pbToken);
 const pbBySerial = new Map(live.map(x => [x.serial, x]));
 
 /* -------------------------------- HES -------------------------------- */
-const hesRaw = await (await fetch(`${API}/GetMeterAccount?UserID=2&Token=${TOKEN}`)).json();
+const hesRaw = await getJson('GetMeterAccount', { UserID: process.env.USER_ID || '2', Token: TOKEN });
 if (!Array.isArray(hesRaw)) {
   console.error('GetMeterAccount lỗi:', JSON.stringify(hesRaw));
   process.exit(1);
@@ -88,23 +54,9 @@ const hes = hesRaw.map(m => ({
 const hesBySerial = new Map(hes.map(m => [m.serial, m]));
 
 /* ------------------- Còn phát dữ liệu không (tức thời) ------------------- */
-/** Chạy song song có giới hạn — HES là máy chủ nội bộ, đừng dội hết một lúc. */
-const mapLimit = async (items, limit, fn) => {
-  const out = new Array(items.length);
-  let i = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (i < items.length) {
-      const k = i++;
-      try { out[k] = await fn(items[k]); } catch (e) { out[k] = { error: String(e).slice(0, 60) }; }
-    }
-  }));
-  return out;
-};
-
 const probe = async (serial) => {
-  const r = await fetch(
-    `${API}/GetInstantByDate?MeterNo=${encodeURIComponent(serial)}&StartDate=${FROM}&EndDate=${TO}&Token=${TOKEN}`);
-  const j = await r.json();
+  const j = await getJson('GetInstantByDate',
+    { MeterNo: serial, StartDate: FROM, EndDate: TO, Token: TOKEN });
   if (!Array.isArray(j)) return { n: 0, last: '', msg: j?.MESSAGE ?? '' };
   const times = j.map(x => N(x.DATE_TIME)).filter(Boolean).sort();
   return { n: j.length, last: times[times.length - 1] ?? '', sample: j[j.length - 1] };
