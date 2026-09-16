@@ -54,6 +54,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
+import { notifyOnce } from './lib/pb_notify.mjs';
 
 /**
  * Chi tiết 30 phút — 115 công tơ × 48 mốc ≈ 5.520 dòng ≈ 385 KB MỘT NGÀY.
@@ -426,6 +427,33 @@ if (real.length) {
         + `${d.from} → ${d.to}  (−${d.gap.toFixed(3)}, ≈${Math.round(d.gap * (d.hsn || 1))} sau ×HSN)`);
     }
     if (list.length > 5) console.log(`   ${' '.repeat(12)} … và ${list.length - 5} lần nữa`);
+  }
+
+  /*
+    Gửi cảnh báo vào chuông / màn Thông báo — CHỈ ca lùi THẬT.
+
+    Ca sai số làm tròn (0.001) tuyệt đối không gửi: 21 ngày cuối tháng 8 có 102
+    ca như vậy, gửi hết thì chuông ngập ngay ngày đầu và mất sạch tác dụng cảnh
+    báo. Chúng đã có một dòng đếm ở log là đủ.
+
+    Gộp MỘT thông báo cho cả mẻ, không phải mỗi công tơ một cái. Nội dung có kèm
+    NGÀY nên `notifyOnce` (chống trùng theo `message`) vẫn cho ra thông báo riêng
+    từng ngày khi sai lệch kéo dài.
+  */
+  if (process.argv.includes('--notify')) {
+    const serials = [...realBySerial.keys()];
+    const sent = await notifyOnce(pbToken, {
+      title: 'Cảnh báo chỉ số công tơ chạy lùi',
+      message: `Ngày ${ymd(day)}: ${serials.length} công tơ có chỉ số chạy lùi `
+        + `(${real.length} lần) — ${serials.join(', ')}`,
+      type: 'info',
+      kind: 'lui',
+      /* area rỗng = khối Kinh doanh; cảnh báo kỹ thuật không thuộc riêng KCN nào. */
+      area: '',
+    });
+    console.log(sent ? 'Đã gửi thông báo chỉ số lùi.' : 'Thông báo chỉ số lùi đã có sẵn, bỏ qua.');
+  } else {
+    console.log('(Thêm --notify để đẩy cảnh báo này vào chuông thông báo.)');
   }
 }
 

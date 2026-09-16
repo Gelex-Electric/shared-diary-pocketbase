@@ -21,8 +21,17 @@ const COLLECTION = 'notifications';
 /**
  * Tạo một thông báo nếu chưa có cái nào trùng `message` + `area`.
  * Trả `true` nếu đã tạo mới, `false` nếu bỏ qua vì trùng.
+ *
+ * `kind` là NHÓM nghiệp vụ, quyết định thông báo vào sub-side nào ở màn Thông
+ * báo: `thanhtoan` · `hsn` · `tram` · `congto` · `lui`. Khác `type` — `type`
+ * chỉ quyết định màu và biểu tượng, và ba loại cảnh báo khác hẳn nhau đều mang
+ * `type = 'info'` nên không chia nhóm được bằng nó.
+ *
+ * LƯU Ý: PocketBase BỎ QUA trường lạ khi tạo bản ghi, KHÔNG báo lỗi. Trước khi
+ * cột `kind` được thêm vào collection, giá trị truyền vào đây rơi vào hư không mà
+ * mọi thứ vẫn báo thành công — đã gặp khi thử ngày 16/09/2026.
  */
-export async function notifyOnce(token, { title, message, type = 'info', mkh = '', area = '' }) {
+export async function notifyOnce(token, { title, message, type = 'info', kind = '', mkh = '', area = '' }) {
   const api = `${PB_URL}/api/collections/${COLLECTION}/records`;
   const headers = { Authorization: token, 'Content-Type': 'application/json' };
 
@@ -33,7 +42,7 @@ export async function notifyOnce(token, { title, message, type = 'info', mkh = '
 
   const r = await fetch(api, {
     method: 'POST', headers,
-    body: JSON.stringify({ title, message, type, mkh, area }),
+    body: JSON.stringify({ title, message, type, kind, mkh, area }),
   });
   if (!r.ok) {
     console.log(`[WARN] Gửi thông báo thất bại (${r.status}): ${(await r.text()).slice(0, 200)}`);
