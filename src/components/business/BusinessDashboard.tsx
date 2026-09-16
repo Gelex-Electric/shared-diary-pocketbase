@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { pb } from '../../lib/pocketbase';
 import {
   LogOut, X, Menu, ChevronDown,
-  FileText, LayoutDashboard, Briefcase, Activity, Package, FileSignature,
+  FileText, LayoutDashboard, Briefcase, Activity, Package, FileSignature, Bell,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import BusinessSummaryDashboard from './BusinessSummaryDashboard';
@@ -20,16 +20,19 @@ import GeneralManagement from '../dm/GeneralManagement';
 import CatalogEntry from '../dm/CatalogEntry';
 import QlvhPage from '../qlvh/QlvhPage';
 import NotificationBell from '../ui/NotificationBell';
+import NotificationCenter from '../notifications/NotificationCenter';
+import { useUnreadCount } from '../notifications/useUnreadCount';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
-  | 'summary' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'invoice-export'
+  | 'summary' | 'notifications' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'invoice-export'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
   | 'dm-general' | 'dm-catalog'
   | 'qlvh';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
+  notifications:   'Thông báo',
   'bill-confirm':  'Biên bản xác nhận chỉ số',
   'quick-import':  'Nạp dữ liệu nhanh',
   'customer-debt': 'Công nợ khách hàng',
@@ -56,6 +59,8 @@ const QLVH_TABS: Tab[] = ['qlvh'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
+  /** Số chưa đọc cho badge sidebar — dùng chung một nguồn với chuông. */
+  const unreadNotif = useUnreadCount();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isBusinessExpanded, setIsBusinessExpanded] = useState(true);
   const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
@@ -114,6 +119,25 @@ export default function BusinessDashboard() {
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
               <span>Tổng hợp</span>
+            </button>
+          </li>
+
+          {/* Thông báo — badge là số CHƯA ĐỌC, mở màn là về 0 */}
+          <li className="relative mt-1">
+            <button
+              id="nav-notifications"
+              onClick={() => { setTopTab('notifications'); onNavigate?.(); }}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'notifications' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <Bell className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Thông báo</span>
+              {unreadNotif > 0 && (
+                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {unreadNotif > 99 ? '99+' : unreadNotif}
+                </span>
+              )}
             </button>
           </li>
 
@@ -486,6 +510,8 @@ export default function BusinessDashboard() {
           <section>
             {topTab === 'summary' ? (
               <BusinessSummaryDashboard />
+            ) : topTab === 'notifications' ? (
+              <NotificationCenter />
             ) : topTab === 'quick-import' ? (
               <QuickImportManager />
             ) : topTab === 'invoice-export' ? (

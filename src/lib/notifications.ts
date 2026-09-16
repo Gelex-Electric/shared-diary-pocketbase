@@ -93,10 +93,22 @@ export const getLastRead = (): string => {
   try { return localStorage.getItem(LAST_READ_KEY) || ''; } catch { return ''; }
 };
 
+/*
+  Ai đang hiện số chưa đọc thì đăng ký ở đây, để mốc đọc vừa đổi là số cập nhật
+  ngay — không phải chờ tải lại trang. Cùng cách `NotificationBell` làm với danh
+  sách thông báo cục bộ.
+*/
+const readListeners = new Set<() => void>();
+export function onReadChange(fn: () => void): () => void {
+  readListeners.add(fn);
+  return () => { readListeners.delete(fn); };
+}
+
 /** Ghi mốc đọc = bây giờ. Gọi khi người dùng mở màn Thông báo. */
 export function markAllRead(): string {
   const now = new Date().toISOString().replace('T', ' ');
   try { localStorage.setItem(LAST_READ_KEY, now); } catch { /* chế độ ẩn danh */ }
+  readListeners.forEach(fn => fn());
   return now;
 }
 

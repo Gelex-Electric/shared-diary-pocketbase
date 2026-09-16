@@ -2,7 +2,7 @@
 import { pb } from '../lib/pocketbase';
 import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity, FileText, LayoutDashboard,
+  Activity, FileText, LayoutDashboard, Bell,
 } from 'lucide-react';
 import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -19,12 +19,15 @@ import SldPage from './sld/SldPage';
 import BillConfirmManager from './business/BillConfirmManager';
 import CustomerDebtManager from './business/CustomerDebtManager';
 import NotificationBell from './ui/NotificationBell';
+import NotificationCenter from './notifications/NotificationCenter';
+import { useUnreadCount } from './notifications/useUnreadCount';
 import ThemeToggle from './ui/ThemeToggle';
 
-type Tab = 'summary' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
+type Tab = 'summary' | 'notifications' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
+  notifications: 'Thông báo',
   journal:   'Hồ sơ vận hành',
   outage:            'Thông báo ngừng cấp điện',
   'handover-record': 'Biên bản treo tháo',
@@ -71,6 +74,8 @@ const subItemV = {
 
 export default function Dashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
+  /** Số chưa đọc cho badge sidebar — dùng chung một nguồn với chuông. */
+  const unreadNotif = useUnreadCount();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isJournalExpanded, setIsJournalExpanded] = useState(true);
   const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
@@ -166,6 +171,25 @@ export default function Dashboard() {
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
               <span>Tổng hợp</span>
+            </button>
+          </li>
+
+          {/* Thông báo — badge là số CHƯA ĐỌC, mở màn là về 0 */}
+          <li className="relative mt-1">
+            <button
+              id="nav-notifications"
+              onClick={() => { setTopTab('notifications'); onNavigate?.(); }}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'notifications' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <Bell className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Thông báo</span>
+              {unreadNotif > 0 && (
+                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {unreadNotif > 99 ? '99+' : unreadNotif}
+                </span>
+              )}
             </button>
           </li>
 
@@ -507,6 +531,8 @@ export default function Dashboard() {
               <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
                 <SldPage />
               </div>
+            ) : topTab === 'notifications' ? (
+              <NotificationCenter />
             ) : topTab === 'journal' ? (
               <JournalManager />
             ) : topTab === 'outage' ? (
