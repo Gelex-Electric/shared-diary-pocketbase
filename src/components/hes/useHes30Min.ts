@@ -7,11 +7,8 @@ import {
 } from '../../lib/hes30min';
 import { toast as notify } from '../../lib/toast';
 
-export interface MeterRow { id: string; MeterNo: string; HSN: string; Line: string; area: string; }
-
-/** Số → chuỗi kiểu Việt Nam, `null` thành gạch ngang. */
-export const fmt = (val: number | null) =>
-  val === null ? '—' : val.toLocaleString('vi-VN', { maximumFractionDigits: 0 });
+export type { MeterRow } from './hesShared';
+import type { MeterRow } from './hesShared';
 
 /**
  * Chuyển kết quả sang hình dạng `Consumption` mà `HesConsumptionTable` đang

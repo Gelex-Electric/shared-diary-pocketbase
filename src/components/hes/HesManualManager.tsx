@@ -3,7 +3,7 @@ import { useScopeAreas, useUserAreas, type Scope } from '../../lib/scope';
 import { RefreshCw, Download, Zap, Table as TableIcon, CreditCard } from 'lucide-react';
 import { Select } from '../ui/Select';
 import * as XLSX from 'xlsx';
-import { maxTotalMeterId, toExportRow } from './useHesConsumption';
+import { maxTotalMeterId, toExportRow } from './hesShared';
 import { useHesManualReadings } from './useHesManualReadings';
 import { HesManualSectionCards } from './HesManualSectionCards';
 import { HesConsumptionTable } from './HesConsumptionTable';

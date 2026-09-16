@@ -2,7 +2,7 @@ import React from 'react';
 import { RefreshCw, Zap } from 'lucide-react';
 import { DatePicker, TimePicker } from '../ui/DateTimePickers';
 import { kcnColorOf } from '../../lib/kcnColors';
-import { fmtTime, type MeterRow } from './useHesConsumption';
+import { fmtTime, type MeterRow } from './hesShared';
 import type { ReadingSection } from './useHesManualReadings';
 
 const SECTION_COLOR = ['bg-accent shadow-[var(--accent)]/20', 'bg-purple-600 shadow-purple-600/20'];

@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 /**
- * Lấy chỉ số công tơ từ `GetMeterDataByDate` và ghi ra HAI file:
- *   - `public/hes_index_30min.csv`  chi tiết 30 phút, giữ 30 ngày (file nóng)
- *   - `public/hes_index_daily.csv`  đầu/cuối kỳ theo ngày
+ * Lấy chỉ số công tơ từ `GetMeterDataByDate`, ghi `public/hes_index_30min.csv`
+ * — chi tiết 30 phút, giữ 30 ngày gần nhất.
  *
  * Một lời gọi API cho mỗi công tơ trả sẵn 49 bản ghi (48 mốc 30 phút + mốc
- * 00:00 hôm sau), rút ra được cả hai. Bản Python cũ gọi HAI lần với hai cửa sổ
- * nhỏ rồi vứt 47 bản ghi.
+ * 00:00 hôm sau). Bản Python cũ gọi HAI lần với hai cửa sổ nhỏ rồi vứt 47 bản
+ * ghi — vừa tốn gấp đôi lời gọi, vừa sinh lỗi chồng mốc.
+ *
+ * KHÔNG còn ghi `hes_index_daily.csv` (bỏ 16/09/2026). Tab đọc file đó đã thay
+ * bằng "Chỉ số theo hóa đơn" lấy từ `invoice` — nguồn chuẩn hơn; còn file ngày
+ * bắt trình duyệt tải trọn 2,9 MB rồi chỉ dùng 2 dòng mỗi công tơ. Cần lại bản
+ * cũ thì lấy từ lịch sử git: `git show <commit>:public/hes_index_daily.csv`.
+ *
+ * Chỉ số ngày vẫn TÍNH trong bộ nhớ để dò thụt lùi và báo công tơ thiếu dữ
+ * liệu — chỉ là không ghi ra file nữa.
  *
  * KHÔNG ghi PocketBase. Đã thử collection `hes_index` ngày 16/09/2026 rồi bỏ:
  * chỉ số đầu/cuối kỳ có giá trị pháp lý đã nằm ở `invoice` (màn Biên bản xác
@@ -35,15 +42,9 @@
  *
  * Biến môi trường:
  *   TARGET_DATE   rỗng = hôm qua · "YYYY-MM-DD" · số N = lùi N ngày
- *   KEEP_DAYS     0 = giữ toàn bộ lịch sử trong CSV (mặc định — xem ghi chú dưới)
  *   KEEP_DAYS_30  số ngày giữ trong file 30 phút. Mặc định 30
- *   HES_INDEX_PATH  đường dẫn CSV ngày.     Mặc định public/hes_index_daily.csv
  *   HES_30MIN_PATH  đường dẫn CSV 30 phút.  Mặc định public/hes_index_30min.csv
  *   PB_EMAIL/PB_PASS (hoặc PB_ADMIN_*), API_TOKEN hoặc API_USER/API_PASS
- *
- * Vì sao KEEP_DAYS mặc định 0 (giữ toàn bộ): màn "Lấy chỉ số HES" đọc chính file
- * này và cho người dùng chọn kỳ tùy ý — thường là cả tháng — rồi tính theo
- * `row[đến].END − row[từ].START`. Cắt bớt là mất khả năng tra kỳ dài.
  *
  * Vẫn cần tài khoản PocketBase, nhưng CHỈ ĐỂ ĐỌC danh mục công tơ (`dm_*`).
  */
@@ -53,8 +54,6 @@ import { pathToFileURL } from 'node:url';
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
 
-const OUT_PATH = process.env.HES_INDEX_PATH || 'public/hes_index_daily.csv';
-const KEEP_DAYS = Number(process.env.KEEP_DAYS || 0);
 /**
  * Chi tiết 30 phút — file nóng, nặng gấp 48 lần bản ngày.
  *
@@ -221,14 +220,22 @@ export function overlapOf(cur, prev) {
  * cuối kỳ có giá trị pháp lý đã nằm ở `invoice` rồi — thêm một bản sao chi tiết
  * hơn trên PB là thừa (user chốt 16/09/2026).
  *
- * Hệ quả: `KEEP_DAYS` phải > 1 thì mới xét được thụt lùi liên ngày. Mặc định 0
- * (giữ toàn bộ) nên không thành vấn đề.
  */
 function prevDayRows(day) {
   const prev = ymd(new Date(day.getTime() - 86400000));
   const out = new Map();
-  for (const r of readCsv(OUT_PATH)) if (r.DATE === prev) out.set(r.METER_NO, r);
-  return { prev, rows: out, src: out.size ? 'CSV' : 'không có' };
+  /*
+    Đọc từ FILE 30 PHÚT: mốc 00:00 của ngày D chính là "cuối kỳ" của ngày D−1.
+    Trước 16/09/2026 đọc `hes_index_daily.csv`, nhưng file đó đã bỏ.
+  */
+  const at = `${ymd(day)} 00:00:00`;
+  for (const r of readCsv(OUT_30_PATH)) {
+    if (r.DATE_TIME !== at) continue;
+    const row = { END_TIME: r.DATE_TIME };
+    for (const k of KEYS) row[`${k}_END`] = r[k];
+    out.set(r.METER_NO, row);
+  }
+  return { prev, rows: out, src: out.size ? 'file 30 phút' : 'không có' };
 }
 
 function buildRow(meterNo, hsn, day, startRec, endRec) {
@@ -257,35 +264,6 @@ export function readCsv(path) {
     const c = l.split(',');
     return Object.fromEntries(head.map((h, i) => [h, (c[i] ?? '').trim()]));
   });
-}
-
-/** Gộp với file cũ theo khóa (METER_NO, DATE) → chạy lại an toàn. */
-export function writeCsv(path, newRows) {
-  const merged = new Map();
-  for (const r of readCsv(path)) merged.set(`${r.METER_NO}|${r.DATE}`, r);
-  for (const r of newRows) merged.set(`${r.METER_NO}|${r.DATE}`, r);
-
-  let rows = [...merged.values()];
-  if (KEEP_DAYS > 0) {
-    const cutoff = ymd(new Date(todayVn().getTime() - KEEP_DAYS * 86400000));
-    const kept = rows.filter(r => (r.DATE ?? '') >= cutoff);
-    /*
-      Chốt chặn: pipeline nghỉ vài ngày (Actions hỏng, token hết hạn) là mọi dòng
-      đều cũ hơn mốc cắt, prune sẽ quét sạch file. Thà giữ dữ liệu cũ còn hơn
-      đưa ra một file rỗng — nơi đọc không phân biệt được "chưa có" với "vừa mất".
-    */
-    if (kept.length) rows = kept;
-    else if (rows.length) {
-      console.log(`[CẢNH BÁO] Mọi dòng đều cũ hơn ${cutoff} — GIỮ NGUYÊN ${rows.length} dòng `
-        + 'thay vì cắt sạch. Kiểm tra xem pipeline có đang chạy không.');
-    }
-  }
-  rows.sort((a, b) => (a.DATE + a.METER_NO).localeCompare(b.DATE + b.METER_NO));
-
-  mkdirSync(dirname(path), { recursive: true });
-  const body = rows.map(r => OUT_FIELDS.map(f => r[f] ?? '').join(','));
-  writeFileSync(path, [OUT_FIELDS.join(','), ...body].join('\n') + '\n', 'utf8');
-  return rows.length;
 }
 
 /**
@@ -391,9 +369,6 @@ if (rows.length === noData.length) {
   console.error('Không công tơ nào có chỉ số — dừng, không ghi đè file cũ.');
   process.exit(1);
 }
-
-const total = writeCsv(OUT_PATH, rows);
-console.log(`Ghi ${rows.length} dòng. Tổng file: ${total} dòng → ${OUT_PATH}`);
 
 const total30 = writeCsv30(OUT_30_PATH, rows30);
 console.log(`Chi tiết 30 phút: ghi ${rows30.length} mốc, giữ ${KEEP_DAYS_30} ngày. `

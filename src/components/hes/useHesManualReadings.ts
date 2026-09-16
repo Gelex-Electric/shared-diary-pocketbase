@@ -3,9 +3,9 @@ import { pb } from '../../lib/pocketbase';
 import { loadCatalog } from '../../lib/dm/repo';
 import { hesMeterRowsOf } from '../../lib/dm/meterRows';
 import { AccountHes, DataMetter } from '../../types';
-import type { Consumption } from '../../lib/hesIndex';
+import type { ConsumptionCell as Consumption } from './hesShared';
 import { toast as notify, type ToastType } from '../../lib/toast';
-import type { MeterRow } from './useHesConsumption';
+import type { MeterRow } from './hesShared';
 
 const TOAST_TITLE: Record<ToastType, string> = {
   success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo', alert: 'Thông báo',
@@ -287,7 +287,7 @@ export function useHesManualReadings({
   };
 
   /**
-   * Quy tiêu thụ về đúng kiểu `Consumption` của lib/hesIndex để dùng lại
+   * Quy tiêu thụ về đúng kiểu `ConsumptionCell` dùng chung để dùng lại
    * `HesConsumptionTable` và `toExportRow` chung với tab "Lấy trực tiếp".
    */
   const consumptions = useMemo(() => {

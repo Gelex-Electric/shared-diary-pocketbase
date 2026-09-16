@@ -1,6 +1,5 @@
-import { RefreshCw, Info } from 'lucide-react';
-import type { Consumption } from '../../lib/hesIndex';
-import { fmt, fmtTime, type MeterRow } from './useHesConsumption';
+import { RefreshCw } from 'lucide-react';
+import { fmt, fmtTime, type MeterRow, type ConsumptionCell } from './hesShared';
 
 const COLS = 10;
 
@@ -15,7 +14,7 @@ export function HesConsumptionTable({
   rows, consumptions, highlightId = '', status,
 }: {
   rows: MeterRow[];
-  consumptions: Map<string, Consumption | null>;
+  consumptions: Map<string, ConsumptionCell | null>;
   /** Công tơ được tô nổi bật (thường là công tơ tiêu thụ lớn nhất). */
   highlightId?: string;
   status?: 'loading' | 'empty';
@@ -68,36 +67,4 @@ export function HesConsumptionTable({
       </table>
     </div>
   );
-}
-
-/** Khối thông báo nhỏ dùng chung ở đầu 2 màn HES (chưa có dữ liệu / khoảng ngày sai). */
-export function HesRangeNotices({
-  isLoading, hasDates, validRange, rounded = false,
-}: {
-  isLoading: boolean;
-  /** `hesData` đã tải xong và có ít nhất một ngày. `null` khi chưa tải. */
-  hasDates: boolean | null;
-  validRange: boolean;
-  /** Khối Văn phòng đặt notice ngoài card nên cần bo góc. */
-  rounded?: boolean;
-}) {
-  if (isLoading || hasDates === null) return null;
-  const r = rounded ? ' rounded-lg' : '';
-  if (!hasDates) {
-    return (
-      <div className={`flex items-center gap-2 px-5 py-3 text-xs text-soft bg-subtle/50${r}`}>
-        <Info className="w-3.5 h-3.5 shrink-0" />
-        Chưa có dữ liệu chỉ số tự động — workflow “Fetch HES Index” cần chạy ít nhất một lần.
-      </div>
-    );
-  }
-  if (!validRange) {
-    return (
-      <div className={`flex items-center gap-2 px-5 py-3 text-xs text-warn bg-[var(--warning-soft)]${r}`}>
-        <Info className="w-3.5 h-3.5 shrink-0" />
-        Khoảng ngày không hợp lệ — ngày đầu kỳ phải nhỏ hơn hoặc bằng ngày cuối kỳ.
-      </div>
-    );
-  }
-  return null;
 }

@@ -3,7 +3,7 @@ import { AREAS } from '../../lib/pocketbase';
 import { kcnColorOf } from '../../lib/kcnColors';
 import { RefreshCw, Download, Zap, Table as TableIcon, CreditCard } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { toExportRow, type MeterRow } from '../hes/useHesConsumption';
+import { toExportRow, type MeterRow } from '../hes/hesShared';
 import { useHesManualReadings } from '../hes/useHesManualReadings';
 import { HesManualSectionCards } from '../hes/HesManualSectionCards';
 import { HesConsumptionTable } from '../hes/HesConsumptionTable';

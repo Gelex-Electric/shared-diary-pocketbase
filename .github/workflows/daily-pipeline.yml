@@ -72,7 +72,7 @@ jobs:
       - name: Compute daily Pmax
         run: python scripts/daily_pmax.py
 
-      # 4) Chi so HES: chi tiet 30 phut (giu 30 ngay) + dau/cuoi ky theo ngay.
+      # 4) Chi so HES chi tiet 30 phut, giu 30 ngay.
       # Ban Node thay ban Python tu 16/09/2026. Khac hai cho:
       #   - danh sach cong to lay tu DANH MUC PocketBase (cong to dang treo),
       #     khong phai metterinfo.csv;
@@ -104,7 +104,7 @@ jobs:
           # Ba file transformer_loss_*.csv da bo khoi day tu 16/09/2026 (buoc 5+6
           # tam dung). File cu van nam trong repo, chi khong sinh/commit them.
           git add public/metterinfo.csv public/line_info.csv public/mba_info.csv public/datametter.csv public/pmax_daily.csv \
-                  public/hes_index_daily.csv public/hes_index_30min.csv
+                  public/hes_index_30min.csv
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
