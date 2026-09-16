@@ -125,6 +125,88 @@ async function fetchBoundary(token, meterNo, boundary) {
   return null;
 }
 
+/* ------------------------------ thụt lùi ------------------------------ */
+/**
+ * Dung sai khi so chỉ số — chênh dưới mức này coi như sai số làm tròn của công
+ * tơ, không phải thụt lùi.
+ */
+const EPS = Number(process.env.REGRESS_EPS || 0.001);
+
+/**
+ * Các chỉ số CHẠY THỤT LÙI của một dòng, dạng "PG,VC". Rỗng = bình thường.
+ *
+ * Chỉ số lũy kế chỉ được phép tăng, nên xét hai chiều:
+ *   1. Trong ngày : X_END < X_START
+ *   2. Liên ngày  : X_START hôm nay < X_END hôm qua
+ *
+ * Công tơ vừa THAY hoặc vừa RESET cũng rơi vào trường hợp 2 và KHÔNG phân biệt
+ * được tự động — dữ liệu không mang thông tin đó. Vì vậy `REGRESS` là tín hiệu
+ * để người dùng tra, KHÔNG phải kết luận công tơ lỗi. Dòng vẫn lưu số liệu thật
+ * (user chốt 16/09/2026), không xoá, không sửa.
+ *
+ * Ô rỗng (thiếu chỉ số) thì bỏ qua, không coi là thụt lùi — đã có `NO_DATA` lo.
+ */
+export function regressOf(cur, prev) {
+  const has = (v) => v !== undefined && v !== null && String(v).trim() !== '';
+  const bad = [];
+  /*
+    So liên ngày chỉ có nghĩa khi hai mốc KHÔNG chồng nhau. Cuối kỳ hôm qua có
+    thể rơi vào 00:30 (lúc chạy chưa có bản ghi 00:00, cửa sổ nới rộng vớt được
+    bản muộn hơn) trong khi đầu kỳ hôm nay là 00:00 — chỉ số hôm nay thấp hơn là
+    ĐƯƠNG NHIÊN, không phải thụt lùi. Xem `overlapOf`.
+  */
+  const overlapped = overlapOf(cur, prev);
+  for (const k of KEYS) {
+    const s = cur[`${k}_START`], e = cur[`${k}_END`];
+    if (has(s) && has(e) && Number(e) < Number(s) - EPS) { bad.push(k); continue; }
+    if (overlapped) continue;
+    const p = prev?.[`${k}_END`];
+    if (has(s) && has(p) && Number(s) < Number(p) - EPS) bad.push(k);
+  }
+  return bad.join(',');
+}
+
+/**
+ * Hai kỳ liên tiếp có CHỒNG MỐC không: cuối kỳ hôm qua muộn hơn đầu kỳ hôm nay.
+ *
+ * Khi đó khoảng [đầu hôm nay → cuối hôm qua] bị tính vào CẢ HAI ngày, tức sản
+ * lượng cộng trùng. Đây là lỗi dữ liệu riêng, không phải thụt lùi, nên chỉ cảnh
+ * báo chứ không gắn cờ `REGRESS`.
+ */
+export function overlapOf(cur, prev) {
+  const a = prev?.END_TIME, b = cur?.START_TIME;
+  if (!a || !b) return false;
+  return new Date(String(a).replace(' ', 'T')) > new Date(String(b).replace(' ', 'T'));
+}
+
+/**
+ * Chỉ số ngày liền trước theo công tơ, để xét thụt lùi liên ngày.
+ * Ưu tiên PocketBase (không phụ thuộc cửa sổ giữ ngày của CSV); PB chưa có dữ
+ * liệu thì lùi về đọc chính file CSV.
+ */
+async function prevDayRows(pbToken, day) {
+  const prev = ymd(new Date(day.getTime() - 86400000));
+  const out = new Map();
+  try {
+    const headers = { Authorization: pbToken };
+    for (let page = 1; ; page++) {
+      const url = `${PB_URL}/api/collections/${PB_COLLECTION}/records?perPage=500&page=${page}`
+        + `&filter=${encodeURIComponent(`date=${JSON.stringify(prev)}`)}`;
+      const r = await (await fetch(url, { headers })).json();
+      for (const it of r.items ?? []) {
+        const row = { END_TIME: it.end_time };
+        for (const k of KEYS) row[`${k}_END`] = it[`${k.toLowerCase()}_end`];
+        out.set(it.meter_no, row);
+      }
+      if (page >= (r.totalPages ?? 1)) break;
+    }
+  } catch { /* PB chưa có collection hoặc mất mạng — dùng CSV bên dưới */ }
+
+  if (out.size) return { prev, rows: out, src: 'PocketBase' };
+  for (const r of readCsv(OUT_PATH)) if (r.DATE === prev) out.set(r.METER_NO, r);
+  return { prev, rows: out, src: out.size ? 'CSV' : 'không có' };
+}
+
 function buildRow(meterNo, hsn, day, startRec, endRec) {
   const row = {
     METER_NO: meterNo, DATE: ymd(day),
@@ -249,6 +331,28 @@ const results = await mapLimit(meters, CONCURRENCY, async (m) => {
 });
 
 const rows = results.filter(r => r && r.METER_NO);
+
+/* Cờ thụt lùi — cần chỉ số ngày liền trước, nên làm sau khi đã có cả mẻ. */
+const { prev, rows: prevRows, src } = await prevDayRows(pbToken, day);
+console.log(`Chỉ số ngày liền trước (${prev}): ${prevRows.size} công tơ, nguồn ${src}.`);
+for (const r of rows) r.REGRESS = regressOf(r, prevRows.get(r.METER_NO));
+
+const overlapped = rows.filter(r => overlapOf(r, prevRows.get(r.METER_NO)));
+if (overlapped.length) {
+  console.log(`\n[CẢNH BÁO] ${overlapped.length} công tơ CHỒNG MỐC với ngày ${prev}: cuối kỳ hôm đó `
+    + 'muộn hơn đầu kỳ hôm nay, nên phần chồng bị tính sản lượng vào cả hai ngày.');
+  for (const r of overlapped) {
+    console.log(`   ${r.METER_NO.padEnd(12)} cuối ${prevRows.get(r.METER_NO).END_TIME} > đầu ${r.START_TIME}`);
+  }
+}
+
+const regressed = rows.filter(r => r.REGRESS);
+if (regressed.length) {
+  console.log(`\n[CẢNH BÁO] ${regressed.length} công tơ có chỉ số CHẠY THỤT LÙI `
+    + '(có thể do thay/reset công tơ — cần tra, không phải kết luận lỗi):');
+  for (const r of regressed) console.log(`   ${r.METER_NO.padEnd(12)} ${r.REGRESS}`);
+}
+
 const noData = rows.filter(r => r.NO_DATA === '1');
 console.log(`Lấy được ${rows.length - noData.length}/${rows.length} công tơ có đủ chỉ số hai đầu.`);
 if (noData.length) {
