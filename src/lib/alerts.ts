@@ -19,22 +19,59 @@
  */
 import { pb } from './pocketbase';
 
-/** Một dòng trong bảng chi tiết của cảnh báo. */
+/**
+ * Một dòng trong bảng chi tiết của cảnh báo.
+ *
+ * Với nhóm `lui`, một dòng = MỘT CA lùi (một biểu, một khoảng thời gian), không
+ * phải một công tơ: cùng một công tơ có thể lùi ở nhiều biểu và nhiều giờ khác
+ * nhau, gộp lại thì mất hết "lùi từ bao nhiêu về bao nhiêu, lúc mấy giờ".
+ */
 export interface AlertDetail {
   meter: string;
   /** Tên tắt khách hàng; rỗng khi Danh mục chưa khai công tơ này. */
   customer?: string;
+  /** Trạm / điểm đo — hiện dưới tên khách trong cùng một ô. */
+  station?: string;
   zone?: string;
-  /** Mô tả ngắn: thanh ghi lùi và giờ, hoặc mã điểm đo/trạm. */
+  /** Khoảng bất thường, `HH:mm`. */
+  fromTime?: string;
+  toTime?: string;
+  /** Biểu (thanh ghi) bị lùi, vd "Hữu công giao – tổng". */
+  register?: string;
+  /** Chỉ số trước → sau, tức "lùi từ bao nhiêu về bao nhiêu". */
+  fromIndex?: number;
+  toIndex?: number;
+  /** Mô tả ngắn cho các nhóm không phải `lui` (mã điểm đo/trạm). */
   note?: string;
   /**
-   * Lượng bất thường đã ×HSN. `null` = KHÔNG ĐO ĐƯỢC (vd công tơ không có chỉ
-   * số), khác hẳn 0 nghĩa là "đo được và bằng không" — bảng phải hiện hai
-   * trường hợp này khác nhau.
+   * Lượng bất thường đã ×HSN. `null` = KHÔNG ĐO ĐƯỢC, khác hẳn 0 nghĩa là "đo
+   * được và bằng không" — bảng phải hiện hai trường hợp này khác nhau.
    */
   value?: number | null;
   unit?: string;
 }
+
+/**
+ * Gom chi tiết theo KCN, giữ nguyên thứ tự đã sắp sẵn từ script.
+ *
+ * Cảnh báo thường trải nhiều KCN; trộn lẫn thì người vận hành một khu phải tự
+ * lọc bằng mắt. KCN rỗng gom vào cuối dưới tên "Chưa rõ KCN".
+ */
+export function groupByZone(rows: AlertDetail[]): { zone: string; rows: AlertDetail[] }[] {
+  const map = new Map<string, AlertDetail[]>();
+  for (const r of rows) {
+    const z = r.zone || '';
+    if (!map.has(z)) map.set(z, []);
+    map.get(z)!.push(r);
+  }
+  return [...map.entries()]
+    .sort((a, b) => (a[0] ? 0 : 1) - (b[0] ? 0 : 1) || a[0].localeCompare(b[0]))
+    .map(([zone, rows]) => ({ zone, rows }));
+}
+
+/** Tổng lượng bất thường; bỏ qua dòng không đo được. */
+export const sumValue = (rows: AlertDetail[]): number =>
+  rows.reduce((t, r) => t + (typeof r.value === 'number' ? r.value : 0), 0);
 
 export interface AlertRecord {
   id: string;
@@ -73,7 +110,7 @@ export const ALERT_KINDS = [
   /* Mã `lui` giữ nguyên trong dữ liệu — đổi mã là mọi bản ghi cũ rơi ra ngoài
      nhóm. Chỉ đổi NHÃN: "bất thường" rộng hơn "chạy lùi", để sau này thêm được
      các kiểu sai khác của chỉ số mà không phải đặt lại tên mục. */
-  { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số giảm giữa hai mốc, hoặc công tơ đang treo mà không có chỉ số' },
+  { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số công tơ giảm giữa hai mốc' },
   { kind: 'tram', label: 'Dữ liệu trạm', desc: 'Mã trạm không khớp tên trạm bên HES' },
   { kind: 'congto', label: 'Đối chiếu công tơ', desc: 'Công tơ lệch giữa HES và Danh mục' },
 ] as const;

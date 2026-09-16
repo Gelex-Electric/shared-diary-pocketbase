@@ -217,6 +217,9 @@ export function scanRegress(recs) {
       const gap = a - b;
       out.push({
         label, at: recTime(recs[i]), from: a, to: b, gap,
+        /* Mốc TRƯỚC — bảng cảnh báo cần khoảng "từ mấy giờ đến mấy giờ", một
+           mốc đơn không nói được chỉ số tụt trong khoảng nào. */
+        fromAt: recTime(recs[i - 1]),
         /* Lùi đúng một bước chữ số cuối = sai số làm tròn của HES, không phải công tơ ngược. */
         rounding: gap <= ROUNDING_STEP + FLOAT_SLOP,
       });
@@ -464,32 +467,36 @@ if (real.length) {
     const zone = zoneOf(zones);
 
     /*
-      Một dòng bảng cho MỖI công tơ, không phải mỗi lần lùi: một công tơ hỏng
-      sinh hàng chục lần lùi, liệt kê phẳng thì bảng dài ra mà vẫn không cho biết
-      có bao nhiêu công tơ dính.
+      MỘT DÒNG = MỘT CA LÙI, không gộp theo công tơ (user chốt 16/09/2026).
 
-      `value` là mức lùi LỚN NHẤT đã ×HSN — đó mới là sản lượng thật sự lệch;
-      lùi 0,5 trên công tơ HSN 200 nặng hơn hẳn lùi 5 trên công tơ HSN 1.
+      Bảng cần "lùi từ bao nhiêu về bao nhiêu" trong khoảng "từ mấy giờ đến mấy
+      giờ" ở "biểu nào" — ba thứ đó đều thuộc về từng ca. Gộp về mỗi công tơ một
+      dòng thì phải vứt hết, chỉ giữ được cái nặng nhất.
+
+      `value` là lượng đã ×HSN — số thô không so sánh được giữa các công tơ.
     */
-    const details = serials.map(sn => {
-      const list = realBySerial.get(sn) ?? [];
-      const m = meters.find(x => x.serial === sn);
-      const worst = list.reduce((a, b) => (b.gap > a.gap ? b : a), list[0]);
-      return {
-        meter: sn,
-        customer: shortNameOf(m?.mkh),
-        zone: m?.zone ?? '',
-        note: `${worst.label} lúc ${String(worst.at).slice(11, 16)}`
-          + `${list.length > 1 ? ` (+${list.length - 1} lần khác)` : ''}`,
-        /*
-          KHÔNG làm tròn về số nguyên: ca lùi 0,001 trên HSN 200 ra 0,2 kWh, mà
-          Math.round biến thành 0 — bảng đầy số 0 thì cột này thành vô nghĩa.
-          Giữ 3 chữ số thập phân, nơi hiển thị tự rút gọn.
-        */
-        value: Number((worst.gap * (m?.hsn || 1)).toFixed(3)),
-        unit: 'kWh',
-      };
-    });
+    const details = real
+      .map(d => {
+        const m = meters.find(x => x.serial === d.serial);
+        return {
+          meter: d.serial,
+          customer: shortNameOf(m?.mkh),
+          /* Trạm/điểm đo hiện dưới tên khách trong cùng một ô. */
+          station: m?.code ?? '',
+          zone: m?.zone ?? '',
+          fromTime: String(d.fromAt).slice(11, 16),
+          toTime: String(d.at).slice(11, 16),
+          register: d.label,
+          fromIndex: d.from,
+          toIndex: d.to,
+          value: Number((d.gap * (m?.hsn || 1)).toFixed(3)),
+          unit: 'kWh',
+        };
+      })
+      /* Sắp theo KCN rồi công tơ rồi giờ — bảng gom nhóm theo KCN nên thứ tự
+         này giữ mỗi công tơ liền một khối thay vì rải rác. */
+      .sort((a, b) => a.zone.localeCompare(b.zone) || a.meter.localeCompare(b.meter)
+        || a.fromTime.localeCompare(b.fromTime));
 
     const ok = await raiseAlert(pbToken, {
       kind: 'lui',
@@ -547,46 +554,16 @@ if (noData.length) {
 }
 
 /*
-  CÔNG TƠ KHAI ĐANG TREO MÀ KHÔNG CÓ CHỈ SỐ — cũng là chỉ số bất thường.
+  KHÔNG cảnh báo công tơ thiếu chỉ số (user chốt 16/09/2026, sau khi đã thử).
 
-  Trước đây chỉ in ra log rồi thôi (sửa 16/09/2026): 17 công tơ im lặng mỗi ngày
-  mà không ai biết, vì log Actions không ai mở ra đọc. Đây đúng là thứ cần hiện
-  ở màn Cảnh báo — công tơ đang treo thì phải có chỉ số, không có nghĩa là mất
-  kết nối, hỏng, hoặc Danh mục khai sai trạng thái.
+  Không có chỉ số KHÔNG đồng nghĩa với bất thường: khách hàng tắt trạm là
+  chuyện bình thường, và đó là phần lớn trong 17 công tơ im lặng mỗi ngày. Báo
+  hết thì mục Cảnh báo đầy những việc không ai cần làm gì, rồi người dùng quen
+  bỏ qua — lúc có sự cố thật cũng bị bỏ qua nốt.
 
-  Mốc cảnh báo là TỶ LỆ chứ không phải "có cái nào thiếu là báo": vài công tơ đọc
-  thưa là chuyện thường ngày. Quá ngưỡng mới là dấu hiệu hệ thống có vấn đề.
+  Vẫn in ra log ở trên để tra khi cần.
 */
-const NO_DATA_ALERT_RATIO = Number(process.env.NO_DATA_ALERT_RATIO || 0.05);
-if (process.argv.includes('--notify')
-    && noData.length && noData.length >= rows.length * NO_DATA_ALERT_RATIO) {
-  const serials = noData.map(r => r.METER_NO);
-  const zone = zoneOf(serials.map(sn => meters.find(m => m.serial === sn)?.zone ?? ''));
-  const details = serials.map(sn => {
-    const m = meters.find(x => x.serial === sn);
-    return {
-      meter: sn,
-      customer: shortNameOf(m?.mkh),
-      zone: m?.zone ?? '',
-      note: m?.code || 'không rõ điểm đo',
-      /* Không có chỉ số nào để đo mức lệch — để trống chứ không ghi 0, vì 0 có
-         nghĩa là "đo được và bằng không", khác hẳn "không đo được". */
-      value: null,
-    };
-  });
-  const ok = await raiseAlert(pbToken, {
-    kind: 'lui',
-    details,
-    title: 'Công tơ đang treo nhưng không lấy được chỉ số',
-    message: `Ngày ${ymd(day)}: ${serials.length}/${rows.length} công tơ khai đang treo`
-      + ` nhưng HES không trả đủ chỉ số hai đầu${zone ? ` tại ${zone}` : ''}`
-      + ` — ${serials.join(', ')}`,
-    zone,
-    meters: serials,
-    day: ymd(day),
-  });
-  console.log(`Cảnh báo thiếu chỉ số: ${ok ? 'đã ghi 1 bản' : 'bỏ qua (đã có bản cho ngày này)'}.`);
-}
+
 if (rows.length === noData.length) {
   console.error('Không công tơ nào có chỉ số — dừng, không ghi đè file cũ.');
   process.exit(1);

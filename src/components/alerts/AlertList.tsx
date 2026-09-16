@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { CheckCircle2, AlertTriangle, RefreshCw, Undo2, MapPin, ChevronDown } from 'lucide-react';
 import type { AlertRecord, AlertDetail } from '../../lib/alerts';
-import { setResolved, detailsOf } from '../../lib/alerts';
+import { setResolved, detailsOf, groupByZone, sumValue } from '../../lib/alerts';
 
 /**
  * Danh sách cảnh báo của MỘT nhóm.
@@ -18,28 +18,36 @@ import { setResolved, detailsOf } from '../../lib/alerts';
 /**
  * Số có dấu chấm ngăn nghìn; `null` = không đo được, KHÁC 0.
  *
- * Giá trị nhỏ giữ đến 3 chữ số thập phân: lùi 0,2 kWh mà làm tròn thành 0 thì
- * cả cột thành một dãy số 0 vô nghĩa. Giá trị lớn thì phần thập phân không còn
- * quan trọng, bỏ đi cho bảng dễ đọc.
+ * LUÔN giữ phần thập phân. Bản đầu bỏ phần lẻ với số ≥ 10 cho gọn, nhưng khi
+ * cộng lại thì tổng 19,03 hiện thành "19" trong khi các dòng cộng bên trên vẫn
+ * có số lẻ — nhìn như cộng sai. Số nhỏ cần 3 chữ số (lùi 0,2 kWh mà làm tròn
+ * thành 0 thì cả cột thành dãy số 0 vô nghĩa), số lớn thì 2 là đủ.
  */
 const fmtValue = (v: number | null | undefined) => {
   if (v === null || v === undefined) return '—';
-  const digits = Math.abs(v) < 10 ? 3 : 0;
+  const digits = Math.abs(v) < 10 ? 3 : 2;
   return v.toLocaleString('vi-VN', { maximumFractionDigits: digits });
 };
 
+/** Chỉ số thô — giữ nguyên phần thập phân, đây là con số trên mặt công tơ. */
+const fmtIdx = (v: number | undefined) =>
+  v === undefined ? '—' : v.toLocaleString('vi-VN', { maximumFractionDigits: 3 });
+
 /**
- * Bảng chi tiết từng công tơ của một cảnh báo.
+ * Bảng chi tiết CÁC CA LÙI CHỈ SỐ, gom nhóm theo KCN, có tổng từng khu và tổng
+ * chung ở cuối.
  *
- * Trước đây toàn bộ danh sách công tơ nằm trong `message` dưới dạng một chuỗi
- * phẩy dài — 17 số sê-ri dính liền nhau thì không ai đọc nổi, và không cho biết
- * công tơ của khách nào, lệch bao nhiêu.
- *
- * Cột "Lượng bất thường" để "—" khi KHÔNG ĐO ĐƯỢC (công tơ không có chỉ số thì
- * không có gì để trừ), khác hẳn số 0.
+ * Một dòng = MỘT CA (một biểu, một khoảng thời gian), không phải một công tơ:
+ * cùng một công tơ lùi ở nhiều biểu và nhiều giờ khác nhau là chuyện thường, gộp
+ * lại thì mất hết "lùi từ bao nhiêu về bao nhiêu, lúc mấy giờ" — đúng những thứ
+ * người đi tra cần.
  */
-function DetailTable({ rows }: { rows: AlertDetail[] }) {
-  const hasValue = rows.some(r => r.value !== null && r.value !== undefined);
+function RegressTable({ rows }: { rows: AlertDetail[] }) {
+  const groups = groupByZone(rows);
+  const total = sumValue(rows);
+  /* Số cột trước cột tổng — để dòng tổng nhập ô cho đúng. */
+  const LEAD = 7;
+
   return (
     /* Bảng là thứ DUY NHẤT được phép rộng hơn khung — cuộn ngang trong hộp
        riêng để thân trang không bao giờ cuộn ngang trên máy hẹp. */
@@ -47,28 +55,125 @@ function DetailTable({ rows }: { rows: AlertDetail[] }) {
       <table className="w-full text-[12px] border-collapse">
         <thead>
           <tr className="bg-subtle text-faint">
-            <th className="px-2.5 py-1.5 text-left font-bold w-10">#</th>
+            <th className="px-2.5 py-1.5 text-left font-bold w-10">STT</th>
             <th className="px-2.5 py-1.5 text-left font-bold">Số công tơ</th>
             <th className="px-2.5 py-1.5 text-left font-bold">Khách hàng</th>
             <th className="px-2.5 py-1.5 text-left font-bold">KCN</th>
-            <th className="px-2.5 py-1.5 text-left font-bold">Chi tiết</th>
-            {hasValue && <th className="px-2.5 py-1.5 text-right font-bold whitespace-nowrap">Lượng bất thường</th>}
+            <th className="px-2.5 py-1.5 text-left font-bold whitespace-nowrap">Giờ bất thường</th>
+            <th className="px-2.5 py-1.5 text-left font-bold">Biểu bất thường</th>
+            <th className="px-2.5 py-1.5 text-right font-bold whitespace-nowrap">Mức bất thường</th>
+            <th className="px-2.5 py-1.5 text-right font-bold whitespace-nowrap">Lượng (kWh)</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={`${r.meter}-${i}`} className="border-t border-[var(--border)]">
-              <td className="px-2.5 py-1.5 text-faint">{i + 1}</td>
-              <td className="px-2.5 py-1.5 font-mono font-bold text-ink whitespace-nowrap">{r.meter}</td>
-              <td className="px-2.5 py-1.5 text-soft">{r.customer || <span className="text-faint italic">chưa khai</span>}</td>
-              <td className="px-2.5 py-1.5 text-soft whitespace-nowrap">{r.zone || '—'}</td>
-              <td className="px-2.5 py-1.5 text-soft">{r.note || '—'}</td>
-              {hasValue && (
-                <td className="px-2.5 py-1.5 text-right font-mono font-bold text-ink whitespace-nowrap">
-                  {fmtValue(r.value)}{r.value != null && r.unit ? ` ${r.unit}` : ''}
-                </td>
+          {groups.map(g => (
+            <Fragment key={g.zone || '(chưa rõ)'}>
+              {/* Tiêu đề khu — chỉ hiện khi cảnh báo trải NHIỀU khu; một khu
+                  duy nhất thì cột KCN đã nói rồi, thêm dòng này là thừa. */}
+              {groups.length > 1 && (
+                <tr className="bg-accent-soft">
+                  <td colSpan={LEAD + 1} className="px-2.5 py-1.5 font-black text-accent">
+                    {g.zone || 'Chưa rõ KCN'} — {g.rows.length} ca
+                  </td>
+                </tr>
               )}
-            </tr>
+              {g.rows.map((r, i) => (
+                <tr key={`${r.meter}-${r.register}-${r.fromTime}-${i}`} className="border-t border-[var(--border)]">
+                  <td className="px-2.5 py-1.5 text-faint">{i + 1}</td>
+                  <td className="px-2.5 py-1.5 font-mono font-bold text-ink whitespace-nowrap">{r.meter}</td>
+                  {/* Khách hàng trên, trạm dưới — cùng quy ước với các bảng chỉ số. */}
+                  <td className="px-2.5 py-1.5">
+                    <div className="font-medium text-ink">
+                      {r.customer || <span className="text-faint italic">chưa khai</span>}
+                    </div>
+                    {r.station && <div className="text-[11px] text-faint">{r.station}</div>}
+                  </td>
+                  <td className="px-2.5 py-1.5 text-soft whitespace-nowrap">{r.zone || '—'}</td>
+                  <td className="px-2.5 py-1.5 font-mono text-soft whitespace-nowrap">
+                    {r.fromTime && r.toTime ? `${r.fromTime} → ${r.toTime}` : '—'}
+                  </td>
+                  <td className="px-2.5 py-1.5 text-soft">{r.register || '—'}</td>
+                  <td className="px-2.5 py-1.5 text-right font-mono text-soft whitespace-nowrap">
+                    {fmtIdx(r.fromIndex)} → {fmtIdx(r.toIndex)}
+                  </td>
+                  <td className="px-2.5 py-1.5 text-right font-mono font-bold text-ink whitespace-nowrap">
+                    {fmtValue(r.value)}
+                  </td>
+                </tr>
+              ))}
+              {groups.length > 1 && (
+                <tr className="border-t border-[var(--border)] bg-subtle">
+                  <td colSpan={LEAD} className="px-2.5 py-1.5 text-right font-bold text-soft">
+                    Cộng {g.zone || 'chưa rõ KCN'}
+                  </td>
+                  <td className="px-2.5 py-1.5 text-right font-mono font-black text-ink whitespace-nowrap">
+                    {fmtValue(sumValue(g.rows))}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+          <tr className="border-t-2 border-[var(--accent)] bg-accent-soft">
+            <td colSpan={LEAD} className="px-2.5 py-2 text-right font-black text-accent">
+              TỔNG ({rows.length} ca)
+            </td>
+            <td className="px-2.5 py-2 text-right font-mono font-black text-accent whitespace-nowrap">
+              {fmtValue(total)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * Bảng chi tiết cho các nhóm KHÁC (đối chiếu công tơ, dữ liệu trạm).
+ *
+ * Những nhóm này không có chỉ số hay khoảng thời gian để hiện — chỉ cần biết
+ * công tơ nào, của ai, ở đâu.
+ */
+function DetailTable({ rows }: { rows: AlertDetail[] }) {
+  const groups = groupByZone(rows);
+  return (
+    /* Cuộn ngang trong hộp riêng để thân trang không cuộn ngang trên máy hẹp. */
+    <div className="mt-2 overflow-x-auto rounded-lg border border-[var(--border)]">
+      <table className="w-full text-[12px] border-collapse">
+        <thead>
+          <tr className="bg-subtle text-faint">
+            <th className="px-2.5 py-1.5 text-left font-bold w-10">STT</th>
+            <th className="px-2.5 py-1.5 text-left font-bold">Số công tơ</th>
+            <th className="px-2.5 py-1.5 text-left font-bold">Khách hàng</th>
+            <th className="px-2.5 py-1.5 text-left font-bold">KCN</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map(g => (
+            <Fragment key={g.zone || '(chưa rõ)'}>
+              {groups.length > 1 && (
+                <tr className="bg-accent-soft">
+                  <td colSpan={4} className="px-2.5 py-1.5 font-black text-accent">
+                    {g.zone || 'Chưa rõ KCN'} — {g.rows.length} công tơ
+                  </td>
+                </tr>
+              )}
+              {g.rows.map((r, i) => (
+                <tr key={`${r.meter}-${i}`} className="border-t border-[var(--border)]">
+                  <td className="px-2.5 py-1.5 text-faint">{i + 1}</td>
+                  <td className="px-2.5 py-1.5 font-mono font-bold text-ink whitespace-nowrap">{r.meter}</td>
+                  {/* Khách hàng trên, trạm dưới — cùng quy ước với các bảng chỉ số. */}
+                  <td className="px-2.5 py-1.5">
+                    <div className="font-medium text-ink">
+                      {r.customer || <span className="text-faint italic">chưa khai</span>}
+                    </div>
+                    {(r.station || r.note) && (
+                      <div className="text-[11px] text-faint">{r.station || r.note}</div>
+                    )}
+                  </td>
+                  <td className="px-2.5 py-1.5 text-soft whitespace-nowrap">{r.zone || '—'}</td>
+                </tr>
+              ))}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -131,6 +236,7 @@ export function AlertList({ items, loading, empty, onChanged }: {
     <div className="space-y-2">
       {items.map(it => {
         const rows = detailsOf(it);
+        const meterCount = new Set(rows.map(r => r.meter)).size;
         const isOpen = open.has(it.id);
         /*
           Cắt đuôi danh sách sê-ri khỏi câu mô tả: script ghép nó vào `message`
@@ -173,12 +279,23 @@ export function AlertList({ items, loading, empty, onChanged }: {
                     onClick={() => toggleOpen(it.id)}
                     className="flex items-center gap-1 font-bold text-accent hover:underline"
                   >
-                    {rows.length} công tơ
+                    {/*
+                      Nhóm `lui`: một dòng = một CA lùi, nhiều ca có thể cùng một
+                      công tơ — nên phải nói cả hai con số. Ghi "81 công tơ" trong
+                      khi chỉ có 49 công tơ dính là báo sai quy mô sự việc.
+                    */}
+                    {it.kind === 'lui'
+                      ? `${rows.length} ca · ${meterCount} công tơ`
+                      : `${rows.length} công tơ`}
                     <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                   </button>
                 )}
               </div>
-              {isOpen && rows.length > 0 && <DetailTable rows={rows} />}
+              {isOpen && rows.length > 0 && (
+                it.kind === 'lui'
+                  ? <RegressTable rows={rows} />
+                  : <DetailTable rows={rows} />
+              )}
             </div>
 
             <button
