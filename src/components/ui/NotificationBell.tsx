@@ -227,7 +227,12 @@ export default function NotificationBell({ onOpen }: {
    Sau khi tạo, với khu vực Vận hành (area != '') sẽ tự dọn bớt chỉ giữ MAX_PER_AREA
    bản ghi mới nhất (khối Kinh doanh area="" không giới hạn). Bọc try/catch để không
    làm hỏng luồng chính nếu collection chưa sẵn sàng. */
-export async function createNotification(data: { title: string; message: string; type?: string; mkh?: string; area?: string }) {
+export async function createNotification(data: {
+  title: string; message: string; type?: string;
+  /** NHÓM nghiệp vụ, quyết định sub-side ở màn Thông báo. Xem NOTIF_KINDS. */
+  kind?: string;
+  mkh?: string; area?: string;
+}) {
   try {
     await pb.collection(COLLECTION).create({ ...data, area: data.area || '' });
 

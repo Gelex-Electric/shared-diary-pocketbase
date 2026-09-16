@@ -183,6 +183,8 @@ def notify_bad_hsn(bad: list):
                         "title": "Cảnh báo hệ số nhân (HSN) sai",
                         "message": message,
                         "type": "info",
+                        # kind = NHOM nghiep vu, quyet dinh sub-side o man Thong bao
+                        "kind": "hsn",
                         "mkh": "",
                         "area": area,
                     },
@@ -355,7 +357,11 @@ def notify_bad_stations(bad_stations: list):
             r = requests.post(
                 api,
                 json={"title": "Cảnh báo dữ liệu trạm (CODE/LINE_NAME)",
-                      "message": message, "type": "info", "mkh": "", "area": ""},
+                      "message": message, "type": "info", "kind": "tram",
+                      # area="" (khoi Kinh doanh): canh bao nay suy tu GetLineList,
+                      # khong biet tram thuoc KCN nao ma khong nhan ban do
+                      # tien-to-CODE -> KCN sang Python (dang o src/lib/invoices.ts).
+                      "mkh": "", "area": ""},
                 headers=headers, timeout=30,
             )
             if r.ok:

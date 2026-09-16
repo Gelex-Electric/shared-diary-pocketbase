@@ -413,6 +413,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
               title: 'Khách hàng đã thanh toán',
               message: `${info.nMua || info.mkh} (MKH ${info.mkh}) đã thanh toán kỳ ${fmtDate(info.endDate)}.`,
               type: 'payment',
+              kind: 'thanhtoan',
               mkh: info.mkh,
               area: kcnArea,
             });

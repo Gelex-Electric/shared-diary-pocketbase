@@ -74,12 +74,15 @@ export async function allOf(col, token) {
  * dùng lại dữ liệu thô mà không phải tải PB lần thứ hai.
  */
 export async function liveMeters(token) {
-  const [points, assets, customers, stations] = await Promise.all(
-    ['dm_point', 'dm_asset', 'dm_customer', 'dm_station'].map(c => allOf(c, token)));
+  const [points, assets, customers, stations, zones] = await Promise.all(
+    ['dm_point', 'dm_asset', 'dm_customer', 'dm_station', 'dm_zone'].map(c => allOf(c, token)));
 
   const pointById = new Map(points.map(p => [p.id, p]));
   const mkhOf = (id) => customers.find(c => c.id === id)?.mkh ?? '';
   const sdmOf = (id) => stations.find(s => s.id === id)?.sdm_kva;
+  const zoneName = new Map(zones.map(z => [z.id, z.name]));
+  /* KCN lấy theo TRẠM: khách thuê nhà xưởng có thể khai ở KCN khác nơi đặt công tơ. */
+  const zoneOfPoint = (p) => zoneName.get(stations.find(s => s.id === p?.station)?.zone) ?? '';
 
   const meters = assets
     .filter(a => a.type === 'CONGTO' && ymd(a.date_on) && !ymd(a.date_off) && a.point)
@@ -89,9 +92,10 @@ export async function liveMeters(token) {
         serial: N(a.serial), point: p,
         code: p?.code || p?.line_name || '(không rõ)',
         hsn: p?.hsn, mkh: mkhOf(p?.customer), status: p?.status, sdm: sdmOf(p?.station),
+        zone: zoneOfPoint(p),
         dateOn: ymd(a.date_on),
       };
     });
 
-  return { meters, points, assets, customers, stations };
+  return { meters, points, assets, customers, stations, zones };
 }

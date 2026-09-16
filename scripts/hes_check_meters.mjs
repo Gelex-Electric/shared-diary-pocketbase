@@ -140,35 +140,46 @@ show('LỆCH MÃ TRẠM (tham khảo — hai bên đặt tên khác nhau)', line
   Gộp MỘT thông báo cho mỗi nhóm, không phải mỗi công tơ một cái: lệch 20 công
   tơ thì chuông ngập 20 dòng, không ai đọc nữa.
 
-  Chỉ gửi `area=''` (khối Kinh doanh) — đối chiếu danh mục là việc quản trị,
-  không thuộc về một KCN cụ thể.
+  Gửi cho CẢ HAI khối (user chốt 16/09): từng KCN có công tơ dính, và `area=''`
+  cho khối Kinh doanh xem toàn cục. Chuông lọc `area` khớp tuyệt đối, nên chỉ gửi
+  `''` thì chính người vận hành KCN đó lại không thấy gì.
 */
 if (process.argv.includes('--notify')) {
   const list = (rows, f) => rows.map(f).join(', ');
+  /** KCN của một nhóm công tơ, bỏ trùng và bỏ rỗng. */
+  const zonesOf = (serials) => [...new Set(serials
+    .map(sn => pbBySerial.get(sn)?.zone ?? '')
+    .filter(Boolean))];
   const groups = [
     onlyHes.length && {
       title: 'Công tơ chưa khai trong Danh mục',
       message: `Đối chiếu HES ↔ Danh mục: ${onlyHes.length} công tơ có trên HES nhưng chưa khai`
         + ` đang treo trong Danh mục — ${list(onlyHes, m => m.serial)}`,
-      type: 'info',
+      type: 'info', kind: 'congto', zones: zonesOf(onlyHes.map(m => m.serial)),
     },
     hsnOff.length && {
       title: 'Lệch hệ số nhân (HSN) giữa HES và Danh mục',
       message: `Đối chiếu HES ↔ Danh mục: ${hsnOff.length} công tơ lệch HSN — `
         + list(hsnOff, x => `${x.serial} (Danh mục ${x.hsn} ≠ HES ${hesBySerial.get(x.serial).hsn})`),
-      type: 'info',
+      type: 'info', kind: 'hsn', zones: zonesOf(hsnOff.map(x => x.serial)),
     },
     onlyPb.length && {
       title: 'Công tơ đang treo mà HES không có',
       message: `Đối chiếu HES ↔ Danh mục: ${onlyPb.length} công tơ khai đang treo trong Danh mục`
         + ` nhưng HES không có — ${list(onlyPb, x => x.serial)}`,
-      type: 'info',
+      type: 'info', kind: 'congto', zones: zonesOf(onlyPb.map(x => x.serial)),
     },
   ].filter(Boolean);
 
-  let sent = 0;
-  for (const g of groups) if (await notifyOnce(pbToken, g)) sent++;
-  console.log(`\nThông báo: ${groups.length} nhóm lệch, đã gửi ${sent} (còn lại đã có sẵn, bỏ qua).`);
+  /* Mỗi nhóm gửi cho TỪNG KCN liên quan VÀ cho khối Kinh doanh (area=''). */
+  let sent = 0, tried = 0;
+  for (const { zones, ...g } of groups) {
+    for (const area of [...zones, '']) {
+      tried++;
+      if (await notifyOnce(pbToken, { ...g, area })) sent++;
+    }
+  }
+  console.log(`\nThông báo: ${groups.length} nhóm lệch → ${tried} bản, đã gửi ${sent} (còn lại đã có sẵn).`);
 } else if (onlyHes.length || hsnOff.length || onlyPb.length) {
   console.log('\n(Thêm --notify để đẩy các nhóm lệch trên vào chuông thông báo.)');
 }

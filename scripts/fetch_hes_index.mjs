@@ -441,17 +441,35 @@ if (real.length) {
     từng ngày khi sai lệch kéo dài.
   */
   if (process.argv.includes('--notify')) {
-    const serials = [...realBySerial.keys()];
-    const sent = await notifyOnce(pbToken, {
-      title: 'Cảnh báo chỉ số công tơ chạy lùi',
-      message: `Ngày ${ymd(day)}: ${serials.length} công tơ có chỉ số chạy lùi `
-        + `(${real.length} lần) — ${serials.join(', ')}`,
-      type: 'info',
-      kind: 'lui',
-      /* area rỗng = khối Kinh doanh; cảnh báo kỹ thuật không thuộc riêng KCN nào. */
-      area: '',
-    });
-    console.log(sent ? 'Đã gửi thông báo chỉ số lùi.' : 'Thông báo chỉ số lùi đã có sẵn, bỏ qua.');
+    /*
+      Gửi cho CẢ HAI khối (user chốt 16/09): một bản cho từng KCN có công tơ
+      dính, một bản `area = ''` cho khối Kinh doanh xem toàn cục.
+
+      Chuông lọc `area` khớp tuyệt đối, nên chỉ gửi `''` thì chính người vận hành
+      KCN đó — người phải đi kiểm tra công tơ — lại không thấy gì.
+    */
+    const byZone = new Map();
+    for (const serial of realBySerial.keys()) {
+      const zone = meters.find(m => m.serial === serial)?.zone ?? '';
+      byZone.set(zone, [...(byZone.get(zone) ?? []), serial]);
+    }
+    const targets = [...byZone.entries(), ['', [...realBySerial.keys()]]];
+
+    let sent = 0, tried = 0;
+    for (const [area, serials] of targets) {
+      if (!serials.length) continue;
+      tried++;
+      const ok = await notifyOnce(pbToken, {
+        title: 'Cảnh báo chỉ số công tơ chạy lùi',
+        message: `Ngày ${ymd(day)}: ${serials.length} công tơ có chỉ số chạy lùi`
+          + `${area ? ` tại ${area}` : ''} — ${serials.join(', ')}`,
+        type: 'info',
+        kind: 'lui',
+        area,
+      });
+      if (ok) sent++;
+    }
+    console.log(`Thông báo chỉ số lùi: gửi ${sent}/${tried} bản (bản đã có sẵn thì bỏ qua).`);
   } else {
     console.log('(Thêm --notify để đẩy cảnh báo này vào chuông thông báo.)');
   }
