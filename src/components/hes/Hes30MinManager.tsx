@@ -11,7 +11,7 @@ import {
   type MeterRow,
 } from './useHes30Min';
 import { ZoneTables, type ZoneGroup } from '../dm/ZoneTables';
-import { fmt, fmtTime } from './hesShared';
+import { fmtTime, INDEX_COLUMNS, INDEX_MIN_WIDTH, ValueCell } from './hesShared';
 
 /* ================================================================
    Tab "Chỉ số trong 30 ngày" — đọc `public/hes_30min/<ngày>.csv`.
@@ -32,6 +32,7 @@ export default function Hes30MinManager({ scope = 'doi' }: { scope?: Scope }) {
   const [filterArea, setFilterArea] = useState('');
 
   const {
+    data: data30,
     meters, isLoading, reload,
     startDate, setStartDate, startTime, setStartTime,
     endDate, setEndDate, endTime, setEndTime,
@@ -119,11 +120,11 @@ export default function Hes30MinManager({ scope = 'doi' }: { scope?: Scope }) {
 
           <div className="flex flex-wrap items-end gap-3 w-full xl:w-auto">
             <div className="flex items-end gap-1.5">
-              <DatePicker value={startDate} onChange={setStartDate} label="Ngày đầu kỳ" className="min-w-[145px]" />
+              <DatePicker value={startDate} onChange={setStartDate} label="Ngày đầu kỳ" className="min-w-[145px]" usePortal />
               <TimePicker value={startTime} onChange={setStartTime} label="Giờ" className="min-w-[95px]" />
             </div>
             <div className="flex items-end gap-1.5">
-              <DatePicker value={endDate} onChange={setEndDate} label="Ngày cuối kỳ" className="min-w-[145px]" />
+              <DatePicker value={endDate} onChange={setEndDate} label="Ngày cuối kỳ" className="min-w-[145px]" usePortal />
               <TimePicker value={endTime} onChange={setEndTime} label="Giờ" className="min-w-[95px]" />
             </div>
             {!office && (
@@ -165,44 +166,35 @@ export default function Hes30MinManager({ scope = 'doi' }: { scope?: Scope }) {
         unit="công tơ"
         loading={isLoading}
         empty="Không có công tơ nào trong phạm vi đang chọn"
-        minWidth={1000}
-        columns={<>
-          <th>Số công tơ</th>
-          <th>Trạm</th>
-          <th className="text-center">HSN</th>
-          <th className="text-center">Mốc đầu kỳ</th>
-          <th className="text-center">Mốc cuối kỳ</th>
-          <th className="text-center border-x border-[var(--border)]">Tổng (kWh)</th>
-          <th className="text-center">Biểu 1</th>
-          <th className="text-center">Biểu 2</th>
-          <th className="text-center">Biểu 3</th>
-          <th className="text-center">Vô công</th>
-        </>}
+        minWidth={INDEX_MIN_WIDTH}
+        columns={INDEX_COLUMNS}
         rowKey={m => m.id}
         renderRow={m => {
           const r = results.get(m.MeterNo);
           const c = r?.value;
+          const idx = (k: string) => ({
+            dau: c ? data30?.byMeter.get(m.MeterNo)?.get(c.startAt)?.[k] : undefined,
+            cuoi: c ? data30?.byMeter.get(m.MeterNo)?.get(c.endAt)?.[k] : undefined,
+          });
           return (
             <tr className={`transition-colors ${m.id === highlightId
               ? 'bg-[var(--warning-soft)]' : 'hover:bg-subtle'}`}>
               <td>
                 <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">{m.MeterNo}</span>
               </td>
-              <td className="text-sm text-soft truncate" title={m.Line}>{m.Line || '—'}</td>
+              <td className="text-sm text-soft truncate" title={m.Customer}>{m.Customer || '—'}</td>
               <td className="text-center text-xs font-mono text-soft">{m.HSN || '1'}</td>
               <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{fmtTime(c?.startAt)}</td>
               <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{fmtTime(c?.endAt)}</td>
-              <td className="text-center text-sm font-extrabold text-ink border-x border-[var(--border)]">
-                {c ? fmt(c.values.PG) : (
-                  <span className="text-[10px] font-normal text-[var(--warning)]" title={MISSING_LABEL[r?.missing ?? '']}>
-                    thiếu dữ liệu
-                  </span>
-                )}
+              <td className="text-center border-x border-[var(--border)]">
+                {c ? <ValueCell value={c.values.PG} {...idx('PG')} strong />
+                   : <span className="text-[10px] text-[var(--warning)]"
+                           title={MISSING_LABEL[r?.missing ?? '']}>thiếu dữ liệu</span>}
               </td>
-              <td className="text-center text-xs font-bold text-accent">{fmt(c?.values.BT ?? null)}</td>
-              <td className="text-center text-xs font-bold text-orange-500">{fmt(c?.values.CD ?? null)}</td>
-              <td className="text-center text-xs font-bold text-purple-500">{fmt(c?.values.TD ?? null)}</td>
-              <td className="text-center text-xs font-bold text-soft">{fmt(c?.values.VC ?? null)}</td>
+              <td className="text-center"><ValueCell value={c?.values.BT ?? null} {...idx('BT')} tone="text-accent" /></td>
+              <td className="text-center"><ValueCell value={c?.values.CD ?? null} {...idx('CD')} tone="text-orange-500" /></td>
+              <td className="text-center"><ValueCell value={c?.values.TD ?? null} {...idx('TD')} tone="text-purple-500" /></td>
+              <td className="text-center"><ValueCell value={c?.values.VC ?? null} {...idx('VC')} tone="text-soft" /></td>
             </tr>
           );
         }}

@@ -14,14 +14,17 @@ import { pb } from './pocketbase';
 import { num } from './invoices';
 
 /**
- * Các thành phần hiện trên bảng. `invoice` có sẵn cả `VC` (vô công); user chốt
- * 16/09/2026 tab này không cần, nên để ngoài. Muốn bật lại: thêm
- * `{ key: 'VC', label: 'Vô công', unit: 'kVarh' }` vào mảng, không phải sửa gì khác.
+ * Bốn thành phần hiện trên bảng. Cột hai bảng chỉ số đã thống nhất (user chốt
+ * 16/09/2026) nên có cả VC — `invoice` lưu sẵn `VC_dau`/`VC_cuoi`.
+ *
+ * `inTotal` = có cộng vào cột Tổng hay không. Vô công tính bằng kVarh, KHÔNG
+ * phải điện tác dụng; cộng vào tổng là sai đơn vị.
  */
 export const INVOICE_COMPONENTS = [
-  { key: 'BT', label: 'Biểu 1', unit: 'kWh' },
-  { key: 'CD', label: 'Biểu 2', unit: 'kWh' },
-  { key: 'TD', label: 'Biểu 3', unit: 'kWh' },
+  { key: 'BT', label: 'Biểu 1', unit: 'kWh', inTotal: true },
+  { key: 'CD', label: 'Biểu 2', unit: 'kWh', inTotal: true },
+  { key: 'TD', label: 'Biểu 3', unit: 'kWh', inTotal: true },
+  { key: 'VC', label: 'VC', unit: 'kVarh', inTotal: false },
 ] as const;
 
 export type InvoiceComponentKey = typeof INVOICE_COMPONENTS[number]['key'];
@@ -31,6 +34,8 @@ export interface InvoiceIndexRow {
   sct: string;
   mkh: string;
   customer: string;
+  /** TÊN TẮT khách hàng, lấy từ Danh mục theo `mkh`; rỗng nếu chưa khai. */
+  shortName?: string;
   hsn: number;
   /** Ngày đầu/cuối kỳ, dạng "YYYY-MM-DD". */
   startDate: string;
@@ -79,6 +84,7 @@ export function mergeInvoiceRows(recs: any[]): InvoiceIndexRow {
     index[c.key] = { dau, cuoi };
     const v = dau === null || cuoi === null ? null : Math.round((cuoi - dau) * hsn);
     values[c.key] = v;
+    if (!c.inTotal) continue;
     if (v === null) total = null; else if (total !== null) total += v;
   }
 
@@ -117,6 +123,17 @@ export async function fetchInvoiceIndexMonth(ym: string): Promise<InvoiceIndexRo
     requestKey: null,
   });
 
+  /*
+    Tên TẮT khách hàng lấy từ Danh mục (`dm_customer.short_name`) theo mã KH:
+    bảng hẹp, tên đầy đủ đẩy các cột số ra ngoài màn hình. Danh mục nhỏ (~100
+    bản ghi) nên tải kèm không đáng kể.
+  */
+  let shortOf = new Map<string, string>();
+  try {
+    const cs = await pb.collection('dm_customer').getFullList({ fields: 'mkh,short_name', requestKey: null });
+    shortOf = new Map(cs.map((c: any) => [String(c.mkh ?? '').trim(), String(c.short_name ?? '').trim()]));
+  } catch { /* thiếu quyền đọc danh mục thì hiện tên đầy đủ, không chặn cả bảng */ }
+
   const groups = new Map<string, any[]>();
   for (const r of list) {
     if (!String((r as any).SCT ?? '').trim()) continue;   // bản ghi không gắn công tơ
@@ -126,7 +143,7 @@ export async function fetchInvoiceIndexMonth(ym: string): Promise<InvoiceIndexRo
   }
 
   return [...groups.values()]
-    .map(mergeInvoiceRows)
+    .map(g => { const row = mergeInvoiceRows(g); row.shortName = shortOf.get(row.mkh) || ''; return row; })
     .sort((a, b) => a.sct.localeCompare(b.sct, 'vi', { numeric: true }));
 }
 

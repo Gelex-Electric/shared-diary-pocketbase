@@ -12,6 +12,7 @@ import {
   type InvoiceIndexRow,
 } from '../../lib/hesInvoiceIndex';
 import { ZoneTables, type ZoneGroup } from '../dm/ZoneTables';
+import { INDEX_COLUMNS, INDEX_MIN_WIDTH, ValueCell } from './hesShared';
 
 /* ================================================================
    Tab "Chỉ số theo hóa đơn" — đọc collection `invoice`.
@@ -27,12 +28,6 @@ import { ZoneTables, type ZoneGroup } from '../dm/ZoneTables';
    Bảng bày thành THẺ THU GỌN theo KCN, dùng lại `ZoneTables` của màn
    Danh mục để hai nơi không mỗi nơi một kiểu.
 ================================================================ */
-
-const fmt = (v: number | null) =>
-  v === null ? '—' : v.toLocaleString('vi-VN', { maximumFractionDigits: 0 });
-/** Chỉ số thô để nguyên phần thập phân — đây là con số trên biên bản. */
-const fmtIdx = (v: number | null) =>
-  v === null ? '—' : v.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
 
 const toExportRow = (r: InvoiceIndexRow) => {
   const row: Record<string, any> = {
@@ -157,7 +152,7 @@ export default function HesInvoiceManager({ scope = 'doi' }: { scope?: Scope }) 
           </div>
 
           <div className="flex flex-wrap items-end gap-3 w-full lg:w-auto">
-            <MonthPicker value={month} onChange={setMonth} label="Kỳ hóa đơn" className="min-w-[150px]" />
+            <MonthPicker value={month} onChange={setMonth} label="Kỳ hóa đơn" className="min-w-[150px]" usePortal />
             {!office && (
               <Select
                 value={filterArea}
@@ -184,17 +179,8 @@ export default function HesInvoiceManager({ scope = 'doi' }: { scope?: Scope }) 
         unit="công tơ"
         loading={isLoading}
         empty="Tháng này chưa có hóa đơn nào"
-        minWidth={980}
-        columns={<>
-          <th>Số công tơ</th>
-          <th>Khách hàng</th>
-          <th className="text-center">HSN</th>
-          <th className="text-center">Kỳ hóa đơn</th>
-          {INVOICE_COMPONENTS.map(c => (
-            <th key={c.key} className="text-center">{c.label} đầu → cuối</th>
-          ))}
-          <th className="text-center border-x border-[var(--border)]">Tổng (kWh)</th>
-        </>}
+        minWidth={INDEX_MIN_WIDTH}
+        columns={INDEX_COLUMNS}
         rowKey={r => `${r.sct}-${r.startDate}`}
         renderRow={r => (
           <tr className="hover:bg-subtle transition-colors">
@@ -206,20 +192,25 @@ export default function HesInvoiceManager({ scope = 'doi' }: { scope?: Scope }) 
                 </span>
               )}
             </td>
-            <td className="text-sm text-soft truncate" title={r.customer}>{r.customer || '—'}</td>
+            <td className="text-sm text-soft truncate" title={r.customer}>{r.shortName || r.customer || '—'}</td>
             <td className="text-center text-xs font-mono text-soft">{r.hsn}</td>
-            <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">
-              {r.startDate} → {r.endDate}
+            <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{r.startDate}</td>
+            <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{r.endDate}</td>
+            <td className="text-center border-x border-[var(--border)]">
+              <ValueCell value={r.total} strong />
             </td>
-            {INVOICE_COMPONENTS.map(c => (
-              <td key={c.key} className="text-center text-[11px] font-mono text-soft whitespace-nowrap">
-                <span className="text-faint">{fmtIdx(r.index[c.key]?.dau ?? null)}</span>
-                {' → '}
-                <span className="text-ink">{fmtIdx(r.index[c.key]?.cuoi ?? null)}</span>
-                <div className="text-[10px] font-bold text-accent">{fmt(r.values[c.key] ?? null)}</div>
-              </td>
-            ))}
-            <td className="text-center text-sm font-extrabold text-ink border-x border-[var(--border)]">{fmt(r.total)}</td>
+            <td className="text-center">
+              <ValueCell value={r.values.BT ?? null} dau={r.index.BT?.dau} cuoi={r.index.BT?.cuoi} tone="text-accent" />
+            </td>
+            <td className="text-center">
+              <ValueCell value={r.values.CD ?? null} dau={r.index.CD?.dau} cuoi={r.index.CD?.cuoi} tone="text-orange-500" />
+            </td>
+            <td className="text-center">
+              <ValueCell value={r.values.TD ?? null} dau={r.index.TD?.dau} cuoi={r.index.TD?.cuoi} tone="text-purple-500" />
+            </td>
+            <td className="text-center">
+              <ValueCell value={r.values.VC ?? null} dau={r.index.VC?.dau} cuoi={r.index.VC?.cuoi} tone="text-soft" />
+            </td>
           </tr>
         )}
       />

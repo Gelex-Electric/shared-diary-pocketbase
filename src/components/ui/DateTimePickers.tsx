@@ -350,10 +350,18 @@ interface MonthPickerProps {
   className?: string;
   /** Cho phép chọn "Tất cả" — onChange nhận giá trị 'all' */
   allowAll?: boolean;
+  /**
+   * Render dropdown thẳng ra `document.body`.
+   *
+   * Cần khi ô chọn nằm trong thẻ có `overflow: hidden` (các `vl-card`): không
+   * portal thì lịch bị thẻ cắt cụt, mở ra không nhìn thấy gì. Cùng cơ chế với
+   * `DatePicker`.
+   */
+  usePortal?: boolean;
 }
 
 export function MonthPicker({
-  value, onChange, label, className = '', allowAll = false,
+  value, onChange, label, className = '', allowAll = false, usePortal = false,
 }: MonthPickerProps) {
   const today = new Date();
 
@@ -366,17 +374,46 @@ export function MonthPicker({
 
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(parsed?.y ?? today.getFullYear());
+  /** null = chưa đo được vị trí → chưa render, tránh dropdown nhảy từ góc 0,0. */
+  const [portalPos, setPortalPos] = useState<{ top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const portalRef = useRef<HTMLDivElement>(null);
 
-  /* Đóng khi click ngoài */
+  /* Bám theo trigger, lật lên khi dưới không đủ chỗ — cùng cách `DatePicker` làm. */
+  useLayoutEffect(() => {
+    if (!usePortal || !open) { setPortalPos(null); return; }
+    const measure = () => {
+      if (!triggerRef.current) return;
+      const rect = triggerRef.current.getBoundingClientRect();
+      const H = 300, W = 260, M = 8;
+      const openUp = rect.bottom + H > window.innerHeight && rect.top > H;
+      let left = rect.left;
+      if (left + W > window.innerWidth - M) left = rect.right - W;
+      left = Math.max(M, Math.min(left, window.innerWidth - W - M));
+      setPortalPos({ top: openUp ? rect.top - H - 6 : rect.bottom + 6, left });
+    };
+    measure();
+    window.addEventListener('scroll', measure, true);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('resize', measure);
+    };
+  }, [usePortal, open]);
+
+  /* Đóng khi click ngoài — click bên trong dropdown đã portal ra ngoài thì bỏ qua. */
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (wrapperRef.current?.contains(target)) return;
+      if (usePortal && portalRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  }, [open, usePortal]);
 
   /* Đồng bộ view khi value đổi từ ngoài */
   useEffect(() => {
@@ -420,6 +457,7 @@ export function MonthPicker({
 
       {/* Trigger input */}
       <div
+        ref={triggerRef}
         onClick={() => setOpen(o => !o)}
         className={`relative flex items-center gap-2 w-full pl-2.5 pr-3 py-2 bg-surface border rounded-lg
                     text-sm font-bold cursor-pointer select-none transition-all
@@ -434,10 +472,16 @@ export function MonthPicker({
       </div>
 
       {/* Dropdown */}
-      {open && (
+      {open && (!usePortal || portalPos) && (() => {
+        const dropdown = (
         <div
-          className="absolute top-full mt-1.5 left-0 z-[200] bg-surface rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
-          style={{ boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 240 }}
+          ref={portalRef}
+          className={usePortal
+            ? 'fixed z-[300] bg-surface rounded-2xl overflow-hidden animate-in fade-in duration-150'
+            : 'absolute top-full mt-1.5 left-0 z-[200] bg-surface rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150'}
+          style={usePortal
+            ? { boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 240, top: portalPos!.top, left: portalPos!.left }
+            : { boxShadow: '-8px 12px 28px 0 rgba(25,42,70,0.2)', minWidth: 240 }}
           onClick={e => e.stopPropagation()}
         >
           {/* ── Hàng Năm ── */}
@@ -504,7 +548,9 @@ export function MonthPicker({
             </button>
           </div>
         </div>
-      )}
+        );
+        return usePortal ? createPortal(dropdown, document.body) : dropdown;
+      })()}
     </div>
   );
 }

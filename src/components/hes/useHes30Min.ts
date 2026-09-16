@@ -80,12 +80,15 @@ export function useHes30Min({ allowedAreas, filterArea = '' }: UseHes30MinOption
     try {
       const [cat, idx] = await Promise.all([loadCatalog(), fetchHes30Index()]);
       const rows = hesMeterRowsOf(cat);
+      /* Tên TẮT khách hàng: bảng hẹp, tên đầy đủ đẩy các cột số ra ngoài màn hình. */
+      const shortOf = new Map(cat.customers.map(c => [c.mkh, c.short_name || c.name]));
       const allowed = allowedAreas ? new Set(allowedAreas) : null;
       setMeters(rows
         .filter(r => (filterArea ? r.ADDRESS === filterArea : (!allowed || allowed.has(r.ADDRESS))))
         .map((r): MeterRow => ({
           id: r.METER_NO, MeterNo: r.METER_NO, HSN: r.METER_NAME,
           Line: r.LINE_NAME, area: r.ADDRESS,
+          Customer: shortOf.get(r.CUSTOMER_CODE) || r.CUSTOMER_NAME,
         }))
         .sort((a, b) => (a.Line + a.MeterNo).localeCompare(b.Line + b.MeterNo)));
       setIndex(idx);
@@ -146,6 +149,8 @@ export function useHes30Min({ allowedAreas, filterArea = '' }: UseHes30MinOption
   }, [results]);
 
   return {
+    /** Dữ liệu thô đang giữ — bảng cần để hiện chỉ số đầu/cuối dưới mỗi ô số. */
+    data,
     meters, isLoading, reload,
     startDate, setStartDate, startTime, setStartTime,
     endDate, setEndDate, endTime, setEndTime,
