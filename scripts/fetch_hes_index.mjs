@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 /**
- * Lấy chỉ số công tơ từ `GetMeterDataByDate` và ghi ra BA nơi:
+ * Lấy chỉ số công tơ từ `GetMeterDataByDate` và ghi ra HAI file:
  *   - `public/hes_index_30min.csv`  chi tiết 30 phút, giữ 7 ngày (file nóng)
- *   - `public/hes_index_daily.csv`  đầu/cuối kỳ theo ngày (giữ như cũ)
- *   - collection `hes_index` trên PocketBase — bản NGÀY, lịch sử dài
+ *   - `public/hes_index_daily.csv`  đầu/cuối kỳ theo ngày
  *
  * Một lời gọi API cho mỗi công tơ trả sẵn 49 bản ghi (48 mốc 30 phút + mốc
- * 00:00 hôm sau), rút ra được cả ba. Bản Python cũ gọi HAI lần với hai cửa sổ
+ * 00:00 hôm sau), rút ra được cả hai. Bản Python cũ gọi HAI lần với hai cửa sổ
  * nhỏ rồi vứt 47 bản ghi.
+ *
+ * KHÔNG ghi PocketBase. Đã thử collection `hes_index` ngày 16/09/2026 rồi bỏ:
+ * chỉ số đầu/cuối kỳ có giá trị pháp lý đã nằm ở `invoice` (màn Biên bản xác
+ * nhận chỉ số ghi vào đó), nên thêm một bản sao chi tiết hơn trên PB là thừa.
+ * PocketBase giữ dữ liệu nghiệp vụ; CSV giữ số liệu thô của pipeline.
  *
  * Thay cho `fetch_hes_index.py`. Khác bản Python ở hai chỗ:
  *   1. Danh sách công tơ lấy từ DANH MỤC PocketBase (công tơ ĐANG TREO), không
@@ -37,19 +41,17 @@
  *   HES_30MIN_PATH  đường dẫn CSV 30 phút.  Mặc định public/hes_index_30min.csv
  *   PB_EMAIL/PB_PASS (hoặc PB_ADMIN_*), API_TOKEN hoặc API_USER/API_PASS
  *
- * Vì sao KEEP_DAYS mặc định 0 chứ không phải 7: màn "Lấy chỉ số HES" cho người
- * dùng chọn kỳ tùy ý (thường là cả tháng) và tính theo `row[đến].END −
- * row[từ].START`. Cắt CSV còn 7 ngày TRƯỚC KHI app chuyển sang đọc `hes_index`
- * trên PB là làm hỏng màn đó. Đổi mặc định khi app đã đọc PB.
+ * Vì sao KEEP_DAYS mặc định 0 (giữ toàn bộ): màn "Lấy chỉ số HES" đọc chính file
+ * này và cho người dùng chọn kỳ tùy ý — thường là cả tháng — rồi tính theo
+ * `row[đến].END − row[từ].START`. Cắt bớt là mất khả năng tra kỳ dài.
  *
- * Ghi PocketBase: chỉ đụng collection `hes_index`. Thiếu tài khoản thì bỏ qua
- * phần PB và vẫn ghi CSV, không làm hỏng lần chạy.
+ * Vẫn cần tài khoản PocketBase, nhưng CHỈ ĐỂ ĐỌC danh mục công tơ (`dm_*`).
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
-import { pbLogin, liveMeters, PB_URL } from './lib/pb_meters.mjs';
+import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
 
 const OUT_PATH = process.env.HES_INDEX_PATH || 'public/hes_index_daily.csv';
 const KEEP_DAYS = Number(process.env.KEEP_DAYS || 0);
@@ -57,7 +59,6 @@ const KEEP_DAYS = Number(process.env.KEEP_DAYS || 0);
 const OUT_30_PATH = process.env.HES_30MIN_PATH || 'public/hes_index_30min.csv';
 const KEEP_DAYS_30 = Number(process.env.KEEP_DAYS_30 || 7);
 const CONCURRENCY = Number(process.env.CONCURRENCY || 6);
-const PB_COLLECTION = 'hes_index';
 
 /** Cột CSV → trường HES. Thứ tự này cũng là thứ tự cột trong file. */
 const FIELD_MAP = {
@@ -208,28 +209,17 @@ export function overlapOf(cur, prev) {
 
 /**
  * Chỉ số ngày liền trước theo công tơ, để xét thụt lùi liên ngày.
- * Ưu tiên PocketBase (không phụ thuộc cửa sổ giữ ngày của CSV); PB chưa có dữ
- * liệu thì lùi về đọc chính file CSV.
+ *
+ * Đọc từ chính file CSV ngày. Trước đây ưu tiên PocketBase, nhưng chỉ số đầu/
+ * cuối kỳ có giá trị pháp lý đã nằm ở `invoice` rồi — thêm một bản sao chi tiết
+ * hơn trên PB là thừa (user chốt 16/09/2026).
+ *
+ * Hệ quả: `KEEP_DAYS` phải > 1 thì mới xét được thụt lùi liên ngày. Mặc định 0
+ * (giữ toàn bộ) nên không thành vấn đề.
  */
-async function prevDayRows(pbToken, day) {
+function prevDayRows(day) {
   const prev = ymd(new Date(day.getTime() - 86400000));
   const out = new Map();
-  try {
-    const headers = { Authorization: pbToken };
-    for (let page = 1; ; page++) {
-      const url = `${PB_URL}/api/collections/${PB_COLLECTION}/records?perPage=500&page=${page}`
-        + `&filter=${encodeURIComponent(`date=${JSON.stringify(prev)}`)}`;
-      const r = await (await fetch(url, { headers })).json();
-      for (const it of r.items ?? []) {
-        const row = { END_TIME: it.end_time };
-        for (const k of KEYS) row[`${k}_END`] = it[`${k.toLowerCase()}_end`];
-        out.set(it.meter_no, row);
-      }
-      if (page >= (r.totalPages ?? 1)) break;
-    }
-  } catch { /* PB chưa có collection hoặc mất mạng — dùng CSV bên dưới */ }
-
-  if (out.size) return { prev, rows: out, src: 'PocketBase' };
   for (const r of readCsv(OUT_PATH)) if (r.DATE === prev) out.set(r.METER_NO, r);
   return { prev, rows: out, src: out.size ? 'CSV' : 'không có' };
 }
@@ -322,43 +312,6 @@ export function writeCsv30(path, rows) {
   return out.length;
 }
 
-/* ------------------------------ PocketBase ------------------------------ */
-const pbNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
-
-/** Ghi vào `hes_index`: có rồi thì cập nhật, chưa có thì tạo. Chỉ đụng collection này. */
-async function writePb(token, rows) {
-  const api = `${PB_URL}/api/collections/${PB_COLLECTION}/records`;
-  const headers = { Authorization: token, 'Content-Type': 'application/json' };
-  let created = 0, updated = 0, failed = 0;
-
-  for (const r of rows) {
-    const body = {
-      meter_no: r.METER_NO, date: r.DATE, hsn: pbNum(r.HSN),
-      start_time: r.START_TIME, end_time: r.END_TIME,
-      regress: r.REGRESS, no_data: r.NO_DATA === '1',
-    };
-    for (const k of KEYS) {
-      body[`${k.toLowerCase()}_start`] = pbNum(r[`${k}_START`]);
-      body[`${k.toLowerCase()}_end`] = pbNum(r[`${k}_END`]);
-    }
-    try {
-      const q = `${api}?perPage=1&filter=`
-        + encodeURIComponent(`meter_no=${JSON.stringify(r.METER_NO)} && date=${JSON.stringify(r.DATE)}`);
-      const found = await (await fetch(q, { headers })).json();
-      const id = found.items?.[0]?.id;
-      const res = id
-        ? await fetch(`${api}/${id}`, { method: 'PATCH', headers, body: JSON.stringify(body) })
-        : await fetch(api, { method: 'POST', headers, body: JSON.stringify(body) });
-      if (!res.ok) { failed++; if (failed <= 3) console.log(`[WARN] PB ${r.METER_NO}: ${res.status}`); }
-      else if (id) updated++; else created++;
-    } catch (e) {
-      failed++;
-      if (failed <= 3) console.log(`[WARN] PB ${r.METER_NO}: ${String(e).slice(0, 100)}`);
-    }
-  }
-  return { created, updated, failed };
-}
-
 /* --------------------------------- main --------------------------------- */
 /*
   Chỉ chạy khi gọi thẳng file này. Import từ nơi khác (script kiểm thử, hoặc
@@ -403,7 +356,7 @@ const rows = results.filter(r => r?.daily?.METER_NO).map(r => r.daily);
 const rows30 = results.flatMap(r => r?.detail ?? []);
 
 /* Cờ thụt lùi — cần chỉ số ngày liền trước, nên làm sau khi đã có cả mẻ. */
-const { prev, rows: prevRows, src } = await prevDayRows(pbToken, day);
+const { prev, rows: prevRows, src } = prevDayRows(day);
 console.log(`Chỉ số ngày liền trước (${prev}): ${prevRows.size} công tơ, nguồn ${src}.`);
 for (const r of rows) r.REGRESS = regressOf(r, prevRows.get(r.METER_NO));
 
@@ -440,9 +393,6 @@ const total30 = writeCsv30(OUT_30_PATH, rows30);
 console.log(`Chi tiết 30 phút: ghi ${rows30.length} mốc, giữ ${KEEP_DAYS_30} ngày. `
   + `Tổng file: ${total30} dòng → ${OUT_30_PATH}`);
 
-const pb = await writePb(pbToken, rows);
-console.log(`PocketBase \`${PB_COLLECTION}\`: tạo ${pb.created}, cập nhật ${pb.updated}`
-  + `${pb.failed ? `, lỗi ${pb.failed}` : ''}.`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

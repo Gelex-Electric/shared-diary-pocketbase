@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { loadCatalog } from '../../lib/dm/repo';
 import { hesMeterRowsOf } from '../../lib/dm/meterRows';
 import {
-  fetchHesIndexBounds, fetchHesIndexDays, computeConsumption,
+  fetchHesIndex, computeConsumption,
   type HesIndexData, type Consumption,
 } from '../../lib/hesIndex';
 import { toast as notify } from '../../lib/toast';
@@ -70,8 +70,6 @@ export interface UseHesConsumptionOptions {
 export function useHesConsumption({ allowedAreas, filterArea = '' }: UseHesConsumptionOptions = {}) {
   const [meters, setMeters]       = useState<MeterRow[]>([]);
   const [hesData, setHesData]     = useState<HesIndexData | null>(null);
-  /** Ngày cũ nhất/mới nhất có chỉ số — để đặt mặc định và hiện khoảng tra được. */
-  const [bounds, setBounds]       = useState<{ first: string; last: string }>({ first: '', last: '' });
   const [isLoading, setIsLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate]     = useState('');
@@ -84,12 +82,10 @@ export function useHesConsumption({ allowedAreas, filterArea = '' }: UseHesConsu
         `metterinfo.csv` (user chốt 04/09/2026) — CSV là bản kết xuất từ HES
         chạy hằng đêm nên trễ một ngày và không biết gì về những gì vừa khai.
 
-        CHỈ SỐ đo đếm cũng chuyển sang PocketBase (user chốt 16/09/2026): file
-        `hes_index_daily.csv` nằm trong `public/` nên ai biết URL đều tải được
-        toàn bộ số liệu mà không cần đăng nhập. Ở đây chỉ lấy MỐC ngày có dữ
-        liệu; bản thân chỉ số tải sau, theo đúng kỳ người dùng chọn.
+        `hes_index_daily.csv` thì GIỮ NGUYÊN: đó là CHỈ SỐ đo đếm do pipeline
+        chốt mỗi ngày, không phải danh mục.
       */
-      const [cat, bounds] = await Promise.all([loadCatalog(), fetchHesIndexBounds()]);
+      const [cat, idx] = await Promise.all([loadCatalog(), fetchHesIndex()]);
       const rows = hesMeterRowsOf(cat);
       const allowed = allowedAreas ? new Set(allowedAreas) : null;
       const filtered = rows
@@ -97,11 +93,12 @@ export function useHesConsumption({ allowedAreas, filterArea = '' }: UseHesConsu
         .map((r): MeterRow => ({ id: r.METER_NO, MeterNo: r.METER_NO, HSN: r.METER_NAME, Line: r.LINE_NAME, area: r.ADDRESS }))
         .sort((a, b) => (a.Line + a.MeterNo).localeCompare(b.Line + b.MeterNo));
       setMeters(filtered);
-      setBounds(bounds);
+      setHesData(idx);
       // Mặc định: ngày mới nhất có dữ liệu (kỳ 1 ngày)
-      if (bounds.last) {
-        setStartDate(prev => prev || bounds.last);
-        setEndDate(prev => prev || bounds.last);
+      if (idx.dates.length > 0) {
+        const last = idx.dates[idx.dates.length - 1];
+        setStartDate(prev => prev || last);
+        setEndDate(prev => prev || last);
       }
     } catch (err: any) {
       notify.show('error', 'Lỗi', err?.message || 'Không tải được dữ liệu chỉ số');
@@ -112,28 +109,12 @@ export function useHesConsumption({ allowedAreas, filterArea = '' }: UseHesConsu
 
   useEffect(() => { reload(); }, [reload]);
 
-  const dateRangeHint = useMemo(
-    () => (bounds.first && bounds.last ? `${bounds.first} → ${bounds.last}` : ''),
-    [bounds]);
+  const dateRangeHint = useMemo(() => {
+    if (!hesData || hesData.dates.length === 0) return '';
+    return `${hesData.dates[0]} → ${hesData.dates[hesData.dates.length - 1]}`;
+  }, [hesData]);
 
   const validRange = !!(startDate && endDate && startDate <= endDate);
-
-  /*
-    Tải chỉ số của ĐÚNG hai ngày đầu/cuối kỳ mỗi khi người dùng đổi kỳ.
-    `computeConsumption` chỉ cần hai dòng đó, nên không có lý do gì tải cả kho.
-  */
-  useEffect(() => {
-    if (!validRange) { setHesData(null); return; }
-    let ok = true;
-    setIsLoading(true);
-    fetchHesIndexDays([startDate, endDate])
-      .then(d => { if (ok) setHesData(d); })
-      .catch(err => {
-        if (ok) notify.show('error', 'Lỗi', err?.message || 'Không tải được chỉ số');
-      })
-      .finally(() => { if (ok) setIsLoading(false); });
-    return () => { ok = false; };
-  }, [startDate, endDate, validRange]);
 
   const consumptions = useMemo(() => {
     const map = new Map<string, Consumption | null>();

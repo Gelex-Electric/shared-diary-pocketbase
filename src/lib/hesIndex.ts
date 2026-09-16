@@ -1,19 +1,12 @@
 /**
- * Reader cho chỉ số đầu/cuối ngày, nguồn là collection `hes_index` trên
- * PocketBase do `scripts/fetch_hes_index.mjs` ghi mỗi đêm. Mỗi bản ghi =
- * 1 công tơ × 1 ngày, chỉ số tại mốc 00:00 ngày đó (START) và 00:00 ngày kế
- * tiếp (END).
+ * Reader cho public/hes_index_daily.csv — chỉ số đầu/cuối ngày do GitHub Action
+ * (scripts/fetch_hes_index.py) sinh ra. Mỗi dòng = 1 công tơ × 1 ngày, với chỉ số
+ * tại mốc 00:00 ngày đó (START) và 00:00 ngày kế tiếp (END).
  *
  * Sản lượng kỳ [A → B] (theo ngày, bao gồm cả 2 đầu) cho từng chỉ số:
  *   value = row[B].END − row[A].START          (đầu = A 00:00, cuối = B+1 00:00)
  *   kWh   = value × HSN
- *
- * Trước 16/09/2026 đọc `public/hes_index_daily.csv`. Bỏ vì thư mục `public/`
- * phục vụ công khai — ai biết URL đều tải được toàn bộ chỉ số đo đếm mà không
- * cần đăng nhập. Bản đọc CSV đã gỡ hẳn để không tồn tại hai nguồn song song.
  */
-
-import { pb } from './pocketbase';
 
 export type HesField = 'PG' | 'BT' | 'CD' | 'TD' | 'VC';
 export const HES_FIELDS: HesField[] = ['PG', 'BT', 'CD', 'TD', 'VC'];
@@ -28,11 +21,60 @@ export interface HesIndexRow {
   [k: string]: string;
 }
 
+/** CSV line parser hỗ trợ field có dấu phẩy trong ngoặc kép. */
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
 export interface HesIndexData {
   /** meterNo → (date → row) */
   byMeter: Map<string, Map<string, HesIndexRow>>;
   /** Danh sách ngày có dữ liệu, tăng dần. */
   dates: string[];
+}
+
+/** Tải + parse CSV thành cấu trúc tra cứu nhanh theo (công tơ, ngày). */
+export async function fetchHesIndex(): Promise<HesIndexData> {
+  const res = await fetch('/hes_index_daily.csv', { cache: 'no-cache' });
+  // Chưa có file (workflow chưa chạy lần nào) → coi như rỗng, không báo lỗi.
+  if (res.status === 404) return { byMeter: new Map(), dates: [] };
+  if (!res.ok) throw new Error('Không tải được hes_index_daily.csv');
+  const text = await res.text();
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  const byMeter = new Map<string, Map<string, HesIndexRow>>();
+  const dateSet = new Set<string>();
+  if (lines.length <= 1) return { byMeter, dates: [] };
+
+  const headers = parseCsvLine(lines[0]).map(h => h.trim());
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    const row: any = {};
+    headers.forEach((h, j) => { row[h] = (cols[j] ?? '').trim(); });
+    const no = row.METER_NO as string;
+    const date = row.DATE as string;
+    if (!no || !date) continue;
+    if (!byMeter.has(no)) byMeter.set(no, new Map());
+    byMeter.get(no)!.set(date, row as HesIndexRow);
+    dateSet.add(date);
+  }
+  return { byMeter, dates: [...dateSet].sort() };
 }
 
 const num = (v: string | undefined): number | null => {
@@ -47,66 +89,6 @@ export interface Consumption {
   hsn: number;
   /** kWh/kVarh đã nhân HSN, làm tròn; null nếu thiếu dữ liệu một trong hai biên. */
   values: Record<HesField, number | null>;
-}
-
-/* ===================== Nguồn PocketBase (thay CSV) =====================
-
-   Vì sao đổi (user chốt 16/09/2026): `hes_index_daily.csv` nằm trong `public/`
-   nên ai biết URL đều tải được toàn bộ chỉ số đo đếm mà không cần đăng nhập.
-   Collection `hes_index` yêu cầu đăng nhập mới đọc được.
-
-   Đổi nguồn còn rẻ hơn hẳn: sản lượng kỳ [A → B] chỉ cần dòng của ĐÚNG hai ngày
-   A và B (xem `computeConsumption`), tức ~2 × số công tơ bản ghi — thay vì tải
-   cả file 21.108 dòng rồi vứt gần hết.
-*/
-
-/** Tên cột PB (viết thường) → tên cột kiểu CSV mà `computeConsumption` đang dùng. */
-function rowFromPb(rec: any): HesIndexRow {
-  const row: any = {
-    METER_NO: String(rec.meter_no ?? ''),
-    DATE: String(rec.date ?? ''),
-    HSN: rec.hsn == null ? '' : String(rec.hsn),
-    START_TIME: String(rec.start_time ?? ''),
-    END_TIME: String(rec.end_time ?? ''),
-    REGRESS: String(rec.regress ?? ''),
-    NO_DATA: rec.no_data ? '1' : '',
-  };
-  for (const f of HES_FIELDS) {
-    const lo = f.toLowerCase();
-    row[`${f}_START`] = rec[`${lo}_start`] == null ? '' : String(rec[`${lo}_start`]);
-    row[`${f}_END`] = rec[`${lo}_end`] == null ? '' : String(rec[`${lo}_end`]);
-  }
-  return row as HesIndexRow;
-}
-
-/** Ngày cũ nhất / mới nhất có dữ liệu, để đặt mặc định và hiện khoảng tra được. */
-export async function fetchHesIndexBounds(): Promise<{ first: string; last: string }> {
-  const one = async (sort: string) => {
-    const r = await pb.collection('hes_index').getList(1, 1, { sort, fields: 'date' });
-    return (r.items[0] as any)?.date ?? '';
-  };
-  const [first, last] = await Promise.all([one('date'), one('-date')]);
-  return { first, last };
-}
-
-/**
- * Chỉ số của ĐÚNG những ngày được yêu cầu (thường là 2: đầu kỳ và cuối kỳ).
- * Trả về đúng cấu trúc `HesIndexData` như bản CSV nên nơi gọi không phải đổi.
- */
-export async function fetchHesIndexDays(days: string[]): Promise<HesIndexData> {
-  const wanted = [...new Set(days.filter(Boolean))];
-  const byMeter = new Map<string, Map<string, HesIndexRow>>();
-  if (!wanted.length) return { byMeter, dates: [] };
-
-  const filter = wanted.map(d => `date="${d}"`).join(' || ');
-  const items = await pb.collection('hes_index').getFullList({ filter, batch: 500 });
-  for (const rec of items) {
-    const row = rowFromPb(rec);
-    if (!row.METER_NO || !row.DATE) continue;
-    if (!byMeter.has(row.METER_NO)) byMeter.set(row.METER_NO, new Map());
-    byMeter.get(row.METER_NO)!.set(row.DATE, row);
-  }
-  return { byMeter, dates: wanted.sort() };
 }
 
 /**

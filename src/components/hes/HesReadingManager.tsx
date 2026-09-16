@@ -13,7 +13,7 @@ type HesTab = 'manual' | 'direct';
 /*
   TÊN TAB TRƯỚC ĐÂY ĐẶT NGƯỢC (sửa 04/09/2026).
 
-  "Lấy trực tiếp" lại là tab ĐỌC CHỈ SỐ ĐÃ CHỐT (collection `hes_index`), còn
+  "Lấy trực tiếp" lại là tab ĐỌC FILE `hes_index_daily.csv` đã chốt sẵn, còn
   "thủ công" mới là tab GỌI THẲNG API HES ngay lúc bấm. Người dùng đọc tên xong
   chọn nhầm tab là chuyện đương nhiên.
 
