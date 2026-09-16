@@ -113,7 +113,7 @@ const show = (title, rows, fmt) => {
   for (const r of rows) console.log('  ' + fmt(r));
 };
 
-show('LỆCH HSN — sai một ly là sai toàn bộ sản lượng', hsnOff, x =>
+show('Lệch HSN so với HES (tham khảo — HSN lấy theo Danh mục, không cảnh báo)', hsnOff, x =>
   `${x.serial.padEnd(12)} PB ${String(x.hsn).padStart(5)}  ≠  HES ${String(hesBySerial.get(x.serial).hsn).padStart(5)}   ${x.code}`);
 
 show('ĐANG TREO TRÊN PB MÀ HES KHÔNG CÓ', onlyPb, x =>
@@ -157,12 +157,12 @@ if (process.argv.includes('--notify')) {
         + ` đang treo trong Danh mục — ${list(onlyHes, m => m.serial)}`,
       type: 'info', kind: 'congto', zones: zonesOf(onlyHes.map(m => m.serial)),
     },
-    hsnOff.length && {
-      title: 'Lệch hệ số nhân (HSN) giữa HES và Danh mục',
-      message: `Đối chiếu HES ↔ Danh mục: ${hsnOff.length} công tơ lệch HSN — `
-        + list(hsnOff, x => `${x.serial} (Danh mục ${x.hsn} ≠ HES ${hesBySerial.get(x.serial).hsn})`),
-      type: 'info', kind: 'hsn', zones: zonesOf(hsnOff.map(x => x.serial)),
-    },
+    /*
+      KHÔNG cảnh báo lệch HSN (user chốt 16/09/2026): HSN lấy theo điểm đo tại
+      thời điểm hiện tại (`dm_point.hsn`), không còn tuân theo HES nữa — lệch với
+      HES là chuyện bình thường, không phải sự cố. Phần in ra màn hình ở trên vẫn
+      giữ để tra cứu khi cần.
+    */
     onlyPb.length && {
       title: 'Công tơ đang treo mà HES không có',
       message: `Đối chiếu HES ↔ Danh mục: ${onlyPb.length} công tơ khai đang treo trong Danh mục`
@@ -180,6 +180,6 @@ if (process.argv.includes('--notify')) {
     }
   }
   console.log(`\nThông báo: ${groups.length} nhóm lệch → ${tried} bản, đã gửi ${sent} (còn lại đã có sẵn).`);
-} else if (onlyHes.length || hsnOff.length || onlyPb.length) {
+} else if (onlyHes.length || onlyPb.length) {
   console.log('\n(Thêm --notify để đẩy các nhóm lệch trên vào chuông thông báo.)');
 }
