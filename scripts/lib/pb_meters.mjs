@@ -23,6 +23,19 @@ const N = (s) => String(s ?? '').trim();
  */
 export async function pbLogin(email = process.env.PB_EMAIL || process.env.PB_ADMIN_EMAIL,
                               password = process.env.PB_PASS || process.env.PB_ADMIN_PASSWORD) {
+  /*
+    Thiếu biến và sai mật khẩu là hai lỗi khác nhau — gộp làm một thì người chạy
+    cứ ngồi soi lại mật khẩu trong khi thật ra chưa truyền biến nào cả.
+
+    Chấp nhận HAI bộ tên: `PB_EMAIL`/`PB_PASS` là tên pipeline dùng (bước 1 của
+    daily-pipeline.yml truyền xuống), `PB_ADMIN_EMAIL`/`PB_ADMIN_PASSWORD` là tên
+    các script `dm_*.mjs` chạy tay vẫn dùng. Giữ cả hai để không phải sửa thói
+    quen gõ lệnh của ai.
+  */
+  if (!email || !password) {
+    throw new Error('Thiếu tài khoản PocketBase. Truyền PB_EMAIL/PB_PASS '
+      + '(tên pipeline dùng) hoặc PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD (tên chạy tay).');
+  }
   for (const coll of ['_superusers', 'users']) {
     try {
       const r = await fetch(`${PB_URL}/api/collections/${coll}/auth-with-password`, {
@@ -35,7 +48,8 @@ export async function pbLogin(email = process.env.PB_EMAIL || process.env.PB_ADM
       }
     } catch { /* thử collection tiếp theo */ }
   }
-  throw new Error('Đăng nhập PocketBase thất bại');
+  throw new Error(`Đăng nhập PocketBase thất bại (${PB_URL}) — sai tài khoản/mật khẩu, `
+    + 'hoặc tài khoản không có quyền đọc danh mục.');
 }
 
 /** Lấy HẾT bản ghi của một collection — `dm_asset` đã vượt 500, một trang là thiếu im lặng. */

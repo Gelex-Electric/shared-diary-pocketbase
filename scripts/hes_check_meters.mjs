@@ -15,7 +15,17 @@
  *
  * CHỈ ĐỌC cả hai phía.
  *
- *   PB_ADMIN_EMAIL=... PB_ADMIN_PASSWORD=... API_TOKEN=... node scripts/hes_check_meters.mjs
+ * Biến môi trường (tên khớp `daily-pipeline.yml` để chạy được trong Actions):
+ *   PB_URL      địa chỉ PocketBase          — mặc định https://getc.up.railway.app/pb
+ *   PB_EMAIL    tài khoản PocketBase        — hoặc PB_ADMIN_EMAIL khi chạy tay
+ *   PB_PASS     mật khẩu PocketBase         — hoặc PB_ADMIN_PASSWORD
+ *   API_TOKEN   token HES đã có sẵn         — thiếu thì mới dùng API_USER/API_PASS
+ *   API_USER    tài khoản HES               — chỉ dùng khi không có API_TOKEN
+ *   API_PASS    mật khẩu HES
+ *   USER_ID     UserID cho GetMeterAccount  — mặc định 2 (GETC)
+ *   DAYS        cửa sổ soi dữ liệu tức thời — mặc định 3 ngày
+ *
+ *   PB_EMAIL=... PB_PASS=... API_TOKEN=... node scripts/hes_check_meters.mjs
  */
 import { getJson, mapLimit, stamp, getToken } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
