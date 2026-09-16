@@ -42,7 +42,13 @@ const fmtIdx = (v: number | undefined) =>
  * lại thì mất hết "lùi từ bao nhiêu về bao nhiêu, lúc mấy giờ" — đúng những thứ
  * người đi tra cần.
  */
-function RegressTable({ rows }: { rows: AlertDetail[] }) {
+/** "2026-09-15" → "15/09". Năm bỏ đi: cảnh báo luôn trong vài tuần gần đây. */
+const fmtDay = (d: string | undefined) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d ?? '');
+  return m ? `${m[3]}/${m[2]}` : (d || '—');
+};
+
+function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay: string }) {
   const groups = groupByZone(rows);
   const total = sumValue(rows);
   /* Số cột trước cột tổng — để dòng tổng nhập ô cho đúng. */
@@ -58,7 +64,11 @@ function RegressTable({ rows }: { rows: AlertDetail[] }) {
             <th className="px-2.5 py-1.5 text-left font-bold w-10">STT</th>
             <th className="px-2.5 py-1.5 text-left font-bold">Số công tơ</th>
             <th className="px-2.5 py-1.5 text-left font-bold">Khách hàng</th>
-            <th className="px-2.5 py-1.5 text-left font-bold">KCN</th>
+            {/* Cột KCN bỏ đi (user chốt 16/09/2026): bảng đã gom nhóm theo KCN
+                và thẻ cảnh báo cũng ghi KCN, nhắc lại ở từng dòng là thừa. Chỗ
+                đó dành cho NGÀY — cột giờ chỉ có HH:mm nên không có ngày thì
+                không biết ca nằm ở đâu, nhất là ca ở chỗ nối qua nửa đêm. */}
+            <th className="px-2.5 py-1.5 text-left font-bold whitespace-nowrap">Ngày</th>
             <th className="px-2.5 py-1.5 text-left font-bold whitespace-nowrap">Giờ bất thường</th>
             <th className="px-2.5 py-1.5 text-left font-bold">Biểu bất thường</th>
             <th className="px-2.5 py-1.5 text-right font-bold whitespace-nowrap">Mức bất thường</th>
@@ -88,7 +98,10 @@ function RegressTable({ rows }: { rows: AlertDetail[] }) {
                     </div>
                     {r.station && <div className="text-[11px] text-faint">{r.station}</div>}
                   </td>
-                  <td className="px-2.5 py-1.5 text-soft whitespace-nowrap">{r.zone || '—'}</td>
+                  {/* Bản ghi cũ chưa có `day` từng dòng — lùi về ngày của cảnh báo. */}
+                  <td className="px-2.5 py-1.5 font-mono text-soft whitespace-nowrap">
+                    {fmtDay(r.day || fallbackDay)}
+                  </td>
                   <td className="px-2.5 py-1.5 font-mono text-soft whitespace-nowrap">
                     {r.fromTime && r.toTime ? `${r.fromTime} → ${r.toTime}` : '—'}
                   </td>
@@ -295,7 +308,7 @@ export function AlertList({ items, loading, empty, onChanged }: {
                 /* `lui` và `lamtron` cùng là ca lùi chỉ số nên dùng chung bảng —
                    khác nhau ở mức độ nghiêm trọng, không ở dữ liệu. */
                 it.kind === 'lui' || it.kind === 'lamtron'
-                  ? <RegressTable rows={rows} />
+                  ? <RegressTable rows={rows} fallbackDay={it.day} />
                   : <DetailTable rows={rows} />
               )}
             </div>

@@ -429,6 +429,9 @@ function detailsOfDrops(list, meters, shortNameOf) {
         /* Trạm/điểm đo hiện dưới tên khách trong cùng một ô. */
         station: m?.code ?? '',
         zone: m?.zone ?? '',
+        /* Ngày lấy từ chính mốc của ca, không lấy ngày đang xử lý: ca ở chỗ
+           nối 23:30 → 00:00 thuộc về ngày HÔM SAU, ghi nhầm là sai. */
+        day: String(d.at).slice(0, 10),
         fromTime: String(d.fromAt).slice(11, 16),
         toTime: String(d.at).slice(11, 16),
         register: d.label,

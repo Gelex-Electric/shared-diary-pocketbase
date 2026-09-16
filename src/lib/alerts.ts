@@ -33,6 +33,8 @@ export interface AlertDetail {
   /** Trạm / điểm đo — hiện dưới tên khách trong cùng một ô. */
   station?: string;
   zone?: string;
+  /** Ngày xảy ra ca này, `YYYY-MM-DD`. Bản ghi cũ không có — lùi về `day` của cảnh báo. */
+  day?: string;
   /** Khoảng bất thường, `HH:mm`. */
   fromTime?: string;
   toTime?: string;
