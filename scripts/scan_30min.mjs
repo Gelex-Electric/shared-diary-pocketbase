@@ -172,8 +172,17 @@ for (const [meter, list] of order) {
    kiểm tra công tơ hay đi hỏi HES. */
 const byTime = new Map();
 for (const h of shown) byTime.set(h.at, (byTime.get(h.at) ?? 0) + 1);
-const clusters = [...byTime.entries()].filter(([, n]) => n >= 5).sort((a, b) => b[1] - a[1]);
-if (clusters.length) {
-  console.log(`\n=== CỤM THỜI ĐIỂM (≥5 ca cùng một mốc — nghi do hệ thống HES) ===`);
-  for (const [t, n] of clusters.slice(0, 10)) console.log(`  ${t}  ${n} ca`);
+/*
+  LIỆT KÊ ĐỦ MỌI KHUNG, không lọc theo ngưỡng. Bản đầu chỉ hiện cụm ≥5 ca cho
+  gọn, nhưng thế là giấu mất 3 trong 5 khung — người đọc tưởng chỉ có hai khung
+  trong khi thực tế có năm (user phát hiện 16/09/2026). Đặt ngưỡng tuỳ tiện
+  trong chính báo cáo soi lỗi thì báo cáo thành nguồn sai mới.
+*/
+const times = [...byTime.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+if (times.length) {
+  console.log(`\n=== KHUNG GIỜ (${times.length} khung — cùng một mốc nhiều ca là nghi do HES) ===`);
+  for (const [t, n] of times) console.log(`  ${t}  ${String(n).padStart(3)} ca`);
+  console.log('\nLƯU Ý: chỉ soi 5 biểu chiều ACTIVE có trong file. Chiều NHẬN'
+    + ' (vô công nhận) KHÔNG nằm trong file 30 phút nên số ở đây THẤP HƠN thực tế;'
+    + ' muốn đủ phải soi thẳng từ API.');
 }
