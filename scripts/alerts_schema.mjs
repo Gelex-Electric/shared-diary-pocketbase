@@ -57,6 +57,13 @@ const FIELDS = [
   txt('message'),
   txt('zone'),      // KCN liên quan; rỗng = không thuộc KCN nào
   txt('meters'),    // danh sách số công tơ, cách nhau dấu phẩy
+  /*
+    Chi tiết TỪNG công tơ để dựng bảng trên màn Cảnh báo: mảng JSON
+    [{ meter, customer, zone, note, value }]. `meters` ở trên chỉ là danh sách
+    phẳng — đủ để đếm, không đủ để người đọc biết công tơ nào của ai và lệch bao
+    nhiêu. Giữ CẢ HAI: bản ghi cũ không có `details` vẫn hiện được.
+  */
+  { name: 'details', type: 'json', required: false, presentable: false, maxSize: 2000000 },
   txt('day'),       // ngày phát hiện, YYYY-MM-DD
   { name: 'resolved', type: 'bool', required: false, presentable: false },
   /*
@@ -88,7 +95,7 @@ async function main() {
       không tự thêm) — vá lại cho PB đã chạy bản cũ của script này.
     */
     const cur = await call('GET', `/api/collections/${NAME}`, token);
-    const missing = FIELDS.filter(f => f.type === 'autodate'
+    const missing = FIELDS.filter(f => (f.type === 'autodate' || f.type === 'json')
       && !cur.fields.some(c => c.name === f.name));
     if (missing.length) {
       const names = missing.map(f => f.name).join(', ');

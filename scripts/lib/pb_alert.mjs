@@ -47,9 +47,12 @@ export const ALERT_KINDS = ['lui', 'tram', 'congto'];
  * @param {string}   a.message  mô tả đầy đủ
  * @param {string}  [a.zone]    KCN liên quan; rỗng = trải nhiều KCN hoặc không thuộc KCN nào
  * @param {string[]}[a.meters]  danh sách số công tơ — để tra lại sau
+ * @param {object[]}[a.details] chi tiết TỪNG công tơ để dựng bảng trên màn Cảnh
+ *   báo: `{ meter, customer, zone, note, value }`. `meters` chỉ đủ để đếm; bảng
+ *   cần biết công tơ nào của ai và bất thường bao nhiêu.
  * @param {string}  [a.day]     ngày phát hiện `YYYY-MM-DD`, mặc định hôm nay
  */
-export async function raiseAlert(token, { kind, title, message, zone = '', meters = [], day }) {
+export async function raiseAlert(token, { kind, title, message, zone = '', meters = [], details = [], day }) {
   if (!ALERT_KINDS.includes(kind)) {
     console.log(`[WARN] Bỏ qua cảnh báo với kind lạ: ${JSON.stringify(kind)}`);
     return false;
@@ -68,6 +71,7 @@ export async function raiseAlert(token, { kind, title, message, zone = '', meter
     body: JSON.stringify({
       kind, title, message, zone,
       meters: meters.join(', '),
+      details,
       day: d,
       resolved: false,
     }),

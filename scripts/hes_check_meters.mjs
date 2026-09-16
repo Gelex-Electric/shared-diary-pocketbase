@@ -48,7 +48,10 @@ const N = (s) => String(s ?? '').trim();
 
 /* ----------------------------- PocketBase ----------------------------- */
 const pbToken = await pbLogin();
-const { meters: live } = await liveMeters(pbToken);
+const { meters: live, customers } = await liveMeters(pbToken);
+/* Tên tắt cho bảng chi tiết — `name` là tên pháp nhân dài cả dòng. */
+const byMkh = new Map(customers.map(c => [c.mkh, c]));
+const shortNameOf = (mkh) => byMkh.get(mkh)?.short_name || byMkh.get(mkh)?.name || '';
 const pbBySerial = new Map(live.map(x => [x.serial, x]));
 
 /* -------------------------------- HES -------------------------------- */
@@ -157,6 +160,11 @@ if (process.argv.includes('--notify')) {
       message: `Đối chiếu HES ↔ Danh mục: ${onlyHes.length} công tơ có trên HES nhưng chưa khai`
         + ` đang treo trong Danh mục — ${list(onlyHes, m => m.serial)}`,
       meters: onlyHes.map(m => m.serial),
+      /* Bên HES thì Danh mục chưa có gì để tra, nên tên/trạm lấy từ chính HES. */
+      details: onlyHes.map(m => ({
+        meter: m.serial, customer: m.customer, zone: '',
+        note: m.line || 'không rõ trạm', value: null,
+      })),
     },
     /*
       KHÔNG cảnh báo lệch HSN (user chốt 16/09/2026): HSN lấy theo điểm đo tại
@@ -170,6 +178,10 @@ if (process.argv.includes('--notify')) {
       message: `Đối chiếu HES ↔ Danh mục: ${onlyPb.length} công tơ khai đang treo trong Danh mục`
         + ` nhưng HES không có — ${list(onlyPb, x => x.serial)}`,
       meters: onlyPb.map(x => x.serial),
+      details: onlyPb.map(x => ({
+        meter: x.serial, customer: shortNameOf(x.mkh), zone: x.zone ?? '',
+        note: x.code || 'không rõ điểm đo', value: null,
+      })),
     },
   ].filter(Boolean);
 

@@ -19,6 +19,23 @@
  */
 import { pb } from './pocketbase';
 
+/** Một dòng trong bảng chi tiết của cảnh báo. */
+export interface AlertDetail {
+  meter: string;
+  /** Tên tắt khách hàng; rỗng khi Danh mục chưa khai công tơ này. */
+  customer?: string;
+  zone?: string;
+  /** Mô tả ngắn: thanh ghi lùi và giờ, hoặc mã điểm đo/trạm. */
+  note?: string;
+  /**
+   * Lượng bất thường đã ×HSN. `null` = KHÔNG ĐO ĐƯỢC (vd công tơ không có chỉ
+   * số), khác hẳn 0 nghĩa là "đo được và bằng không" — bảng phải hiện hai
+   * trường hợp này khác nhau.
+   */
+  value?: number | null;
+  unit?: string;
+}
+
 export interface AlertRecord {
   id: string;
   /** NHÓM cảnh báo, quyết định sub-side. */
@@ -27,8 +44,13 @@ export interface AlertRecord {
   message: string;
   /** KCN liên quan; rỗng = trải nhiều KCN hoặc không thuộc KCN nào. */
   zone: string;
-  /** Danh sách số công tơ, cách nhau dấu phẩy. */
+  /** Danh sách số công tơ, cách nhau dấu phẩy. Đủ để đếm, không đủ dựng bảng. */
   meters: string;
+  /**
+   * Chi tiết từng công tơ để dựng bảng. Bản ghi cũ không có trường này — nơi
+   * đọc phải chịu được mảng rỗng và lùi về `meters`.
+   */
+  details?: AlertDetail[];
   /** Ngày phát hiện, `YYYY-MM-DD`. */
   day: string;
   resolved: boolean;
@@ -120,6 +142,21 @@ export function filterAlerts(items: AlertRecord[], kind: string, zone: string): 
  * Trả `true` nếu ghi được. Không xoá bản ghi trong mọi trường hợp — đây là chỗ
  * duy nhất màn Cảnh báo được phép ghi.
  */
+/**
+ * Chi tiết của một cảnh báo, luôn trả về mảng dùng được.
+ *
+ * Bản ghi cũ chỉ có `meters` (chuỗi phẩy) — dựng tạm một dòng mỗi công tơ để
+ * bảng vẫn hiện được, thay vì để trống và làm người đọc tưởng mất dữ liệu.
+ */
+export function detailsOf(r: AlertRecord): AlertDetail[] {
+  if (Array.isArray(r.details) && r.details.length) return r.details;
+  return (r.meters || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(meter => ({ meter }));
+}
+
 export async function setResolved(id: string, resolved: boolean): Promise<boolean> {
   try {
     await pb.collection('alerts').update(id, { resolved });

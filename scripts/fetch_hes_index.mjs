@@ -363,8 +363,21 @@ const endBoundary = new Date(day.getTime() + 86400000);
 console.log(`Kỳ ngày ${ymd(day)}: đầu=${ymd(startBoundary)} 00:00, cuối=${ymd(endBoundary)} 00:00`);
 
 const pbToken = await pbLogin();
-const { meters } = await liveMeters(pbToken);
+const { meters, customers } = await liveMeters(pbToken);
 console.log(`Danh mục: ${meters.length} công tơ ĐANG TREO (nguồn PocketBase).`);
+
+/*
+  Tên tắt khách hàng cho bảng chi tiết trên màn Cảnh báo.
+
+  Ưu tiên `short_name` — bảng cảnh báo hẹp, còn `name` là tên pháp nhân dài cả
+  dòng ("Công ty đầu tư hạ tầng và đô thị Viglacera - Chi nhánh…"). Thiếu tên tắt
+  thì mới lùi về `name`, cùng quy ước với các bảng chỉ số bên app.
+*/
+const byMkh = new Map(customers.map(c => [c.mkh, c]));
+const shortNameOf = (mkh) => {
+  const c = byMkh.get(mkh);
+  return c?.short_name || c?.name || '';
+};
 if (!meters.length) { console.error('Không có công tơ nào — dừng, không ghi đè file cũ.'); process.exit(1); }
 
 const noHsn = meters.filter(m => m.hsn == null);
@@ -450,8 +463,37 @@ if (real.length) {
     const zones = serials.map(sn => meters.find(m => m.serial === sn)?.zone ?? '');
     const zone = zoneOf(zones);
 
+    /*
+      Một dòng bảng cho MỖI công tơ, không phải mỗi lần lùi: một công tơ hỏng
+      sinh hàng chục lần lùi, liệt kê phẳng thì bảng dài ra mà vẫn không cho biết
+      có bao nhiêu công tơ dính.
+
+      `value` là mức lùi LỚN NHẤT đã ×HSN — đó mới là sản lượng thật sự lệch;
+      lùi 0,5 trên công tơ HSN 200 nặng hơn hẳn lùi 5 trên công tơ HSN 1.
+    */
+    const details = serials.map(sn => {
+      const list = realBySerial.get(sn) ?? [];
+      const m = meters.find(x => x.serial === sn);
+      const worst = list.reduce((a, b) => (b.gap > a.gap ? b : a), list[0]);
+      return {
+        meter: sn,
+        customer: shortNameOf(m?.mkh),
+        zone: m?.zone ?? '',
+        note: `${worst.label} lúc ${String(worst.at).slice(11, 16)}`
+          + `${list.length > 1 ? ` (+${list.length - 1} lần khác)` : ''}`,
+        /*
+          KHÔNG làm tròn về số nguyên: ca lùi 0,001 trên HSN 200 ra 0,2 kWh, mà
+          Math.round biến thành 0 — bảng đầy số 0 thì cột này thành vô nghĩa.
+          Giữ 3 chữ số thập phân, nơi hiển thị tự rút gọn.
+        */
+        value: Number((worst.gap * (m?.hsn || 1)).toFixed(3)),
+        unit: 'kWh',
+      };
+    });
+
     const ok = await raiseAlert(pbToken, {
       kind: 'lui',
+      details,
       title: 'Cảnh báo chỉ số công tơ chạy lùi',
       message: `Ngày ${ymd(day)}: ${serials.length} công tơ có chỉ số chạy lùi`
         + `${zone ? ` tại ${zone}` : ''} — ${serials.join(', ')}`,
@@ -520,8 +562,21 @@ if (process.argv.includes('--notify')
     && noData.length && noData.length >= rows.length * NO_DATA_ALERT_RATIO) {
   const serials = noData.map(r => r.METER_NO);
   const zone = zoneOf(serials.map(sn => meters.find(m => m.serial === sn)?.zone ?? ''));
+  const details = serials.map(sn => {
+    const m = meters.find(x => x.serial === sn);
+    return {
+      meter: sn,
+      customer: shortNameOf(m?.mkh),
+      zone: m?.zone ?? '',
+      note: m?.code || 'không rõ điểm đo',
+      /* Không có chỉ số nào để đo mức lệch — để trống chứ không ghi 0, vì 0 có
+         nghĩa là "đo được và bằng không", khác hẳn "không đo được". */
+      value: null,
+    };
+  });
   const ok = await raiseAlert(pbToken, {
     kind: 'lui',
+    details,
     title: 'Công tơ đang treo nhưng không lấy được chỉ số',
     message: `Ngày ${ymd(day)}: ${serials.length}/${rows.length} công tơ khai đang treo`
       + ` nhưng HES không trả đủ chỉ số hai đầu${zone ? ` tại ${zone}` : ''}`
