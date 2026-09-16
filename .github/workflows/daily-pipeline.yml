@@ -65,22 +65,27 @@ jobs:
       - name: Fetch HES index
         run: python scripts/fetch_hes_index.py
 
-      # 5) Ton that MBA 30 phut (giu 40 ngay)
-      - name: Transformer loss (30 min)
-        run: python scripts/daily_transformer_loss.py
-
-      # 6) Ton that MBA theo thang (luu vinh vien)
-      - name: Transformer loss (monthly)
-        run: python scripts/monthly_transformer_loss.py
+      # 5) + 6) TAM DUNG tu 16/09/2026 (user chot): ca chuoi ton that dang lay HSN
+      # tu METER_NAME cua HES, khong phai dm_point.hsn cua Danh muc -> sai ca P, Q
+      # lan OUTPUT. Bat lai sau khi doi nguon HSN va tinh lai lich su; xem
+      # plans/2026-09-16-hes-chi-so-chieu-nhan.md va co LOSS_DISABLED trong
+      # src/lib/transformerLoss.ts. Script va 3 file CSV cu GIU NGUYEN.
+      #
+      # - name: Transformer loss (30 min)
+      #   run: python scripts/daily_transformer_loss.py
+      #
+      # - name: Transformer loss (monthly)
+      #   run: python scripts/monthly_transformer_loss.py
 
       # 7) Commit MOT LAN tat ca CSV
       - name: Commit & push CSV
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Ba file transformer_loss_*.csv da bo khoi day tu 16/09/2026 (buoc 5+6
+          # tam dung). File cu van nam trong repo, chi khong sinh/commit them.
           git add public/metterinfo.csv public/line_info.csv public/mba_info.csv public/datametter.csv public/pmax_daily.csv \
-                  public/hes_index_daily.csv \
-                  public/transformer_loss_30min.csv public/transformer_loss_daily.csv public/transformer_loss_monthly.csv
+                  public/hes_index_daily.csv
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else

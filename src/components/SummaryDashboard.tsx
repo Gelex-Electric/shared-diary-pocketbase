@@ -12,7 +12,7 @@ import {
   useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, ZONE_MAP, zoneCodeOf,
 } from '../lib/invoices';
 import { usePmaxDaily } from '../lib/pmax';
-import { fetchLossMonthly, LossMonthlyRow } from '../lib/transformerLoss';
+import { fetchLossMonthly, LossMonthlyRow, LOSS_DISABLED } from '../lib/transformerLoss';
 
 /** Ngưỡng đánh giá tỷ lệ tổn thất tính toán năm (%). */
 const LOSS_TARGET_PCT = 1.5;
@@ -68,6 +68,7 @@ export default function SummaryDashboard() {
   const [lossMonthly, setLossMonthly] = useState<LossMonthlyRow[]>([]);
   useEffect(() => {
     let ok = true;
+    if (LOSS_DISABLED) return;   // tổn thất tạm dừng — đừng tải file số liệu sai
     fetchLossMonthly().then(r => { if (ok) setLossMonthly(r); }).catch(() => {});
     return () => { ok = false; };
   }, []);
@@ -303,16 +304,16 @@ export default function SummaryDashboard() {
       {error && <div className="vl-alert vl-alert-light-danger text-sm">{error}</div>}
 
       {/* Row 1 — KPI cards (kWh / ₫ / tổn thất năm) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className={`grid grid-cols-1 gap-3 ${LOSS_DISABLED ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
         <StatTile label="Sản lượng hữu công" value={fmtInt(kpis.kwh)} unit="kWh" icon={Zap} tone="accent" loading={loading}
           sub={`${fmtInt(kpis.bills)} hóa đơn · ${fmtInt(kpis.customers)} khách hàng`} subTone="neutral" />
         <StatTile label="Doanh thu" value={fmtInt(kpis.vnd)} unit="đồng" icon={TrendingUp} tone="neutral" loading={loading}
           sub={`Đã thu ${Math.round(kpis.collectRate * 100)}% · cosφ ${kpis.avgCosFi ? kpis.avgCosFi.toFixed(3) : '—'}`}
           subTone={kpis.collectRate >= 0.8 ? 'ok' : 'warn'} />
-        <StatTile label="Tổn thất tính toán năm" value={lossYear.has ? pctVN(lossYear.pct) : '—'} icon={TrendingDown}
+        {!LOSS_DISABLED && <StatTile label="Tổn thất tính toán năm" value={lossYear.has ? pctVN(lossYear.pct) : '—'} icon={TrendingDown}
           tone={!lossYear.has ? 'neutral' : lossYear.pct > LOSS_TARGET_PCT ? 'bad' : 'ok'} loading={loading}
           sub={`Mốc ${pctVN(LOSS_TARGET_PCT)} · năm ${year}`}
-          subTone={!lossYear.has ? 'neutral' : lossYear.pct > LOSS_TARGET_PCT ? 'bad' : 'ok'} />
+          subTone={!lossYear.has ? 'neutral' : lossYear.pct > LOSS_TARGET_PCT ? 'bad' : 'ok'} />}
       </div>
 
       {/* Row 2 — monthly load bars (3) + tariff donut (1), 3:1 on xl */}

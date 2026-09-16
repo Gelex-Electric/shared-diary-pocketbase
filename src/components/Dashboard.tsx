@@ -11,6 +11,7 @@ import CustomerManager from './CustomerManager';
 import HesReadingManager from './hes/HesReadingManager';
 import VoltagePowerDashboard from './VoltagePowerDashboard';
 import TransformerLossManager from './TransformerLossManager';
+import { LOSS_DISABLED } from '../lib/transformerLoss';
 import JournalManager from './JournalManager';
 import PowerOutageManager from './PowerOutageManager';
 import NewUpdateTour from './NewUpdateTour';
@@ -37,8 +38,9 @@ const TAB_LABEL: Record<Tab, string> = {
   later:     'Cập nhật sau',
 };
 
-/** Các tab con thuộc nhóm "Thông số vận hành". */
-const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
+/** Các tab con thuộc nhóm "Thông số vận hành". Bỏ 'loss' khi tổn thất tạm dừng. */
+const OPERATING_TABS: Tab[] = (['operating', 'hes', 'opchart', 'loss', 'sld'] as Tab[])
+  .filter(t => !(LOSS_DISABLED && t === 'loss'));
 /** Các tab con thuộc nhóm "Hồ sơ vận hành". */
 const JOURNAL_TABS: Tab[] = ['journal', 'outage', 'handover-record', 'billconfirm', 'debt'];
 
@@ -306,7 +308,7 @@ export default function Dashboard() {
                       <span className="flex-1">Đồ thị điện áp &amp; công suất</span>
                     </button>
                   </motion.li>
-                  <motion.li variants={subItemV}>
+                  {!LOSS_DISABLED && <motion.li variants={subItemV}>
                     <button
                       id="nav-loss-sub"
                       onClick={() => { setTopTab('loss'); onNavigate?.(); }}
@@ -317,7 +319,7 @@ export default function Dashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Tổn thất tính toán</span>
                     </button>
-                  </motion.li>
+                  </motion.li>}
                   <motion.li variants={subItemV}>
                     <button
                       id="nav-sld-sub"
@@ -500,7 +502,7 @@ export default function Dashboard() {
             ) : topTab === 'opchart' ? (
               <VoltagePowerDashboard />
             ) : topTab === 'loss' ? (
-              <TransformerLossManager />
+              LOSS_DISABLED ? null : <TransformerLossManager />
             ) : topTab === 'sld' ? (
               <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
                 <SldPage />

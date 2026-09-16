@@ -10,6 +10,23 @@
  * File có thể chưa tồn tại (chưa nhập mba_info.csv) → coi như rỗng, không báo lỗi.
  */
 
+/**
+ * TẠM DỪNG toàn bộ phần tổn thất (user chốt 16/09/2026).
+ *
+ * Vì sao: cả chuỗi lấy HSN từ `METER_NAME` của HES chứ không phải `dm_point.hsn`
+ * của Danh mục, nên HSN sai ⇒ sai cả P, Q (dùng tính ΔP = P0 + Pk×(S/Sdm)²) lẫn
+ * OUTPUT (mẫu số của LOSS_PCT). Số hiện ra không tin được, thà không hiện.
+ *
+ * Pipeline cũng đã gỡ bước 5 và 6 trong `daily-pipeline.yml` nên dữ liệu không
+ * sinh thêm nữa. Ba file CSV cũ GIỮ NGUYÊN trong `public/` để còn đối chiếu
+ * trước/sau khi tính lại.
+ *
+ * Bật lại: đổi cờ này về `false` và bỏ chú thích 2 bước trong workflow — sau khi
+ * chuyển nguồn HSN sang Danh mục và tính lại lịch sử (xem
+ * `plans/2026-09-16-hes-chi-so-chieu-nhan.md`).
+ */
+export const LOSS_DISABLED = true;
+
 export interface LossDailyRow {
   code: string;
   lineName: string;

@@ -14,6 +14,7 @@ import CustomerManager from '../CustomerManager';
 import HesReadingManager from '../hes/HesReadingManager';
 import OfficeVoltagePowerDashboard from './OfficeVoltagePowerDashboard';
 import TransformerLossManager from '../TransformerLossManager';
+import { LOSS_DISABLED } from '../../lib/transformerLoss';
 import OfficeSldPage from './OfficeSldPage';
 import GeneralManagement from '../dm/GeneralManagement';
 import CatalogEntry from '../dm/CatalogEntry';
@@ -46,7 +47,8 @@ const TAB_LABEL: Record<Tab, string> = {
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
 const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt', 'invoice-export'];
 /** Các tab con thuộc nhóm "Thông số vận hành". */
-const OPERATING_TABS: Tab[] = ['operating', 'hes', 'opchart', 'loss', 'sld'];
+const OPERATING_TABS: Tab[] = (['operating', 'hes', 'opchart', 'loss', 'sld'] as Tab[])
+  .filter(t => !(LOSS_DISABLED && t === 'loss'));
 /** Các tab con thuộc nhóm "Quản lý vật tư thiết bị điện". */
 const ASSET_TABS: Tab[] = ['dm-general', 'dm-catalog'];
 /** Mục con của nhóm "Quản lý Hợp đồng" — hiện chỉ 1, giữ mảng để thêm mục sau. */
@@ -287,7 +289,7 @@ export default function BusinessDashboard() {
                       <span className="flex-1">Đồ thị điện áp &amp; công suất</span>
                     </button>
                   </li>
-                  <li>
+                  {!LOSS_DISABLED && <li>
                     <button
                       id="nav-loss-sub"
                       onClick={() => { setTopTab('loss'); onNavigate?.(); }}
@@ -298,7 +300,7 @@ export default function BusinessDashboard() {
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Tổn thất tính toán</span>
                     </button>
-                  </li>
+                  </li>}
                   <li>
                     <button
                       id="nav-sld-sub"
@@ -501,7 +503,7 @@ export default function BusinessDashboard() {
             ) : topTab === 'dm-catalog' ? (
               <CatalogEntry scope="vanphong" />
             ) : topTab === 'loss' ? (
-              <TransformerLossManager />
+              LOSS_DISABLED ? null : <TransformerLossManager />
             ) : topTab === 'qlvh' ? (
               <QlvhPage scope="vanphong" />
             ) : topTab === 'sld' ? (
