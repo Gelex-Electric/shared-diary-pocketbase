@@ -584,8 +584,22 @@ const crossDay = [];
 for (const r of rows) {
   const p = prevRows.get(r.METER_NO);
   if (!p) continue;
+  /*
+    BỎ QUA công tơ hôm nay KHÔNG CÓ chỉ số.
+
+    `Number('')` bằng 0 chứ không phải NaN, nên guard `Number.isFinite` bên dưới
+    không bắt được ô rỗng: công tơ ngừng phát dữ liệu bị đọc thành "lùi từ
+    1.258,72 về 0" rồi nhân HSN ra 50.348,8 kWh — một con số hoàn toàn bịa.
+
+    Đây chính là trường hợp user đã chốt KHÔNG cảnh báo (khách tắt trạm). Để lọt
+    thì nó quay lại cửa sau, lại còn đội lốt sự cố nặng hơn. Phát hiện khi kiểm
+    chứng bảng ngày 16/09/2026 — cột giờ trống là dấu hiệu.
+  */
+  if (r.NO_DATA === '1') continue;
   for (const k of KEYS) {
-    const a = Number(p[`${k}_END`]), b = Number(r[`${k}_START`]);
+    const rawA = p[`${k}_END`], rawB = r[`${k}_START`];
+    if (rawA === '' || rawA == null || rawB === '' || rawB == null) continue;
+    const a = Number(rawA), b = Number(rawB);
     if (!Number.isFinite(a) || !Number.isFinite(b) || b >= a) continue;
     const gap = a - b;
     crossDay.push({
