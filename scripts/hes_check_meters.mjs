@@ -13,7 +13,8 @@
  * `METER_NAME` của HES là HỆ SỐ NHÂN, không phải tên công tơ (xem API_HES.md).
  * Phía PB, HSN đọc từ `dm_point.hsn` — xem `lib/pb_meters.mjs`.
  *
- * CHỈ ĐỌC cả hai phía.
+ * CHỈ ĐỌC cả hai phía. Thêm `--notify` thì có ghi, nhưng chỉ TẠO bản ghi mới
+ * trong collection `notifications` — không sửa/xóa gì, không chạm collection khác.
  *
  * Biến môi trường (tên khớp `daily-pipeline.yml` để chạy được trong Actions):
  *   PB_URL      địa chỉ PocketBase          — mặc định https://getc.up.railway.app/pb
@@ -29,6 +30,7 @@
  */
 import { getJson, mapLimit, stamp, getToken } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
+import { notifyOnce } from './lib/pb_notify.mjs';
 
 /** Cửa sổ soi dữ liệu tức thời — đủ rộng để công tơ đọc thưa vẫn lọt. */
 const DAYS = Number(process.env.DAYS || 3);
@@ -128,3 +130,45 @@ show(`CÓ Ở CẢ HAI NHƯNG IM LẶNG ${DAYS} NGÀY`, both.filter(x => !isAliv
 
 show('LỆCH MÃ TRẠM (tham khảo — hai bên đặt tên khác nhau)', lineOff, x =>
   `${x.serial.padEnd(12)} PB ${x.code.padEnd(34)} HES ${hesBySerial.get(x.serial).line}`);
+
+/* ----------------------------- Thông báo ----------------------------- */
+/*
+  Mặc định script CHỈ ĐỌC và in ra. Phải truyền `--notify` mới ghi thông báo —
+  staging dùng chung dữ liệu với production, nên mỗi lần chạy tay để soi số liệu
+  mà tự đẩy thông báo là làm phiền người dùng thật.
+
+  Gộp MỘT thông báo cho mỗi nhóm, không phải mỗi công tơ một cái: lệch 20 công
+  tơ thì chuông ngập 20 dòng, không ai đọc nữa.
+
+  Chỉ gửi `area=''` (khối Kinh doanh) — đối chiếu danh mục là việc quản trị,
+  không thuộc về một KCN cụ thể.
+*/
+if (process.argv.includes('--notify')) {
+  const list = (rows, f) => rows.map(f).join(', ');
+  const groups = [
+    onlyHes.length && {
+      title: 'Công tơ chưa khai trong Danh mục',
+      message: `Đối chiếu HES ↔ Danh mục: ${onlyHes.length} công tơ có trên HES nhưng chưa khai`
+        + ` đang treo trong Danh mục — ${list(onlyHes, m => m.serial)}`,
+      type: 'info',
+    },
+    hsnOff.length && {
+      title: 'Lệch hệ số nhân (HSN) giữa HES và Danh mục',
+      message: `Đối chiếu HES ↔ Danh mục: ${hsnOff.length} công tơ lệch HSN — `
+        + list(hsnOff, x => `${x.serial} (Danh mục ${x.hsn} ≠ HES ${hesBySerial.get(x.serial).hsn})`),
+      type: 'info',
+    },
+    onlyPb.length && {
+      title: 'Công tơ đang treo mà HES không có',
+      message: `Đối chiếu HES ↔ Danh mục: ${onlyPb.length} công tơ khai đang treo trong Danh mục`
+        + ` nhưng HES không có — ${list(onlyPb, x => x.serial)}`,
+      type: 'info',
+    },
+  ].filter(Boolean);
+
+  let sent = 0;
+  for (const g of groups) if (await notifyOnce(pbToken, g)) sent++;
+  console.log(`\nThông báo: ${groups.length} nhóm lệch, đã gửi ${sent} (còn lại đã có sẵn, bỏ qua).`);
+} else if (onlyHes.length || hsnOff.length || onlyPb.length) {
+  console.log('\n(Thêm --notify để đẩy các nhóm lệch trên vào chuông thông báo.)');
+}
