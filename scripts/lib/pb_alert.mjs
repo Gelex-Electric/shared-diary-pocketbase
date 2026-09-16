@@ -28,8 +28,11 @@ const COLLECTION = 'alerts';
  * `src/lib/alerts.ts`. KHÔNG có `hsn`: HSN lấy theo `dm_point` tại thời điểm
  * hiện tại, không đối chiếu HES nữa nên lệch không còn là sự cố (user chốt
  * 16/09/2026). Cũng không có `thanhtoan` — thanh toán không phải cảnh báo.
+ *
+ * `lamtron` TÁCH khỏi `lui`: sai số làm tròn của HES sinh ~80 ca mỗi ngày, gộp
+ * chung thì ca lùi thật lẫn vào giữa và không ai nhìn ra.
  */
-export const ALERT_KINDS = ['lui', 'tram', 'congto'];
+export const ALERT_KINDS = ['lui', 'lamtron', 'tram', 'congto'];
 
 /**
  * Tạo một cảnh báo nếu chưa có cái nào trùng `kind` + `day` + `message`.

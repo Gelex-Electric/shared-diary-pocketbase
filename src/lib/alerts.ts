@@ -111,6 +111,13 @@ export const ALERT_KINDS = [
      nhóm. Chỉ đổi NHÃN: "bất thường" rộng hơn "chạy lùi", để sau này thêm được
      các kiểu sai khác của chỉ số mà không phải đặt lại tên mục. */
   { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số công tơ giảm giữa hai mốc' },
+  /*
+    TÁCH khỏi `lui` (user chốt 16/09/2026). HES làm tròn chữ số cuối sinh ~80 ca
+    mỗi ngày, toàn bộ lùi đúng 0,001 và dồn vào vài mốc giờ — vô hại, nhưng cần
+    nhìn thấy để biết HES đang làm gì. Để chung với lùi thật thì ca lùi thật lẫn
+    vào giữa 80 dòng vô hại và không ai nhìn ra.
+  */
+  { kind: 'lamtron', label: 'Sai số làm tròn', desc: 'HES làm tròn chữ số cuối, chỉ số giảm đúng 0,001' },
   { kind: 'tram', label: 'Dữ liệu trạm', desc: 'Mã trạm không khớp tên trạm bên HES' },
   { kind: 'congto', label: 'Đối chiếu công tơ', desc: 'Công tơ lệch giữa HES và Danh mục' },
 ] as const;

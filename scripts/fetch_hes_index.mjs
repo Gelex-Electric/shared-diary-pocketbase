@@ -410,6 +410,40 @@ const results = await mapLimit(meters, CONCURRENCY, async (m) => {
 const rows = results.filter(r => r?.daily?.METER_NO).map(r => r.daily);
 const rows30 = results.flatMap(r => r?.detail ?? []);
 
+/**
+ * Chi tiết từng CA lùi để dựng bảng trên màn Cảnh báo.
+ *
+ * MỘT DÒNG = MỘT CA, không gộp theo công tơ: bảng cần "lùi từ bao nhiêu về bao
+ * nhiêu" trong khoảng "từ mấy giờ đến mấy giờ" ở "biểu nào" — cả ba đều thuộc
+ * về từng ca, gộp về mỗi công tơ một dòng thì phải vứt hết.
+ *
+ * `value` là lượng đã ×HSN: số thô không so sánh được giữa các công tơ.
+ */
+function detailsOfDrops(list, meters, shortNameOf) {
+  return list
+    .map(d => {
+      const m = meters.find(x => x.serial === d.serial);
+      return {
+        meter: d.serial,
+        customer: shortNameOf(m?.mkh),
+        /* Trạm/điểm đo hiện dưới tên khách trong cùng một ô. */
+        station: m?.code ?? '',
+        zone: m?.zone ?? '',
+        fromTime: String(d.fromAt).slice(11, 16),
+        toTime: String(d.at).slice(11, 16),
+        register: d.label,
+        fromIndex: d.from,
+        toIndex: d.to,
+        value: Number((d.gap * (m?.hsn || 1)).toFixed(3)),
+        unit: 'kWh',
+      };
+    })
+    /* Sắp theo KCN rồi công tơ rồi giờ — bảng gom nhóm theo KCN nên thứ tự này
+       giữ mỗi công tơ liền một khối thay vì rải rác. */
+    .sort((a, b) => a.zone.localeCompare(b.zone) || a.meter.localeCompare(b.meter)
+      || a.fromTime.localeCompare(b.fromTime));
+}
+
 /* ---------------------------- Soát thụt lùi ---------------------------- */
 /*
   Soi từng cặp mốc liên tiếp trong ngày trên MỌI thanh ghi (xem `scanRegress`),
@@ -432,6 +466,42 @@ if (rounding.length) {
   const meterCount = new Set(rounding.map(d => d.serial)).size;
   console.log(`\nSai số làm tròn: ${rounding.length} lần lùi đúng ${ROUNDING_STEP} trên ${meterCount} công tơ `
     + '— của hệ thống HES, không phải công tơ chạy ngược.');
+
+  /*
+    CẢNH BÁO RIÊNG cho ca làm tròn (user chốt 16/09/2026), tách hẳn khỏi nhóm
+    lùi thật.
+
+    Trước đây chỉ in ra log rồi thôi, nên người dùng không thấy gì trên app và
+    tưởng hệ thống bỏ sót. Nhưng gộp chung với lùi thật cũng sai: HES sinh ~80 ca
+    mỗi ngày, ca lùi THẬT sẽ lẫn vào giữa 80 dòng vô hại và không ai nhìn ra.
+
+    Nội dung nêu luôn các KHUNG GIỜ: 80 ca dồn vào một hai mốc thì thủ phạm là
+    HES, còn rải đều cả ngày lại là chuyện khác hẳn — người đọc cần phân biệt
+    được ngay ở dòng tóm tắt, không phải mở bảng ra đếm.
+  */
+  if (process.argv.includes('--notify')) {
+    const byTime = new Map();
+    for (const d of rounding) {
+      const t = String(d.at).slice(11, 16);
+      byTime.set(t, (byTime.get(t) ?? 0) + 1);
+    }
+    const windows = [...byTime.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const zone = zoneOf(rounding.map(d => meters.find(x => x.serial === d.serial)?.zone ?? ''));
+
+    const ok = await raiseAlert(pbToken, {
+      kind: 'lamtron',
+      title: 'Sai số làm tròn hàng loạt từ HES',
+      message: `Ngày ${ymd(day)}: ${rounding.length} ca chỉ số giảm đúng ${ROUNDING_STEP}`
+        + ` trên ${meterCount} công tơ, dồn vào ${windows.length} khung giờ`
+        + ` (${windows.map(([t, n]) => `${t}: ${n} ca`).join(', ')})`,
+      zone,
+      meters: [...new Set(rounding.map(d => d.serial))],
+      details: detailsOfDrops(rounding, meters, shortNameOf),
+      day: ymd(day),
+    });
+    console.log(`Cảnh báo sai số làm tròn: ${ok ? 'đã ghi 1 bản' : 'bỏ qua (đã có bản cho ngày này)'}`
+      + ` · ${windows.length} khung giờ.`);
+  }
 }
 
 if (real.length) {
@@ -466,37 +536,7 @@ if (real.length) {
     const zones = serials.map(sn => meters.find(m => m.serial === sn)?.zone ?? '');
     const zone = zoneOf(zones);
 
-    /*
-      MỘT DÒNG = MỘT CA LÙI, không gộp theo công tơ (user chốt 16/09/2026).
-
-      Bảng cần "lùi từ bao nhiêu về bao nhiêu" trong khoảng "từ mấy giờ đến mấy
-      giờ" ở "biểu nào" — ba thứ đó đều thuộc về từng ca. Gộp về mỗi công tơ một
-      dòng thì phải vứt hết, chỉ giữ được cái nặng nhất.
-
-      `value` là lượng đã ×HSN — số thô không so sánh được giữa các công tơ.
-    */
-    const details = real
-      .map(d => {
-        const m = meters.find(x => x.serial === d.serial);
-        return {
-          meter: d.serial,
-          customer: shortNameOf(m?.mkh),
-          /* Trạm/điểm đo hiện dưới tên khách trong cùng một ô. */
-          station: m?.code ?? '',
-          zone: m?.zone ?? '',
-          fromTime: String(d.fromAt).slice(11, 16),
-          toTime: String(d.at).slice(11, 16),
-          register: d.label,
-          fromIndex: d.from,
-          toIndex: d.to,
-          value: Number((d.gap * (m?.hsn || 1)).toFixed(3)),
-          unit: 'kWh',
-        };
-      })
-      /* Sắp theo KCN rồi công tơ rồi giờ — bảng gom nhóm theo KCN nên thứ tự
-         này giữ mỗi công tơ liền một khối thay vì rải rác. */
-      .sort((a, b) => a.zone.localeCompare(b.zone) || a.meter.localeCompare(b.meter)
-        || a.fromTime.localeCompare(b.fromTime));
+    const details = detailsOfDrops(real, meters, shortNameOf);
 
     const ok = await raiseAlert(pbToken, {
       kind: 'lui',

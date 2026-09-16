@@ -284,7 +284,7 @@ export function AlertList({ items, loading, empty, onChanged }: {
                       công tơ — nên phải nói cả hai con số. Ghi "81 công tơ" trong
                       khi chỉ có 49 công tơ dính là báo sai quy mô sự việc.
                     */}
-                    {it.kind === 'lui'
+                    {it.kind === 'lui' || it.kind === 'lamtron'
                       ? `${rows.length} ca · ${meterCount} công tơ`
                       : `${rows.length} công tơ`}
                     <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -292,7 +292,9 @@ export function AlertList({ items, loading, empty, onChanged }: {
                 )}
               </div>
               {isOpen && rows.length > 0 && (
-                it.kind === 'lui'
+                /* `lui` và `lamtron` cùng là ca lùi chỉ số nên dùng chung bảng —
+                   khác nhau ở mức độ nghiêm trọng, không ở dữ liệu. */
+                it.kind === 'lui' || it.kind === 'lamtron'
                   ? <RegressTable rows={rows} />
                   : <DetailTable rows={rows} />
               )}
