@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 /**
- * Lấy chỉ số công tơ đầu/cuối kỳ theo NGÀY từ `GetMeterDataByDate`, ghi ra
- * `public/hes_index_daily.csv` và (nếu có tài khoản) collection `hes_index`.
+ * Lấy chỉ số công tơ từ `GetMeterDataByDate` và ghi ra BA nơi:
+ *   - `public/hes_index_30min.csv`  chi tiết 30 phút, giữ 7 ngày (file nóng)
+ *   - `public/hes_index_daily.csv`  đầu/cuối kỳ theo ngày (giữ như cũ)
+ *   - collection `hes_index` trên PocketBase — bản NGÀY, lịch sử dài
+ *
+ * Một lời gọi API cho mỗi công tơ trả sẵn 49 bản ghi (48 mốc 30 phút + mốc
+ * 00:00 hôm sau), rút ra được cả ba. Bản Python cũ gọi HAI lần với hai cửa sổ
+ * nhỏ rồi vứt 47 bản ghi.
  *
  * Thay cho `fetch_hes_index.py`. Khác bản Python ở hai chỗ:
  *   1. Danh sách công tơ lấy từ DANH MỤC PocketBase (công tơ ĐANG TREO), không
@@ -26,8 +32,9 @@
  * Biến môi trường:
  *   TARGET_DATE   rỗng = hôm qua · "YYYY-MM-DD" · số N = lùi N ngày
  *   KEEP_DAYS     0 = giữ toàn bộ lịch sử trong CSV (mặc định — xem ghi chú dưới)
- *   WINDOW_STEPS  các bước nới rộng cửa sổ quanh mốc 00:00, phút. Mặc định 60,180,1440
- *   HES_INDEX_PATH  đường dẫn CSV. Mặc định public/hes_index_daily.csv
+ *   KEEP_DAYS_30  số ngày giữ trong file 30 phút. Mặc định 7
+ *   HES_INDEX_PATH  đường dẫn CSV ngày.     Mặc định public/hes_index_daily.csv
+ *   HES_30MIN_PATH  đường dẫn CSV 30 phút.  Mặc định public/hes_index_30min.csv
  *   PB_EMAIL/PB_PASS (hoặc PB_ADMIN_*), API_TOKEN hoặc API_USER/API_PASS
  *
  * Vì sao KEEP_DAYS mặc định 0 chứ không phải 7: màn "Lấy chỉ số HES" cho người
@@ -46,7 +53,9 @@ import { pbLogin, liveMeters, PB_URL } from './lib/pb_meters.mjs';
 
 const OUT_PATH = process.env.HES_INDEX_PATH || 'public/hes_index_daily.csv';
 const KEEP_DAYS = Number(process.env.KEEP_DAYS || 0);
-const WINDOW_STEPS = (process.env.WINDOW_STEPS || '60,180,1440').split(',').map(Number);
+/** Chi tiết 30 phút — file nóng, chỉ giữ ít ngày vì nó nặng gấp 48 lần bản ngày. */
+const OUT_30_PATH = process.env.HES_30MIN_PATH || 'public/hes_index_30min.csv';
+const KEEP_DAYS_30 = Number(process.env.KEEP_DAYS_30 || 7);
 const CONCURRENCY = Number(process.env.CONCURRENCY || 6);
 const PB_COLLECTION = 'hes_index';
 
@@ -65,6 +74,9 @@ const OUT_FIELDS = [
   /* Hai cột mới NỐI VÀO CUỐI để reader cũ (đọc theo tên cột) không phải sửa. */
   'REGRESS', 'NO_DATA',
 ];
+
+/** Cột của file 30 phút. Một dòng = một công tơ tại một mốc. */
+const OUT_30_FIELDS = ['METER_NO', 'DATE_TIME', 'HSN', ...KEYS];
 
 /* ----------------------------- ngày tháng ----------------------------- */
 /** Hôm nay theo giờ VN, bất kể máy chạy ở múi nào. */
@@ -95,34 +107,49 @@ const toNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 const recTime = (r) => r?.DATE_TIME || r?.DATA_TIME || '';
 
 /**
- * Bản ghi hợp lệ GẦN mốc `boundary` nhất; nới rộng cửa sổ dần theo WINDOW_STEPS.
- * `null` nếu không tìm thấy ở mọi bước.
+ * TOÀN BỘ bản ghi của một công tơ trong ngày D, sắp theo thời gian tăng dần.
+ *
+ * API trả sẵn 49 bản ghi cho một ngày: 48 mốc 30 phút + mốc 00:00 hôm sau. Bản
+ * cũ gọi HAI lần với hai cửa sổ nhỏ quanh 00:00 rồi vứt 47 bản ghi — vừa tốn
+ * gấp đôi lời gọi, vừa sinh ra lỗi CHỒNG MỐC (cuối kỳ vớt phải bản 00:30 trong
+ * khi đầu kỳ hôm sau là 00:00, nên 30 phút đó tính sản lượng vào cả hai ngày).
+ * Lấy trọn ngày thì mốc nào cũng có sẵn, lấy đúng mốc cần.
  */
-async function fetchBoundary(token, meterNo, boundary) {
-  const start = stamp(boundary);
-  for (const win of WINDOW_STEPS) {
-    let data;
-    try {
-      data = await getJson('GetMeterDataByDate', {
-        MeterNo: meterNo, StartDate: start,
-        EndDate: stamp(new Date(boundary.getTime() + win * 60000)), Token: token,
-      });
-    } catch (e) {
-      console.log(`[WARN] ${meterNo} @ ${start}: lỗi API (${String(e).slice(0, 80)})`);
-      return null;
-    }
-    if (!Array.isArray(data)) {
-      if (String(data?.MESSAGE ?? '').toLowerCase() === 'invalid token') throw new Error('invalid token');
-      continue;
-    }
-    const valid = data.filter(r => toNum(r.ACTIVE_KW_INDICATE_TOTAL) > 0);
-    if (!valid.length) continue;
-    valid.sort((a, b) =>
-      Math.abs(new Date(recTime(a).replace(' ', 'T')) - boundary)
-      - Math.abs(new Date(recTime(b).replace(' ', 'T')) - boundary));
-    return valid[0];
+export async function fetchDay(token, meterNo, day) {
+  let data;
+  try {
+    data = await getJson('GetMeterDataByDate', {
+      MeterNo: meterNo, StartDate: stamp(day),
+      EndDate: stamp(new Date(day.getTime() + 86400000)), Token: token,
+    });
+  } catch (e) {
+    console.log(`[WARN] ${meterNo} @ ${ymd(day)}: lỗi API (${String(e).slice(0, 80)})`);
+    return [];
   }
-  return null;
+  if (!Array.isArray(data)) {
+    if (String(data?.MESSAGE ?? '').toLowerCase() === 'invalid token') throw new Error('invalid token');
+    return [];
+  }
+  return data
+    .filter(r => recTime(r) && toNum(r.ACTIVE_KW_INDICATE_TOTAL) > 0)
+    .sort((a, b) => recTime(a).localeCompare(recTime(b)));
+}
+
+/**
+ * Hai bản ghi biên của ngày D: đúng mốc 00:00 ngày D và 00:00 ngày D+1.
+ *
+ * Thiếu mốc đúng thì lùi về bản ghi sớm nhất / muộn nhất trong ngày và GHI LẠI
+ * thời điểm thật vào `START_TIME`/`END_TIME` — nơi đọc còn biết kỳ này không
+ * trọn ngày, thay vì tưởng là đủ.
+ */
+export function boundariesOf(recs, day) {
+  if (!recs.length) return [null, null];
+  const at = (d) => `${ymd(d)} 00:00:00`;
+  const start = recs.find(r => recTime(r) === at(day)) ?? recs[0];
+  const endStamp = at(new Date(day.getTime() + 86400000));
+  const end = recs.find(r => recTime(r) === endStamp) ?? recs[recs.length - 1];
+  /* Một bản ghi duy nhất thì không đủ hai biên — coi như thiếu dữ liệu. */
+  return start === end ? [null, null] : [start, end];
 }
 
 /* ------------------------------ thụt lùi ------------------------------ */
@@ -264,6 +291,37 @@ export function writeCsv(path, newRows) {
   return rows.length;
 }
 
+/**
+ * Ghi file chi tiết 30 phút. Khóa gộp là (METER_NO, DATE_TIME) nên chạy lại
+ * cùng ngày chỉ ghi đè đúng các mốc của ngày đó.
+ *
+ * Cắt theo `KEEP_DAYS_30` (mặc định 7): ~115 công tơ × 48 mốc = 5.520 dòng/ngày,
+ * tức ~385 KB/ngày. Giữ cả năm là 137 MB trong thư mục CÔNG KHAI — không được.
+ * Lịch sử dài nằm ở bản NGÀY trên PocketBase.
+ */
+export function writeCsv30(path, rows) {
+  const merged = new Map();
+  for (const r of readCsv(path)) merged.set(`${r.METER_NO}|${r.DATE_TIME}`, r);
+  for (const r of rows) merged.set(`${r.METER_NO}|${r.DATE_TIME}`, r);
+
+  let out = [...merged.values()];
+  if (KEEP_DAYS_30 > 0) {
+    const cutoff = ymd(new Date(todayVn().getTime() - KEEP_DAYS_30 * 86400000));
+    const kept = out.filter(r => String(r.DATE_TIME ?? '').slice(0, 10) >= cutoff);
+    /* Cùng chốt chặn như bản ngày: thà giữ dữ liệu cũ còn hơn ra file rỗng. */
+    if (kept.length) out = kept;
+    else if (out.length) {
+      console.log(`[CẢNH BÁO] File 30 phút: mọi mốc đều cũ hơn ${cutoff} — giữ nguyên ${out.length} dòng.`);
+    }
+  }
+  out.sort((a, b) => (a.DATE_TIME + a.METER_NO).localeCompare(b.DATE_TIME + b.METER_NO));
+
+  mkdirSync(dirname(path), { recursive: true });
+  const body = out.map(r => OUT_30_FIELDS.map(f => r[f] ?? '').join(','));
+  writeFileSync(path, [OUT_30_FIELDS.join(','), ...body].join('\n') + '\n', 'utf8');
+  return out.length;
+}
+
 /* ------------------------------ PocketBase ------------------------------ */
 const pbNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
 
@@ -324,13 +382,25 @@ if (noHsn.length) {
 }
 
 const hesToken = await getToken();
+/*
+  MỘT lời gọi cho mỗi công tơ, lấy trọn ngày. Từ cùng một mẻ bản ghi rút ra cả
+  hai thứ: chi tiết 30 phút, và hai biên của ngày. Vì hai biên lấy từ chính mẻ
+  này nên không thể lệch mốc như cách gọi hai lần trước đây.
+*/
 const results = await mapLimit(meters, CONCURRENCY, async (m) => {
-  const [s, e] = [await fetchBoundary(hesToken, m.serial, startBoundary),
-                  await fetchBoundary(hesToken, m.serial, endBoundary)];
-  return buildRow(m.serial, m.hsn, day, s, e);
+  const recs = await fetchDay(hesToken, m.serial, day);
+  const [s, e] = boundariesOf(recs, day);
+  const hsn = m.hsn == null ? '' : String(m.hsn);
+  const detail = recs.map(r => {
+    const row = { METER_NO: m.serial, DATE_TIME: recTime(r), HSN: hsn };
+    for (const [k, src] of Object.entries(FIELD_MAP)) row[k] = r[src] ?? '';
+    return row;
+  });
+  return { daily: buildRow(m.serial, m.hsn, day, s, e), detail };
 });
 
-const rows = results.filter(r => r && r.METER_NO);
+const rows = results.filter(r => r?.daily?.METER_NO).map(r => r.daily);
+const rows30 = results.flatMap(r => r?.detail ?? []);
 
 /* Cờ thụt lùi — cần chỉ số ngày liền trước, nên làm sau khi đã có cả mẻ. */
 const { prev, rows: prevRows, src } = await prevDayRows(pbToken, day);
@@ -365,6 +435,10 @@ if (rows.length === noData.length) {
 
 const total = writeCsv(OUT_PATH, rows);
 console.log(`Ghi ${rows.length} dòng. Tổng file: ${total} dòng → ${OUT_PATH}`);
+
+const total30 = writeCsv30(OUT_30_PATH, rows30);
+console.log(`Chi tiết 30 phút: ghi ${rows30.length} mốc, giữ ${KEEP_DAYS_30} ngày. `
+  + `Tổng file: ${total30} dòng → ${OUT_30_PATH}`);
 
 const pb = await writePb(pbToken, rows);
 console.log(`PocketBase \`${PB_COLLECTION}\`: tạo ${pb.created}, cập nhật ${pb.updated}`
