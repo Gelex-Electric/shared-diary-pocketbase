@@ -18,7 +18,12 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Building2, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { Zone } from '../../lib/dm/types';
+/**
+ * Chỉ cần ba trường này để dựng đầu thẻ. Khai rộng (không buộc `Zone` đầy đủ của
+ * Danh mục) để màn HES — vốn chỉ có TÊN khu công nghiệp chứ không có bản ghi
+ * `dm_zone` — dùng lại được đúng khuôn thẻ này, khỏi chép bản thứ hai.
+ */
+export interface ZoneHead { id: string; name: string; code?: string }
 
 /**
  * Nền đầu thẻ — chép nguyên từ `CustomerDebtManager` để hai màn không lệch nhau.
@@ -31,7 +36,7 @@ export const PAGE_SIZE = 50;
 
 export interface ZoneGroup<T> {
   /** `null` = nhóm bản ghi chưa gắn KCN nào. */
-  zone: Zone | null;
+  zone: ZoneHead | null;
   rows: T[];
 }
 

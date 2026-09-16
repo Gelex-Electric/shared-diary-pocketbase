@@ -7,20 +7,24 @@ import { Select } from '../ui/Select';
 import { toast as notify } from '../../lib/toast';
 import * as XLSX from 'xlsx';
 import {
-  useHes30Min, toConsumptionMap, maxTotalMeterId30, toExportRow30, MISSING_LABEL,
+  useHes30Min, maxTotalMeterId30, toExportRow30, MISSING_LABEL,
   type MeterRow,
 } from './useHes30Min';
-import { HesConsumptionTable } from './HesConsumptionTable';
+import { ZoneTables, type ZoneGroup } from '../dm/ZoneTables';
+import { fmt, fmtTime } from './hesShared';
 
 /* ================================================================
-   Tab "Chỉ số trong 30 ngày" — đọc `public/hes_index_30min.csv`.
+   Tab "Chỉ số trong 30 ngày" — đọc `public/hes_30min/<ngày>.csv`.
 
    Khác tab theo hóa đơn ở chỗ hai đầu kỳ là MỐC 30 PHÚT bất kỳ, không
    bắt buộc 00:00: đó là lý do lấy dữ liệu chi tiết này về.
 
    MỘT component cho cả hai khối (nguyên tắc 17 trong ARCHITECTURE.md):
-     scope='doi'      → một bảng phẳng + bộ lọc KCN
-     scope='vanphong' → mỗi KCN một bảng, xuất Excel một sheet/KCN
+     scope='doi'      → có thêm bộ lọc KCN (thường chỉ một KCN)
+     scope='vanphong' → xem hết, Excel một sheet mỗi KCN
+
+   Bảng bày thành THẺ THU GỌN theo KCN, dùng lại `ZoneTables` của màn
+   Danh mục để hai nơi không mỗi nơi một kiểu.
 ================================================================ */
 export default function Hes30MinManager({ scope = 'doi' }: { scope?: Scope }) {
   const office = scope === 'vanphong';
@@ -35,18 +39,23 @@ export default function Hes30MinManager({ scope = 'doi' }: { scope?: Scope }) {
     startAt, endAt,
   } = useHes30Min(office ? {} : { allowedAreas: effectiveAreas, filterArea });
 
-  const consumptions = useMemo(() => toConsumptionMap(results) as any, [results]);
   const highlightId = useMemo(() => maxTotalMeterId30(meters, results), [meters, results]);
 
-  /** Công tơ nhóm theo KCN, giữ thứ tự `AREAS` — chỉ dùng cho khối Văn phòng. */
-  const metersByZone = useMemo(() => {
+  /**
+   * Công tơ nhóm theo KCN, giữ thứ tự `AREAS`. Dùng cho CẢ HAI khối: khối Vận
+   * hành thường chỉ có một KCN nên ra đúng một thẻ, không thừa.
+   */
+  const zoneGroups = useMemo((): ZoneGroup<MeterRow>[] => {
     const map = new Map<string, MeterRow[]>();
     for (const m of meters) {
-      const z = m.area || '—';
+      const z = m.area || '';
       if (!map.has(z)) map.set(z, []);
       map.get(z)!.push(m);
     }
-    return AREAS.filter(a => map.has(a)).map(a => ({ area: a, rows: map.get(a)! }));
+    const known = AREAS.filter(a => map.has(a))
+      .map(a => ({ zone: { id: a, name: a }, rows: map.get(a)! }));
+    // Công tơ chưa gắn KCN gom vào thẻ cuối, đừng để chúng biến mất khỏi bảng.
+    return map.has('') ? [...known, { zone: null, rows: map.get('')! }] : known;
   }, [meters]);
 
   const fileName = `SanLuong_30phut_${startAt.replace(/[: ]/g, '-')}_${endAt.replace(/[: ]/g, '-')}.xlsx`;
@@ -55,9 +64,9 @@ export default function Hes30MinManager({ scope = 'doi' }: { scope?: Scope }) {
     if (meters.length === 0) { notify.show('warning', 'Lưu ý', 'Chưa có dữ liệu để xuất'); return; }
     const wb = XLSX.utils.book_new();
     if (office) {
-      for (const { area, rows } of metersByZone) {
+      for (const { zone, rows } of zoneGroups) {
         const ws = XLSX.utils.json_to_sheet(rows.map(m => toExportRow30(m, results.get(m.MeterNo))));
-        const sheetName = area.replace(/[\\/?*[\]:]/g, '').slice(0, 31);
+        const sheetName = (zone?.name ?? 'Chua gan KCN').replace(/[\\/?*[\]:]/g, '').slice(0, 31);
         XLSX.utils.book_append_sheet(wb, ws, sheetName || 'KCN');
       }
     } else {
@@ -133,7 +142,7 @@ export default function Hes30MinManager({ scope = 'doi' }: { scope?: Scope }) {
         </div>
 
         {/* Gợi ý mốc có thật + lý do thiếu dữ liệu, thay vì để ô trống không lời giải thích */}
-        <div className="px-5 py-2.5 border-b border-[var(--border)] bg-subtle/10 space-y-1">
+        <div className="px-5 py-2.5 border-t border-[var(--border)] bg-subtle/10 space-y-1">
           <p className="text-[11px] text-faint flex items-center gap-1.5">
             <Info className="w-3 h-3 shrink-0" />
             Mốc có dữ liệu — đầu kỳ: {hintTimes(startTimes)} · cuối kỳ: {hintTimes(endTimes)}
@@ -145,23 +154,59 @@ export default function Hes30MinManager({ scope = 'doi' }: { scope?: Scope }) {
             <p key={line} className="text-[11px] text-[var(--warning)]">{line}</p>
           ))}
         </div>
-
-        {office ? (
-          metersByZone.map(({ area, rows }) => (
-            <div key={area} className="border-b border-[var(--border)] last:border-b-0">
-              <div className="px-5 py-2 bg-subtle/30 text-xs font-bold text-ink">{area} · {rows.length} công tơ</div>
-              <HesConsumptionTable rows={rows as any} consumptions={consumptions} highlightId={highlightId} />
-            </div>
-          ))
-        ) : (
-          <HesConsumptionTable
-            rows={meters as any}
-            consumptions={consumptions}
-            highlightId={highlightId}
-            status={isLoading ? 'loading' : meters.length === 0 ? 'empty' : undefined}
-          />
-        )}
       </div>
+
+      {/*
+        Mỗi KCN một thẻ thu gọn được — cùng khuôn với bảng Danh mục (`ZoneTables`),
+        để hai màn không mỗi nơi một kiểu. Kèm phân trang 50 dòng/thẻ có sẵn.
+      */}
+      <ZoneTables
+        groups={zoneGroups}
+        unit="công tơ"
+        loading={isLoading}
+        empty="Không có công tơ nào trong phạm vi đang chọn"
+        minWidth={1000}
+        columns={<>
+          <th>Số công tơ</th>
+          <th>Trạm</th>
+          <th className="text-center">HSN</th>
+          <th className="text-center">Mốc đầu kỳ</th>
+          <th className="text-center">Mốc cuối kỳ</th>
+          <th className="text-center border-x border-[var(--border)]">Tổng (kWh)</th>
+          <th className="text-center">Biểu 1</th>
+          <th className="text-center">Biểu 2</th>
+          <th className="text-center">Biểu 3</th>
+          <th className="text-center">Vô công</th>
+        </>}
+        rowKey={m => m.id}
+        renderRow={m => {
+          const r = results.get(m.MeterNo);
+          const c = r?.value;
+          return (
+            <tr className={`transition-colors ${m.id === highlightId
+              ? 'bg-[var(--warning-soft)]' : 'hover:bg-subtle'}`}>
+              <td>
+                <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">{m.MeterNo}</span>
+              </td>
+              <td className="text-sm text-soft truncate" title={m.Line}>{m.Line || '—'}</td>
+              <td className="text-center text-xs font-mono text-soft">{m.HSN || '1'}</td>
+              <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{fmtTime(c?.startAt)}</td>
+              <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{fmtTime(c?.endAt)}</td>
+              <td className="text-center text-sm font-extrabold text-ink border-x border-[var(--border)]">
+                {c ? fmt(c.values.PG) : (
+                  <span className="text-[10px] font-normal text-[var(--warning)]" title={MISSING_LABEL[r?.missing ?? '']}>
+                    thiếu dữ liệu
+                  </span>
+                )}
+              </td>
+              <td className="text-center text-xs font-bold text-accent">{fmt(c?.values.BT ?? null)}</td>
+              <td className="text-center text-xs font-bold text-orange-500">{fmt(c?.values.CD ?? null)}</td>
+              <td className="text-center text-xs font-bold text-purple-500">{fmt(c?.values.TD ?? null)}</td>
+              <td className="text-center text-xs font-bold text-soft">{fmt(c?.values.VC ?? null)}</td>
+            </tr>
+          );
+        }}
+      />
     </div>
   );
 }

@@ -10,21 +10,6 @@ import { toast as notify } from '../../lib/toast';
 export type { MeterRow } from './hesShared';
 import type { MeterRow } from './hesShared';
 
-/**
- * Chuyển kết quả sang hình dạng `Consumption` mà `HesConsumptionTable` đang
- * dùng, để tab mới xài lại nguyên bảng cũ thay vì dựng bảng thứ hai.
- */
-export function toConsumptionMap(results: Map<string, Result30>) {
-  const map = new Map<string, { startTime: string; endTime: string; hsn: number;
-    values: Record<string, number | null> } | null>();
-  for (const [no, r] of results) {
-    map.set(no, r.value
-      ? { startTime: r.value.startAt, endTime: r.value.endAt, hsn: r.value.hsn, values: r.value.values }
-      : null);
-  }
-  return map;
-}
-
 /** Công tơ tiêu thụ lớn nhất, để tô nổi bật. '' nếu chưa có số nào. */
 export function maxTotalMeterId30(rows: MeterRow[], results: Map<string, Result30>): string {
   let bestId = ''; let best = -Infinity;
@@ -72,8 +57,9 @@ export interface UseHes30MinOptions {
  * thì đọc file CSV do pipeline chốt (user chốt 16/09/2026: PocketBase giữ dữ
  * liệu nghiệp vụ, CSV giữ số liệu thô của pipeline).
  *
- * Toàn bộ file tải MỘT lần rồi tra trong bộ nhớ: 30 ngày ≈ 11,7 MB thô, ~2,1 MB
- * sau nén. Đổi mốc không phải tải lại.
+ * Tải theo NGÀY: lượt đầu chỉ lấy danh mục ngày (~1 KB), rồi mỗi lần đổi ngày
+ * tải đúng 2 file của hai đầu kỳ (~770 KB). Đổi GIỜ không phải tải lại vì cả
+ * ngày đã nằm trong bộ nhớ.
  */
 export function useHes30Min({ allowedAreas, filterArea = '' }: UseHes30MinOptions = {}) {
   const [meters, setMeters]   = useState<MeterRow[]>([]);

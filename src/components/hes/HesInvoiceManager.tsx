@@ -11,6 +11,7 @@ import {
   fetchInvoiceIndexMonth, latestInvoiceMonth, INVOICE_COMPONENTS,
   type InvoiceIndexRow,
 } from '../../lib/hesInvoiceIndex';
+import { ZoneTables, type ZoneGroup } from '../dm/ZoneTables';
 
 /* ================================================================
    Tab "Chỉ số theo hóa đơn" — đọc collection `invoice`.
@@ -20,8 +21,11 @@ import {
    khoảng người dùng tự chọn.
 
    MỘT component cho cả hai khối qua prop `scope` (nguyên tắc 17):
-     scope='doi'      → một bảng phẳng + bộ lọc KCN
-     scope='vanphong' → mỗi KCN một bảng, Excel một sheet/KCN
+     scope='doi'      → có thêm bộ lọc KCN (thường chỉ một KCN)
+     scope='vanphong' → xem hết, Excel một sheet mỗi KCN
+
+   Bảng bày thành THẺ THU GỌN theo KCN, dùng lại `ZoneTables` của màn
+   Danh mục để hai nơi không mỗi nơi một kiểu.
 ================================================================ */
 
 const fmt = (v: number | null) =>
@@ -96,85 +100,33 @@ export default function HesInvoiceManager({ scope = 'doi' }: { scope?: Scope }) 
     });
   }, [rows, office, effectiveAreas, filterArea]);
 
-  const byZone = useMemo(() => {
+  /** Nhóm theo KCN, giữ thứ tự `AREAS`; kỳ chưa suy được KCN gom vào thẻ cuối. */
+  const zoneGroups = useMemo((): ZoneGroup<InvoiceIndexRow>[] => {
     const map = new Map<string, InvoiceIndexRow[]>();
     for (const r of visible) {
-      const z = areaOf(r) || '—';
+      const z = areaOf(r) || '';
       if (!map.has(z)) map.set(z, []);
       map.get(z)!.push(r);
     }
-    return [...AREAS.filter(a => map.has(a)), ...(map.has('—') ? ['—'] : [])]
-      .map(a => ({ area: a, rows: map.get(a)! }));
+    const known = AREAS.filter(a => map.has(a))
+      .map(a => ({ zone: { id: a, name: a }, rows: map.get(a)! }));
+    return map.has('') ? [...known, { zone: null, rows: map.get('')! }] : known;
   }, [visible]);
 
   const exportToExcel = () => {
     if (visible.length === 0) { notify.show('warning', 'Lưu ý', 'Chưa có dữ liệu để xuất'); return; }
     const wb = XLSX.utils.book_new();
     if (office) {
-      for (const { area, rows: rs } of byZone) {
+      for (const { zone, rows: rs } of zoneGroups) {
         const ws = XLSX.utils.json_to_sheet(rs.map(toExportRow));
-        XLSX.utils.book_append_sheet(wb, ws, area.replace(/[\\/?*[\]:]/g, '').slice(0, 31) || 'KCN');
+        XLSX.utils.book_append_sheet(wb, ws,
+          (zone?.name ?? 'Chua gan KCN').replace(/[\\/?*[\]:]/g, '').slice(0, 31));
       }
     } else {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(visible.map(toExportRow)), 'ChiSo');
     }
     XLSX.writeFile(wb, `ChiSo_HoaDon_${month}.xlsx`);
   };
-
-  const Table = ({ data }: { data: InvoiceIndexRow[] }) => (
-    <div className="overflow-x-auto">
-      <table className="vl-table w-full text-left border-collapse">
-        <thead>
-          <tr>
-            <th>Số công tơ</th>
-            <th>Khách hàng</th>
-            <th className="text-center">HSN</th>
-            <th className="text-center">Kỳ hóa đơn</th>
-            {INVOICE_COMPONENTS.map(c => (
-              <th key={c.key} className="text-center">{c.label} đầu → cuối</th>
-            ))}
-            <th className="text-center text-ink font-bold border-x border-[var(--border)]">Tổng (kWh)</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[var(--border)]">
-          {isLoading ? (
-            <tr><td colSpan={5 + INVOICE_COMPONENTS.length} className="py-10 text-center">
-              <RefreshCw className="w-5 h-5 animate-spin text-faint mx-auto" />
-            </td></tr>
-          ) : data.length === 0 ? (
-            <tr><td colSpan={5 + INVOICE_COMPONENTS.length} className="py-10 text-center text-faint text-sm italic">
-              Tháng này chưa có hóa đơn nào
-            </td></tr>
-          ) : data.map(r => (
-            <tr key={`${r.sct}-${r.startDate}`} className="hover:bg-subtle transition-colors">
-              <td>
-                <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">{r.sct}</span>
-                {r.merged && (
-                  <span title="Gộp từ nhiều khoảng đổi giá" className="ml-1.5 inline-flex align-middle text-[var(--warning)]">
-                    <Layers className="w-3 h-3" />
-                  </span>
-                )}
-              </td>
-              <td className="text-sm text-soft max-w-[240px] truncate" title={r.customer}>{r.customer || '—'}</td>
-              <td className="text-center text-xs font-mono text-soft">{r.hsn}</td>
-              <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">
-                {r.startDate} → {r.endDate}
-              </td>
-              {INVOICE_COMPONENTS.map(c => (
-                <td key={c.key} className="text-center text-[11px] font-mono text-soft whitespace-nowrap">
-                  <span className="text-faint">{fmtIdx(r.index[c.key]?.dau ?? null)}</span>
-                  {' → '}
-                  <span className="text-ink">{fmtIdx(r.index[c.key]?.cuoi ?? null)}</span>
-                  <div className="text-[10px] font-bold text-accent">{fmt(r.values[c.key] ?? null)}</div>
-                </td>
-              ))}
-              <td className="text-center text-sm font-extrabold text-ink border-x border-[var(--border)]">{fmt(r.total)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
 
   return (
     <div className="space-y-6 pb-6">
@@ -221,17 +173,56 @@ export default function HesInvoiceManager({ scope = 'doi' }: { scope?: Scope }) 
           </div>
         </div>
 
-        {office ? (
-          byZone.map(({ area, rows: rs }) => (
-            <div key={area} className="border-b border-[var(--border)] last:border-b-0">
-              <div className="px-5 py-2 bg-subtle/30 text-xs font-bold text-ink">{area} · {rs.length} công tơ</div>
-              <Table data={rs} />
-            </div>
-          ))
-        ) : (
-          <Table data={visible} />
-        )}
       </div>
+
+      {/*
+        Mỗi KCN một thẻ thu gọn được — cùng khuôn với bảng Danh mục
+        (`ZoneTables`), kèm phân trang 50 dòng/thẻ có sẵn.
+      */}
+      <ZoneTables
+        groups={zoneGroups}
+        unit="công tơ"
+        loading={isLoading}
+        empty="Tháng này chưa có hóa đơn nào"
+        minWidth={980}
+        columns={<>
+          <th>Số công tơ</th>
+          <th>Khách hàng</th>
+          <th className="text-center">HSN</th>
+          <th className="text-center">Kỳ hóa đơn</th>
+          {INVOICE_COMPONENTS.map(c => (
+            <th key={c.key} className="text-center">{c.label} đầu → cuối</th>
+          ))}
+          <th className="text-center border-x border-[var(--border)]">Tổng (kWh)</th>
+        </>}
+        rowKey={r => `${r.sct}-${r.startDate}`}
+        renderRow={r => (
+          <tr className="hover:bg-subtle transition-colors">
+            <td>
+              <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">{r.sct}</span>
+              {r.merged && (
+                <span title="Gộp từ nhiều khoảng đổi giá" className="ml-1.5 inline-flex align-middle text-[var(--warning)]">
+                  <Layers className="w-3 h-3" />
+                </span>
+              )}
+            </td>
+            <td className="text-sm text-soft truncate" title={r.customer}>{r.customer || '—'}</td>
+            <td className="text-center text-xs font-mono text-soft">{r.hsn}</td>
+            <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">
+              {r.startDate} → {r.endDate}
+            </td>
+            {INVOICE_COMPONENTS.map(c => (
+              <td key={c.key} className="text-center text-[11px] font-mono text-soft whitespace-nowrap">
+                <span className="text-faint">{fmtIdx(r.index[c.key]?.dau ?? null)}</span>
+                {' → '}
+                <span className="text-ink">{fmtIdx(r.index[c.key]?.cuoi ?? null)}</span>
+                <div className="text-[10px] font-bold text-accent">{fmt(r.values[c.key] ?? null)}</div>
+              </td>
+            ))}
+            <td className="text-center text-sm font-extrabold text-ink border-x border-[var(--border)]">{fmt(r.total)}</td>
+          </tr>
+        )}
+      />
     </div>
   );
 }
