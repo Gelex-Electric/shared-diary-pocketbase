@@ -105,6 +105,9 @@ export interface AlertRecord {
  * KHÔNG có `hsn`: HSN lấy theo `dm_point` tại thời điểm hiện tại, không đối
  * chiếu HES nữa nên lệch với HES không còn là sự cố (cùng ngày).
  *
+ * KHÔNG có `tram` (mã trạm không khớp tên trạm bên HES): chưa cần tới (user chốt
+ * 16/09/2026). Nơi sinh cũng đã ngừng ghi — xem `scripts/fetch_meter_info.py`.
+ *
  * LUÔN hiện đủ mọi nhóm kể cả nhóm đang rỗng: người dùng cần biết hệ thống có
  * theo dõi loại sự cố đó mà hiện chưa có gì, thay vì tưởng nó không tồn tại.
  */
@@ -113,7 +116,6 @@ export const ALERT_KINDS = [
      nhóm. Chỉ đổi NHÃN: "bất thường" rộng hơn "chạy lùi", để sau này thêm được
      các kiểu sai khác của chỉ số mà không phải đặt lại tên mục. */
   { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số công tơ giảm giữa hai mốc' },
-  { kind: 'tram', label: 'Dữ liệu trạm', desc: 'Mã trạm không khớp tên trạm bên HES' },
   { kind: 'congto', label: 'Đối chiếu công tơ', desc: 'Công tơ lệch giữa HES và Danh mục' },
 ] as const;
 

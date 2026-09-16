@@ -410,10 +410,12 @@ def main():
               f"(> {HSN_MAX:g} hoac trung so cong to).")
     # Khong day canh bao HSN nua - xem ghi chu o raise_alert.
 
-    # Canh bao tram: CODE khong phai tien to cua LINE_NAME
+    # Tram co CODE khong phai tien to cua LINE_NAME.
+    #
+    # CHI IN RA, khong ghi canh bao nua (user chot 16/09/2026): phan nay chua can
+    # toi. Giu lai `alert_bad_stations` de bat lai chi can go mot dong.
     for s in bad_stations:
         print(f"[ALERT] Tram {s['line_id']}: CODE='{s['code']}' khong la tien to cua LINE_NAME='{s['line_name']}'.")
-    alert_bad_stations(bad_stations)
 
 
 if __name__ == "__main__":

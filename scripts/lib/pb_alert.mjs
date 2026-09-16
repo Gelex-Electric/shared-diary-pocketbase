@@ -31,8 +31,10 @@ const COLLECTION = 'alerts';
  *
  * `lamtron` TÁCH khỏi `lui`: sai số làm tròn của HES sinh ~80 ca mỗi ngày, gộp
  * chung thì ca lùi thật lẫn vào giữa và không ai nhìn ra.
+ *
+ * KHÔNG còn `tram` (16/09/2026): chưa cần tới, nơi sinh đã ngừng ghi.
  */
-export const ALERT_KINDS = ['lui', 'lamtron', 'tram', 'congto'];
+export const ALERT_KINDS = ['lui', 'lamtron', 'congto'];
 
 /**
  * Tạo một cảnh báo nếu chưa có cái nào trùng `kind` + `day` + `message`.
