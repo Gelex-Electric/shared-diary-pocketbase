@@ -4,9 +4,9 @@
  * `public/hes_30min/` — MỖI NGÀY MỘT FILE `YYYY-MM-DD.csv`, giữ 30 ngày gần
  * nhất, kèm `index.json` liệt kê các ngày đang có.
  *
- * Một lời gọi API cho mỗi công tơ trả sẵn 49 bản ghi (48 mốc 30 phút + mốc
- * 00:00 hôm sau). Bản Python cũ gọi HAI lần với hai cửa sổ nhỏ rồi vứt 47 bản
- * ghi — vừa tốn gấp đôi lời gọi, vừa sinh lỗi chồng mốc.
+ * Một lời gọi API cho mỗi công tơ lấy TRỌN ngày: 48 mốc 30 phút (00:00 → 23:30).
+ * Bản Python cũ gọi HAI lần với hai cửa sổ nhỏ rồi vứt 46 bản ghi — vừa tốn gấp
+ * đôi lời gọi, vừa sinh lỗi chồng mốc.
  *
  * KHÔNG còn ghi `hes_index_daily.csv` (bỏ 16/09/2026). Tab đọc file đó đã thay
  * bằng "Chỉ số theo hóa đơn" lấy từ `invoice` — nguồn chuẩn hơn; còn file ngày
@@ -29,10 +29,15 @@
  *      `METER_NAME` của HES. Đây chính là chỗ sai đã làm phần tổn thất phải
  *      dừng ngày 16/09/2026.
  *
- * Quy ước kỳ (giữ nguyên bản Python):
+ * Quy ước kỳ (sửa 17/09/2026):
  *   đầu kỳ  = 00:00 ngày D      (mặc định D = hôm qua theo giờ VN)
- *   cuối kỳ = 00:00 ngày D+1
+ *   cuối kỳ = 23:30 ngày D      (mốc cuối cùng CÒN TRONG ngày D)
  *   Sản lượng ngày D = (chỉ số cuối − chỉ số đầu) × HSN — nơi đọc tự nhân.
+ *
+ * Trước đây cuối kỳ là 00:00 ngày D+1 nên mỗi lượt chạy đẻ ra HAI file, file thứ
+ * hai chỉ có đúng một dòng. Đổi lại thì mất 30 phút cuối trong CHỈ SỐ NGÀY tính
+ * nội bộ — chấp nhận được vì `hes_index_daily.csv` đã bỏ, không nơi nào đọc số
+ * đó nữa; app tính sản lượng thẳng từ các mốc 30 phút.
  *
  * 5 chỉ số lấy là chiều ACTIVE, tức phần TÍNH TIỀN ĐIỆN (xem `document/API_HES.md`;
  * tài liệu gọi theo góc nhìn bên bán là "chiều giao"):
@@ -115,20 +120,31 @@ const toNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 const recTime = (r) => r?.DATE_TIME || r?.DATA_TIME || '';
 
 /**
- * TOÀN BỘ bản ghi của một công tơ trong ngày D, sắp theo thời gian tăng dần.
+ * TOÀN BỘ bản ghi của một công tơ TRONG ngày D, sắp theo thời gian tăng dần.
  *
- * API trả sẵn 49 bản ghi cho một ngày: 48 mốc 30 phút + mốc 00:00 hôm sau. Bản
- * cũ gọi HAI lần với hai cửa sổ nhỏ quanh 00:00 rồi vứt 47 bản ghi — vừa tốn
- * gấp đôi lời gọi, vừa sinh ra lỗi CHỒNG MỐC (cuối kỳ vớt phải bản 00:30 trong
- * khi đầu kỳ hôm sau là 00:00, nên 30 phút đó tính sản lượng vào cả hai ngày).
- * Lấy trọn ngày thì mốc nào cũng có sẵn, lấy đúng mốc cần.
+ * Một lời gọi lấy đủ 48 mốc 00:00 → 23:30. Bản cũ gọi HAI lần với hai cửa sổ nhỏ
+ * quanh 00:00 rồi vứt 46 bản ghi — vừa tốn gấp đôi lời gọi, vừa sinh ra lỗi
+ * CHỒNG MỐC (cuối kỳ vớt phải bản 00:30 trong khi đầu kỳ hôm sau là 00:00, nên
+ * 30 phút đó tính sản lượng vào cả hai ngày).
  */
 export async function fetchDay(token, meterNo, day) {
   let data;
   try {
+    /*
+      Kết thúc ở 23:59:59 NGÀY D, không phải 00:00 ngày D+1 (user chốt 17/09/2026).
+
+      Lấy tới 00:00 hôm sau thì mốc đó rơi vào NGÀY KHÁC khi ghi file theo ngày,
+      nên mỗi lượt chạy đẻ ra HAI file mà file thứ hai chỉ có đúng một dòng 00:00.
+      Cắt ở 23:59:59 thì mỗi lượt đúng MỘT file, 48 mốc trọn ngày.
+
+      KHÔNG mất khả năng dò lùi ở chỗ nối: cặp 23:30 → 00:00 nay do phép so LIÊN
+      NGÀY đảm nhiệm (mốc cuối ngày D−1 với mốc đầu ngày D) — xem `prevDayRows`.
+    */
+    const endOfDay = new Date(day.getTime());
+    endOfDay.setHours(23, 59, 59, 0);
     data = await getJson('GetMeterDataByDate', {
       MeterNo: meterNo, StartDate: stamp(day),
-      EndDate: stamp(new Date(day.getTime() + 86400000)), Token: token,
+      EndDate: stamp(endOfDay), Token: token,
     });
   } catch (e) {
     console.log(`[WARN] ${meterNo} @ ${ymd(day)}: lỗi API (${String(e).slice(0, 80)})`);
@@ -144,18 +160,18 @@ export async function fetchDay(token, meterNo, day) {
 }
 
 /**
- * Hai bản ghi biên của ngày D: đúng mốc 00:00 ngày D và 00:00 ngày D+1.
+ * Hai bản ghi biên của ngày D: mốc 00:00 và mốc CUỐI CÙNG trong ngày (23:30).
  *
- * Thiếu mốc đúng thì lùi về bản ghi sớm nhất / muộn nhất trong ngày và GHI LẠI
- * thời điểm thật vào `START_TIME`/`END_TIME` — nơi đọc còn biết kỳ này không
- * trọn ngày, thay vì tưởng là đủ.
+ * Thiếu mốc đúng thì lùi về bản ghi sớm nhất / muộn nhất có được và GHI LẠI thời
+ * điểm thật vào `START_TIME`/`END_TIME` — nơi đọc còn biết kỳ này không trọn
+ * ngày, thay vì tưởng là đủ.
  */
 export function boundariesOf(recs, day) {
   if (!recs.length) return [null, null];
   const at = (d) => `${ymd(d)} 00:00:00`;
   const start = recs.find(r => recTime(r) === at(day)) ?? recs[0];
-  const endStamp = at(new Date(day.getTime() + 86400000));
-  const end = recs.find(r => recTime(r) === endStamp) ?? recs[recs.length - 1];
+  /* Không còn mốc 00:00 hôm sau trong mẻ — lấy thẳng bản ghi muộn nhất. */
+  const end = recs[recs.length - 1];
   /* Một bản ghi duy nhất thì không đủ hai biên — coi như thiếu dữ liệu. */
   return start === end ? [null, null] : [start, end];
 }
