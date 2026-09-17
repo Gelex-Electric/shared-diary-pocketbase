@@ -46,9 +46,13 @@ jobs:
 
       - name: Sync point status
         env:
-          PB_URL: ${{ secrets.PB_URL }}
-          PB_ADMIN_EMAIL: ${{ secrets.PB_EMAIL }}
-          PB_ADMIN_PASSWORD: ${{ secrets.PB_PASS }}
+          # TEN SECRET PHAI KHOP VOI REPO: chi co API_USER, API_PASS,
+          # PB_ADMIN_EMAIL, PB_ADMIN_PASS. Truoc day dung PB_URL / PB_EMAIL /
+          # PB_PASS — deu KHONG ton tai, GitHub thay bang chuoi rong mà khong bao
+          # loi gi, nen workflow nay HONG moi dem tu khi tao. PB_URL bo han: script
+          # da co mac dinh (xem scripts/lib/pb_meters.mjs).
+          PB_ADMIN_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_ADMIN_PASSWORD: ${{ secrets.PB_ADMIN_PASS }}
         run: |
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             node scripts/dm_sync_point_status.mjs

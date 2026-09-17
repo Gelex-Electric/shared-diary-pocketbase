@@ -82,7 +82,11 @@ jobs:
         env:
           PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
           PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
-        run: node scripts/fetch_hes_index.mjs
+        # --notify BAT BUOC: thieu co nay thi script van do ra chi so lui nhung
+        # chi in ra log, KHONG ghi canh bao nao vao PocketBase. Man "Canh bao"
+        # se trong tron suot ma nhin vao lai tuong la khong co su co nao.
+        # (Phat hien 17/09/2026 khi doi chieu ngay 16.)
+        run: node scripts/fetch_hes_index.mjs --notify
 
       # 5) + 6) TAM DUNG tu 16/09/2026 (user chot): ca chuoi ton that dang lay HSN
       # tu METER_NAME cua HES, khong phai dm_point.hsn cua Danh muc -> sai ca P, Q
