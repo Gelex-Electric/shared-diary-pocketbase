@@ -20,6 +20,8 @@ import { zoneHexOf } from '../../lib/kcnColors';
 import { toast as notify } from '../../lib/toast';
 import { useScopeAreas, type Scope } from '../../lib/scope';
 import PaymentScheduleTable, { type PaymentEdit } from './PaymentScheduleTable';
+import { VatSub } from './VatSub';
+import { StationTags } from './StationTags';
 import ContractDialog from './ContractDialog';
 import {
   CONTRACT_STATUS_BADGE, CONTRACT_STATUS_LABEL, CONTRACT_STATUS_OPTIONS, STATUS_BADGE, STATUS_LABEL,
@@ -183,20 +185,30 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
   /* KPI tính trên phần đang hiện, để con số luôn khớp cái mắt đang nhìn.
      Trừ hợp đồng DỰ THẢO — chưa ký thì chưa có nghĩa vụ thu tiền. */
   const kpi = useMemo(() => {
-    /* Cộng theo TỪNG hợp đồng rồi mới quy sau thuế: mỗi hợp đồng một thuế suất
+    /* Giữ SONG SONG hai con số: trước thuế (số to) và sau thuế (dòng nhỏ).
+       Quy đổi theo TỪNG hợp đồng rồi mới cộng: mỗi hợp đồng một thuế suất
        (chế xuất 0%, còn lại 8%), gộp hết rồi nhân một lần là sai. */
-    const t = { valueTotal: 0, paid: 0, remaining: 0, overdueCount: 0, overdueAmount: 0, dueSoonCount: 0, dueSoonAmount: 0 };
+    const t = {
+      valueTotal: 0, paid: 0, remaining: 0, overdueAmount: 0, dueSoonAmount: 0,
+      valueTotalGross: 0, paidGross: 0, remainingGross: 0, overdueAmountGross: 0, dueSoonAmountGross: 0,
+      overdueCount: 0, dueSoonCount: 0,
+    };
     for (const r of visible) {
       if (isDraft(r.contract)) continue;
       const rate = r.contract.vat_rate || 0;
       const s = summarize(r.payments);
-      t.valueTotal += withVat(s.valueTotal, rate);
-      t.paid += withVat(s.paid, rate);
-      t.remaining += withVat(s.remaining, rate);
+      t.valueTotal += s.valueTotal;
+      t.paid += s.paid;
+      t.remaining += s.remaining;
+      t.overdueAmount += s.overdueAmount;
+      t.dueSoonAmount += s.dueSoonAmount;
+      t.valueTotalGross += withVat(s.valueTotal, rate);
+      t.paidGross += withVat(s.paid, rate);
+      t.remainingGross += withVat(s.remaining, rate);
+      t.overdueAmountGross += withVat(s.overdueAmount, rate);
+      t.dueSoonAmountGross += withVat(s.dueSoonAmount, rate);
       t.overdueCount += s.overdueCount;
-      t.overdueAmount += withVat(s.overdueAmount, rate);
       t.dueSoonCount += s.dueSoonCount;
-      t.dueSoonAmount += withVat(s.dueSoonAmount, rate);
     }
     return t;
   }, [visible]);
@@ -215,6 +227,9 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       zoneName: string; zoneCode: string;
       rows: ContractWithSchedule[]; value: number; remaining: number;
       statuses: [ContractStatus, number][];
+      /** Hợp của trạm mọi hợp đồng cùng khách — thu gọn thẻ vẫn thấy khách này
+       *  đang được vận hành những trạm nào, không phải mở ra mới biết. */
+      stationCodes: string[];
     }>();
 
     for (const r of visible) {
@@ -222,9 +237,13 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       const g = map.get(key) || {
         key, customerName: r.customerName, customerCode: r.customerCode,
         zoneName: r.zoneName, zoneCode: r.zoneCode,
-        rows: [], value: 0, remaining: 0, statuses: [],
+        rows: [], value: 0, remaining: 0, statuses: [], stationCodes: [],
       };
       g.rows.push(r);
+      /* Nhiều hợp đồng của cùng khách hay phủ chung trạm — bỏ trùng, giữ thứ tự. */
+      for (const code of r.stationCodes) {
+        if (!g.stationCodes.includes(code)) g.stationCodes.push(code);
+      }
       if (!isDraft(r.contract)) {
         g.value += r.contract.value_total || 0;
         g.remaining += withVat(r.totals.remaining, r.contract.vat_rate || 0);
@@ -278,27 +297,33 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       {/* KPI */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatTile
-          label="Tổng giá trị" value={money(kpi.valueTotal)} unit="đ"
-          sub={draftCount > 0
+          label="Tổng giá trị (trước thuế)" value={money(kpi.valueTotal)} unit="đ"
+          sub={<VatSub gross={kpi.valueTotalGross} note={draftCount > 0
             ? `${groups.length} khách · ${visible.length} hợp đồng · ${draftCount} dự thảo không tính`
-            : `${groups.length} khách · ${visible.length} hợp đồng`}
+            : `${groups.length} khách · ${visible.length} hợp đồng`} />}
           icon={FileText} loading={loading}
         />
         <StatTile
-          label="Đã thu" value={money(kpi.paid)} unit="đ" tone="ok"
-          sub={kpi.valueTotal > 0 ? `${Math.round((kpi.paid / kpi.valueTotal) * 100)}% giá trị` : '—'}
+          label="Đã thu (trước thuế)" value={money(kpi.paid)} unit="đ" tone="ok"
+          sub={<VatSub gross={kpi.paidGross}
+            note={kpi.valueTotal > 0 ? `${Math.round((kpi.paid / kpi.valueTotal) * 100)}% giá trị` : '—'} />}
           subTone="ok" icon={Wallet} loading={loading}
         />
         <StatTile
-          label="Còn phải thu" value={money(kpi.remaining)} unit="đ"
+          label="Còn phải thu (trước thuế)" value={money(kpi.remaining)} unit="đ"
           tone={kpi.remaining > 0 ? 'warn' : 'ok'} icon={CalendarClock} loading={loading}
-          sub={kpi.dueSoonCount > 0 ? `${kpi.dueSoonCount} đợt sắp đến hạn` : 'Không có đợt sắp đến hạn'}
-          subTone={kpi.dueSoonCount > 0 ? 'warn' : 'neutral'}
+          sub={<VatSub gross={kpi.remainingGross}
+            note={kpi.dueSoonCount > 0 ? `${kpi.dueSoonCount} đợt sắp đến hạn` : 'Không có đợt sắp đến hạn'} />}
+          subTone={kpi.remaining > 0 ? 'warn' : 'neutral'}
         />
+        {/* Ô này đếm ĐỢT, không phải tiền — số to giữ nguyên, chỉ dòng tiền
+            bên dưới mới tách trước/sau thuế. */}
         <StatTile
           label="Quá hạn" value={kpi.overdueCount} unit="đợt"
           tone={kpi.overdueCount > 0 ? 'bad' : 'ok'} icon={AlertTriangle} loading={loading}
-          sub={kpi.overdueCount > 0 ? `${money(kpi.overdueAmount)}đ chưa thu` : 'Không có đợt quá hạn'}
+          sub={kpi.overdueCount > 0
+            ? <VatSub lead={`${money(kpi.overdueAmount)}đ chưa thu`} gross={kpi.overdueAmountGross} />
+            : 'Không có đợt quá hạn'}
           subTone={kpi.overdueCount > 0 ? 'bad' : 'ok'}
         />
       </div>
@@ -374,6 +399,8 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                       </span>
                       <span>{g.rows.length} hợp đồng</span>
 
+                      <StationTags codes={g.stationCodes} max={3} />
+
                       {/* Tag trạng thái pháp lý — thu gọn thẻ vẫn thấy ngay khách
                           này còn hợp đồng hiệu lực hay đã thanh lý hết. */}
                       {g.statuses.map(([st, n]) => (
@@ -407,6 +434,9 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                             <span className="font-mono text-xs font-bold bg-surface text-soft px-2 py-0.5 rounded border border-[var(--border)]">
                               {c.contract_no}
                             </span>
+
+                            <StationTags codes={row.stationCodes} />
+
                             <span className="text-[11px] text-faint flex-1 min-w-0 truncate">
                               ký {dateVN(c.sign_date)} · hiệu lực {dateVN(c.effective_from)}–{dateVN(c.effective_to)}
                             </span>

@@ -28,6 +28,8 @@ const PREFIX = 'qlvh_';
  */
 const CUSTOMER_COLLECTION = 'dm_customer';
 const ZONE_COLLECTION = 'dm_zone';
+/** Trạm biến áp — danh mục của module Vật tư thiết bị điện. CHỈ ĐỌC. */
+const STATION_COLLECTION = 'dm_station';
 
 /* ---------------------------------------------------------------- chốt chặn */
 
@@ -85,7 +87,7 @@ const OFFICE_ONLY = '@request.auth.id != "" && @request.auth.area = ""';
 const READ_CONTRACT = '@request.auth.id != "" && (@request.auth.area = "" || @request.auth.area ~ zone.name)';
 const READ_PAYMENT = '@request.auth.id != "" && (@request.auth.area = "" || @request.auth.area ~ contract.zone.name)';
 
-function contractFields(customerId, zoneId) {
+function contractFields(customerId, zoneId, stationId) {
   return [
   { name: 'contract_no',      type: 'text',   required: true },
   // Doanh nghiệp chế xuất (EPE) → thuế GTGT 0%. 20/70 hợp đồng trong file theo
@@ -96,6 +98,16 @@ function contractFields(customerId, zoneId) {
   // từ file theo dõi có 8 khách như vậy) và làm dấu vết đối chiếu về sau.
   { name: 'customer_name',    type: 'text' },
   { name: 'zone',             type: 'relation', maxSelect: 1, cascadeDelete: false, collectionId: zoneId },
+  // Các trạm hợp đồng này nhận quản lý vận hành. NHIỀU trạm / hợp đồng (user
+  // chốt 17/09/2026). cascadeDelete: false — xoá một trạm khỏi danh mục KHÔNG
+  // được kéo theo hợp đồng; hợp đồng là chứng từ pháp lý, tồn tại độc lập.
+  //
+  // ⚠️ maxSelect PHẢI > 1. PocketBase coi `maxSelect <= 1` là quan hệ MỘT giá
+  // trị và trả về CHUỖI thay vì mảng. Đặt `null` (17/09/2026) bị PB quy thành 0
+  // → ghi 15 trạm của TITAN chỉ còn lại 1, giao diện thì ném
+  // "(contract.stations || []).map is not a function". Không có giá trị "không
+  // giới hạn" trong API mới, nên đặt trần đủ lớn.
+  { name: 'stations',         type: 'relation', maxSelect: 999, cascadeDelete: false, collectionId: stationId },
   { name: 'sign_date',        type: 'date' },
   { name: 'effective_from',   type: 'date' },
   { name: 'effective_to',     type: 'date' },
@@ -173,15 +185,27 @@ async function ensureCollection(def) {
     const have = new Map(full.fields.map(f => [f.name, f]));
     const missing = def.fields.filter(f => !have.has(f.name));
 
-    /* Ô chọn được NỚI thêm giá trị (không bao giờ thu hẹp ở đây). */
+    /* Ô chọn và quan hệ chỉ được NỚI, không bao giờ thu hẹp ở đây. */
     const widened = [];
     const fields = full.fields.map(f => {
       const want = def.fields.find(d => d.name === f.name);
-      if (!want || want.type !== 'select' || !Array.isArray(want.values)) return f;
-      const add = want.values.filter(v => !(f.values || []).includes(v));
-      if (add.length === 0) return f;
-      widened.push(`${f.name} += ${add.join(',')}`);
-      return { ...f, values: [...(f.values || []), ...add] };
+      if (!want) return f;
+
+      if (want.type === 'select' && Array.isArray(want.values)) {
+        const add = want.values.filter(v => !(f.values || []).includes(v));
+        if (add.length === 0) return f;
+        widened.push(`${f.name} += ${add.join(',')}`);
+        return { ...f, values: [...(f.values || []), ...add] };
+      }
+
+      /* Quan hệ: cho phép chọn NHIỀU hơn. Nới một chiều — thu hẹp lại sẽ cắt
+         cụt các bản ghi đang giữ nhiều quan hệ. PB coi maxSelect<=1 là quan hệ
+         đơn (trả về chuỗi), nên đây cũng là chỗ sửa nếu trót tạo nhầm. */
+      if (want.type === 'relation' && (want.maxSelect || 0) > (f.maxSelect || 0)) {
+        widened.push(`${f.name}: maxSelect ${f.maxSelect ?? 0} → ${want.maxSelect}`);
+        return { ...f, maxSelect: want.maxSelect };
+      }
+      return f;
     });
 
     if (missing.length === 0 && widened.length === 0) {
@@ -228,12 +252,13 @@ async function main() {
   };
   const customerId = idOf(CUSTOMER_COLLECTION);
   const zoneId = idOf(ZONE_COLLECTION);
-  console.log(`Quan hệ dùng lại: ${CUSTOMER_COLLECTION} (${customerId}), ${ZONE_COLLECTION} (${zoneId})\n`);
+  const stationId = idOf(STATION_COLLECTION);
+  console.log(`Quan hệ dùng lại: ${CUSTOMER_COLLECTION} (${customerId}), ${ZONE_COLLECTION} (${zoneId}), ${STATION_COLLECTION} (${stationId})\n`);
 
   const contractId = await ensureCollection({
     name: `${PREFIX}contract`,
     type: 'base',
-    fields: contractFields(customerId, zoneId),
+    fields: contractFields(customerId, zoneId, stationId),
     indexes: [`CREATE UNIQUE INDEX idx_qlvh_contract_no ON ${PREFIX}contract (contract_no)`],
     listRule: READ_CONTRACT,
     viewRule: READ_CONTRACT,

@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { Select } from '../ui/Select';
 import { StatTile, EmptyState, Panel } from '../ui/dashboard';
+import { VatSub } from './VatSub';
+import { StationTags } from './StationTags';
 import { toast as notify } from '../../lib/toast';
 import { useScopeAreas, type Scope } from '../../lib/scope';
 import { zoneHexOf } from '../../lib/kcnColors';
@@ -44,6 +46,8 @@ interface DueRow {
   customerCode: string;
   zoneName: string;
   zoneCode: string;
+  /** Mã trạm hợp đồng nhận vận hành — hiện cùng nhãn KCN cho dễ đối chiếu. */
+  stationCodes: string[];
 }
 
 /** Nhãn KCN mang màu riêng — cùng bộ màu với màn "Biên bản xác nhận chỉ số". */
@@ -82,20 +86,31 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
   /* Hợp đồng DỰ THẢO (chưa ký) không tính vào số liệu lẫn công nợ. */
   const active = useMemo(() => visible.filter(r => !isDraft(r.contract)), [visible]);
 
-  /* Số hiện lên là SAU THUẾ — quy đổi theo từng hợp đồng vì thuế suất khác nhau
-     (chế xuất 0%, còn lại 8%). Dữ liệu dưới CSDL vẫn là trước thuế. */
+  /* Ô KPI hiện SONG SONG hai con số (user chốt 17/09/2026): số to TRƯỚC THUẾ
+     (khớp giá trị ghi trên hợp đồng), dòng nhỏ bên dưới SAU THUẾ (số khách
+     thực trả). Quy đổi theo TỪNG hợp đồng vì thuế suất khác nhau — chế xuất 0%,
+     còn lại 8%; gộp hết rồi nhân một lần là sai. */
   const kpi = useMemo(() => {
-    const t = { valueTotal: 0, paid: 0, remaining: 0, overdueCount: 0, overdueAmount: 0, dueSoonCount: 0, dueSoonAmount: 0 };
+    const t = {
+      valueTotal: 0, paid: 0, remaining: 0, overdueAmount: 0, dueSoonAmount: 0,
+      valueTotalGross: 0, paidGross: 0, remainingGross: 0, overdueAmountGross: 0, dueSoonAmountGross: 0,
+      overdueCount: 0, dueSoonCount: 0,
+    };
     for (const r of active) {
       const rate = r.contract.vat_rate || 0;
       const s = summarize(r.payments, today);
-      t.valueTotal += withVat(s.valueTotal, rate);
-      t.paid += withVat(s.paid, rate);
-      t.remaining += withVat(s.remaining, rate);
+      t.valueTotal += s.valueTotal;
+      t.paid += s.paid;
+      t.remaining += s.remaining;
+      t.overdueAmount += s.overdueAmount;
+      t.dueSoonAmount += s.dueSoonAmount;
+      t.valueTotalGross += withVat(s.valueTotal, rate);
+      t.paidGross += withVat(s.paid, rate);
+      t.remainingGross += withVat(s.remaining, rate);
+      t.overdueAmountGross += withVat(s.overdueAmount, rate);
+      t.dueSoonAmountGross += withVat(s.dueSoonAmount, rate);
       t.overdueCount += s.overdueCount;
-      t.overdueAmount += withVat(s.overdueAmount, rate);
       t.dueSoonCount += s.dueSoonCount;
-      t.dueSoonAmount += withVat(s.dueSoonAmount, rate);
     }
     return t;
   }, [active, today]);
@@ -112,6 +127,7 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
         customerCode: r.customerCode,
         zoneName: r.zoneName,
         zoneCode: r.zoneCode,
+        stationCodes: r.stationCodes,
       }))),
     [active],
   );
@@ -178,6 +194,7 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
                   <span className="mt-0.5 flex items-center gap-1.5 flex-wrap">
                     {d.customerCode && <span className="text-[11px] font-bold text-soft">{d.customerCode}</span>}
                     <ZoneTag name={d.zoneName} code={d.zoneCode} />
+                    <StationTags codes={d.stationCodes} />
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center tabular-nums text-soft">Đợt {d.payment.seq}</td>
@@ -225,18 +242,24 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatTile label="Tổng giá trị" value={money(kpi.valueTotal)} unit="đ"
-          sub={`${visible.length} hợp đồng`} icon={FileText} />
-        <StatTile label="Đã thu" value={money(kpi.paid)} unit="đ" tone="ok" icon={Wallet}
-          sub={kpi.valueTotal > 0 ? `${Math.round((kpi.paid / kpi.valueTotal) * 100)}% giá trị` : '—'}
+        <StatTile label="Tổng giá trị (trước thuế)" value={money(kpi.valueTotal)} unit="đ"
+          sub={<VatSub gross={kpi.valueTotalGross} note={`${visible.length} hợp đồng`} />} icon={FileText} />
+        <StatTile label="Đã thu (trước thuế)" value={money(kpi.paid)} unit="đ" tone="ok" icon={Wallet}
+          sub={<VatSub gross={kpi.paidGross}
+            note={kpi.valueTotal > 0 ? `${Math.round((kpi.paid / kpi.valueTotal) * 100)}% giá trị` : '—'} />}
           subTone="ok" />
-        <StatTile label="Còn phải thu" value={money(kpi.remaining)} unit="đ"
+        <StatTile label="Còn phải thu (trước thuế)" value={money(kpi.remaining)} unit="đ"
           tone={kpi.remaining > 0 ? 'warn' : 'ok'} icon={CalendarClock}
-          sub={`${upcoming.length} đợt đến hạn trong ${HORIZON_DAYS} ngày`}
-          subTone={upcoming.length > 0 ? 'warn' : 'neutral'} />
+          sub={<VatSub gross={kpi.remainingGross}
+            note={`${upcoming.length} đợt đến hạn trong ${HORIZON_DAYS} ngày`} />}
+          subTone={kpi.remaining > 0 ? 'warn' : 'neutral'} />
+        {/* Số to là SỐ ĐỢT, không phải tiền — dòng tiền nằm dưới, trước thuế trên
+            sau thuế dưới. */}
         <StatTile label="Quá hạn" value={overdue.length} unit="đợt"
           tone={overdue.length > 0 ? 'bad' : 'ok'} icon={AlertTriangle}
-          sub={overdue.length > 0 ? `${money(kpi.overdueAmount)}đ chưa thu` : 'Không có đợt quá hạn'}
+          sub={overdue.length > 0
+            ? <VatSub lead={`${money(kpi.overdueAmount)}đ chưa thu`} gross={kpi.overdueAmountGross} />
+            : 'Không có đợt quá hạn'}
           subTone={overdue.length > 0 ? 'bad' : 'ok'} />
       </div>
 
@@ -279,6 +302,7 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
                         <span className="mt-0.5 flex items-center gap-1.5 flex-wrap">
                           {r.customerCode && <span className="text-[11px] font-bold text-soft">{r.customerCode}</span>}
                           <ZoneTag name={r.zoneName} code={r.zoneCode} />
+                          <StationTags codes={r.stationCodes} />
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center tabular-nums text-soft">{dateVN(r.contract.effective_to)}</td>

@@ -20,9 +20,10 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { toast as notify } from '../../lib/toast';
 import {
   CONTRACT_STATUS_LABEL, buildSchedule, computeVat, durationMonths, fetchContract,
-  fetchCustomers, fetchItems, fetchZones, isLocked, saveContract, scheduleWarning,
+  fetchCustomers, fetchItems, fetchStations, fetchZones, isLocked, saveContract, scheduleWarning,
   withVat, withoutVat,
-  type ContractStatus, type DmCustomer, type DmZone, type ItemInput, type PaymentInput,
+  type ContractStatus, type DmCustomer, type DmStation, type DmZone, type ItemInput,
+  type PaymentInput,
 } from '../../lib/qlvh';
 
 const INPUT =
@@ -81,12 +82,14 @@ export default function ContractDialog({
 
   const [customers, setCustomers] = useState<DmCustomer[]>([]);
   const [zones, setZones] = useState<DmZone[]>([]);
+  const [allStations, setAllStations] = useState<DmStation[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [contractNo, setContractNo] = useState('');
   const [customer, setCustomer] = useState('');
   const [zone, setZone] = useState('');
+  const [stations, setStations] = useState<string[]>([]);
   const [signDate, setSignDate] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -132,13 +135,20 @@ export default function ContractDialog({
     Promise.all([fetchCustomers(), fetchZones()])
       .then(([cs, zs]) => { setCustomers(cs); setZones(zs); })
       .catch(err => notify.error(`Không tải được danh mục: ${err.message}`));
+
+    /* Trạm nạp RIÊNG, không gộp vào Promise.all trên: dm_station là danh mục
+       của module khác, quyền đọc có thể khác. Gộp chung thì một lỗi quyền ở đây
+       làm hỏng luôn ô Khách hàng và ô KCN — hộp thoại thành vô dụng. */
+    fetchStations()
+      .then(setAllStations)
+      .catch(() => setAllStations([]));
   }, [open]);
 
   /* Nạp hợp đồng đang sửa, hoặc dọn sạch form khi thêm mới. */
   useEffect(() => {
     if (!open) return;
     if (!contractId) {
-      setContractNo(''); setCustomer(''); setZone(''); setSignDate(''); setFrom(''); setTo('');
+      setContractNo(''); setCustomer(''); setZone(''); setStations([]); setSignDate(''); setFrom(''); setTo('');
       setBeforeVat(0); setVatRate(8); setCheXuat(false); setTerms(''); setStatus('dang_hieu_luc'); setNote(''); setRows([]); setItems([]);
       return;
     }
@@ -148,6 +158,7 @@ export default function ContractDialog({
         setContractNo(c.contract_no);
         setCustomer(c.customer);
         setZone(c.zone);
+        setStations(c.stations || []);
         setSignDate(String(c.sign_date || '').slice(0, 10));
         setFrom(String(c.effective_from || '').slice(0, 10));
         setTo(String(c.effective_to || '').slice(0, 10));
@@ -179,6 +190,15 @@ export default function ContractDialog({
     setCustomer(id);
     const c = customers.find(x => x.id === id);
     if (c?.zone && !zone) setZone(c.zone);
+
+    /* Đổi khách thì bỏ những trạm thuộc khách KHÁC — giữ lại là gắn hợp đồng
+       vào trạm của người ngoài. Báo cho người nhập biết chứ không bỏ im lặng. */
+    setStations(prev => {
+      const kept = prev.filter(sid => allStations.find(s => s.id === sid)?.customer === id);
+      const dropped = prev.length - kept.length;
+      if (dropped > 0) notify.info(`Đã bỏ ${dropped} trạm không thuộc khách hàng vừa chọn.`);
+      return kept;
+    });
   };
 
   const generate = async () => {
@@ -231,7 +251,7 @@ export default function ContractDialog({
     try {
       await saveContract(
         {
-          contract_no: contractNo.trim(), customer, zone,
+          contract_no: contractNo.trim(), customer, zone, stations,
           sign_date: signDate, effective_from: from, effective_to: to,
           value_before_vat: beforeVat, vat_rate: effectiveVat, value_vat, value_total, che_xuat: cheXuat,
           payment_terms: terms, status_manual: status, note,
@@ -255,6 +275,46 @@ export default function ContractDialog({
     [customers],
   );
   const zoneOptions = useMemo(() => zones.map(z => ({ value: z.id, label: z.name })), [zones]);
+
+  /* --- Trạm: chỉ trạm CỦA KHÁCH đang chọn ------------------------------- */
+
+  /** Nhãn trạm: mã là khoá, kèm định danh và công suất cho dễ nhận ra tại chỗ. */
+  const stationLabel = (s: DmStation) =>
+    [s.code, s.ident, s.sdm_kva ? `${s.sdm_kva}kVA` : ''].filter(Boolean).join(' · ');
+
+  /** Trạm của khách hàng đang chọn. Không có khách thì rỗng — ô sẽ bị khoá. */
+  const stationsOfCustomer = useMemo(
+    () => (customer ? allStations.filter(s => s.customer === customer) : []),
+    [allStations, customer],
+  );
+
+  /** Đã chọn rồi thì không liệt kê lại trong ô "Thêm trạm…". */
+  const stationOptions = useMemo(
+    () => stationsOfCustomer
+      .filter(s => !stations.includes(s.id))
+      .map(s => ({ value: s.id, label: stationLabel(s) })),
+    [stationsOfCustomer, stations],
+  );
+
+  /**
+   * Trạm đã chọn, kèm bản ghi danh mục. Bản ghi có thể KHÔNG tìm thấy (trạm đã
+   * bị xoá khỏi danh mục, hoặc không có quyền đọc) — vẫn hiện chip để người
+   * dùng thấy có thứ gì đó đang gắn, thay vì lặng lẽ biến mất.
+   */
+  const pickedStations = useMemo(
+    () => stations.map(id => ({ id, station: allStations.find(s => s.id === id) })),
+    [stations, allStations],
+  );
+
+  const addStation = (id: string) => { if (id) setStations(prev => [...prev, id]); };
+  const removeStation = (id: string) => setStations(prev => prev.filter(x => x !== id));
+
+  /** Vì sao ô trạm không dùng được — mỗi tình huống một câu, không im lặng. */
+  const stationBlocker = !customer
+    ? 'Chọn khách hàng trước để hiện danh sách trạm.'
+    : stationsOfCustomer.length === 0
+      ? 'Khách hàng này chưa có trạm nào trong Danh mục › Trạm.'
+      : '';
 
   return (
     <>
@@ -311,6 +371,32 @@ export default function ContractDialog({
                         <Select value={status} onChange={v => setStatus(v as ContractStatus)} options={STATUS_OPTIONS} />
                       </Field>
                     </div>
+
+                    {/* Trạm nhận vận hành — một hợp đồng có thể gồm nhiều trạm.
+                        App chưa có bộ chọn nhiều giá trị, nên ghép từ thứ sẵn
+                        có: chip có nút × + ô Select chỉ liệt kê trạm chưa chọn
+                        (user duyệt cách này 17/09/2026). */}
+                    <Field label="Trạm quản lý vận hành">
+                      {pickedStations.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {pickedStations.map(({ id, station }) => (
+                            <span key={id}
+                              className="inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded vl-badge-info">
+                              {station ? stationLabel(station) : 'Trạm không còn trong danh mục'}
+                              <button type="button" onClick={() => removeStation(id)}
+                                className="opacity-60 hover:opacity-100" title="Bỏ trạm này">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <Select value="" onChange={addStation} options={stationOptions}
+                        placeholder={stationOptions.length > 0 ? 'Thêm trạm…' : 'Không còn trạm để thêm'}
+                        disabled={Boolean(stationBlocker) || stationOptions.length === 0}
+                        searchable />
+                      {stationBlocker && <p className="text-[11px] text-faint mt-1">{stationBlocker}</p>}
+                    </Field>
 
                     {/* Ô tích để riêng một dòng: nằm trong ô Trạng thái thì nó đội
                         chiều cao cột và làm lệch hàng các ô tiền phía dưới. */}

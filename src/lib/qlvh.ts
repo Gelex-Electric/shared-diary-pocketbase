@@ -75,6 +75,21 @@ export interface DmZone {
   active?: boolean;
 }
 
+/**
+ * Trạm biến áp — danh mục của module Vật tư thiết bị điện (`dm_station`).
+ * CHỈ ĐỌC ở module này: hợp đồng trỏ quan hệ tới trạm, không tạo/sửa trạm.
+ */
+export interface DmStation {
+  id: string;
+  code: string;
+  zone?: string;
+  /** Chủ trạm — khoá để lọc trạm theo khách hàng của hợp đồng. */
+  customer?: string;
+  /** Định danh trong khuôn viên khách: T1, T2, NX1… */
+  ident?: string;
+  sdm_kva?: number;
+}
+
 export interface Contract {
   id: string;
   contract_no: string;
@@ -82,6 +97,8 @@ export interface Contract {
   customer: string;
   /** id của dm_zone */
   zone: string;
+  /** id các dm_station hợp đồng này nhận vận hành (nhiều trạm / hợp đồng). */
+  stations?: string[];
   sign_date: string;
   effective_from: string;
   effective_to: string;
@@ -97,6 +114,7 @@ export interface Contract {
   note?: string;
   created?: string;
   updated?: string;
+  /* `stations` KHÔNG expand — mã trạm tra riêng, xem stationCodeMap(). */
   expand?: {
     customer?: DmCustomer;
     zone?: DmZone;
@@ -156,6 +174,13 @@ export interface ContractWithSchedule {
   zoneName: string;
   /** Mã KCN (dm_zone.code) — khoá tra màu, xem lib/kcnColors. */
   zoneCode: string;
+  /**
+   * Mã các trạm hợp đồng nhận vận hành, tra từ danh mục `dm_station`.
+   *
+   * Rỗng có HAI nghĩa khác nhau: hợp đồng chưa gắn trạm, HOẶC không đọc được
+   * danh mục trạm. Dùng `contract.stations.length` để phân biệt khi cần.
+   */
+  stationCodes: string[];
 }
 
 /* ------------------------------------------------------------------- Đọc */
@@ -175,6 +200,52 @@ export async function fetchZones(): Promise<DmZone[]> {
 }
 
 /**
+ * Danh mục trạm (dm_station) của module Vật tư thiết bị điện. Chỉ đọc.
+ *
+ * Nạp TOÀN BỘ một lần rồi lọc theo khách ở phía giao diện: form đổi khách hàng
+ * liên tục lúc nhập, gọi lại server mỗi lần đổi là chớp nháy và tốn vòng mạng
+ * cho một danh mục nhỏ, ít đổi.
+ */
+export async function fetchStations(): Promise<DmStation[]> {
+  return pb.collection('dm_station').getFullList<DmStation>({ sort: 'code' });
+}
+
+/**
+ * Bảng tra id trạm → mã trạm, dùng khi ghép hợp đồng với trạm.
+ *
+ * Tra bằng truy vấn RIÊNG, cố ý KHÔNG dùng `expand: 'stations'`. Hai lý do, lý
+ * do sau mới là lý do chính:
+ *   1. `dm_station` là danh mục của module khác, quyền đọc có thể khác — expand
+ *      hỏng là hỏng luôn lời gọi hợp đồng, tức mất trắng màn hình.
+ *   2. Trường quan hệ `stations` chỉ tồn tại SAU khi chạy `qlvh_migrate.mjs`.
+ *      Expand một trường chưa có là đánh cược vào cách PocketBase xử lý; tra
+ *      riêng thì trước hay sau di trú đều chạy, chỉ là chưa có trạm nào.
+ *
+ * Lỗi được NUỐT có chủ ý: thiếu chip trạm còn hơn mất cả danh sách hợp đồng.
+ */
+/**
+ * Ép `stations` về MẢNG.
+ *
+ * PocketBase trả quan hệ `maxSelect <= 1` dưới dạng **chuỗi**, chỉ quan hệ nhiều
+ * giá trị mới ra mảng. Ngày 17/09/2026 trường `stations` trót tạo với
+ * `maxSelect: 0` nên toàn bộ màn hợp đồng chết vì `.map is not a function` —
+ * một sai sót schema làm sập cả màn hình. Schema đã sửa, nhưng chuẩn hoá ở đây
+ * để hình dạng dữ liệu của PocketBase không bao giờ đánh sập giao diện nữa.
+ */
+const asIds = (v: unknown): string[] =>
+  Array.isArray(v) ? (v as string[]) : (typeof v === 'string' && v ? [v] : []);
+
+async function stationCodeMap(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    for (const s of await fetchStations()) map.set(s.id, s.code);
+  } catch {
+    /* không đọc được danh mục trạm — hợp đồng vẫn hiện, chỉ thiếu mã trạm */
+  }
+  return map;
+}
+
+/**
  * Toàn bộ hợp đồng + lịch đợt.
  *
  * Nạp đợt bằng MỘT truy vấn cho tất cả hợp đồng rồi gom theo `contract`, thay vì
@@ -185,6 +256,8 @@ export async function fetchContracts(zoneName?: string): Promise<ContractWithSch
     sort: '-sign_date',
     expand: 'customer,zone',
   });
+
+  const stationCodeById = await stationCodeMap();
 
   const filtered = zoneName
     ? contracts.filter(c => c.expand?.zone?.name === zoneName)
@@ -202,7 +275,8 @@ export async function fetchContracts(zoneName?: string): Promise<ContractWithSch
     byContract.set(p.contract, list);
   }
 
-  return filtered.map(contract => {
+  return filtered.map(raw => {
+    const contract = { ...raw, stations: asIds(raw.stations) };
     const payments = (byContract.get(contract.id) || []).sort((a, b) => a.seq - b.seq);
     return {
       contract,
@@ -212,6 +286,9 @@ export async function fetchContracts(zoneName?: string): Promise<ContractWithSch
       customerCode: contract.expand?.customer?.mkh || '',
       zoneName: contract.expand?.zone?.name || '—',
       zoneCode: contract.expand?.zone?.code || '',
+      stationCodes: contract.stations
+        .map(id => stationCodeById.get(id) || '')
+        .filter(Boolean),
     };
   });
 }
@@ -224,11 +301,13 @@ export async function fetchItems(contractId: string): Promise<ContractItem[]> {
 }
 
 export async function fetchContract(id: string): Promise<ContractWithSchedule> {
-  const contract = await pb.collection(C_CONTRACT).getOne<Contract>(id, { expand: 'customer,zone' });
+  const raw = await pb.collection(C_CONTRACT).getOne<Contract>(id, { expand: 'customer,zone' });
+  const contract = { ...raw, stations: asIds(raw.stations) };
   const payments = await pb.collection(C_PAYMENT).getFullList<Payment>({
     filter: `contract = "${id}"`,
     sort: 'seq',
   });
+  const stationCodeById = await stationCodeMap();
   return {
     contract,
     payments,
@@ -237,6 +316,9 @@ export async function fetchContract(id: string): Promise<ContractWithSchedule> {
     customerCode: contract.expand?.customer?.mkh || '',
     zoneName: contract.expand?.zone?.name || '—',
     zoneCode: contract.expand?.zone?.code || '',
+    stationCodes: contract.stations
+      .map(sid => stationCodeById.get(sid) || '')
+      .filter(Boolean),
   };
 }
 
