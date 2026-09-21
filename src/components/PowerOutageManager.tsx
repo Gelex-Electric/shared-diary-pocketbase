@@ -12,6 +12,8 @@ import { Select } from './ui/Select';
 import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
 import { generateOutageDocx } from '../lib/outageDocx';
+import { loadLowNameMap, withLowNames } from '../lib/outageNames';
+import type { LowNameMap } from '../lib/outageNames';
 import { toast as notify } from '../lib/toast';
 
 const TOAST_TITLE: Record<ToastType, string> = {
@@ -109,6 +111,11 @@ export default function PowerOutageManager() {
   const [slots, setSlots] = useState<SlotForm[]>([emptySlot()]);
   const [appendices, setAppendices] = useState<AppendixForm[]>([emptyAppendix()]);
 
+  /**
+   * `mkh` → tên viết thường, nạp một lần khi mở màn. Dùng cho CẢ hiển thị lẫn
+   * xuất Word, kể cả thông báo cũ đã lưu tên viết hoa trong phụ lục.
+   */
+  const [lowNames, setLowNames] = useState<LowNameMap>(() => new Map());
   const [customerList, setCustomerList] = useState<OutageCustomer[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
 
@@ -165,6 +172,20 @@ export default function PowerOutageManager() {
 
   useEffect(() => { loadNotices(); }, [loadNotices]);
 
+  /* Bảng tra tên viết thường — hỏng thì bỏ qua, màn vẫn chạy với tên CSV. */
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const map = await loadLowNameMap();
+        if (!cancelled) setLowNames(map);
+      } catch {
+        showToast('Không tải được tên viết thường, đang dùng tên viết hoa từ metterinfo.csv', 'warning');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showToast]);
+
   /* load customers — từ metterinfo.csv, lọc theo khu vực (KCN) */
   const loadCustomers = useCallback(async (a: string) => {
     if (!a) { setCustomerList([]); return; }
@@ -178,14 +199,16 @@ export default function PowerOutageManager() {
           const id = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
           if (id && !map.has(id)) map.set(id, { id, MKH: r.CUSTOMER_CODE || '?', Name: r.CUSTOMER_NAME || '?' });
         });
-      setCustomerList(Array.from(map.values()).sort((x, y) => x.MKH.localeCompare(y.MKH)));
+      setCustomerList(
+        withLowNames(Array.from(map.values()), lowNames)
+          .sort((x, y) => x.MKH.localeCompare(y.MKH)));
     } catch {
       showToast('Lỗi tải danh sách khách hàng từ metterinfo.csv', 'error');
       setCustomerList([]);
     } finally {
       setLoadingCustomers(false);
     }
-  }, [showToast]);
+  }, [showToast, lowNames]);
 
   useEffect(() => {
     if (isModalOpen && area) loadCustomers(area);
@@ -289,7 +312,9 @@ export default function PowerOutageManager() {
     /* khôi phục snapshot khách hàng đã lưu (gồm cả khách hàng nhập tay trước đó) để hiển thị đúng khi sửa */
     const snapshot = new Map<string, OutageCustomer>();
     (n.appendices || []).forEach(a => (a.customers || []).forEach(c => snapshot.set(c.id, c)));
-    setManualCustomers(Array.from(snapshot.values()));
+    /* Thông báo cũ lưu tên VIẾT HOA từ CSV — tra lại sang tên viết thường để
+       sửa xong lưu lại là dữ liệu tự chuẩn hoá theo. */
+    setManualCustomers(withLowNames(Array.from(snapshot.values()), lowNames));
     setManualForm(null);
     setIsModalOpen(true);
   };
@@ -357,7 +382,15 @@ export default function PowerOutageManager() {
   const exportDocx = async (n: PowerOutage) => {
     setIsExporting(true);
     try {
-      const blob = await generateOutageDocx(n);
+      /* Tra tên viết thường ngay lúc xuất, KHÔNG dựa vào tên đã lưu trong phụ
+         lục — nhờ vậy thông báo lưu từ trước cũng in ra tên đúng dạng. */
+      const blob = await generateOutageDocx({
+        ...n,
+        appendices: (n.appendices || []).map(a => ({
+          ...a,
+          customers: withLowNames(a.customers || [], lowNames),
+        })),
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
