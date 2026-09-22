@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Building2, Factory, Users, Gauge, Package,
+  Building2, Cable, Factory, Users, Gauge, Package,
   Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText, History, ArrowLeftRight, Search,
   CaseLower,
 } from 'lucide-react';
@@ -25,11 +25,12 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { toast } from '../../lib/toast';
 import { Toggle } from '../ui/Toggle';
 import { DatePicker } from '../ui/DateTimePickers';
-import { assets, customers, devices, isAbortError, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
+import { assets, customers, devices, isAbortError, lines, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
 import type {
-  AssetStatus, AssetType, Customer, Device, Point, PointRole, Station, Zone,
+  AssetStatus, AssetType, Customer, Device, Line, Point, PointRole, Station,
+  VoltageLevel, Zone,
 } from '../../lib/dm/types';
 import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio, pickRatio } from '../../lib/dm/hsn';
 import { REMOTE_LABEL, TI_PER_SET, countAssets, derivePointStatus, missingRemote } from '../../lib/dm/pointStatus';
@@ -51,6 +52,7 @@ import { groupByZone, sortByCode, sortByMkh } from './groupByZone';
 import AssetLifecycle from './AssetLifecycle';
 import StockEntry from './StockEntry';
 import { TransferOwner } from './TransferOwner';
+import LineAssign from './LineAssign';
 import { ZoneTables } from './ZoneTables';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
 import {
@@ -63,10 +65,11 @@ import {
  * "Vòng đời vật tư" vào cuối dãy tab (user chốt 25/08/2026) thay vì đứng riêng
  * ngoài menu — người dùng khai điểm đo xong là đối chiếu ngay tại chỗ.
  */
-type CatTab = 'zone' | 'station' | 'customer' | 'point' | 'stock' | 'lifecycle';
+type CatTab = 'zone' | 'line' | 'station' | 'customer' | 'point' | 'stock' | 'lifecycle';
 
 const TABS: TabItem<CatTab>[] = [
   { id: 'zone', label: 'Khu công nghiệp', icon: Building2, sub: 'dm_zone' },
+  { id: 'line', label: 'Lộ đường dây', icon: Cable, sub: 'dm_line' },
   { id: 'station', label: 'Trạm', icon: Factory, sub: 'dm_station' },
   { id: 'customer', label: 'Khách hàng', icon: Users, sub: 'dm_customer' },
   { id: 'point', label: 'Điểm đo', icon: Gauge, sub: 'dm_point' },
@@ -78,6 +81,7 @@ const TABS: TabItem<CatTab>[] = [
 /** Gợi ý trong ô tìm kiếm — nói đúng cột nào tìm được, kẻo gõ mò. */
 const SEARCH_HINT: Record<Exclude<CatTab, 'lifecycle' | 'stock'>, string> = {
   zone: 'Tìm mã KCN, tên, địa chỉ...',
+  line: 'Tìm mã lộ, tên lộ...',
   station: 'Tìm mã trạm, MKH, tên khách hàng...',
   customer: 'Tìm MKH, tên công ty, tên tắt, địa chỉ...',
   point: 'Tìm mã điểm đo, trạm, MKH, tên khách hàng...',
@@ -88,6 +92,11 @@ const HEAD: Record<Exclude<CatTab, 'lifecycle' | 'stock'>, { title: string; desc
     title: 'Khu công nghiệp',
     desc: 'Gốc của cây đơn vị — khai trước trạm và điểm đo',
     add: 'Thêm KCN',
+  },
+  line: {
+    title: 'Lộ đường dây',
+    desc: 'Một KCN có nhiều lộ; một lộ không vắt sang KCN khác',
+    add: 'Thêm lộ',
   },
   station: {
     title: 'Trạm',
@@ -107,8 +116,17 @@ const HEAD: Record<Exclude<CatTab, 'lifecycle' | 'stock'>, { title: string; desc
 };
 
 const EMPTY_Z = { code: '', name: '', address: '' };
+/*
+  Mã lộ NHẬP TAY, không sinh tự động như mã trạm/điểm đo: mã lộ là tên ngoài
+  đời do ngành điện đặt ("471-E27.1"), không suy ra được từ dữ liệu trong app.
+*/
+const EMPTY_L = {
+  code: '', name: '', zone: '', note: '', active: true,
+  voltage_level: 'MV' as VoltageLevel,
+};
 /** `code` không có trong form trạm — hệ thống tự sinh từ 4 mảnh bên dưới. */
 const EMPTY_S = {
+  line: '',
   zone: '', customer: '', ident: '',
   sdm_kva: '', p0_w: '', pk_w: '', note: '',
 };
@@ -205,10 +223,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const [editingId, setEditingId] = useState<string | null>(null);
   /** Điểm đo đang mở hộp "Chuyển chủ thể"; `null` = đóng. */
   const [transferring, setTransferring] = useState<Point | null>(null);
+  /** Lộ đang mở hộp "Gắn trạm" hàng loạt; `null` = đóng. */
+  const [assigning, setAssigning] = useState<Line | null>(null);
   /** Người dùng đã bấm "Sinh lại mã" cho điểm đo đang sửa. */
   const [regenCode, setRegenCode] = useState(false);
 
   const [zForm, setZForm] = useState(EMPTY_Z);
+  const [lForm, setLForm] = useState(EMPTY_L);
   const [sForm, setSForm] = useState(EMPTY_S);
   const [cForm, setCForm] = useState(EMPTY_C);
   /** Soát ngay trong form: hiện lý do lệch dưới ô, và bật/tắt nút "Lấy từ tên". */
@@ -234,6 +255,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const d = data;
   const zoneOpts = useMemo(
     () => (d?.zones ?? []).map(z => ({ value: z.id, label: `${z.code} — ${z.name}` })), [d]);
+  /*
+    Lộ để chọn cho TRẠM — chỉ lộ CÙNG KCN với trạm đang khai.
+    Một lộ không vắt sang KCN khác (user xác nhận 22/09), nên hiện cả danh sách
+    thì người khai phải tự lọc bằng mắt và rất dễ chọn nhầm lộ của khu bên cạnh.
+    Lộ đã ngưng vẫn hiện nhưng ghi rõ, vì trạm cũ có thể vẫn đang treo ở đó.
+  */
+  const lineOptsOfZone = (zoneId: string) => (d?.lines ?? [])
+    .filter(l => l.zone === zoneId)
+    .map(l => ({
+      value: l.id,
+      label: `${l.code}${l.name ? ` — ${l.name}` : ''}${l.active === false ? ' (đã ngưng)' : ''}`,
+    }));
   const customerOpts = useMemo(
     () => (d?.customers ?? []).map(c => ({
       value: c.id,
@@ -265,6 +298,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const openAdd = () => {
     setEditingId(null);
     if (tab === 'zone') setZForm(EMPTY_Z);
+    /* Giữ KCN đang chọn để khai liên tiếp nhiều lộ trong cùng một KCN. */
+    if (tab === 'line') setLForm({ ...EMPTY_L, zone: lForm.zone });
     if (tab === 'station') setSForm({ ...EMPTY_S, zone: sForm.zone });
     if (tab === 'customer') setCForm({ ...EMPTY_C, zone: cForm.zone });
     // Giữ trạm đang chọn để khai liên tiếp nhiều điểm đo trong cùng một trạm.
@@ -277,10 +312,19 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     setZForm({ code: z.code, name: z.name, address: z.address ?? '' });
     setModal('zone');
   };
+  const editLine = (l: Line) => {
+    setEditingId(l.id);
+    setLForm({
+      code: l.code, name: l.name ?? '', zone: l.zone,
+      voltage_level: (l.voltage_level || 'MV') as VoltageLevel, note: l.note ?? '',
+      active: l.active !== false,
+    });
+    setModal('line');
+  };
   const editStation = (s: Station) => {
     setEditingId(s.id);
     setSForm({
-      zone: s.zone, customer: s.customer ?? '', ident: s.ident ?? '',
+      zone: s.zone, line: s.line ?? '', customer: s.customer ?? '', ident: s.ident ?? '',
       sdm_kva: str(s.sdm_kva), p0_w: str(s.p0_w), pk_w: str(s.pk_w), note: s.note ?? '',
     });
     setModal('station');
@@ -1047,13 +1091,27 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         `KCN ${body.code}`);
     }
 
+    if (modal === 'line') {
+      if (!lForm.code.trim() || !lForm.zone) {
+        return toast.warning('Thiếu thông tin', 'Mã lộ và KCN là bắt buộc.');
+      }
+      const body = {
+        code: lForm.code.trim(), name: lForm.name.trim(), zone: lForm.zone,
+        voltage_level: lForm.voltage_level, note: lForm.note.trim(),
+        active: lForm.active,
+      };
+      return void persist(
+        () => (editingId ? lines.update(editingId, body) : lines.create(body)),
+        `lộ ${body.code}`);
+    }
+
     if (modal === 'station') {
       if (stationCodeMissing.length) {
         return toast.warning('Chưa sinh được mã trạm',
           `Còn thiếu: ${stationCodeMissing.join(', ')}.`);
       }
       const body = {
-        code: stationCode, zone: sForm.zone,
+        code: stationCode, zone: sForm.zone, line: sForm.line,
         customer: sForm.customer, ident: sForm.ident.trim().toUpperCase(),
         sdm_kva: toNum(sForm.sdm_kva), p0_w: toNum(sForm.p0_w), pk_w: toNum(sForm.pk_w),
         note: sForm.note.trim(),
@@ -1531,6 +1589,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const removeRow = (key: string) =>
     setPForm(f => ({ ...f, assetRows: f.assetRows.filter(r => r.key !== key) }));
 
+  const stationsOfLine = (id: string) => d?.stations.filter(s => s.line === id).length ?? 0;
+  const lineCodeOf = (id?: string) => d?.lines.find(l => l.id === id)?.code;
   const stationCodeOf = (id?: string) => d?.stations.find(s => s.id === id)?.code ?? '—';
   const childrenOf = (id: string) => d?.points.filter(p => p.parent_point === id).length ?? 0;
 
@@ -1543,6 +1603,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   /** KCN xếp theo mã, để bảng KCN cũng có thứ tự ổn định. */
   const zoneRows = useMemo(
     () => [...(d?.zones ?? [])].sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true })),
+    [d]);
+
+  /* Lộ xếp theo MÃ, không theo MKH — lộ không có khách hàng. */
+  const lineGroups = useMemo(
+    () => groupByZone(sortByCode(d?.lines ?? [], l => l.code), l => l.zone, d?.zones ?? []),
     [d]);
 
   const stationGroups = useMemo(
@@ -1660,6 +1725,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const zoneRowsShown = useMemo(
     () => zoneRows.filter(z => matchesTerms([z.code, z.name, z.address], terms)),
     [zoneRows, terms]);
+
+  const lineGroupsShown = useMemo(
+    () => bySearch(byFilterZone(lineGroups), l => [l.code, l.name, zoneName(l.zone)]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lineGroups, filterZone, terms, d]);
 
   const stationGroupsShown = useMemo(
     () => bySearch(byFilterZone(stationGroups), s => [
@@ -1814,6 +1884,61 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         </TableCard>
       )}
 
+      {/* ======================= Lộ đường dây ======================= */}
+      {tab === 'line' && (
+        <>
+          {!d?.zones.length && !loading && (
+            <div className="vl-alert vl-alert-light-warning">
+              Phải khai ít nhất một KCN ở tab "Khu công nghiệp" trước khi thêm lộ.
+            </div>
+          )}
+          <ZoneTables groups={lineGroupsShown} unit="lộ" loading={loading}
+            empty={emptyText('lộ', 'Chưa có lộ đường dây nào được khai.')}
+            rowKey={l => l.id}
+            columns={<>
+              <th className={`${TH_CLS} w-[18%] pl-10`}>Mã lộ</th>
+              <th className={`${TH_CLS} w-[32%]`}>Tên lộ</th>
+              <th className={`${TH_CLS} w-[10%]`}>Cấp điện áp</th>
+              <th className={`${TH_CLS} w-[10%]`}>Số trạm</th>
+              <th className={`${TH_CLS} w-[14%]`}>Tình trạng</th>
+              <th className={`${TH_CLS} w-[16%] pr-10 text-right`}>Thao tác</th>
+            </>}
+            renderRow={l => (
+              <tr className="transition-colors hover:bg-subtle/50">
+                <td className="px-6 py-4 pl-10">
+                  <span className="rounded-md bg-subtle px-2.5 py-1 font-mono text-xs font-bold text-soft">{l.code}</span>
+                </td>
+                <td className="truncate px-6 py-4 font-bold text-ink" title={l.name || ''}>{l.name || '—'}</td>
+                <td className="px-6 py-4 text-sm text-soft">{l.voltage_level || '—'}</td>
+                <td className="px-6 py-4 text-sm font-semibold text-dim">{stationsOfLine(l.id)}</td>
+                <td className="px-6 py-4 text-sm">
+                  {l.active === false
+                    ? <span className="text-[11px] font-bold uppercase text-faint">Đã ngưng</span>
+                    : <span className="text-[11px] font-bold uppercase text-[var(--success)]">Đang dùng</span>}
+                </td>
+                <td className="px-6 py-4 pr-10 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    {/*
+                      Gắn HÀNG LOẠT — mở từ đây chứ không phải form Trạm: gắn 133
+                      trạm mà mỗi trạm mở form một lần thì không ai làm nổi.
+                    */}
+                    <button type="button" onClick={() => setAssigning(l)}
+                      className="vl-btn vl-btn-secondary vl-btn-sm gap-1.5"
+                      title="Chọn nhiều trạm để gắn vào lộ này">
+                      <Factory className="h-3.5 w-3.5" /> Gắn trạm
+                    </button>
+                    <RowActions onEdit={() => editLine(l)}
+                      onDelete={() => void del(`lộ ${l.code}`, () => lines.remove(l.id),
+                        stationsOfLine(l.id) > 0
+                          ? `Lộ này đang có ${stationsOfLine(l.id)} trạm. Xóa lộ KHÔNG xóa trạm — các trạm đó về nhánh "Chưa gắn lộ".`
+                          : undefined)} />
+                  </div>
+                </td>
+              </tr>
+            )} />
+        </>
+      )}
+
       {/* ============================ Trạm ============================ */}
       {tab === 'station' && (
         <>
@@ -1826,12 +1951,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             empty={emptyText('trạm', 'Chưa có trạm nào được khai.')}
             rowKey={s => s.id}
             columns={<>
-              <th className={`${TH_CLS} w-[27%] pl-10`}>Mã trạm</th>
-              <th className={`${TH_CLS} w-[20%]`}>Khu công nghiệp</th>
-              <th className={`${TH_CLS} w-[15%]`}>Khách hàng</th>
-              <th className={`${TH_CLS} w-[10%]`}>Sdm (kVA)</th>
-              <th className={`${TH_CLS} w-[12%]`}>P0 / Pk (W)</th>
-              <th className={`${TH_CLS} w-[8%]`}>Điểm đo</th>
+              <th className={`${TH_CLS} w-[24%] pl-10`}>Mã trạm</th>
+              <th className={`${TH_CLS} w-[16%]`}>Khu công nghiệp</th>
+              <th className={`${TH_CLS} w-[12%]`}>Lộ đường dây</th>
+              <th className={`${TH_CLS} w-[13%]`}>Khách hàng</th>
+              <th className={`${TH_CLS} w-[9%]`}>Sdm (kVA)</th>
+              <th className={`${TH_CLS} w-[11%]`}>P0 / Pk (W)</th>
+              <th className={`${TH_CLS} w-[7%]`}>Điểm đo</th>
               <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
             </>}
             renderRow={s => (
@@ -1841,6 +1967,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                   <span className="inline-flex items-center rounded-full bg-accent-soft px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-blue-600">
                     {zoneName(s.zone)}
                   </span>
+                </td>
+                <td className="px-6 py-4">
+                  {/* Chưa gắn lộ là BÌNH THƯỜNG, không tô đỏ — chỉ để nhạt. */}
+                  {lineCodeOf(s.line)
+                    ? <span className="font-mono text-xs font-bold text-dim">{lineCodeOf(s.line)}</span>
+                    : <span className="text-[11px] italic text-faint">chưa gắn</span>}
                 </td>
                 <td className="px-6 py-4 font-mono text-xs font-bold text-soft">{customerMkh(s.customer)}</td>
                 <td className="px-6 py-4 text-sm font-semibold text-dim">{s.sdm_kva ?? '—'}</td>
@@ -1957,6 +2089,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       <TransferOwner point={transferring} d={d}
         onClose={() => setTransferring(null)} onDone={() => void load()} />
 
+      {/* Gắn hàng loạt trạm vào một lộ — mở từ nút "Gắn trạm" ở bảng Lộ. */}
+      <LineAssign line={assigning} d={d}
+        onClose={() => setAssigning(null)} onDone={() => void load()} />
+
       {/* ============================ Modal ============================ */}
       <FormModal open={modal !== null} title={modalTitle} onClose={closeModal} onSubmit={submit}
         saving={saving} wide>
@@ -1980,6 +2116,38 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
           </>
         )}
 
+        {modal === 'line' && (
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <Field label="Khu công nghiệp" required>
+              <Select value={lForm.zone} onChange={v => setLForm(f => ({ ...f, zone: v }))}
+                options={zoneOpts} placeholder="Chọn KCN" searchable />
+            </Field>
+            <Field label="Mã lộ" required hint="Tên ngoài đời, gõ tay">
+              <TextInput value={lForm.code} mono placeholder="471-E27.1"
+                onChange={v => setLForm(f => ({ ...f, code: v }))} />
+            </Field>
+            <Field label="Cấp điện áp">
+              <Select value={lForm.voltage_level}
+                onChange={v => setLForm(f => ({ ...f, voltage_level: v as VoltageLevel }))}
+                options={[{ value: 'MV', label: 'Trung áp (MV)' }, { value: 'LV', label: 'Hạ áp (LV)' }]} />
+            </Field>
+            <Field label="Tên lộ">
+              <TextInput value={lForm.name} placeholder="Lộ 471 trạm 110kV Tiền Hải"
+                onChange={v => setLForm(f => ({ ...f, name: v }))} />
+            </Field>
+            <Field label="Ghi chú">
+              <TextInput value={lForm.note} placeholder="…"
+                onChange={v => setLForm(f => ({ ...f, note: v }))} />
+            </Field>
+            {/* TẮT thay vì xoá: trạm từng gắn vào lộ vẫn phải tra lại được. */}
+            <Field label="Tình trạng" hint="Lộ cắt/bỏ thì tắt, đừng xóa">
+              <Select value={lForm.active ? '1' : '0'}
+                onChange={v => setLForm(f => ({ ...f, active: v === '1' }))}
+                options={[{ value: '1', label: 'Đang dùng' }, { value: '0', label: 'Đã ngưng' }]} />
+            </Field>
+          </div>
+        )}
+
         {modal === 'station' && (
           <>
             {/*
@@ -1998,6 +2166,16 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               <Field label="Khu công nghiệp" required hint={sZone ? `Hậu tố: ${sZone.code}` : undefined}>
                 <Select value={sForm.zone} onChange={v => setSForm(f => ({ ...f, zone: v }))}
                   options={zoneOpts} placeholder="Chọn KCN" searchable />
+              </Field>
+              {/* Lộ KHÔNG bắt buộc: 133 trạm hiện chưa khai lộ, bắt buộc là
+                  chặn mọi thao tác sửa trạm cho tới khi khai xong hết lộ. */}
+              <Field label="Lộ đường dây"
+                hint={!sForm.zone ? 'Chọn KCN trước'
+                  : lineOptsOfZone(sForm.zone).length ? 'Không bắt buộc'
+                    : 'KCN này chưa khai lộ nào'}>
+                <Select value={sForm.line} onChange={v => setSForm(f => ({ ...f, line: v }))}
+                  options={lineOptsOfZone(sForm.zone)} placeholder="Chưa gắn lộ" searchable
+                  disabled={!sForm.zone || lineOptsOfZone(sForm.zone).length === 0} />
               </Field>
               <Field label="Định danh trạm" required hint="T1, T2, NX1…">
                 <TextInput value={sForm.ident} mono placeholder="T1"
