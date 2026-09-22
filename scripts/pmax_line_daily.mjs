@@ -12,7 +12,17 @@
  * NGUỒN: `public/hes_30min/<ngày>.csv` — chỉ số lũy kế 30 phút, RAW (chưa nhân
  * HSN), kèm cột HSN.
  *
- *   P(t) = (PG[t] − PG[t−1]) × HSN ÷ 0,5h     (kW, công suất trung bình 30 phút)
+ *   P = (PG[i] − PG[i−1]) × HSN ÷ (thời gian THỰC giữa hai bản đọc)
+ *
+ * CHIA CHO THỜI GIAN THỰC, KHÔNG phải 0,5h cố định (sửa 22/09/2026).
+ *
+ * Công tơ KHÔNG báo đúng mỗi 30 phút: đồng hồ lệch và khoảng cách thật rất lệch
+ * nhau. Công tơ 2510633411 ngày 12/09 báo lúc 14:01 rồi 14:45 — cách nhau 44
+ * phút; chia hiệu chỉ số đó cho 0,5h ra 1.888 kW trong khi đúng là 1.287 kW.
+ * Chính con số 1.888 kW đó đã thành "đỉnh" của lộ 473E27.4.
+ *
+ * Công suất tính được áp cho MỌI mốc 30 phút mà khoảng đó phủ qua — nó là công
+ * suất trung bình suốt khoảng ấy, không phải của riêng mốc cuối.
  *
  * LƯU Ý ĐƠN VỊ: đây là công suất TRUNG BÌNH trong khoảng 30 phút, thấp hơn công
  * suất TỨC THỜI mà `pmax_daily.csv` lấy từ `datametter.csv` (đo thực tế lệch
@@ -40,8 +50,10 @@ const FIELDS = [
      mở lại dữ liệu 30 phút để tra (mà 30 ngày sau thì cũng không còn để tra). */
   'TOP_MKH', 'TOP_NAME', 'TOP_STATION', 'TOP_KW', 'TOP_SHARE',
 ];
-/** Mốc 30 phút, tính theo giờ. Dùng để đổi hiệu chỉ số ra công suất. */
-const HOURS_PER_SLOT = 0.5;
+/** Độ dài một mốc đo, phút. Chỉ để chia ô trên trục thời gian — KHÔNG dùng để
+ *  đổi hiệu chỉ số ra công suất; chỗ đó phải dùng thời gian THỰC giữa hai bản
+ *  đọc, xem ghi chú đầu file. */
+const SLOT_MIN = 30;
 
 const arg = (name) => {
   const i = process.argv.indexOf(name);
@@ -146,18 +158,30 @@ function peakOfLine(meters, rowsByMeter) {
     covered++;
 
     rows.sort((a, b) => a.time.localeCompare(b.time));
-    /* Mỗi công tơ góp MỘT giá trị cho mỗi mốc — báo cả 10:01 lẫn 10:02 mà cộng
-       cả hai là đếm trùng chính nó. Lấy giá trị lớn nhất: đây là bài toán ĐỈNH. */
+    /*
+      Mỗi công tơ góp MỘT giá trị cho mỗi mốc — cùng một khoảng có thể phủ hai
+      mốc, và hai khoảng có thể cùng rơi vào một mốc; lấy giá trị LỚN NHẤT vì
+      đây là bài toán tìm ĐỈNH, còn cộng lại là đếm trùng chính công tơ đó.
+    */
     const perSlot = new Map();
     for (let i = 1; i < rows.length; i++) {
       const dv = rows[i].pg - rows[i - 1].pg;
-      /* Chỉ số lùi (thay/reset công tơ) → bỏ mốc đó, không bịa số âm. */
+      /* Chỉ số lùi (thay/reset công tơ) → bỏ khoảng đó, không bịa số âm. */
       if (!(dv >= 0)) continue;
-      const kw = (dv * rows[i].hsn) / HOURS_PER_SLOT;
-      const slot = snap(rows[i].time);
-      const cur = perSlot.get(slot);
-      if (cur === undefined || kw > cur) perSlot.set(slot, kw);
+
+      const dtMin = toMinutes(rows[i].time) - toMinutes(rows[i - 1].time);
+      /* Hai bản đọc cùng phút (hoặc lùi giờ) → không có khoảng để chia. */
+      if (dtMin <= 0) continue;
+
+      const kw = (dv * rows[i].hsn) / (dtMin / 60);
+      /* Áp cho mọi mốc mà khoảng này phủ qua: đó là công suất trung bình suốt
+         khoảng, không phải của riêng mốc cuối. */
+      for (const slot of slotsBetween(rows[i - 1].time, rows[i].time)) {
+        const cur = perSlot.get(slot);
+        if (cur === undefined || kw > cur) perSlot.set(slot, kw);
+      }
     }
+
     for (const [slot, kw] of perSlot) {
       bySlot.set(slot, (bySlot.get(slot) ?? 0) + kw);
       if (!perMeterSlot.has(slot)) perMeterSlot.set(slot, new Map());
@@ -194,10 +218,33 @@ function peakOfLine(meters, rowsByMeter) {
   };
 }
 
+/** `HH:mm` → số phút từ 00:00. */
+function toMinutes(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * Các mốc 30 phút mà khoảng `[from, to]` phủ qua.
+ *
+ * Luôn trả ít nhất một mốc: khoảng ngắn hơn 30 phút vẫn phải đóng góp vào mốc
+ * chứa nó, không thì phần điện đó biến mất khỏi đường phụ tải.
+ */
+function slotsBetween(from, to) {
+  const a = toMinutes(from);
+  const b = toMinutes(to);
+  const out = [];
+  for (let m = Math.floor(a / SLOT_MIN) * SLOT_MIN; m < b; m += SLOT_MIN) {
+    const hh = Math.floor(m / 60) % 24;
+    out.push(`${String(hh).padStart(2, '0')}:${m % 60 === 0 ? '00' : '30'}`);
+  }
+  return out.length ? out : [snap(to)];
+}
+
 /** `HH:mm` → mốc 30 phút gần nhất. */
 function snap(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
-  const mins = Math.round((h * 60 + m) / 30) * 30;
+  const mins = Math.round((h * 60 + m) / SLOT_MIN) * SLOT_MIN;
   const hh = Math.floor(mins / 60) % 24;
   return `${String(hh).padStart(2, '0')}:${mins % 60 === 0 ? '00' : '30'}`;
 }
