@@ -12,6 +12,16 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import requests
+import unicodedata
+
+# Ep stdout ve UTF-8: ma tram/diem do co dau tieng Viet, ma console Windows mac
+# dinh la cp1252 -> chi MOT dong log co dau la UnicodeEncodeError va giet ca
+# buoc pipeline. Da xay ra 22/09/2026 khi them phep soat lech tram.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:  # noqa: BLE001 - Python cu khong co reconfigure
+    pass
 
 
 def get_retry(url, *, attempts=4, **kwargs):
@@ -78,6 +88,20 @@ PB_PASS = os.environ.get("PB_PASS", "") or os.environ.get("PB_ADMIN_PASSWORD", "
 VN_TZ = timezone(timedelta(hours=7))
 
 
+def loose(name: str) -> str:
+    """Ma tram rut ve dang so sanh duoc: bo dau, bo moi ky tu khong phai chu/so.
+
+    Hai he thong viet ten tram khac nhau ma van la MOT tram:
+    "03.NHUA VIET LONG.T1.2500kVA" vs "03.NHUAVIETLONG.T1.2500kVA". So tho thi
+    bao lech hang loat, va canh bao nao cung keu thi khong ai doc nua.
+    """
+    nfd = unicodedata.normalize("NFD", name or "")
+    plain = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+    # chu D gach ngang khong phai dau nen NFD khong tach duoc
+    plain = plain.replace("đ", "d").replace("Đ", "D")
+    return "".join(c for c in plain if c.isalnum()).casefold()
+
+
 def hsn_from_catalog() -> dict:
     """{so_cong_to: HSN} tu Danh muc: dm_asset (CONGTO, dang treo) -> dm_point.hsn.
 
@@ -113,16 +137,19 @@ def hsn_from_catalog() -> dict:
                 page += 1
 
         points = {p["id"]: p for p in rows("dm_point")}
+        stations = {s["id"]: s for s in rows("dm_station")}
         out = {}
         for a in rows("dm_asset"):
             if a.get("type") != "CONGTO" or not a.get("point"):
                 continue
-            if not (a.get("date_on") or "")[:10] or (a.get("date_off") or "")[:10]:
-                continue
+            if (a.get("date_off") or "")[:10]:
+                continue          # da thao khoi diem do -> HSN do khong con dung
             p = points.get(a["point"])
             if not p or p.get("hsn") is None:
                 continue
-            out[str(a.get("serial") or "").strip()] = float(p["hsn"])
+            st = stations.get(p.get("station") or "")
+            out[str(a.get("serial") or "").strip()] = (
+                float(p["hsn"]), (st or {}).get("code") or "")
         return out
     except Exception as e:  # noqa: BLE001
         print(f"[WARN] Khong doc duoc HSN tu Danh muc ({e}) -> lui ve HSN cua HES.")
@@ -135,6 +162,7 @@ def load_meter_list():
     if not os.path.isfile(METTERINFO_PATH):
         sys.exit(f"Khong tim thay {METTERINFO_PATH}. Hay chay fetch_meter_info.py truoc.")
     meters = {}
+    hes_line = {}          # so cong to -> LINE_NAME ben HES (de doi chieu tram)
     with open(METTERINFO_PATH, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             no = str(row.get("METER_NO") or "").strip()
@@ -147,16 +175,26 @@ def load_meter_list():
             except (TypeError, ValueError):
                 hsn = 1.0
             meters[no] = hsn
+            hes_line[no] = str(row.get("LINE_NAME") or "").strip()
 
     catalog = hsn_from_catalog()
     if catalog:
         changed = [no for no, h in meters.items()
-                   if no in catalog and catalog[no] != h]
+                   if no in catalog and catalog[no][0] != h]
         for no in changed:
-            print(f"[HSN] {no}: HES {meters[no]:g} -> Danh muc {catalog[no]:g}")
+            print(f"[HSN] {no}: HES {meters[no]:g} -> Danh muc {catalog[no][0]:g}")
+            # Lech HSN MA con khac ca TRAM thi khong phai chuyen khai thieu, ma la
+            # cong to bi gan nham diem do o mot ben. Phai noi to: dung HSN cua ben
+            # sai thi moi so cong suat cua cong to do deu sai.
+            st_hes = (hes_line.get(no) or "").strip()
+            st_dm = (catalog[no][1] or "").strip()
+            if st_hes and st_dm and loose(st_hes) != loose(st_dm):
+                print(f"[!!] {no}: HES bao o tram '{st_hes}' con Danh muc bao "
+                      f"'{st_dm}'. Mot trong hai ben gan nham diem do - CAN NGUOI "
+                      f"KIEM TRA. Tam thoi dung HSN cua Danh muc.")
         for no in catalog:
             if no in meters:
-                meters[no] = catalog[no]
+                meters[no] = catalog[no][0]
 
     # BO HAN cong to co HSN cua HES vo ly va KHONG co trong Danh muc.
     #
