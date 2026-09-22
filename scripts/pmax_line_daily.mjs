@@ -75,15 +75,27 @@ async function catalog(token) {
 }
 
 /**
- * Công tơ của từng lộ — CHỈ điểm đo chính.
+ * Công tơ ĐANG TREO của từng lộ — CHỈ điểm đo chính.
  * `dm_asset` (CONGTO) → `dm_point` → `dm_station` → `dm_line`.
+ *
+ * "ĐANG TREO" = có ngày treo và CHƯA có ngày tháo — cùng định nghĩa với
+ * `liveMeters` trong `lib/pb_meters.mjs`, chặt hơn cờ `active`.
+ *
+ * Vì sao phải lọc (sửa 22/09/2026): bản đầu đếm MỌI công tơ từng gắn ở điểm đo
+ * chính, nên mẫu số gồm cả công tơ đã tháo và công tơ dự kiến chưa ra hiện
+ * trường. Lộ 477E11.9 hiện "10/31 công tơ có số liệu" trong khi thực tế là
+ * 9/13 — nhìn vào tưởng mất 2/3 dữ liệu, mà 18 cái kia vốn KHÔNG THỂ có dữ liệu:
+ * 10 đã tháo, 7 chưa treo, và chúng vẫn nằm trong mẫu số. Một con số như vậy
+ * làm người đọc mất tin vào cả những lộ đang đúng.
  */
 function metersByLine({ stations, points, assets }) {
   const stById = new Map(stations.map(s => [s.id, s]));
   const pById = new Map(points.map(p => [p.id, p]));
+  const ymd = (v) => String(v ?? '').slice(0, 10);
   const out = new Map();
   for (const a of assets) {
     if (a.type !== 'CONGTO' || !a.point) continue;
+    if (!ymd(a.date_on) || ymd(a.date_off)) continue;
     const p = pById.get(a.point);
     if (!p || p.role !== 'chinh') continue;
     const st = p.station ? stById.get(p.station) : undefined;

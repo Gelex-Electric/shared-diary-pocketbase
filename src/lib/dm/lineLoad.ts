@@ -57,7 +57,16 @@ export interface LineMeters {
 }
 
 /**
- * Công tơ theo lộ: `dm_asset` (CONGTO) → `dm_point` → `dm_station` → `dm_line`.
+ * Công tơ ĐANG TREO theo lộ: `dm_asset` (CONGTO) → `dm_point` → `dm_station` →
+ * `dm_line`.
+ *
+ * "ĐANG TREO" = có ngày treo và CHƯA có ngày tháo — chặt hơn cờ `active`, cùng
+ * định nghĩa với `liveMeters` bên pipeline.
+ *
+ * Vì sao phải lọc (sửa 22/09/2026): bản đầu đếm MỌI công tơ từng gắn, nên lộ
+ * 477E11.9 hiện "10/31 công tơ có số liệu" trong khi thực tế là 9/13 — 18 cái
+ * còn lại (10 đã tháo, 7 chưa treo) vốn KHÔNG THỂ có dữ liệu mà vẫn nằm trong
+ * mẫu số. Độ phủ toàn hệ thống thật là 83%, không phải 32%.
  *
  * Bỏ điểm đo PHỤ (xem ghi chú đầu file). Bỏ công tơ chưa gắn điểm đo, điểm đo
  * chưa gắn trạm, và trạm chưa gắn lộ — không đoán, thiếu mắt xích nào thì
@@ -66,10 +75,12 @@ export interface LineMeters {
 export function lineMetersOf(d: CatalogData): Map<string, string[]> {
   const stationById = new Map(d.stations.map(s => [s.id, s]));
   const pointById = new Map(d.points.map(p => [p.id, p]));
+  const ymd = (v?: string) => String(v ?? '').slice(0, 10);
   const out = new Map<string, string[]>();
 
   for (const a of d.assets) {
     if (a.type !== 'CONGTO' || !a.point) continue;
+    if (!ymd(a.date_on) || ymd(a.date_off)) continue;
     const point = pointById.get(a.point);
     if (!point || point.role !== 'chinh') continue;
     const station = point.station ? stationById.get(point.station) : undefined;
