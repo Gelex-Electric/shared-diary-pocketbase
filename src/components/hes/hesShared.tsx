@@ -70,7 +70,7 @@ export const toExportRow = (m: MeterRow, c?: ConsumptionCell | null) => ({
  * 16/09/2026: hai bảng phải giống hệt nhau về cột và cách căn, để đọc quen mắt
  * rồi chuyển tab không phải dò lại.
  *
- *   Số công tơ · Khách hàng (tên tắt) · HSN · Đầu kỳ · Cuối kỳ
+ *   Số công tơ · Trạm (mã điểm đo) · HSN · Đầu kỳ · Cuối kỳ
  *   Tổng (kWh) · Biểu 1 · Biểu 2 · Biểu 3 · VC
  *
  * Bốn cột số cuối bày HAI TẦNG: sản lượng ở trên (số người dùng cần), chỉ số
@@ -79,7 +79,13 @@ export const toExportRow = (m: MeterRow, c?: ConsumptionCell | null) => ({
 export const INDEX_COLUMNS = (
   <>
     <th className="w-[120px]">Số công tơ</th>
-    <th className="w-[150px]">Khách hàng</th>
+    {/*
+      "Trạm" thay cho "Khách hàng" (user chốt 21/09/2026): tra chỉ số là việc
+      của vận hành, cần biết số liệu thuộc TRẠM nào chứ không phải công ty nào.
+      Ô bên dưới hiện MÃ ĐIỂM ĐO — chuỗi này bắt đầu bằng mã trạm và nói rõ
+      thêm là điểm đo chính hay phụ; nó cũng chính là `LINE_NAME` bên HES.
+    */}
+    <th className="w-[190px]">Trạm</th>
     <th className="w-[70px] text-center">HSN</th>
     <th className="w-[110px] text-center">Đầu kỳ</th>
     <th className="w-[110px] text-center">Cuối kỳ</th>
@@ -92,7 +98,7 @@ export const INDEX_COLUMNS = (
 );
 
 /** Bề ngang tối thiểu trước khi cho cuộn ngang — chung cho cả hai bảng. */
-export const INDEX_MIN_WIDTH = 1090;
+export const INDEX_MIN_WIDTH = 1130;
 
 /** Ô số hai tầng: sản lượng ở trên, chỉ số thô đầu → cuối ở dưới. */
 export function ValueCell({ value, dau, cuoi, tone = 'text-ink', strong = false }: {

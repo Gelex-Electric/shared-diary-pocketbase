@@ -40,7 +40,7 @@ import {
 import { PointBadgeChip, PointBadgeIcon, StatusTag } from './pointIcons';
 import { invoicesOfMkh, invoicesOfSerial, loadCustomerFacts } from '../../lib/dm/invoiceRepo';
 import { isEmptyPlan, latestByMkh, planCustomerSync } from '../../lib/dm/customerSync';
-import { ISSUE_LABEL, checkLowName, planLowNameFix, toLowName } from '../../lib/dm/lowName';
+import { ISSUE_LABEL, autoFillable, checkLowName, planLowNameFix, toLowName } from '../../lib/dm/lowName';
 import type { LowNameRow } from '../../lib/dm/lowName';
 import { bySerial, dmy, dmyRange, segmentFor, segmentOf, segmentsOf } from '../../lib/dm/lifecycle';
 import type { Segment } from '../../lib/dm/lifecycle';
@@ -1193,21 +1193,26 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   };
 
   /**
-   * Ghi `low_name = name.toLowerCase()` cho các dòng lệch.
+   * CHỈ điền các ô đang TRỐNG, bằng tên gốc hạ chữ hoa.
+   *
+   * KHÔNG ghi đè ô đã có: `low_name` do người dùng soạn (danh từ riêng giữ hoa),
+   * hạ hoa tất cả là phá dữ liệu — đã suýt xảy ra ngày 15/09/2026 khi 88/101 bản
+   * ghi bị luật cũ coi là "lệch". Các dòng sai CHỮ thì phải người đọc quyết bên
+   * nào đúng, máy không tự sửa được.
    *
    * Ghi thẳng vào dữ liệu THẬT (staging dùng chung PocketBase với production)
-   * ⇒ đã xem trước ở bảng, còn hỏi thêm một lần nữa. Chỉ `update`, không xóa;
-   * chạy lại lần nữa cũng ra cùng kết quả.
+   * ⇒ đã xem trước ở bảng, còn hỏi thêm một lần nữa. Chỉ `update`, không xóa.
    */
   const fixAllLowName = async () => {
-    const rows = lowNameRows ?? [];
+    const rows = autoFillable(lowNameRows ?? []);
     if (!rows.length) return;
 
     const ok = await confirm({
       title: `Sửa tên viết thường cho ${rows.length} khách hàng?`,
-      message: `Ghi đè cột "tên viết thường" bằng tên gốc hạ chữ hoa, cho ${rows.length} bản ghi `
-        + `đang lệch. Không đụng tên gốc, không xóa bản ghi nào. Ghi thẳng vào dữ liệu thật.`,
-      confirmLabel: 'Sửa tất cả', variant: 'warning',
+      message: `Ghi cột "Đề nghị" vào ${rows.length} bản ghi: lấy ký tự của tên gốc, `
+        + `giữ kiểu viết hoa đang có. Không đụng tên gốc, không xóa bản ghi nào. `
+        + `Ghi thẳng vào dữ liệu thật.`,
+      confirmLabel: 'Sửa', variant: 'warning',
     });
     if (!ok) return;
 
@@ -2060,12 +2065,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             </div>
             <div className="grid gap-6 sm:grid-cols-2">
               <Field label="Tên khách hàng" required>
-                {/* Gõ tên thì ô viết thường chạy theo — NHƯNG chỉ khi nó còn
-                    đang khớp tên cũ. Đã sửa tay thì giữ nguyên bản sửa tay. */}
+                {/* Chỉ mồi ô viết thường khi nó đang TRỐNG. Đã có nội dung thì
+                    không đụng: đó là bản người dùng soạn, hạ hoa là phá. */}
                 <TextInput value={cForm.name} placeholder="CÔNG TY TNHH…"
                   onChange={v => setCForm(f => ({
                     ...f, name: v,
-                    low_name: f.low_name === toLowName(f.name) ? toLowName(v) : f.low_name,
+                    low_name: f.low_name.trim() ? f.low_name : toLowName(v),
                   }))} />
               </Field>
               <Field label="Địa chỉ">
@@ -2074,15 +2079,16 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             </div>
             <Field label="Tên viết thường"
               hint={lowNameCheck.issue === 'ok'
-                ? 'Tự chạy theo "Tên khách hàng"; sửa đè được nếu cần ngoại lệ.'
+                ? 'Cùng chữ với tên khách hàng. Viết hoa thế nào là tùy bạn — không xét hoa/thường.'
                 : `${ISSUE_LABEL[lowNameCheck.issue]} — ${lowNameCheck.detail}`}>
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <TextInput value={cForm.low_name} placeholder="công ty tnhh…"
                     onChange={v => setCForm(f => ({ ...f, low_name: v }))} />
                 </div>
-                <button type="button" title="Lấy lại từ tên khách hàng"
-                  disabled={lowNameCheck.issue === 'ok'}
+                {/* Ghi đè bản đã soạn, nên chỉ mở khi đang sai CHỮ hoặc còn trống. */}
+                <button type="button" title="Thay bằng tên gốc hạ chữ hoa"
+                  disabled={lowNameCheck.issue === 'ok' || lowNameCheck.issue === 'space'}
                   onClick={() => setCForm(f => ({ ...f, low_name: toLowName(f.name) }))}
                   className="vl-btn vl-btn-secondary flex shrink-0 items-center gap-2">
                   <RefreshCw className="h-4 w-4" />
@@ -2453,12 +2459,15 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         onClose={() => setLowNameOpen(false)}
         onSubmit={() => void fixAllLowName()}
         saving={fixingLowName}
-        submitLabel={`Sửa tất cả (${lowNameRows?.length ?? 0})`}>
+        submitLabel={`Sửa theo tên gốc (${autoFillable(lowNameRows ?? []).length})`}>
         <p className="text-sm text-soft">
-          Đối chiếu cột <b>tên viết thường</b> với <b>tên khách hàng</b> hạ chữ hoa. "Sửa tất cả"
-          ghi cột đề nghị vào toàn bộ các dòng dưới đây — không đụng tên gốc, không xóa gì.
-          Muốn giữ một ngoại lệ thì đóng bảng này và sửa riêng khách hàng đó.
+          So <b>tên viết thường</b> với <b>tên khách hàng</b> — chỉ xét số ký tự và ký tự,
+          <b> không phân biệt hoa/thường</b>. Viết hoa khác nhau không phải lỗi.
         </p>
+        <div className="vl-alert vl-alert-light-warning">
+          Tên gốc tải từ hóa đơn nên luôn đúng về chữ. Nút bên dưới lấy <b>ký tự</b> của tên
+          gốc nhưng <b>giữ kiểu viết hoa</b> bạn đã soạn — xem cột "Đề nghị" trước khi bấm.
+        </div>
         <TableCard fixed loading={false} isEmpty={!lowNameRows?.length} empty="Không có dòng nào lệch."
           columns={<>
             <th className={`${TH_CLS} w-[12%] pl-6`}>Mã KH</th>

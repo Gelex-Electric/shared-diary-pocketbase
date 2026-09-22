@@ -373,3 +373,51 @@ export function CustomerZoneCard({
     </div>
   );
 }
+
+/**
+ * ProgressBar — thanh tiến trình đơn (0→100%), cùng ngôn ngữ hình ảnh với
+ * `TariffBar`: nền `bg-subtle`, bo `rounded-md`, phần đã đạt tô bằng biến
+ * theme. Dùng chung cho mọi chỗ cần "x / y đã xong".
+ */
+export function ProgressBar({
+  value,
+  total,
+  tone = 'ok',
+  height = 'h-5',
+  showPercent = true,
+  title,
+}: {
+  /** Phần đã đạt. */
+  value: number;
+  /** Tổng (≤0 → thanh rỗng). */
+  total: number;
+  tone?: Tone;
+  /** Lớp chiều cao Tailwind (mặc định `h-5` như TariffBar). */
+  height?: string;
+  /** Hiện số % trong thanh khi đủ rộng. */
+  showPercent?: boolean;
+  title?: string;
+}) {
+  const pct = total > 0 ? Math.min(100, Math.max(0, (value / total) * 100)) : 0;
+  const rounded = Math.round(pct);
+  return (
+    <div
+      className={`flex w-full ${height} overflow-hidden rounded-md bg-subtle`}
+      title={title ?? `${value}/${total} (${rounded}%)`}
+      role="progressbar"
+      aria-valuenow={rounded}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <motion.div
+        className="flex items-center justify-center text-[10px] font-bold leading-none text-white tabular-nums"
+        style={{ background: RAIL[tone] }}
+        initial={false}
+        animate={{ width: `${pct}%` }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
+      >
+        {showPercent && pct >= 14 ? `${rounded}%` : ''}
+      </motion.div>
+    </div>
+  );
+}
