@@ -133,6 +133,59 @@ export function monthlyPeaks(rows: PmaxLineRow[], year: number, monthIdx: number
   return [...byLine.values()].sort((a, b) => b.pmax - a.pmax);
 }
 
+/* ===================== Ước lượng cho tháng CHƯA có số liệu 30 phút ===================== */
+
+/** Một tháng trên biểu đồ của MỘT lộ. */
+export interface LineMonthPoint {
+  /** `YYYY-MM`. */
+  month: string;
+  /** Nhãn trục hoành, `MM/YYYY`. */
+  label: string;
+  pmax: number;
+  /**
+   * `do` = tính từ dữ liệu 30 phút, đỉnh TRÙNG THỜI ĐIỂM — số đúng.
+   * `uoc` = cộng đỉnh từng công tơ theo ngày rồi lấy ngày lớn nhất.
+   */
+  src: 'do' | 'uoc';
+  date: string;
+  at: string;
+  covered: number;
+  total: number;
+}
+
+/**
+ * Ước lượng Pmax tháng của một lộ từ `pmax_daily.csv` (đỉnh TỪNG công tơ).
+ *
+ * Cách tính: mỗi NGÀY cộng đỉnh của các công tơ trên lộ, rồi lấy ngày lớn nhất
+ * trong tháng. Cộng theo ngày chặt hơn cộng đỉnh-tháng-của-từng-công-tơ, vì ít
+ * nhất các đỉnh được cộng phải rơi vào cùng một ngày.
+ *
+ * VẪN LÀ ƯỚC LƯỢNG, không phải số đo: đỉnh của các trạm trong ngày rơi vào giờ
+ * khác nhau nên tổng này cao hơn đỉnh thật — đo trên tháng 9/2026 (tháng có cả
+ * hai) thì cao hơn 10–33% ở 8/9 lộ.
+ *
+ * KHÔNG gọi nó là "cận trên": một lộ ra THẤP hơn số đo 2%, vì hai nguồn không
+ * phủ cùng một tập công tơ. Nhãn đúng là "ước lượng", và màn hình phải ghi rõ
+ * tháng nào là đo, tháng nào là ước lượng.
+ */
+export function estimateMonthly(
+  pmaxRows: { meter: string; date: string; year: number; monthIdx: number; pmax: number }[],
+  serials: Set<string>,
+  year: number,
+  monthIdx: number,
+): { pmax: number; date: string } {
+  const byDay = new Map<string, number>();
+  for (const r of pmaxRows) {
+    if (r.year !== year || r.monthIdx !== monthIdx) continue;
+    if (!serials.has(r.meter)) continue;
+    byDay.set(r.date, (byDay.get(r.date) ?? 0) + r.pmax);
+  }
+  let pmax = 0;
+  let date = '';
+  for (const [d, v] of byDay) if (v > pmax) { pmax = v; date = d; }
+  return { pmax, date };
+}
+
 /** Các tháng có số liệu, mới nhất trước — để đổ vào bộ chọn tháng. */
 export function monthsOf(rows: PmaxLineRow[]): { year: number; monthIdx: number }[] {
   const seen = new Set<string>();
