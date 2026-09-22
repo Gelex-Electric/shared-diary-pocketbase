@@ -1,0 +1,102 @@
+name: Pmax theo lo duong day (chay tay)
+
+# Tinh lai Pmax cua tung LO cho mot khoang ngay va LUU VINH VIEN vao
+# public/pmax_line_daily.csv.
+#
+# Vi sao can workflow rieng du daily-pipeline da co buoc 4b: buoc do chi tinh
+# NGAY MOI NHAT moi dem. Khi sua cong thuc, sua danh muc (gan lai tram vao lo,
+# doi HSN, doi trang thai diem do) hoac backfill thi phai tinh lai CA KHOANG —
+# va chay tay tren may thi so chi nam o may do, khong ai khac thay.
+#
+# Nguon la public/hes_30min/ nen CHI tinh lai duoc trong pham vi con file (30
+# ngay gan nhat). Ngay cu hon da duoc chot vao pmax_line_daily.csv tu truoc va
+# GIU NGUYEN — script chi ghi de dung nhung ngay no vua tinh.
+#
+# CHI DOC PocketBase (danh muc lo/tram/diem do/vat tu). Khong ghi gi len PB.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Pham vi tinh lai"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all          # moi ngay dang co trong public/hes_30min
+          - one          # dung mot ngay, dien o o duoi
+      date:
+        description: "Ngay can tinh (YYYY-MM-DD) — chi dung khi mode = one"
+        required: false
+        default: ""
+      verify:
+        description: "Goi thang API doi chieu lai sau khi tinh (cham hon)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+permissions:
+  contents: write
+
+# Khong chay chong len daily-pipeline: hai ben cung ghi pmax_line_daily.csv.
+concurrency:
+  group: pmax-line
+  cancel-in-progress: false
+
+jobs:
+  compute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TZ: Asia/Ho_Chi_Minh
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Script chi dung thu vien co san cua Node, khong can npm install.
+      - name: Tinh Pmax theo lo
+        env:
+          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
+        run: |
+          if [ "${{ inputs.mode }}" = "one" ]; then
+            if [ -z "${{ inputs.date }}" ]; then
+              echo "mode=one thi phai dien o 'date'."; exit 1
+            fi
+            node scripts/pmax_line_daily.mjs --date "${{ inputs.date }}"
+          else
+            node scripts/pmax_line_daily.mjs --all
+          fi
+
+      # Doi chieu doc lap: goi thang API HES roi so voi file vua ghi.
+      # Chi doc, khong sua gi. Lech > 1% se hien ra trong log.
+      - name: Doi chieu voi API
+        if: ${{ inputs.verify == 'true' }}
+        env:
+          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
+          API_USER: ${{ secrets.API_USER }}
+          API_PASS: ${{ secrets.API_PASS }}
+        run: |
+          FROM=$(ls public/hes_30min/*.csv | head -1 | xargs basename | sed 's/.csv//')
+          TO=$(ls public/hes_30min/*.csv | tail -1 | xargs basename | sed 's/.csv//')
+          node scripts/verify_pmax_api.mjs --from "$FROM" --to "$TO"
+
+      - name: Commit & push CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/pmax_line_daily.csv
+          if git diff --cached --quiet; then
+            echo "Khong co thay doi nao de commit."
+          else
+            git commit -m "chore: pmax theo lo $(date +'%Y-%m-%d %H:%M ICT')"
+            git pull --rebase origin ${{ github.ref_name }}
+            git push
+          fi

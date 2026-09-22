@@ -4,29 +4,25 @@
  * MỘT LỘ MỘT BIỂU ĐỒ, trục hoành là các THÁNG (user chốt 22/09/2026) — không vẽ
  * Pmax ngày, và không phải bảng so các lộ với nhau trong một tháng.
  *
- * HAI NGUỒN, ghi rõ tháng nào là gì (user chốt 22/09/2026):
+ * MỘT NGUỒN DUY NHẤT: `/pmax_line_daily.csv` — cộng công suất các trạm theo TỪNG
+ * MỐC 30 phút rồi mới lấy max. Có từ 27/08/2026, tự dài thêm mỗi đêm.
  *
- *   ĐO ĐƯỢC   từ `/pmax_line_daily.csv` — cộng công suất các trạm theo TỪNG MỐC
- *             30 phút rồi mới lấy max. Đây là đỉnh thật của lộ. Có từ 27/08/2026,
- *             và tự dài thêm mỗi đêm khi pipeline chạy.
- *   ƯỚC LƯỢNG từ `/pmax_daily.csv` — mỗi ngày cộng đỉnh từng công tơ rồi lấy
- *             ngày lớn nhất. Phủ được từ 01/2026 nhưng CAO HƠN đỉnh thật 10–33%
- *             (đo trên tháng 9, tháng có cả hai nguồn).
+ * ĐÃ BỎ phần "ước lượng" cho giai đoạn trước đó (user chốt 22/09/2026). Nó dựng
+ * từ `pmax_daily.csv` và lệch theo HAI hướng ngược nhau: cao hơn 10–34% vì cộng
+ * các đỉnh không trùng giờ, nhưng lại thấp hơn ở tháng cũ vì hơn nửa số công tơ
+ * chưa được treo khi đó. Hai thiên lệch chồng lên nhau thì con số không đọc ra
+ * được điều gì đáng tin. Biểu đồ ngắn nhưng mọi cột cùng một thước đo.
  *
- * Hai màu khác nhau và có chú giải — trộn hai loại số vào một dãy cột cùng màu
- * là mời người đọc so tháng 3 với tháng 9 như thể chúng cùng một thước đo.
+ * Nhờ bỏ ước lượng, màn này KHÔNG còn phải đọc danh mục PocketBase — chỉ cần
+ * đúng một file CSV.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ResponsiveContainer, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, Bar, Cell,
 } from 'recharts';
 import { Cable, TrendingUp, Users, HelpCircle } from 'lucide-react';
-import { usePmaxLineDaily, estimateMonthly } from '../lib/pmaxLine';
+import { usePmaxLineDaily } from '../lib/pmaxLine';
 import type { LineMonthPoint } from '../lib/pmaxLine';
-import { usePmaxDaily } from '../lib/pmax';
-import { isAbortError, loadCatalog, pbErrorMessage } from '../lib/dm/repo';
-import type { CatalogData } from '../lib/dm/repo';
-import { lineMetersOf } from '../lib/dm/lineLoad';
 import { Select } from './ui/Select';
 import { StatTile, EmptyState, CHART } from './ui/dashboard';
 
@@ -38,7 +34,6 @@ const fmtDateVN = (k: string) => (k ? `${k.slice(8, 10)}/${k.slice(5, 7)}` : '�
 const LOW_COVER = 0.8;
 
 const COLOR_DO = CHART.accent;
-const COLOR_UOC = '#a78bfa';
 
 function MonthTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
@@ -53,14 +48,10 @@ function MonthTooltip({ active, payload }: any) {
           <span className="vl-val">{fmtKw(r.pmax)} kW</span>
         </div>
         <div className="vl-chart-tooltip-row">
-          <span className="vl-lbl">Nguồn</span>
-          <span className="vl-val">{r.src === 'do' ? 'Đo được' : 'Ước lượng'}</span>
-        </div>
-        <div className="vl-chart-tooltip-row">
           <span className="vl-lbl">Đạt ngày</span>
           <span className="vl-val">{fmtDateVN(r.date)}{r.at ? ` ${r.at}` : ''}</span>
         </div>
-        {r.src === 'do' && r.topName && (
+        {r.topName && (
           <div className="vl-chart-tooltip-row">
             <span className="vl-lbl">Khách kéo đỉnh</span>
             <span className="vl-val">{r.topName} · {fmtKw(r.topKw)} kW ({r.topShare}%)</span>
@@ -76,32 +67,13 @@ function MonthTooltip({ active, payload }: any) {
 }
 
 export default function LinePmaxTab() {
-  const { rows: lineRows, loading: loadingLine, error: errLine } = usePmaxLineDaily();
-  const { rows: meterRows, loading: loadingMeter } = usePmaxDaily();
+  const { rows: lineRows, loading, error } = usePmaxLineDaily();
 
-  /* Danh mục chỉ để biết lộ nào gồm công tơ nào — cần cho phần ước lượng. */
-  const [cat, setCat] = useState<CatalogData | null>(null);
-  const [errCat, setErrCat] = useState('');
-  useEffect(() => {
-    let alive = true;
-    loadCatalog()
-      .then(d => { if (alive) setCat(d); })
-      .catch(e => { if (alive && !isAbortError(e)) setErrCat(pbErrorMessage(e)); });
-    return () => { alive = false; };
-  }, []);
-
-  /* Mã lộ → tập số công tơ ĐANG TREO ở điểm đo chính. */
-  const serialsByCode = useMemo(() => {
-    const out = new Map<string, Set<string>>();
-    if (!cat) return out;
-    const byId = lineMetersOf(cat);
-    for (const l of cat.lines) out.set(l.code, new Set(byId.get(l.id) ?? []));
-    return out;
-  }, [cat]);
-
+  /* Mã lộ lấy thẳng từ chính file số liệu — lộ chưa có số đo nào thì cũng chẳng
+     có gì để vẽ, nên không cần đọc danh mục. */
   const lineCodes = useMemo(
-    () => (cat?.lines ?? []).map(l => l.code).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true })),
-    [cat]);
+    () => [...new Set(lineRows.map(r => r.line))].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true })),
+    [lineRows]);
 
   const [picked, setPicked] = useState('');
   /*
@@ -119,61 +91,30 @@ export default function LinePmaxTab() {
   }, [lineRows, lineCodes]);
   const current = picked || defaultLine;
 
-  /* --------- Dãy tháng của lộ đang chọn: ưu tiên số ĐO, thiếu thì ƯỚC LƯỢNG --------- */
+  /* --------- Đỉnh của từng THÁNG: ngày có đỉnh cao nhất trong tháng --------- */
   const series = useMemo<LineMonthPoint[]>(() => {
     if (!current) return [];
-    const serials = serialsByCode.get(current) ?? new Set<string>();
-
-    /* Tháng cần vẽ = hợp của hai nguồn. Chỉ lấy tháng mà lộ này thực sự có số,
-       không dựng cột rỗng cho những tháng lộ chưa tồn tại. */
-    const months = new Set<string>();
-    for (const r of lineRows) if (r.line === current) months.add(`${r.year}-${p2(r.monthIdx + 1)}`);
-    for (const r of meterRows) if (serials.has(r.meter)) months.add(`${r.year}-${p2(r.monthIdx + 1)}`);
-
-    const out: LineMonthPoint[] = [];
-    for (const m of [...months].sort()) {
-      const [y, mm] = m.split('-').map(Number);
-      const monthIdx = mm - 1;
-
-      /* Số ĐO có thì dùng, không cần ngó tới ước lượng. */
-      let best: LineMonthPoint | null = null;
-      for (const r of lineRows) {
-        if (r.line !== current || r.year !== y || r.monthIdx !== monthIdx) continue;
-        if (!best || r.pmax > best.pmax) {
-          best = {
-            month: m, label: `${p2(mm)}/${y}`, pmax: r.pmax, src: 'do',
-            date: r.date, at: r.at, covered: r.covered, total: r.total,
-            topMkh: r.topMkh, topName: r.topName, topStation: r.topStation,
-            topKw: r.topKw, topShare: r.topShare,
-          };
-        }
-      }
-      if (best) { out.push(best); continue; }
-
-      const e = estimateMonthly(meterRows, serials, y, monthIdx);
-      if (e.pmax > 0) {
-        out.push({
-          month: m, label: `${p2(mm)}/${y}`, pmax: e.pmax, src: 'uoc',
-          /* Độ phủ của THÁNG ĐÓ, không phải hôm nay: tháng cũ thường ít công tơ
-             hơn hẳn vì nhiều trạm chưa đấu vào. */
-          date: e.date, at: '', covered: e.covered, total: serials.size,
-          /* Tháng ước lượng KHÔNG biết ai kéo đỉnh: `pmax_daily.csv` chỉ có đỉnh
-             riêng từng công tơ, không có mốc giờ để biết ai trùng với ai. */
-          topMkh: '', topName: '', topStation: '', topKw: 0, topShare: 0,
+    const byMonth = new Map<string, LineMonthPoint>();
+    for (const r of lineRows) {
+      if (r.line !== current) continue;
+      const m = `${r.year}-${p2(r.monthIdx + 1)}`;
+      const cur = byMonth.get(m);
+      if (!cur || r.pmax > cur.pmax) {
+        byMonth.set(m, {
+          month: m, label: `${p2(r.monthIdx + 1)}/${r.year}`, pmax: r.pmax,
+          date: r.date, at: r.at, covered: r.covered, total: r.total,
+          topMkh: r.topMkh, topName: r.topName, topStation: r.topStation,
+          topKw: r.topKw, topShare: r.topShare,
         });
       }
     }
-    return out;
-  }, [current, lineRows, meterRows, serialsByCode]);
+    return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
+  }, [current, lineRows]);
 
-  const measured = series.filter(s => s.src === 'do');
   const peak = series.reduce<LineMonthPoint | null>((a, b) => (!a || b.pmax > a.pmax ? b : a), null);
-  const lastMeasured = measured[measured.length - 1];
+  const lastMeasured = series[series.length - 1];
   const lowCover = lastMeasured && lastMeasured.total > 0
     && lastMeasured.covered / lastMeasured.total < LOW_COVER;
-
-  const loading = loadingLine || loadingMeter || (!cat && !errCat);
-  const error = errLine || errCat;
 
   if (error) {
     return <div className="vl-alert vl-alert-light-danger">Không đọc được số liệu: {error}</div>;
@@ -208,12 +149,12 @@ export default function LinePmaxTab() {
           {/* ---- Thẻ tổng quan ---- */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <StatTile label="Pmax cao nhất" value={peak ? fmtKw(peak.pmax) : '—'} unit="kW" icon={Cable}
-              sub={peak ? `tháng ${peak.label} · ${peak.src === 'do' ? 'đo được' : 'ước lượng'}` : undefined} />
-            <StatTile label="Tháng gần nhất có số đo"
+              sub={peak ? `tháng ${peak.label}` : undefined} />
+            <StatTile label="Tháng gần nhất"
               value={lastMeasured ? fmtKw(lastMeasured.pmax) : '—'} unit="kW" icon={TrendingUp}
               sub={lastMeasured
                 ? `${lastMeasured.label} · ${fmtDateVN(lastMeasured.date)} lúc ${lastMeasured.at}`
-                : 'chưa có tháng nào đo được'} />
+                : 'chưa có tháng nào có số liệu'} />
             {/* Đỉnh của lộ là do AI — câu hỏi đầu tiên người vận hành hỏi khi
                 thấy một con số Pmax cao. */}
             <StatTile
@@ -233,17 +174,9 @@ export default function LinePmaxTab() {
           <div className="vl-card p-5">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
               <h3 className="text-[15px] font-bold text-ink">Pmax lộ {current} theo tháng</h3>
-              {/* Chú giải hai nguồn — đặt ngay cạnh tiêu đề, không giấu dưới đáy. */}
-              <div className="flex items-center gap-4 text-[11px] text-soft">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_DO }} />
-                  Đo được (30 phút)
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_UOC }} />
-                  Ước lượng — cao hơn số đo 10–34%
-                </span>
-              </div>
+              <span className="text-[11px] text-faint">
+                Đỉnh trùng thời điểm · công suất trung bình 30 phút
+              </span>
             </div>
             <ResponsiveContainer width="100%" height={330}>
               <BarChart data={series} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
@@ -254,21 +187,18 @@ export default function LinePmaxTab() {
                 <Tooltip content={<MonthTooltip />} cursor={{ fill: 'var(--subtle)' }} />
                 <Bar dataKey="pmax" name="Pmax" radius={[3, 3, 0, 0]} maxBarSize={56}>
                   {series.map((r, i) => (
-                    <Cell key={i} fill={r.src === 'do' ? COLOR_DO : COLOR_UOC} />
+                    /* Tháng thiếu công tơ tô khác màu — nhìn là thấy cột nào
+                       chưa đại diện cả lộ, không phải rê chuột từng cột. */
+                    <Cell key={i} fill={r.total > 0 && r.covered / r.total < LOW_COVER
+                      ? 'var(--warning)' : COLOR_DO} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-            {measured.length > 0 && measured.length < series.length && (
-              <p className="mt-2 text-[11px] leading-relaxed text-faint">
-                Số đo bắt đầu có từ tháng {measured[0].label}; các tháng trước đó là ước lượng
-                cộng đỉnh từng công tơ nên cao hơn đỉnh thật 10–34%. Mỗi đêm pipeline lại thêm
-                một ngày số đo, nên phần tím sẽ lùi dần.
-                {' '}<b>Đọc kèm cột "công tơ có số liệu"</b>: hơn nửa số công tơ mới được treo
-                trong năm 2026, nên tháng càng cũ càng ít trạm — đường đi lên một phần là do
-                thêm trạm đấu vào chứ không hẳn do tải tăng.
-              </p>
-            )}
+            <p className="mt-2 text-[11px] leading-relaxed text-faint">
+              Số liệu bắt đầu từ 27/08/2026 — trước đó không có dữ liệu 30 phút nên không
+              tính được đỉnh trùng thời điểm. Mỗi đêm pipeline thêm một ngày, biểu đồ tự dài ra.
+            </p>
           </div>
 
           {/* ---- Bảng chi tiết ---- */}
@@ -279,7 +209,6 @@ export default function LinePmaxTab() {
                   <tr className="bg-subtle text-faint">
                     <th className="px-4 py-2.5 text-left font-bold">Tháng</th>
                     <th className="px-4 py-2.5 text-right font-bold">Pmax (kW)</th>
-                    <th className="px-4 py-2.5 text-left font-bold">Nguồn</th>
                     <th className="px-4 py-2.5 text-left font-bold">Đạt lúc</th>
                     <th className="px-4 py-2.5 text-left font-bold">Khách kéo đỉnh</th>
                     <th className="px-4 py-2.5 text-left font-bold">Công tơ</th>
@@ -292,15 +221,6 @@ export default function LinePmaxTab() {
                       <tr key={r.month} className="border-t border-[var(--border)]">
                         <td className="px-4 py-2.5 font-mono font-bold text-ink">{r.label}</td>
                         <td className="px-4 py-2.5 text-right font-mono font-bold text-ink">{fmtKw(r.pmax)}</td>
-                        <td className="px-4 py-2.5">
-                          <span className="rounded-md px-2 py-0.5 text-[11px] font-bold"
-                            style={{
-                              background: r.src === 'do' ? 'var(--accent-soft)' : '#a78bfa22',
-                              color: r.src === 'do' ? 'var(--accent)' : '#7c5cd6',
-                            }}>
-                            {r.src === 'do' ? 'Đo được' : 'Ước lượng'}
-                          </span>
-                        </td>
                         <td className="px-4 py-2.5 font-mono text-soft">
                           {fmtDateVN(r.date)}{r.at ? ` ${r.at}` : ''}
                         </td>
@@ -318,9 +238,7 @@ export default function LinePmaxTab() {
                         <td className="px-4 py-2.5">
                           <span className={low ? 'font-bold text-[var(--warning)]' : 'text-soft'}>
                             {r.covered}/{r.total}
-                            {low && (r.src === 'uoc'
-                              ? ' — tháng này nhiều trạm chưa đấu vào'
-                              : ' — chưa đại diện cả lộ')}
+                            {low && ' — chưa đại diện cả lộ'}
                           </span>
                         </td>
                       </tr>

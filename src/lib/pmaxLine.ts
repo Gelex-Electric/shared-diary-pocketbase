@@ -102,20 +102,22 @@ export function usePmaxLineDaily() {
   return { rows, loading, error };
 }
 
-/* ===================== Ước lượng cho tháng CHƯA có số liệu 30 phút ===================== */
-
-/** Một tháng trên biểu đồ của MỘT lộ. */
+/**
+ * Một tháng trên biểu đồ của MỘT lộ.
+ *
+ * CHỈ có tháng ĐO ĐƯỢC (user chốt 22/09/2026). Bản trước còn dựng thêm tháng
+ * "ước lượng" từ `pmax_daily.csv` cho giai đoạn trước 27/08, nhưng nó lệch theo
+ * HAI hướng ngược nhau — cao hơn 10–34% vì cộng các đỉnh không trùng giờ, mà
+ * lại thấp hơn ở tháng cũ vì hơn nửa số công tơ chưa được treo khi đó. Hai
+ * thiên lệch chồng lên nhau thì không ai đọc ra điều gì đáng tin, nên bỏ hẳn:
+ * biểu đồ ngắn nhưng mọi cột cùng một thước đo.
+ */
 export interface LineMonthPoint {
   /** `YYYY-MM`. */
   month: string;
   /** Nhãn trục hoành, `MM/YYYY`. */
   label: string;
   pmax: number;
-  /**
-   * `do` = tính từ dữ liệu 30 phút, đỉnh TRÙNG THỜI ĐIỂM — số đúng.
-   * `uoc` = cộng đỉnh từng công tơ theo ngày rồi lấy ngày lớn nhất.
-   */
-  src: 'do' | 'uoc';
   date: string;
   at: string;
   covered: number;
@@ -148,22 +150,3 @@ export interface LineMonthPoint {
  * Vì thế hàm này trả kèm `covered` — số công tơ thực sự có số liệu trong tháng.
  * Không hiện con số đó thì người đọc sẽ tưởng mọi cột cùng một phạm vi.
  */
-export function estimateMonthly(
-  pmaxRows: { meter: string; date: string; year: number; monthIdx: number; pmax: number }[],
-  serials: Set<string>,
-  year: number,
-  monthIdx: number,
-): { pmax: number; date: string; covered: number } {
-  const byDay = new Map<string, number>();
-  const seen = new Set<string>();
-  for (const r of pmaxRows) {
-    if (r.year !== year || r.monthIdx !== monthIdx) continue;
-    if (!serials.has(r.meter)) continue;
-    seen.add(r.meter);
-    byDay.set(r.date, (byDay.get(r.date) ?? 0) + r.pmax);
-  }
-  let pmax = 0;
-  let date = '';
-  for (const [d, v] of byDay) if (v > pmax) { pmax = v; date = d; }
-  return { pmax, date, covered: seen.size };
-}
