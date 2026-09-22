@@ -66,6 +66,11 @@ METTERINFO_PATH = os.environ.get("METTERINFO_PATH", "public/metterinfo.csv")
 #
 # Cong to KHONG co trong Danh muc thi van dung HSN cua HES: khong co nguon nao
 # tot hon, va bo han chung di thi mat du lieu. So luong se duoc in ra de biet.
+# Nguong HSN vo ly. Cung y nghia voi HSN_MAX ben fetch_meter_info.py: HSN thuc
+# te cao nhat trong he thong la vai nghin, nen vuot nguong nay chac chan la loi
+# nhap lieu ben HES chu khong phai he so that.
+HSN_MAX = float(os.environ.get("HSN_MAX", "100000"))
+
 PB_URL = os.environ.get("PB_URL", "https://getc.up.railway.app/pb").rstrip("/")
 PB_EMAIL = os.environ.get("PB_EMAIL", "") or os.environ.get("PB_ADMIN_EMAIL", "")
 PB_PASS = os.environ.get("PB_PASS", "") or os.environ.get("PB_ADMIN_PASSWORD", "")
@@ -147,15 +152,41 @@ def load_meter_list():
     if catalog:
         changed = [no for no, h in meters.items()
                    if no in catalog and catalog[no] != h]
-        missing = [no for no in meters if no not in catalog]
         for no in changed:
             print(f"[HSN] {no}: HES {meters[no]:g} -> Danh muc {catalog[no]:g}")
         for no in catalog:
             if no in meters:
                 meters[no] = catalog[no]
+
+    # BO HAN cong to co HSN cua HES vo ly va KHONG co trong Danh muc.
+    #
+    # Vi sao phai chan (them 22/09/2026): `METER_NAME` ben HES doi khi bi nhap
+    # chinh SO CONG TO vao — 2610159558 co METER_NAME = 2610159558. Cong to do
+    # dang im lang nen chua gay hai, nhung ngay nao no phat du lieu thi cong
+    # suat se nhan len 2,6 TY lan va con so do chay thang vao datametter.csv roi
+    # pmax_daily.csv (file luu vinh vien).
+    #
+    # Bo qua han, KHONG doan bang 1: doan 1 thi ra mot con so nho trong co ve
+    # hop ly, khong ai phat hien. Thieu han du lieu thi con nhin ra ma di khai
+    # ngay treo cho no trong Danh muc.
+    bogus = {}
+    for no in list(meters):
+        if no in catalog:
+            continue                      # Danh muc da quyet, khong can xet HES
+        h = meters[no]
+        if h > HSN_MAX or f"{h:g}" == no:
+            bogus[no] = h
+            del meters[no]
+    for no, h in bogus.items():
+        print(f"[BO QUA] {no}: HSN ben HES la {h:g} - vo ly, ma Danh muc chua khai "
+              f"cong to nay. Khai ngay treo cho no de dung HSN cua Danh muc.")
+
+    if catalog:
+        missing = [no for no in meters if no not in catalog]
         print(f"HSN: {len(meters) - len(missing)} cong to lay tu Danh muc "
               f"({len(changed)} lech so voi HES), {len(missing)} cong to khong co "
-              f"trong Danh muc nen giu HSN cua HES.")
+              f"trong Danh muc nen giu HSN cua HES"
+              f"{f', {len(bogus)} cong to bi bo qua vi HSN rac' if bogus else ''}.")
     return meters
 
 
