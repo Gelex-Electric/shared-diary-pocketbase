@@ -88,6 +88,17 @@ jobs:
         # (Phat hien 17/09/2026 khi doi chieu ngay 16.)
         run: node scripts/fetch_hes_index.mjs --notify
 
+      # 4b) Pmax cua tung LO DUONG DAY, tinh tu chinh du lieu 30 phut buoc 4 vua
+      #     ghi. Phai tinh va LUU NGAY moi dem: du lieu 30 phut chi giu 30 ngay,
+      #     ma dinh that cua lo lai bat buoc phai co no (cong P theo tung moc roi
+      #     moi lay max). Cong Pmax tung cong to tu pmax_daily.csv thi vong 0-25%
+      #     vi cac tram dat dinh khac gio nhau.
+      - name: Pmax theo lo duong day
+        env:
+          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
+        run: node scripts/pmax_line_daily.mjs
+
       # 5) + 6) TAM DUNG tu 16/09/2026 (user chot): ca chuoi ton that dang lay HSN
       # tu METER_NAME cua HES, khong phai dm_point.hsn cua Danh muc -> sai ca P, Q
       # lan OUTPUT. Bat lai sau khi doi nguon HSN va tinh lai lich su; xem
@@ -110,7 +121,7 @@ jobs:
           # `git add -A` cho thu muc hes_30min: file qua 30 ngay bi XOA, phai
           # ghi nhan ca xoa chu khong chi them.
           git add -A public/hes_30min
-          git add public/metterinfo.csv public/line_info.csv public/mba_info.csv public/datametter.csv public/pmax_daily.csv
+          git add public/metterinfo.csv public/line_info.csv public/mba_info.csv public/datametter.csv public/pmax_daily.csv public/pmax_line_daily.csv
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
