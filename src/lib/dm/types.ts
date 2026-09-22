@@ -1,6 +1,6 @@
 /**
- * Kiểu dữ liệu cho 4 collection danh mục trên PocketBase (tạo 14/08/2026):
- *   dm_zone (KCN) 1─N dm_station (Trạm) 1─N dm_point (Điểm đo)
+ * Kiểu dữ liệu cho các collection danh mục trên PocketBase (tạo 14/08/2026):
+ *   dm_zone (KCN) 1─N dm_line (Lộ) 1─N dm_station (Trạm) 1─N dm_point (Điểm đo)
  *   dm_customer (Khách hàng) 1─N dm_point
  *
  * Vật tư (dm_asset) chưa thuộc bước này — xem plan
@@ -35,10 +35,38 @@ export interface Zone extends PbRecord {
   active?: boolean;
 }
 
+/**
+ * LỘ ĐƯỜNG DÂY — cấp giữa KCN và Trạm (thêm 22/09/2026).
+ *
+ * MỘT LỘ THUỘC ĐÚNG MỘT KCN (user xác nhận): một KCN có nhiều lộ, nhưng lộ
+ * không vắt sang KCN khác — nên `zone` là một giá trị, không phải danh sách.
+ */
+export interface Line extends PbRecord {
+  /** Mã lộ, NHẬP TAY — `471-E27.1`. Khác mã trạm/điểm đo vốn do hệ thống sinh:
+   *  mã lộ là tên ngoài đời do ngành điện đặt, không suy ra được từ dữ liệu. */
+  code: string;
+  /** Tên đầy đủ — `Lộ 471 trạm 110kV Tiền Hải`. */
+  name?: string;
+  zone: string;
+  voltage_level?: VoltageLevel;
+  note?: string;
+  /** Lộ đã cắt/bỏ thì TẮT chứ không xoá — trạm từng gắn vẫn phải tra lại được. */
+  active?: boolean;
+}
+
 export interface Station extends PbRecord {
   /** Do hệ thống sinh, không gõ tay — xem `buildStationCode` trong `naming.ts`. */
   code: string;
   zone: string;
+  /**
+   * Lộ đường dây cấp điện cho trạm. KHÔNG bắt buộc và đó là chủ ý: 133 trạm
+   * hiện chưa khai lộ nào. Trống thì trạm nằm ở nhánh "Chưa gắn lộ" trong KCN
+   * của nó — trạng thái BÌNH THƯỜNG, không phải lỗi dữ liệu.
+   *
+   * KCN vẫn lấy từ `zone` ở trên chứ KHÔNG suy qua lộ: suy qua lộ thì trạm chưa
+   * gắn lộ mất luôn KCN, cả cây trống trơn cho tới khi khai xong hết lộ.
+   */
+  line?: string;
   /** Chủ trạm — cần để lấy tên tắt khi sinh mã trạm. */
   customer?: string;
   /** Định danh trạm trong khuôn viên khách hàng: T1, T2, NX1… */

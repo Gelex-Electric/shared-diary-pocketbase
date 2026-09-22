@@ -182,7 +182,11 @@ export default function Hes30MinManager({ scope = 'doi' }: { scope?: Scope }) {
               <td>
                 <span className="font-mono text-xs font-bold text-accent bg-accent-soft px-2 py-1 rounded">{m.MeterNo}</span>
               </td>
-              <td className="text-sm text-soft truncate" title={m.Customer}>{m.Customer || '—'}</td>
+              {/* Mã điểm đo; tên khách hàng đưa xuống tooltip cho đỡ chật. */}
+              <td className="text-xs font-mono text-soft truncate"
+                  title={[m.Line, m.Customer].filter(Boolean).join(' · ')}>
+                {m.Line || '—'}
+              </td>
               <td className="text-center text-xs font-mono text-soft">{m.HSN || '1'}</td>
               <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{fmtTime(c?.startAt)}</td>
               <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{fmtTime(c?.endAt)}</td>

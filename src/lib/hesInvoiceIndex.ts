@@ -36,6 +36,12 @@ export interface InvoiceIndexRow {
   customer: string;
   /** TÊN TẮT khách hàng, lấy từ Danh mục theo `mkh`; rỗng nếu chưa khai. */
   shortName?: string;
+  /**
+   * MÃ ĐIỂM ĐO đang treo công tơ này, tra theo số chế tạo trong Danh mục.
+   * Rỗng khi công tơ chưa khai hoặc đã tháo hẳn — hóa đơn cũ vẫn còn mà vật
+   * tư thì không còn gắn ở đâu.
+   */
+  pointCode?: string;
   hsn: number;
   /** Ngày đầu/cuối kỳ, dạng "YYYY-MM-DD". */
   startDate: string;
@@ -134,6 +140,38 @@ export async function fetchInvoiceIndexMonth(ym: string): Promise<InvoiceIndexRo
     shortOf = new Map(cs.map((c: any) => [String(c.mkh ?? '').trim(), String(c.short_name ?? '').trim()]));
   } catch { /* thiếu quyền đọc danh mục thì hiện tên đầy đủ, không chặn cả bảng */ }
 
+  /*
+    Số công tơ → MÃ ĐIỂM ĐO, cho cột "Trạm" (user chốt 21/09/2026).
+
+    Phải tra qua `dm_asset` vì hóa đơn chỉ có số chế tạo, không có mã điểm đo.
+    Một số No có thể đã lắp nhiều nơi, nên chọn: lần lắp ĐANG MỞ trước; không
+    còn cái nào đang mở thì lấy lần treo GẦN NHẤT — hóa đơn kỳ cũ vẫn cần biết
+    hồi đó công tơ nằm ở đâu.
+  */
+  let pointOf = new Map<string, string>();
+  try {
+    const [asRows, ptRows] = await Promise.all([
+      pb.collection('dm_asset').getFullList({
+        filter: 'type = "CONGTO"', fields: 'serial,point,date_on,date_off', requestKey: null }),
+      pb.collection('dm_point').getFullList({ fields: 'id,code,line_name', requestKey: null }),
+    ]);
+    const codeOf = new Map(ptRows.map((p: any) => [p.id, String(p.code || p.line_name || '').trim()]));
+    const best = new Map<string, { code: string; open: boolean; on: string }>();
+    for (const a of asRows as any[]) {
+      const sn = String(a.serial ?? '').trim();
+      const code = codeOf.get(a.point) ?? '';
+      if (!sn || !code) continue;
+      const on = String(a.date_on ?? '').slice(0, 10);
+      const open = !String(a.date_off ?? '').slice(0, 10);
+      const cur = best.get(sn);
+      // Đang mở thắng đã tháo; cùng loại thì cái treo sau thắng.
+      if (!cur || (open && !cur.open) || (open === cur.open && on > cur.on)) {
+        best.set(sn, { code, open, on });
+      }
+    }
+    pointOf = new Map([...best].map(([sn, v]) => [sn, v.code]));
+  } catch { /* thiếu quyền đọc danh mục thì để trống cột Trạm, không chặn bảng */ }
+
   const groups = new Map<string, any[]>();
   for (const r of list) {
     if (!String((r as any).SCT ?? '').trim()) continue;   // bản ghi không gắn công tơ
@@ -143,7 +181,12 @@ export async function fetchInvoiceIndexMonth(ym: string): Promise<InvoiceIndexRo
   }
 
   return [...groups.values()]
-    .map(g => { const row = mergeInvoiceRows(g); row.shortName = shortOf.get(row.mkh) || ''; return row; })
+    .map(g => {
+      const row = mergeInvoiceRows(g);
+      row.shortName = shortOf.get(row.mkh) || '';
+      row.pointCode = pointOf.get(String(row.sct ?? '').trim()) || '';
+      return row;
+    })
     .sort((a, b) => a.sct.localeCompare(b.sct, 'vi', { numeric: true }));
 }
 

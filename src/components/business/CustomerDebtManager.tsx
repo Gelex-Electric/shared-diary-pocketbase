@@ -3,10 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { pb } from '../../lib/pocketbase';
 import { DatePicker, MonthPicker } from '../ui/DateTimePickers';
 import { createNotification } from '../ui/NotificationBell';
+import { Tabs, type TabItem } from '../ui/Tabs';
+import { ProgressBar } from '../ui/dashboard';
 import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
-  RefreshCw, X, Loader2, Save, Banknote,
+  RefreshCw, X, Loader2, Save, Banknote, LayoutDashboard, Table2, CalendarClock,
 } from 'lucide-react';
 
 /* ============================================================
@@ -25,6 +27,12 @@ import { zoneFromArea, fetchLatestInvoiceMonth } from '../../lib/invoices';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 type PaymentFilter = 'all' | 'paid' | 'unpaid';
+type DebtTab = 'summary' | 'detail';
+
+const DEBT_TABS: TabItem<DebtTab>[] = [
+  { id: 'summary', label: 'Tổng hợp', icon: LayoutDashboard, sub: 'Chỉ tiêu chung & tiến trình thanh toán' },
+  { id: 'detail', label: 'Chi tiết', icon: Table2, sub: 'Bảng công nợ theo từng khu công nghiệp' },
+];
 
 const TOAST_TITLE: Record<ToastType, string> = {
   success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
@@ -148,6 +156,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
   const [loading, setLoading] = useState(false);
   // '' = chưa xác định tháng mặc định (đang hỏi tháng có dữ liệu mới nhất)
   const [monthFilter, setMonthFilter] = useState<string>('');
+  const [tab, setTab] = useState<DebtTab>('summary');
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -337,6 +346,34 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       unpaidPre: unpaid.dtHC + unpaid.dtVC,
       unpaidVAT: unpaid.dtVAT,
     };
+  }, [effectiveCustomers]);
+
+  /* ── tiến trình thanh toán theo NGÀY CHỐT CHỈ SỐ ──
+     Gom mọi kỳ trong tháng đang xem theo `endDate`; mỗi ngày chốt là một nhóm
+     khách hàng. Một khách được tính "đã thanh toán" của ngày đó khi MỌI kỳ chốt
+     đúng ngày đó của họ đều đã có ngày thanh toán. Không phụ thuộc tìm kiếm/tab
+     lọc (giống các thẻ KPI). */
+  const dateProgress = useMemo(() => {
+    const map = new Map<string, { date: string; paid: number; total: number; unpaidVAT: number; dtVAT: number }>();
+    effectiveCustomers.forEach(c => {
+      const byDate = new Map<string, KyGroup[]>();
+      c.kyList.forEach(ky => {
+        if (!ky.endDate) return;
+        if (!byDate.has(ky.endDate)) byDate.set(ky.endDate, []);
+        byDate.get(ky.endDate)!.push(ky);
+      });
+      byDate.forEach((kys, date) => {
+        let g = map.get(date);
+        if (!g) { g = { date, paid: 0, total: 0, unpaidVAT: 0, dtVAT: 0 }; map.set(date, g); }
+        g.total += 1;
+        if (kys.every(ky => !!ky.nTToan)) g.paid += 1;
+        kys.forEach(ky => {
+          g!.dtVAT += ky.dtVAT;
+          if (!ky.nTToan) g!.unpaidVAT += ky.dtVAT;
+        });
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
   }, [effectiveCustomers]);
 
   /* ── lọc theo tìm kiếm + trạng thái thanh toán ──
@@ -617,19 +654,26 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
             allowAll
             className="min-w-[170px]"
           />
-          <div className="relative">
-            <Search className="w-4 h-4 text-faint absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Tìm MKH, tên công ty..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-[var(--border)] bg-surface rounded-lg text-dim text-sm focus:outline-none focus:ring-1 focus:ring-accent w-full sm:w-[240px]"
-            />
-          </div>
+          {tab === 'detail' && (
+            <div className="relative">
+              <Search className="w-4 h-4 text-faint absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Tìm MKH, tên công ty..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-[var(--border)] bg-surface rounded-lg text-dim text-sm focus:outline-none focus:ring-1 focus:ring-accent w-full sm:w-[240px]"
+              />
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Tab: Tổng hợp (chỉ tiêu + tiến trình) | Chi tiết (bảng theo KCN) */}
+      <Tabs<DebtTab> tabs={DEBT_TABS} value={tab} onChange={setTab} />
+
+      {tab === 'summary' && (
+      <>
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="vl-card p-6 md:p-7 hover:-translate-y-1 transition-all group">
@@ -689,6 +733,64 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
         </div>
       </div>
 
+      {/* Tiến trình thanh toán theo ngày chốt chỉ số */}
+      <div className="vl-card p-6 md:p-7">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="p-2 bg-accent-soft rounded-xl text-accent shrink-0">
+            <CalendarClock className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-ink uppercase tracking-wide">Tiến trình thanh toán theo ngày chốt chỉ số</h3>
+            <p className="text-[11px] font-semibold text-soft">
+              Mỗi dòng là nhóm khách hàng có cùng ngày chốt — tỷ lệ khách đã thanh toán đủ mọi hóa đơn của ngày đó.
+            </p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="py-10 text-center text-faint text-sm">
+            <Loader2 className="w-5 h-5 animate-spin inline-block mr-2" /> Đang tải dữ liệu...
+          </div>
+        ) : dateProgress.length === 0 ? (
+          <div className="py-10 text-center text-faint text-sm">Chưa có hóa đơn nào trong kỳ đang chọn</div>
+        ) : (
+          <div className="space-y-4">
+            {dateProgress.map(g => (
+              <div key={g.date} className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="sm:w-[150px] shrink-0">
+                  <div className="font-mono text-sm font-black text-ink">{fmtDate(g.date)}</div>
+                  <div className="text-[11px] font-semibold text-soft">{g.total} khách hàng</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <ProgressBar
+                    value={g.paid}
+                    total={g.total}
+                    tone={g.paid === g.total ? 'ok' : 'accent'}
+                    title={`${g.paid}/${g.total} khách hàng đã thanh toán`}
+                  />
+                </div>
+                <div className="sm:w-[210px] shrink-0 sm:text-right">
+                  <div className="font-mono text-xs font-bold text-ink">
+                    <span className={g.paid === g.total ? 'text-ok' : 'text-accent'}>{g.paid}</span>
+                    <span className="text-faint">/{g.total}</span>
+                    <span className="text-[10px] font-semibold text-faint"> đã thanh toán</span>
+                  </div>
+                  {g.unpaidVAT > 0 && (
+                    <div className="font-mono text-[11px] font-bold text-rose-600">
+                      Còn {fmtVND(g.unpaidVAT)} <span className="text-[9px] text-faint font-semibold">đ</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      </>
+      )}
+
+      {tab === 'detail' && (
+      <>
       {/* Thanh điều khiển: tải lại + lọc trạng thái + chú thích màu */}
       <div className="vl-card p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4 text-[11px] font-semibold text-soft">
@@ -848,6 +950,8 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
             </AnimatePresence>
           </div>
         ))
+      )}
+      </>
       )}
     </div>
   );

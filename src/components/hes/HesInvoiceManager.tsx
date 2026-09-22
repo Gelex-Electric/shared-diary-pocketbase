@@ -34,6 +34,7 @@ const toExportRow = (r: InvoiceIndexRow) => {
     'Số công tơ': r.sct,
     'Mã khách hàng': r.mkh,
     'Khách hàng': r.customer,
+    'Trạm': r.pointCode ?? '',
     'Hệ số nhân': r.hsn,
     'Từ ngày': r.startDate,
     'Đến ngày': r.endDate,
@@ -192,7 +193,11 @@ export default function HesInvoiceManager({ scope = 'doi' }: { scope?: Scope }) 
                 </span>
               )}
             </td>
-            <td className="text-sm text-soft truncate" title={r.customer}>{r.shortName || r.customer || '—'}</td>
+            {/* Mã điểm đo; tên khách hàng đưa xuống tooltip cho đỡ chật. */}
+            <td className="text-xs font-mono text-soft truncate"
+                title={[r.pointCode, r.shortName || r.customer].filter(Boolean).join(' · ')}>
+              {r.pointCode || '—'}
+            </td>
             <td className="text-center text-xs font-mono text-soft">{r.hsn}</td>
             <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{r.startDate}</td>
             <td className="text-center text-[11px] font-mono text-faint whitespace-nowrap">{r.endDate}</td>
