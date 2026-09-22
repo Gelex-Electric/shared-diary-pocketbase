@@ -63,6 +63,11 @@ export interface LineMeters {
  * "ĐANG TREO" = có ngày treo và CHƯA có ngày tháo — chặt hơn cờ `active`, cùng
  * định nghĩa với `liveMeters` bên pipeline.
  *
+ * VÀ điểm đo phải ĐANG VẬN HÀNH (`status === 'active'`) (user chốt 22/09/2026).
+ * Đo trước khi làm: 15 công tơ đang treo ở điểm đo "chưa vận hành" đều KHÔNG có
+ * dữ liệu, loại chúng mất đúng 0 kW. Sau khi lọc, độ phủ từ 78/94 lên 78/79 —
+ * mẫu số cũ làm màn hình trông như mất 1/5 dữ liệu trong khi chỉ thiếu 1 công tơ.
+ *
  * Vì sao phải lọc (sửa 22/09/2026): bản đầu đếm MỌI công tơ từng gắn, nên lộ
  * 477E11.9 hiện "10/31 công tơ có số liệu" trong khi thực tế là 9/13 — 18 cái
  * còn lại (10 đã tháo, 7 chưa treo) vốn KHÔNG THỂ có dữ liệu mà vẫn nằm trong
@@ -82,7 +87,7 @@ export function lineMetersOf(d: CatalogData): Map<string, string[]> {
     if (a.type !== 'CONGTO' || !a.point) continue;
     if (!ymd(a.date_on) || ymd(a.date_off)) continue;
     const point = pointById.get(a.point);
-    if (!point || point.role !== 'chinh') continue;
+    if (!point || point.role !== 'chinh' || point.status !== 'active') continue;
     const station = point.station ? stationById.get(point.station) : undefined;
     if (!station?.line) continue;
     const list = out.get(station.line);

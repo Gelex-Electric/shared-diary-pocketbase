@@ -34,7 +34,12 @@ const DIR_30 = process.env.HES_30MIN_DIR || 'public/hes_30min';
 const OUT = process.env.PMAX_LINE_OUT || 'public/pmax_line_daily.csv';
 const PB_URL = (process.env.PB_URL || 'https://getc.up.railway.app/pb').replace(/\/$/, '');
 
-const FIELDS = ['LINE_CODE', 'DATE', 'PMAX_KW', 'AT', 'COVERED', 'TOTAL', 'SRC'];
+const FIELDS = [
+  'LINE_CODE', 'DATE', 'PMAX_KW', 'AT', 'COVERED', 'TOTAL', 'SRC',
+  /* Ai kéo đỉnh lên — trả lời "đỉnh này của khách nào" ngay tại chỗ, khỏi phải
+     mở lại dữ liệu 30 phút để tra (mà 30 ngày sau thì cũng không còn để tra). */
+  'TOP_MKH', 'TOP_NAME', 'TOP_STATION', 'TOP_KW', 'TOP_SHARE',
+];
 /** Mốc 30 phút, tính theo giờ. Dùng để đổi hiệu chỉ số ra công suất. */
 const HOURS_PER_SLOT = 0.5;
 
@@ -69,9 +74,9 @@ async function catalog(token) {
     if (!r.ok) { console.error(`Không đọc được ${c}: HTTP ${r.status}`); process.exit(1); }
     return (await r.json()).items;
   };
-  const [lines, stations, points, assets] = await Promise.all(
-    ['dm_line', 'dm_station', 'dm_point', 'dm_asset'].map(get));
-  return { lines, stations, points, assets };
+  const [lines, stations, points, assets, customers] = await Promise.all(
+    ['dm_line', 'dm_station', 'dm_point', 'dm_asset', 'dm_customer'].map(get));
+  return { lines, stations, points, assets, customers };
 }
 
 /**
@@ -81,6 +86,12 @@ async function catalog(token) {
  * "ĐANG TREO" = có ngày treo và CHƯA có ngày tháo — cùng định nghĩa với
  * `liveMeters` trong `lib/pb_meters.mjs`, chặt hơn cờ `active`.
  *
+ * VÀ điểm đo phải ĐANG VẬN HÀNH (`status === 'active'`) (user chốt 22/09/2026).
+ * Đo trước khi làm: 15 công tơ đang treo ở điểm đo "chưa vận hành" đều KHÔNG có
+ * dữ liệu — loại chúng mất đúng 0 kW, chỉ làm mẫu số trung thực hơn. Điểm đo
+ * chưa vận hành nằm trong mẫu số thì độ phủ trông thấp hơn thực tế và người đọc
+ * mất tin vào cả những lộ đang đủ số liệu.
+ *
  * Vì sao phải lọc (sửa 22/09/2026): bản đầu đếm MỌI công tơ từng gắn ở điểm đo
  * chính, nên mẫu số gồm cả công tơ đã tháo và công tơ dự kiến chưa ra hiện
  * trường. Lộ 477E11.9 hiện "10/31 công tơ có số liệu" trong khi thực tế là
@@ -88,20 +99,28 @@ async function catalog(token) {
  * 10 đã tháo, 7 chưa treo, và chúng vẫn nằm trong mẫu số. Một con số như vậy
  * làm người đọc mất tin vào cả những lộ đang đúng.
  */
-function metersByLine({ stations, points, assets }) {
+function metersByLine({ stations, points, assets, customers }) {
   const stById = new Map(stations.map(s => [s.id, s]));
   const pById = new Map(points.map(p => [p.id, p]));
+  const cById = new Map(customers.map(c => [c.id, c]));
   const ymd = (v) => String(v ?? '').slice(0, 10);
   const out = new Map();
   for (const a of assets) {
     if (a.type !== 'CONGTO' || !a.point) continue;
     if (!ymd(a.date_on) || ymd(a.date_off)) continue;
     const p = pById.get(a.point);
-    if (!p || p.role !== 'chinh') continue;
+    if (!p || p.role !== 'chinh' || p.status !== 'active') continue;
     const st = p.station ? stById.get(p.station) : undefined;
     if (!st?.line) continue;
+    const cus = p.customer ? cById.get(p.customer) : undefined;
     if (!out.has(st.line)) out.set(st.line, []);
-    out.get(st.line).push(a.serial);
+    out.get(st.line).push({
+      serial: a.serial,
+      station: st.code ?? '',
+      mkh: cus?.mkh ?? '',
+      /* Tên TẮT: tên đầy đủ có dấu phẩy sẽ phá cấu trúc CSV. */
+      name: cus?.short_name ?? '',
+    });
   }
   return out;
 }
@@ -114,11 +133,14 @@ function metersByLine({ stations, points, assets }) {
  * "mốc 10:00" nằm rải ở 10:00/10:01/10:02; cộng theo mốc thô thì tổng bị HỤT
  * (đo ngày 21/09: lộ 479E28.24 hụt 135 kW = 7,6%).
  */
-function peakOfLine(serials, rowsByMeter) {
+function peakOfLine(meters, rowsByMeter) {
   const bySlot = new Map();
+  /* Đóng góp của từng công tơ tại từng mốc — cần để biết ai kéo đỉnh lên. */
+  const perMeterSlot = new Map();
   let covered = 0;
 
-  for (const serial of serials) {
+  for (const m of meters) {
+    const serial = m.serial;
     const rows = rowsByMeter.get(serial);
     if (!rows || rows.length < 2) continue;
     covered++;
@@ -136,13 +158,40 @@ function peakOfLine(serials, rowsByMeter) {
       const cur = perSlot.get(slot);
       if (cur === undefined || kw > cur) perSlot.set(slot, kw);
     }
-    for (const [slot, kw] of perSlot) bySlot.set(slot, (bySlot.get(slot) ?? 0) + kw);
+    for (const [slot, kw] of perSlot) {
+      bySlot.set(slot, (bySlot.get(slot) ?? 0) + kw);
+      if (!perMeterSlot.has(slot)) perMeterSlot.set(slot, new Map());
+      perMeterSlot.get(slot).set(serial, kw);
+    }
   }
 
   let pmax = 0;
   let at = '';
   for (const [slot, kw] of bySlot) if (kw > pmax) { pmax = kw; at = slot; }
-  return { pmax, at, covered, total: serials.length };
+
+  /*
+    Ai kéo đỉnh lên — lấy TẠI ĐÚNG MỐC đạt đỉnh, không phải công tơ có đỉnh
+    riêng lớn nhất trong ngày: hai thứ đó có thể là hai khách khác nhau, mà câu
+    hỏi "đỉnh của lộ là do ai" chỉ có nghĩa tại chính thời điểm đỉnh.
+  */
+  let top = null;
+  const atPeak = perMeterSlot.get(at);
+  if (atPeak) {
+    let mx = -1;
+    for (const [serial, kw] of atPeak) if (kw > mx) { mx = kw; top = { serial, kw }; }
+  }
+  const info = top ? meters.find(m => m.serial === top.serial) : null;
+
+  return {
+    pmax, at, covered, total: meters.length,
+    topMkh: info?.mkh ?? '',
+    topName: info?.name ?? '',
+    topStation: info?.station ?? '',
+    topKw: top?.kw ?? 0,
+    /* Tỷ trọng của khách lớn nhất trong đỉnh — 70% thì đỉnh lộ thực chất là
+       đỉnh của một khách, khác hẳn 15% (nhiều khách cùng lên). */
+    topShare: pmax > 0 && top ? top.kw / pmax : 0,
+  };
 }
 
 /** `HH:mm` → mốc 30 phút gần nhất. */
@@ -192,18 +241,23 @@ for (const day of days) {
   }
 
   let n = 0;
-  for (const [lineId, serials] of byLine) {
-    const { pmax, at, covered, total } = peakOfLine(serials, rowsByMeter);
-    if (!covered) continue;
+  for (const [lineId, meters] of byLine) {
+    const r = peakOfLine(meters, rowsByMeter);
+    if (!r.covered) continue;
     added.push({
       LINE_CODE: lineCode.get(lineId) ?? lineId,
       DATE: day,
-      PMAX_KW: pmax.toFixed(1),
-      AT: at,
-      COVERED: covered,
-      TOTAL: total,
+      PMAX_KW: r.pmax.toFixed(1),
+      AT: r.at,
+      COVERED: r.covered,
+      TOTAL: r.total,
       /* Ghi rõ đại lượng: trung bình 30 phút, KHÁC tức thời của pmax_daily.csv. */
       SRC: '30min',
+      TOP_MKH: r.topMkh,
+      TOP_NAME: r.topName,
+      TOP_STATION: r.topStation,
+      TOP_KW: r.topKw.toFixed(1),
+      TOP_SHARE: (r.topShare * 100).toFixed(0),
     });
     n++;
   }

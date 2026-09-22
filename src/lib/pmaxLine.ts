@@ -27,6 +27,14 @@ export interface PmaxLineRow {
   /** Số công tơ ĐANG TREO có số liệu / tổng số công tơ đang treo của lộ. */
   covered: number;
   total: number;
+  /** Khách hàng đóng góp lớn nhất TẠI ĐÚNG MỐC đạt đỉnh. */
+  topMkh: string;
+  topName: string;
+  topStation: string;
+  topKw: number;
+  /** Tỷ trọng của khách đó trong đỉnh, %. 70% nghĩa là đỉnh lộ thực chất là
+   *  đỉnh của một khách; 15% là nhiều khách cùng lên. */
+  topShare: number;
 }
 
 let _cache: PmaxLineRow[] | null = null;
@@ -38,7 +46,8 @@ function parse(text: string): PmaxLineRow[] {
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
-    const [code, date, pmax, at, covered, total] = line.split(',');
+    const [code, date, pmax, at, covered, total, , topMkh, topName, topStation, topKw, topShare]
+      = line.split(',');
     if (!code || !date) continue;
     const year = Number(date.slice(0, 4));
     const monthIdx = Number(date.slice(5, 7)) - 1;
@@ -49,6 +58,11 @@ function parse(text: string): PmaxLineRow[] {
       at: (at ?? '').trim(),
       covered: Number(covered) || 0,
       total: Number(total) || 0,
+      topMkh: (topMkh ?? '').trim(),
+      topName: (topName ?? '').trim(),
+      topStation: (topStation ?? '').trim(),
+      topKw: parseFloat(topKw) || 0,
+      topShare: Number(topShare) || 0,
     });
   }
   return out;
@@ -88,51 +102,6 @@ export function usePmaxLineDaily() {
   return { rows, loading, error };
 }
 
-/** Một lộ trong một tháng — đã gộp từ các ngày. */
-export interface MonthlyLinePeak {
-  line: string;
-  pmax: number;
-  /** Ngày đạt đỉnh trong tháng, `YYYY-MM-DD`. */
-  date: string;
-  at: string;
-  /** Độ phủ TẠI NGÀY đạt đỉnh — con số đó mới là thứ đẻ ra Pmax đang hiện. */
-  covered: number;
-  total: number;
-  /** Số ngày trong tháng có số liệu, để biết tháng này đầy hay khuyết. */
-  days: number;
-}
-
-/**
- * Pmax tháng của từng lộ = ngày có đỉnh CAO NHẤT trong tháng.
- *
- * Lấy max các đỉnh NGÀY chứ không cộng: mỗi đỉnh ngày đã là đỉnh trùng thời
- * điểm của cả lộ rồi, đỉnh tháng chỉ là ngày nặng nhất trong số đó.
- *
- * `covered/total` lấy theo ĐÚNG NGÀY đạt đỉnh chứ không phải trung bình tháng:
- * người đọc cần biết con số đang hiện dựa trên mấy công tơ, mà đó là độ phủ của
- * chính ngày đó.
- */
-export function monthlyPeaks(rows: PmaxLineRow[], year: number, monthIdx: number): MonthlyLinePeak[] {
-  const byLine = new Map<string, MonthlyLinePeak>();
-  for (const r of rows) {
-    if (r.year !== year || r.monthIdx !== monthIdx) continue;
-    const cur = byLine.get(r.line);
-    if (!cur) {
-      byLine.set(r.line, {
-        line: r.line, pmax: r.pmax, date: r.date, at: r.at,
-        covered: r.covered, total: r.total, days: 1,
-      });
-      continue;
-    }
-    cur.days++;
-    if (r.pmax > cur.pmax) {
-      cur.pmax = r.pmax; cur.date = r.date; cur.at = r.at;
-      cur.covered = r.covered; cur.total = r.total;
-    }
-  }
-  return [...byLine.values()].sort((a, b) => b.pmax - a.pmax);
-}
-
 /* ===================== Ước lượng cho tháng CHƯA có số liệu 30 phút ===================== */
 
 /** Một tháng trên biểu đồ của MỘT lộ. */
@@ -151,6 +120,12 @@ export interface LineMonthPoint {
   at: string;
   covered: number;
   total: number;
+  /** Khách kéo đỉnh lên — chỉ có ở tháng ĐO ĐƯỢC. */
+  topMkh: string;
+  topName: string;
+  topStation: string;
+  topKw: number;
+  topShare: number;
 }
 
 /**
@@ -184,17 +159,4 @@ export function estimateMonthly(
   let date = '';
   for (const [d, v] of byDay) if (v > pmax) { pmax = v; date = d; }
   return { pmax, date };
-}
-
-/** Các tháng có số liệu, mới nhất trước — để đổ vào bộ chọn tháng. */
-export function monthsOf(rows: PmaxLineRow[]): { year: number; monthIdx: number }[] {
-  const seen = new Set<string>();
-  const out: { year: number; monthIdx: number }[] = [];
-  for (const r of rows) {
-    const k = `${r.year}-${r.monthIdx}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push({ year: r.year, monthIdx: r.monthIdx });
-  }
-  return out.sort((a, b) => b.year - a.year || b.monthIdx - a.monthIdx);
 }

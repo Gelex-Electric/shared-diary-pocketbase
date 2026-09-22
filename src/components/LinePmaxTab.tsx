@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, Bar, Cell,
 } from 'recharts';
-import { Cable, TrendingUp, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Cable, TrendingUp, Users, HelpCircle } from 'lucide-react';
 import { usePmaxLineDaily, estimateMonthly } from '../lib/pmaxLine';
 import type { LineMonthPoint } from '../lib/pmaxLine';
 import { usePmaxDaily } from '../lib/pmax';
@@ -60,6 +60,12 @@ function MonthTooltip({ active, payload }: any) {
           <span className="vl-lbl">Đạt ngày</span>
           <span className="vl-val">{fmtDateVN(r.date)}{r.at ? ` ${r.at}` : ''}</span>
         </div>
+        {r.src === 'do' && r.topName && (
+          <div className="vl-chart-tooltip-row">
+            <span className="vl-lbl">Khách kéo đỉnh</span>
+            <span className="vl-val">{r.topName} · {fmtKw(r.topKw)} kW ({r.topShare}%)</span>
+          </div>
+        )}
         {r.src === 'do' && (
           <div className="vl-chart-tooltip-row">
             <span className="vl-lbl">Công tơ có số liệu</span>
@@ -139,6 +145,8 @@ export default function LinePmaxTab() {
           best = {
             month: m, label: `${p2(mm)}/${y}`, pmax: r.pmax, src: 'do',
             date: r.date, at: r.at, covered: r.covered, total: r.total,
+            topMkh: r.topMkh, topName: r.topName, topStation: r.topStation,
+            topKw: r.topKw, topShare: r.topShare,
           };
         }
       }
@@ -149,6 +157,9 @@ export default function LinePmaxTab() {
         out.push({
           month: m, label: `${p2(mm)}/${y}`, pmax: e.pmax, src: 'uoc',
           date: e.date, at: '', covered: 0, total: serials.size,
+          /* Tháng ước lượng KHÔNG biết ai kéo đỉnh: `pmax_daily.csv` chỉ có đỉnh
+             riêng từng công tơ, không có mốc giờ để biết ai trùng với ai. */
+          topMkh: '', topName: '', topStation: '', topKw: 0, topShare: 0,
         });
       }
     }
@@ -203,14 +214,18 @@ export default function LinePmaxTab() {
               sub={lastMeasured
                 ? `${lastMeasured.label} · ${fmtDateVN(lastMeasured.date)} lúc ${lastMeasured.at}`
                 : 'chưa có tháng nào đo được'} />
+            {/* Đỉnh của lộ là do AI — câu hỏi đầu tiên người vận hành hỏi khi
+                thấy một con số Pmax cao. */}
             <StatTile
-              label="Công tơ có số liệu"
-              value={lastMeasured ? `${lastMeasured.covered}/${lastMeasured.total}` : '—'}
-              icon={AlertTriangle}
+              label="Khách kéo đỉnh"
+              value={lastMeasured?.topName || '—'}
+              icon={Users}
               tone={lowCover ? 'warn' : 'neutral'}
-              sub={lowCover
-                ? 'chưa đại diện cả lộ — còn trạm chưa báo số'
-                : 'ở tháng gần nhất có số đo'}
+              sub={lastMeasured?.topName
+                ? `${fmtKw(lastMeasured.topKw)} kW · ${lastMeasured.topShare}% đỉnh lộ`
+                  + ` · ${lastMeasured.covered}/${lastMeasured.total} công tơ`
+                + (lowCover ? ' ⚠ chưa đại diện cả lộ' : '')
+                : 'chưa có tháng nào đo được'}
             />
           </div>
 
@@ -263,7 +278,8 @@ export default function LinePmaxTab() {
                     <th className="px-4 py-2.5 text-right font-bold">Pmax (kW)</th>
                     <th className="px-4 py-2.5 text-left font-bold">Nguồn</th>
                     <th className="px-4 py-2.5 text-left font-bold">Đạt lúc</th>
-                    <th className="px-4 py-2.5 text-left font-bold">Công tơ có số liệu</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Khách kéo đỉnh</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Công tơ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -284,6 +300,17 @@ export default function LinePmaxTab() {
                         </td>
                         <td className="px-4 py-2.5 font-mono text-soft">
                           {fmtDateVN(r.date)}{r.at ? ` ${r.at}` : ''}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {r.topName ? (
+                            <>
+                              <span className="font-semibold text-ink">{r.topName}</span>
+                              <span className="ml-1.5 text-[11px] text-faint">
+                                {fmtKw(r.topKw)} kW · {r.topShare}%
+                              </span>
+                              <div className="text-[11px] text-faint">{r.topStation}</div>
+                            </>
+                          ) : <span className="text-faint italic">—</span>}
                         </td>
                         <td className="px-4 py-2.5">
                           {r.src === 'do' ? (
