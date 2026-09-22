@@ -21,6 +21,7 @@ import {
   TrendingUp,
   TrendingDown,
   ZapOff,
+  Cable,
 } from 'lucide-react';
 import { pb, ID_TO_AREA, AREAS } from '../lib/pocketbase';
 import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
@@ -28,6 +29,7 @@ import { DatePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
 import { Tabs, TabItem } from './ui/Tabs';
 import CustomerPmaxTab from './CustomerPmaxTab';
+import LinePmaxTab from './LinePmaxTab';
 
 /* ================================================================
    CACHE CSV (module-level) — datametter.csv chỉ tải 1 lần/phiên.
@@ -213,7 +215,7 @@ interface VoltagePowerDashboardProps {
   onZoneFilterChange?: (zone: string) => void;
 }
 
-type PageTab = 'chart' | 'pmax';
+type PageTab = 'chart' | 'pmax' | 'linePmax';
 
 export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }: VoltagePowerDashboardProps = {}) {
   /* ---- Tab đang xem ---- */
@@ -487,6 +489,9 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
   const TABS: TabItem<PageTab>[] = [
     { id: 'chart', label: 'Đồ thị theo ngày', icon: Activity },
     { id: 'pmax', label: 'Pmax khách hàng', icon: Gauge, sub: 'Pmax theo tháng từ pmax_daily.csv' },
+    /* Ghi rõ "trung bình 30 phút" ngay trên tab: con số này KHÁC đơn vị với tab
+       bên cạnh (~18%), không nói ra thì chắc chắn bị đem so thẳng. */
+    { id: 'linePmax', label: 'Pmax theo lộ', icon: Cable, sub: 'Đỉnh cả lộ · trung bình 30 phút' },
   ];
   // Danh sách khách hàng đã lọc theo KCN của tài khoản → dùng chung cho tab Pmax.
   const pmaxCustomers = useMemo(() => Array.from(customerInfoMap.values()), [customerInfoMap]);
@@ -718,6 +723,9 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
 
       {/* ---- Tab Pmax khách hàng (theo tháng) ---- */}
       {tab === 'pmax' && <CustomerPmaxTab customers={pmaxCustomers} />}
+
+      {/* ---- Tab Pmax theo lộ đường dây (theo tháng) ---- */}
+      {tab === 'linePmax' && <LinePmaxTab />}
 
       {/* ---- Trạng thái tải / rỗng (lỗi hiển thị bằng toast) ---- */}
       {tab === 'chart' && !isReady && !csvError && (
