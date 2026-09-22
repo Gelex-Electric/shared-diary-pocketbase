@@ -52,15 +52,80 @@ FETCH_SLEEP = float(os.environ.get("FETCH_SLEEP", "0"))
 USER_ACCOUNT = os.environ.get("API_USER", "")
 PASSWORD = os.environ.get("API_PASS", "")
 
-# Danh sach cong to + HSN doc tu file metterinfo.csv (sinh boi fetch_meter_info.py).
-# Cot METER_NAME duoc dung lam HSN (he so nhan).
+# Danh sach cong to doc tu metterinfo.csv (sinh boi fetch_meter_info.py).
 METTERINFO_PATH = os.environ.get("METTERINFO_PATH", "public/metterinfo.csv")
+
+# HSN LAY TU DANH MUC (dm_point.hsn), KHONG lay tu METER_NAME cua HES
+# (user chot 22/09/2026).
+#
+# Vi sao: METER_NAME cua HES la ban khai ben do, con nguon dung la HSN suy tu bo
+# TI/TU dang treo tai diem do trong Danh muc. Day chinh la cho sai da lam phan
+# ton that phai dung ngay 16/09/2026. Doi chieu 106 cong to ngay 22/09 thi co 1
+# cai lech: 2510203134 (HES 320, Danh muc 200) — moi so cong suat cua no trong
+# datametter.csv va pmax_daily.csv deu VONG 60% ke tu 01/01.
+#
+# Cong to KHONG co trong Danh muc thi van dung HSN cua HES: khong co nguon nao
+# tot hon, va bo han chung di thi mat du lieu. So luong se duoc in ra de biet.
+PB_URL = os.environ.get("PB_URL", "https://getc.up.railway.app/pb").rstrip("/")
+PB_EMAIL = os.environ.get("PB_EMAIL", "") or os.environ.get("PB_ADMIN_EMAIL", "")
+PB_PASS = os.environ.get("PB_PASS", "") or os.environ.get("PB_ADMIN_PASSWORD", "")
 
 VN_TZ = timezone(timedelta(hours=7))
 
 
+def hsn_from_catalog() -> dict:
+    """{so_cong_to: HSN} tu Danh muc: dm_asset (CONGTO, dang treo) -> dm_point.hsn.
+
+    "Dang treo" = co ngay treo va CHUA co ngay thao — chat hon co `active`.
+    Tra dict rong neu thieu tai khoan PB hoac goi that bai; khi do goi ben tren
+    tu lui ve HSN cua HES va IN RA canh bao, chu khong im lang dung so sai.
+    """
+    if not (PB_URL and PB_EMAIL and PB_PASS):
+        print("[WARN] Thieu PB_EMAIL/PB_PASS -> HSN van lay tu METER_NAME cua HES.")
+        return {}
+    try:
+        auth = requests.post(
+            f"{PB_URL}/api/collections/_superusers/auth-with-password",
+            json={"identity": PB_EMAIL, "password": PB_PASS}, timeout=30)
+        if not auth.ok:
+            auth = requests.post(
+                f"{PB_URL}/api/collections/users/auth-with-password",
+                json={"identity": PB_EMAIL, "password": PB_PASS}, timeout=30)
+        auth.raise_for_status()
+        head = {"Authorization": auth.json().get("token", "")}
+
+        def rows(coll):
+            out, page = [], 1
+            while True:
+                r = requests.get(f"{PB_URL}/api/collections/{coll}/records",
+                                 params={"perPage": 500, "page": page},
+                                 headers=head, timeout=60)
+                r.raise_for_status()
+                j = r.json()
+                out.extend(j.get("items", []))
+                if page >= (j.get("totalPages") or 1):
+                    return out
+                page += 1
+
+        points = {p["id"]: p for p in rows("dm_point")}
+        out = {}
+        for a in rows("dm_asset"):
+            if a.get("type") != "CONGTO" or not a.get("point"):
+                continue
+            if not (a.get("date_on") or "")[:10] or (a.get("date_off") or "")[:10]:
+                continue
+            p = points.get(a["point"])
+            if not p or p.get("hsn") is None:
+                continue
+            out[str(a.get("serial") or "").strip()] = float(p["hsn"])
+        return out
+    except Exception as e:  # noqa: BLE001
+        print(f"[WARN] Khong doc duoc HSN tu Danh muc ({e}) -> lui ve HSN cua HES.")
+        return {}
+
+
 def load_meter_list():
-    """Doc {METER_NO: HSN} tu metterinfo.csv. HSN lay tu cot METER_NAME.
+    """Doc {METER_NO: HSN}. Danh sach cong to tu metterinfo.csv, HSN tu Danh muc.
     ROLE_FILTER (neu co) chi lay cong to dung ROLE do."""
     if not os.path.isfile(METTERINFO_PATH):
         sys.exit(f"Khong tim thay {METTERINFO_PATH}. Hay chay fetch_meter_info.py truoc.")
@@ -77,6 +142,20 @@ def load_meter_list():
             except (TypeError, ValueError):
                 hsn = 1.0
             meters[no] = hsn
+
+    catalog = hsn_from_catalog()
+    if catalog:
+        changed = [no for no, h in meters.items()
+                   if no in catalog and catalog[no] != h]
+        missing = [no for no in meters if no not in catalog]
+        for no in changed:
+            print(f"[HSN] {no}: HES {meters[no]:g} -> Danh muc {catalog[no]:g}")
+        for no in catalog:
+            if no in meters:
+                meters[no] = catalog[no]
+        print(f"HSN: {len(meters) - len(missing)} cong to lay tu Danh muc "
+              f"({len(changed)} lech so voi HES), {len(missing)} cong to khong co "
+              f"trong Danh muc nen giu HSN cua HES.")
     return meters
 
 
