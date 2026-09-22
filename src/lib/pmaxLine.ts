@@ -135,28 +135,35 @@ export interface LineMonthPoint {
  * trong tháng. Cộng theo ngày chặt hơn cộng đỉnh-tháng-của-từng-công-tơ, vì ít
  * nhất các đỉnh được cộng phải rơi vào cùng một ngày.
  *
- * VẪN LÀ ƯỚC LƯỢNG, không phải số đo: đỉnh của các trạm trong ngày rơi vào giờ
- * khác nhau nên tổng này cao hơn đỉnh thật — đo trên tháng 9/2026 (tháng có cả
- * hai) thì cao hơn 10–33% ở 8/9 lộ.
+ * VẪN LÀ ƯỚC LƯỢNG, không phải số đo, và lệch theo HAI HƯỚNG NGƯỢC NHAU:
  *
- * KHÔNG gọi nó là "cận trên": một lộ ra THẤP hơn số đo 2%, vì hai nguồn không
- * phủ cùng một tập công tơ. Nhãn đúng là "ước lượng", và màn hình phải ghi rõ
- * tháng nào là đo, tháng nào là ước lượng.
+ *   CAO HƠN vì đỉnh các trạm rơi vào giờ khác nhau mà vẫn bị cộng lại — đo trên
+ *   tháng 9/2026 (tháng có cả hai nguồn) thì cao hơn số đo 10–34%, cả 9/9 lộ.
+ *
+ *   THẤP HƠN ở THÁNG CŨ vì tập công tơ là tập CỦA HÔM NAY: 41/79 công tơ mới
+ *   treo trong năm 2026, nên tháng 1 chỉ có 7/14 công tơ của lộ 472E28.6 từng
+ *   phát số liệu. Đường đi lên trên biểu đồ vì thế MỘT PHẦN chỉ là thêm trạm
+ *   được đấu vào, không phải tải tăng.
+ *
+ * Vì thế hàm này trả kèm `covered` — số công tơ thực sự có số liệu trong tháng.
+ * Không hiện con số đó thì người đọc sẽ tưởng mọi cột cùng một phạm vi.
  */
 export function estimateMonthly(
   pmaxRows: { meter: string; date: string; year: number; monthIdx: number; pmax: number }[],
   serials: Set<string>,
   year: number,
   monthIdx: number,
-): { pmax: number; date: string } {
+): { pmax: number; date: string; covered: number } {
   const byDay = new Map<string, number>();
+  const seen = new Set<string>();
   for (const r of pmaxRows) {
     if (r.year !== year || r.monthIdx !== monthIdx) continue;
     if (!serials.has(r.meter)) continue;
+    seen.add(r.meter);
     byDay.set(r.date, (byDay.get(r.date) ?? 0) + r.pmax);
   }
   let pmax = 0;
   let date = '';
   for (const [d, v] of byDay) if (v > pmax) { pmax = v; date = d; }
-  return { pmax, date };
+  return { pmax, date, covered: seen.size };
 }

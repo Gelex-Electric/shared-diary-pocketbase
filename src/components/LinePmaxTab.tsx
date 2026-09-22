@@ -43,7 +43,7 @@ const COLOR_UOC = '#a78bfa';
 function MonthTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const r: LineMonthPoint = payload[0].payload;
-  const low = r.src === 'do' && r.total > 0 && r.covered / r.total < LOW_COVER;
+  const low = r.total > 0 && r.covered / r.total < LOW_COVER;
   return (
     <div className="vl-chart-tooltip">
       <div className="vl-chart-tooltip-title">Tháng {r.label}</div>
@@ -66,12 +66,10 @@ function MonthTooltip({ active, payload }: any) {
             <span className="vl-val">{r.topName} · {fmtKw(r.topKw)} kW ({r.topShare}%)</span>
           </div>
         )}
-        {r.src === 'do' && (
-          <div className="vl-chart-tooltip-row">
-            <span className="vl-lbl">Công tơ có số liệu</span>
-            <span className="vl-val">{r.covered}/{r.total}{low ? ' ⚠' : ''}</span>
-          </div>
-        )}
+        <div className="vl-chart-tooltip-row">
+          <span className="vl-lbl">Công tơ có số liệu</span>
+          <span className="vl-val">{r.covered}/{r.total}{low ? ' ⚠' : ''}</span>
+        </div>
       </div>
     </div>
   );
@@ -156,7 +154,9 @@ export default function LinePmaxTab() {
       if (e.pmax > 0) {
         out.push({
           month: m, label: `${p2(mm)}/${y}`, pmax: e.pmax, src: 'uoc',
-          date: e.date, at: '', covered: 0, total: serials.size,
+          /* Độ phủ của THÁNG ĐÓ, không phải hôm nay: tháng cũ thường ít công tơ
+             hơn hẳn vì nhiều trạm chưa đấu vào. */
+          date: e.date, at: '', covered: e.covered, total: serials.size,
           /* Tháng ước lượng KHÔNG biết ai kéo đỉnh: `pmax_daily.csv` chỉ có đỉnh
              riêng từng công tơ, không có mốc giờ để biết ai trùng với ai. */
           topMkh: '', topName: '', topStation: '', topKw: 0, topShare: 0,
@@ -241,7 +241,7 @@ export default function LinePmaxTab() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_UOC }} />
-                  Ước lượng — thường cao hơn 10–33%
+                  Ước lượng — cao hơn số đo 10–34%
                 </span>
               </div>
             </div>
@@ -260,10 +260,13 @@ export default function LinePmaxTab() {
               </BarChart>
             </ResponsiveContainer>
             {measured.length > 0 && measured.length < series.length && (
-              <p className="mt-2 text-[11px] text-faint">
+              <p className="mt-2 text-[11px] leading-relaxed text-faint">
                 Số đo bắt đầu có từ tháng {measured[0].label}; các tháng trước đó là ước lượng
-                cộng đỉnh từng công tơ nên cao hơn đỉnh thật. Mỗi đêm pipeline lại thêm một
-                ngày số đo, nên phần tím sẽ lùi dần.
+                cộng đỉnh từng công tơ nên cao hơn đỉnh thật 10–34%. Mỗi đêm pipeline lại thêm
+                một ngày số đo, nên phần tím sẽ lùi dần.
+                {' '}<b>Đọc kèm cột "công tơ có số liệu"</b>: hơn nửa số công tơ mới được treo
+                trong năm 2026, nên tháng càng cũ càng ít trạm — đường đi lên một phần là do
+                thêm trạm đấu vào chứ không hẳn do tải tăng.
               </p>
             )}
           </div>
@@ -284,7 +287,7 @@ export default function LinePmaxTab() {
                 </thead>
                 <tbody>
                   {[...series].reverse().map(r => {
-                    const low = r.src === 'do' && r.total > 0 && r.covered / r.total < LOW_COVER;
+                    const low = r.total > 0 && r.covered / r.total < LOW_COVER;
                     return (
                       <tr key={r.month} className="border-t border-[var(--border)]">
                         <td className="px-4 py-2.5 font-mono font-bold text-ink">{r.label}</td>
@@ -313,13 +316,12 @@ export default function LinePmaxTab() {
                           ) : <span className="text-faint italic">—</span>}
                         </td>
                         <td className="px-4 py-2.5">
-                          {r.src === 'do' ? (
-                            <span className={low ? 'font-bold text-[var(--warning)]' : 'text-soft'}>
-                              {r.covered}/{r.total}{low && ' — chưa đại diện cả lộ'}
-                            </span>
-                          ) : (
-                            <span className="text-faint italic">không áp dụng</span>
-                          )}
+                          <span className={low ? 'font-bold text-[var(--warning)]' : 'text-soft'}>
+                            {r.covered}/{r.total}
+                            {low && (r.src === 'uoc'
+                              ? ' — tháng này nhiều trạm chưa đấu vào'
+                              : ' — chưa đại diện cả lộ')}
+                          </span>
                         </td>
                       </tr>
                     );
