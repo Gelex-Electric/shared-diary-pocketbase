@@ -2,12 +2,18 @@
  * Màn "Quản lý chung" — cây ĐƠN VỊ theo DỮ LIỆU THẬT trong PocketBase:
  *
  *   KCN (dm_zone)
- *    └── Trạm (dm_station)
- *         └── Điểm đo (dm_point)  — kèm khách hàng, chính/phụ, đấu nối, HSN
+ *    └── Lộ đường dây (dm_line)
+ *         └── Trạm (dm_station)
+ *              └── Điểm đo (dm_point)  — kèm khách hàng, chính/phụ, đấu nối, HSN
  *
  * Không mô tả schema — mỗi nút là một BẢN GHI thật. Bản ghi mất cha (trạm không
  * còn KCN, điểm đo không còn trạm) gom vào nhánh "Chưa gắn" ở cuối để không bị
  * khuất — quan hệ đặt `cascadeDelete=false` nên tình huống này có thể xảy ra.
+ *
+ * "CHƯA GẮN LỘ" KHÁC "CHƯA GẮN CHA" (thêm 22/09/2026). Trạm chưa khai lộ là
+ * chuyện BÌNH THƯỜNG — 133 trạm hiện đều vậy — nên nhánh đó nằm TRONG KCN, mang
+ * màu KCN, không có biểu tượng cảnh báo. Còn "Chưa gắn cha" là hỏng dữ liệu
+ * thật (trạm trỏ tới KCN đã xoá) nên vẫn nằm riêng ở cuối với dấu cảnh báo.
  *
  * BỐ CỤC: hai card cạnh nhau — cây chiếm 1/3 bên TRÁI, chi tiết chiếm 2/3 bên
  * PHẢI. Bấm một nút bên cây thì card chi tiết đổi nội dung theo (`TreeDetail`).
@@ -27,11 +33,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Building2, Factory, Gauge, ChevronRight, RefreshCw, Search,
-  FoldVertical, UnfoldVertical, AlertTriangle, CornerDownRight,
+  FoldVertical, UnfoldVertical, AlertTriangle, CornerDownRight, Cable,
 } from 'lucide-react';
 import { isAbortError, loadCatalog, pbErrorMessage } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
-import type { Point, Station, Zone } from '../../lib/dm/types';
+import type { Line, Point, Station, Zone } from '../../lib/dm/types';
 import { kcnColorOf } from '../../lib/kcnColors';
 import { PointBadgeIcon, StatusIcon } from './pointIcons';
 import { TreeDetail } from './TreeDetail';
@@ -133,38 +139,69 @@ export default function DataTree() {
     return [p.line_id, p.line_name, c?.mkh, c?.name].some(x => x?.toLowerCase().includes(q));
   };
   const matchStation = (s: Station) => !q || s.code.toLowerCase().includes(q);
+  const matchLine = (l: Line) =>
+    !q || l.code.toLowerCase().includes(q) || (l.name ?? '').toLowerCase().includes(q);
   const matchZone = (z: Zone) =>
     !q || z.code.toLowerCase().includes(q) || z.name.toLowerCase().includes(q);
+
+  /*
+    Cây 4 cấp. Trạm gom theo LỘ, phần còn lại rơi vào `loose` — nhánh "Chưa gắn
+    lộ" của chính KCN đó.
+
+    `loose` xét theo LỘ CÓ THẬT chứ không chỉ theo ô trống: trạm trỏ tới một lộ
+    đã bị xoá cũng phải hiện ra, không thì nó biến mất khỏi cây mà không ai biết.
+  */
+  const withPoints = (s: Station) => ({
+    station: s,
+    points: data ? data.points.filter(p => p.station === s.id) : [],
+  });
 
   const tree = useMemo(() => {
     if (!data) return [];
     return data.zones.map(z => {
-      const sts = data.stations
-        .filter(s => s.zone === z.id)
-        .map(s => ({
-          station: s,
-          points: data.points.filter(p => p.station === s.id),
-        }));
-      return { zone: z, stations: sts };
+      const zoneStations = data.stations.filter(s => s.zone === z.id);
+      const zoneLines = data.lines.filter(l => l.zone === z.id);
+      const lineIds = new Set(zoneLines.map(l => l.id));
+      return {
+        zone: z,
+        lines: zoneLines.map(l => ({
+          line: l,
+          stations: zoneStations.filter(s => s.line === l.id).map(withPoints),
+        })),
+        loose: zoneStations.filter(s => !s.line || !lineIds.has(s.line)).map(withPoints),
+      };
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   /** Nhánh giữ lại khi lọc: khớp chính nó, hoặc có con khớp. */
-  const visibleTree = useMemo(() => tree
-    .map(({ zone, stations }) => {
-      const zoneHit = matchZone(zone);
-      const sts = stations
-        .map(({ station, points }) => {
-          const stationHit = matchStation(station);
-          const pts = points.filter(p => zoneHit || stationHit || matchPoint(p));
-          return { station, points: pts, keep: zoneHit || stationHit || pts.length > 0 };
-        })
-        .filter(s => s.keep);
-      return { zone, stations: sts, keep: zoneHit || sts.length > 0 };
-    })
-    .filter(z => z.keep),
+  const visibleTree = useMemo(() => {
+    const filterStations = (
+      list: { station: Station; points: Point[] }[], inherited: boolean,
+    ) => list
+      .map(({ station, points }) => {
+        const hit = inherited || matchStation(station);
+        const pts = points.filter(p => hit || matchPoint(p));
+        return { station, points: pts, keep: hit || pts.length > 0 };
+      })
+      .filter(s => s.keep);
+
+    return tree
+      .map(({ zone, lines, loose }) => {
+        const zoneHit = matchZone(zone);
+        const ls = lines
+          .map(({ line, stations }) => {
+            const lineHit = zoneHit || matchLine(line);
+            const sts = filterStations(stations, lineHit);
+            return { line, stations: sts, keep: lineHit || sts.length > 0 };
+          })
+          .filter(l => l.keep);
+        const lo = filterStations(loose, zoneHit);
+        return { zone, lines: ls, loose: lo, keep: zoneHit || ls.length > 0 || lo.length > 0 };
+      })
+      .filter(z => z.keep);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [tree, q, data]);
+  }, [tree, q, data]);
 
   /* ------------------------ bản ghi mất cha ------------------------ */
   const orphanStations = useMemo(
@@ -195,6 +232,48 @@ export default function DataTree() {
     );
   };
 
+  /*
+    Khối TRẠM + ĐIỂM ĐO. Tách riêng vì dùng ở HAI chỗ giống hệt nhau: dưới một
+    lộ, và dưới nhánh "Chưa gắn lộ". Chép đôi thì sửa một chỗ quên chỗ kia.
+  */
+  const StationBlock = ({ list, hex }: {
+    list: { station: Station; points: Point[] }[]; hex: string;
+  }) => (<>
+    {list.map(({ station, points }) => {
+      const sOpen = openIds.has(station.id);
+      return (
+        <div key={station.id}>
+          {/* --- Cấp 3: Trạm --- */}
+          <button onClick={() => { toggle(station.id); pick('station', station.id); }}
+            className={`flex w-full items-center gap-2.5 rounded-lg border-l-2 px-2 py-2 text-left transition-colors ${
+              isSel('station', station.id) ? 'border-accent bg-accent-soft' : 'border-transparent hover:bg-subtle'
+            }`}>
+            <Caret open={sOpen} hidden={points.length === 0} />
+            <Factory className="h-4 w-4 shrink-0" style={{ color: hex }} />
+            <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-bold text-dim">
+              {station.code}
+            </span>
+            {station.sdm_kva != null && (
+              <span className="shrink-0 text-[11px] font-semibold text-faint">
+                {station.sdm_kva} kVA
+              </span>
+            )}
+            <Count n={points.length} label="điểm đo" hex={hex} />
+          </button>
+
+          {/* --- Cấp 4: Điểm đo --- */}
+          {sOpen && points.length > 0 && (
+            <div className="ml-[9px] border-l-2 pl-4" style={{ borderColor: `${hex}40` }}>
+              {orderPoints(points).map(({ point, isChild }) => (
+                <PointRow key={point.id} p={point} isChild={isChild} hex={hex} />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </>);
+
   return (
     <div className="space-y-4">
       {/* Thanh công cụ */}
@@ -204,12 +283,16 @@ export default function DataTree() {
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Tìm KCN, trạm, điểm đo, khách hàng…"
+            placeholder="Tìm KCN, lộ, trạm, điểm đo, khách hàng…"
             className="w-full rounded-lg border border-[var(--border)] bg-surface py-2.5 pl-10 pr-3 text-sm outline-none transition-all focus:border-accent focus:ring-2 focus:ring-accent placeholder:text-faint"
           />
         </div>
+        {/* Mở hết phải gồm cả cấp LỘ và các nhánh "Chưa gắn lộ", không thì bấm
+            xong vẫn còn hai cấp đóng. */}
         <button onClick={() => setOpenIds(new Set([
           ...(data?.zones ?? []).map(z => z.id),
+          ...(data?.zones ?? []).map(z => `loose-${z.id}`),
+          ...(data?.lines ?? []).map(l => l.id),
           ...(data?.stations ?? []).map(s => s.id),
         ]))} className="vl-btn vl-btn-secondary vl-btn-sm">
           <UnfoldVertical className="h-3.5 w-3.5" /> <span>Mở hết</span>
@@ -229,6 +312,7 @@ export default function DataTree() {
       {data && !isEmpty && (
         <div className="flex flex-wrap gap-2 text-[12px] text-soft">
           <span><b className="text-ink">{data.zones.length}</b> KCN</span>·
+          <span><b className="text-ink">{data.lines.length}</b> lộ</span>·
           <span><b className="text-ink">{data.stations.length}</b> trạm</span>·
           <span><b className="text-ink">{totalPoints}</b> điểm đo</span>·
           <span><b className="text-ink">{data.customers.length}</b> khách hàng</span>
@@ -260,10 +344,11 @@ export default function DataTree() {
             </p>
           )}
 
-          {visibleTree.map(({ zone, stations }) => {
+          {visibleTree.map(({ zone, lines, loose }) => {
             const color = kcnColorOf(zone.name);
             const zOpen = openIds.has(zone.id);
-            const zPoints = stations.reduce((n, s) => n + s.points.length, 0);
+            const allStations = [...lines.flatMap(l => l.stations), ...loose];
+            const zPoints = allStations.reduce((n, s) => n + s.points.length, 0);
 
             return (
               <div key={zone.id}>
@@ -277,49 +362,72 @@ export default function DataTree() {
                   <Building2 className="h-4 w-4 shrink-0" style={{ color: color.hex }} />
                   <span className="font-mono text-[11px] font-bold text-faint">{zone.code}</span>
                   <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-ink">{zone.name}</span>
-                  <Count n={stations.length} label="trạm" hex={color.hex} />
+                  <Count n={allStations.length} label="trạm" hex={color.hex} />
                   <Count n={zPoints} label="điểm đo" hex={color.hex} />
                 </button>
 
                 {zOpen && (
                   <div className="ml-[13px] border-l-2 pl-4"
                     style={{ borderColor: `${color.hex}59` }}>
-                    {stations.length === 0 ? (
+                    {lines.length === 0 && loose.length === 0 ? (
                       <p className="px-3 py-2 text-[12px] italic text-faint">Chưa có trạm nào trong KCN này.</p>
-                    ) : stations.map(({ station, points }) => {
-                      const sOpen = openIds.has(station.id);
-                      return (
-                        <div key={station.id}>
-                          {/* --- Cấp 2: Trạm --- */}
-                          <button onClick={() => { toggle(station.id); pick('station', station.id); }}
-                            className={`flex w-full items-center gap-2.5 rounded-lg border-l-2 px-2 py-2 text-left transition-colors ${
-                              isSel('station', station.id) ? 'border-accent bg-accent-soft' : 'border-transparent hover:bg-subtle'
-                            }`}>
-                            <Caret open={sOpen} hidden={points.length === 0} />
-                            <Factory className="h-4 w-4 shrink-0" style={{ color: color.hex }} />
-                            <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-bold text-dim">
-                              {station.code}
-                            </span>
-                            {station.sdm_kva != null && (
-                              <span className="shrink-0 text-[11px] font-semibold text-faint">
-                                {station.sdm_kva} kVA
+                    ) : (<>
+                      {/* --- Cấp 2: Lộ đường dây --- */}
+                      {lines.map(({ line, stations }) => {
+                        const lOpen = openIds.has(line.id);
+                        const lPoints = stations.reduce((n, x) => n + x.points.length, 0);
+                        return (
+                          <div key={line.id}>
+                            <button onClick={() => { toggle(line.id); pick('line', line.id); }}
+                              className={`flex w-full items-center gap-2.5 rounded-lg border-l-2 px-2 py-2 text-left transition-colors ${
+                                isSel('line', line.id) ? 'border-accent bg-accent-soft' : 'border-transparent hover:bg-subtle'
+                              }`}>
+                              <Caret open={lOpen} hidden={stations.length === 0} />
+                              <Cable className="h-4 w-4 shrink-0" style={{ color: color.hex }} />
+                              <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-bold text-dim"
+                                title={line.name || line.code}>
+                                {line.code}
                               </span>
+                              {/* Lộ đã cắt/bỏ vẫn hiện, chỉ ghi rõ — trạm dưới nó không tự biến mất. */}
+                              {line.active === false && (
+                                <span className="shrink-0 text-[10px] font-bold uppercase text-faint">ngưng</span>
+                              )}
+                              <Count n={stations.length} label="trạm" hex={color.hex} />
+                              <Count n={lPoints} label="điểm đo" hex={color.hex} />
+                            </button>
+                            {lOpen && stations.length > 0 && (
+                              <div className="ml-[9px] border-l-2 pl-4" style={{ borderColor: `${color.hex}4d` }}>
+                                <StationBlock list={stations} hex={color.hex} />
+                              </div>
                             )}
-                            <Count n={points.length} label="điểm đo" hex={color.hex} />
-                          </button>
+                          </div>
+                        );
+                      })}
 
-                          {/* --- Cấp 3: Điểm đo --- */}
-                          {sOpen && points.length > 0 && (
-                            <div className="ml-[9px] border-l-2 pl-4"
-                              style={{ borderColor: `${color.hex}40` }}>
-                              {orderPoints(points).map(({ point, isChild }) => (
-                                <PointRow key={point.id} p={point} isChild={isChild} hex={color.hex} />
-                              ))}
+                      {/*
+                        Trạm CHƯA GẮN LỘ — trạng thái bình thường, không phải lỗi.
+                        Nằm trong KCN, mang màu KCN, không có dấu cảnh báo.
+                      */}
+                      {loose.length > 0 && (
+                        <div>
+                          <button onClick={() => toggle(`loose-${zone.id}`)}
+                            className="flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2 py-2 text-left transition-colors hover:bg-subtle">
+                            <Caret open={openIds.has(`loose-${zone.id}`)} />
+                            <Cable className="h-4 w-4 shrink-0 text-faint" />
+                            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold italic text-faint">
+                              Chưa gắn lộ
+                            </span>
+                            <Count n={loose.length} label="trạm" hex={color.hex} />
+                          </button>
+                          {openIds.has(`loose-${zone.id}`) && (
+                            <div className="ml-[9px] border-l-2 border-dashed pl-4"
+                              style={{ borderColor: `${color.hex}4d` }}>
+                              <StationBlock list={loose} hex={color.hex} />
                             </div>
                           )}
                         </div>
-                      );
-                    })}
+                      )}
+                    </>)}
                   </div>
                 )}
               </div>

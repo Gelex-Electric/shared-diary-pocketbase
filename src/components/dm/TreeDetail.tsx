@@ -3,6 +3,7 @@
  * bên sơ đồ cây (user chốt 25/08/2026).
  *
  *   KCN     → tổng số trạm, tổng số điểm đo, phân bố trạng thái điểm đo
+ *   Lộ      → số trạm, số điểm đo, tổng Sdm, danh sách trạm trên lộ
  *   Trạm    → số điểm đo chính/phụ, tình trạng vận hành hiện tại
  *   Điểm đo → vật tư đang gắn + vòng đời từng công tơ theo hóa đơn
  *
@@ -11,10 +12,10 @@
  * tơ của điểm đo đang chọn (`invoicesOfSerial`), không kéo cả kho hóa đơn về.
  */
 import { useEffect, useState } from 'react';
-import { Building2, Factory, Gauge, MousePointerClick, X } from 'lucide-react';
+import { Building2, Cable, Factory, Gauge, MousePointerClick, X } from 'lucide-react';
 import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
-import type { Asset, Point, PointStatus, Station, Zone } from '../../lib/dm/types';
+import type { Asset, Line, Point, PointStatus, Station, Zone } from '../../lib/dm/types';
 import { invoicesOfSerial } from '../../lib/dm/invoiceRepo';
 import { dmyRange, segmentOf, segmentsOf, ymd } from '../../lib/dm/lifecycle';
 import type { Segment } from '../../lib/dm/lifecycle';
@@ -23,7 +24,7 @@ import { InfoTag, PointBadgeChip, StatusTag } from './pointIcons';
 import { SegmentBar, Warn } from './lifecycleUi';
 
 /** Phần tử đang được chọn bên cây. */
-export type Sel = { kind: 'zone' | 'station' | 'point'; id: string } | null;
+export type Sel = { kind: 'zone' | 'line' | 'station' | 'point'; id: string } | null;
 
 /** Thứ tự hiện 4 trạng thái — từ "đang chạy" xuống "đã bỏ". */
 const STATUS_ORDER: Exclude<PointStatus, ''>[] = ['active', 'chua_van_hanh', 'du_kien', 'thao_go'];
@@ -122,6 +123,72 @@ function ZoneDetail({ zone, d }: { zone: Zone; d: CatalogData }) {
           <div>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-faint">
               Trạm trong KCN
+            </p>
+            <div className="max-h-72 overflow-y-auto rounded-xl border border-[var(--border)]">
+              {stations.map(s => {
+                const n = d.points.filter(p => p.station === s.id).length;
+                return (
+                  <div key={s.id} className="flex items-center gap-3 border-b border-[var(--border)] px-3 py-2 text-[13px] last:border-0">
+                    <Factory className="h-3.5 w-3.5 shrink-0" style={{ color: color.hex }} />
+                    <span className="min-w-0 flex-1 truncate font-mono font-bold text-dim">{s.code}</span>
+                    <span className="shrink-0 text-[11px] text-faint">{s.sdm_kva ?? '—'} kVA</span>
+                    <span className="shrink-0 text-[11px] font-semibold text-soft">{n} điểm đo</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+    </div>
+  );
+}
+
+/**
+ * Chi tiết một LỘ ĐƯỜNG DÂY.
+ *
+ * Màu lấy theo KCN CHA chứ không đặt màu riêng cho lộ: cả cây đã dùng màu để
+ * nói "đang đứng ở KCN nào", thêm một bảng màu thứ hai thì màu hết nghĩa.
+ */
+function LineDetail({ line, d }: { line: Line; d: CatalogData }) {
+  const zone = d.zones.find(z => z.id === line.zone);
+  const stations = d.stations.filter(s => s.line === line.id);
+  const ids = new Set(stations.map(s => s.id));
+  const points = d.points.filter(p => ids.has(p.station));
+  const sdm = stations.reduce((n, s) => n + (s.sdm_kva ?? 0), 0);
+  const color = kcnColorOf(zone?.name ?? '');
+
+  return (
+    <div className="space-y-5">
+      <Head icon={Cable} hex={color.hex} title={line.name || line.code}
+        sub={`${line.code}${zone ? ` · ${zone.name}` : ' · chưa rõ KCN'}`
+          + `${line.voltage_level ? ` · ${line.voltage_level}` : ''}`
+          + `${line.active === false ? ' · đã ngưng' : ''}`} />
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat n={stations.length} label="Trạm" />
+        <Stat n={points.length} label="Điểm đo" />
+        <Stat n={sdm ? sdm.toLocaleString('vi-VN') : '—'} label="Tổng Sdm" hint="kVA" />
+        <Stat n={points.filter(p => p.status === 'active').length} label="Đang vận hành" />
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-faint">Tình trạng điểm đo</p>
+        <StatusBreakdown points={points} />
+      </div>
+
+      {line.note && <p className="text-[13px] text-soft">{line.note}</p>}
+
+      {stations.length === 0
+        ? (
+          <p className="text-[13px] italic text-faint">
+            Chưa có trạm nào trên lộ này. Vào <b>Danh mục → Trạm</b> chọn lộ cho trạm,
+            hoặc dùng nút gắn hàng loạt ở đó.
+          </p>
+        )
+        : (
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-faint">
+              Trạm trên lộ
             </p>
             <div className="max-h-72 overflow-y-auto rounded-xl border border-[var(--border)]">
               {stations.map(s => {
@@ -370,6 +437,7 @@ export function TreeDetail({ sel, d, onClose }: {
   onClose?: () => void;
 }) {
   const zone = sel?.kind === 'zone' ? d?.zones.find(z => z.id === sel.id) : undefined;
+  const line = sel?.kind === 'line' ? d?.lines.find(l => l.id === sel.id) : undefined;
   const station = sel?.kind === 'station' ? d?.stations.find(s => s.id === sel.id) : undefined;
   const point = sel?.kind === 'point' ? d?.points.find(p => p.id === sel.id) : undefined;
 
@@ -387,10 +455,11 @@ export function TreeDetail({ sel, d, onClose }: {
           <MousePointerClick className="h-9 w-9 text-faint" />
           <p className="mt-3 text-[14px] font-bold text-dim">Chưa chọn phần tử nào</p>
           <p className="mt-1 text-[12px] text-faint">
-            Bấm một khu công nghiệp, trạm hoặc điểm đo ở sơ đồ cây để xem chi tiết.
+            Bấm một khu công nghiệp, lộ đường dây, trạm hoặc điểm đo ở sơ đồ cây để xem chi tiết.
           </p>
         </div>
       ) : zone ? <ZoneDetail zone={zone} d={d!} />
+        : line ? <LineDetail line={line} d={d!} />
         : station ? <StationDetail station={station} d={d!} />
           : point ? <PointDetail point={point} d={d!} />
             : (

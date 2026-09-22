@@ -9,7 +9,7 @@
  * KHÔNG áp cách này cho dữ liệu đo đếm — bulk data phải query theo filter.
  */
 import { pb } from '../pocketbase';
-import type { Asset, Customer, Device, Point, Station, Zone } from './types';
+import type { Asset, Customer, Device, Line, Point, Station, Zone } from './types';
 import { toLowName } from './lowName';
 
 /**
@@ -31,6 +31,17 @@ export const zones = {
   create: (data: Partial<Zone>) => pb.collection('dm_zone').create(data),
   update: (id: string, data: Partial<Zone>) => pb.collection('dm_zone').update(id, data),
   remove: (id: string) => pb.collection('dm_zone').delete(id),
+};
+
+/**
+ * Lộ đường dây. Sắp theo `code` như mọi danh mục khác — mã lộ là thứ người dùng
+ * đọc và tìm, không phải tên.
+ */
+export const lines = {
+  list: () => all<Line>('dm_line', 'code'),
+  create: (data: Partial<Line>) => pb.collection('dm_line').create(data),
+  update: (id: string, data: Partial<Line>) => pb.collection('dm_line').update(id, data),
+  remove: (id: string) => pb.collection('dm_line').delete(id),
 };
 
 export const stations = {
@@ -86,6 +97,7 @@ export const devices = {
 
 export interface CatalogData {
   zones: Zone[];
+  lines: Line[];
   stations: Station[];
   customers: Customer[];
   points: Point[];
@@ -93,12 +105,13 @@ export interface CatalogData {
   devices: Device[];
 }
 
-/** Nạp cả 6 bảng song song — dùng cho cả sơ đồ cây lẫn màn nhập liệu. */
+/** Nạp cả 7 bảng song song — dùng cho cả sơ đồ cây lẫn màn nhập liệu. */
 export async function loadCatalog(): Promise<CatalogData> {
-  const [z, s, c, p, a, d] = await Promise.all([
-    zones.list(), stations.list(), customers.list(), points.list(), assets.list(), devices.list(),
+  const [z, l, s, c, p, a, d] = await Promise.all([
+    zones.list(), lines.list(), stations.list(), customers.list(),
+    points.list(), assets.list(), devices.list(),
   ]);
-  return { zones: z, stations: s, customers: c, points: p, assets: a, devices: d };
+  return { zones: z, lines: l, stations: s, customers: c, points: p, assets: a, devices: d };
 }
 
 /**
