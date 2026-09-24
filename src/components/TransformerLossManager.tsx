@@ -12,8 +12,9 @@ import { Tabs, TabItem } from './ui/Tabs';
 import { Select } from './ui/Select';
 import { DatePicker } from './ui/DateTimePickers';
 import { fetchLoss30min, fetchLossDaily, fetchLossMonthly, Loss30minRow, LossDailyRow, LossMonthlyRow } from '../lib/transformerLoss';
-import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
-import { fetchMbaInfo, buildMbaLookup, MbaParams } from '../lib/mbaInfo';
+import { stations as dmStations } from '../lib/dm/repo';
+import type { Station as DmStation } from '../lib/dm/types';
+import { resolveLossParams } from '@/scripts/lib/lossParams.mjs';
 import { pb } from '../lib/pocketbase';
 import { zoneFromArea, zoneCodeOf, ZONE_MAP } from '../lib/invoices';
 
@@ -162,8 +163,7 @@ export default function TransformerLossManager() {
   const [rows, setRows] = useState<Loss30minRow[]>([]);
   const [daily, setDaily] = useState<LossDailyRow[]>([]);
   const [monthly, setMonthly] = useState<LossMonthlyRow[]>([]);
-  const [meters, setMeters] = useState<MeterInfoRow[]>([]);
-  const [mba, setMba] = useState<MbaParams[]>([]);
+  const [dmSt, setDmSt] = useState<DmStation[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('table');
   const [selDate, setSelDate] = useState('');
@@ -175,10 +175,13 @@ export default function TransformerLossManager() {
     setLoading(true);
     Promise.all([
       fetchLoss30min(), fetchLossDaily(), fetchLossMonthly(),
-      fetchMeterInfo().catch(() => [] as MeterInfoRow[]),
-      fetchMbaInfo().catch(() => [] as MbaParams[]),
+      /* Danh sách trạm lấy từ PocketBase — ĐÚNG nguồn mà `scripts/loss_daily.mjs`
+         dùng để sinh số. Trước đây lấy từ metterinfo.csv + mba_info.csv (mã HES);
+         sau khi lõi đổi nguồn sang Danh mục thì hai bên nói hai thứ tiếng và
+         28/68 trạm không khớp được mã ⇒ giao diện báo "không có dữ liệu" dù có. */
+      dmStations.list().catch(() => [] as DmStation[]),
     ])
-      .then(([r, dy, mo, mi, mb]) => { if (ok) { setRows(r); setDaily(dy); setMonthly(mo); setMeters(mi); setMba(mb); } })
+      .then(([r, dy, mo, st]) => { if (ok) { setRows(r); setDaily(dy); setMonthly(mo); setDmSt(st); } })
       .catch(e => { console.error(e); notify.error('Lỗi dữ liệu', e?.message || 'Không tải được tổn thất MBA.'); })
       .finally(() => { if (ok) setLoading(false); });
     return () => { ok = false; };
@@ -188,30 +191,34 @@ export default function TransformerLossManager() {
   const userZone = useMemo(() => zoneFromArea((pb.authStore.model as any)?.area), []);
 
   /**
-   * Meta từng trạm CHÍNH có đủ P0 & PK (nền để hiển thị cả trạm không hoạt động).
-   * - Gom theo KCN suy từ TIỀN TỐ CODE (chuẩn), không dùng ADDRESS (có thể sai, vd "Emic").
-   * - Chỉ giữ trạm thuộc KCN của tài khoản đang đăng nhập (bỏ qua khi là kinh doanh/admin).
-   * - Trạm không đủ P0/PK => bỏ qua (không tính, không hiển thị).
+   * Meta từng trạm, lấy từ Danh mục PocketBase — CÙNG NGUỒN với lõi tính.
+   *
+   * Vì sao không còn dùng `metterinfo.csv` + `mba_info.csv`: mã trạm bên HES là
+   * chuỗi tự do (`03.TMD.3000KVA`, `03.LOGOS…`, `…400KVA`), còn `dm_station.code`
+   * do `buildStationCode` sinh (`03.TMD.T1.3000kVA`, `03.LOGOI…`). Giữ hai nguồn
+   * là giữ hai từ vựng cho cùng một khoá — đúng 28/68 trạm mất dữ liệu trên màn
+   * hình ngày 24/09/2026 vì chuyện này.
+   *
+   * - KCN suy từ TIỀN TỐ code (chuẩn), lọc theo KCN của tài khoản đăng nhập.
+   * - Dùng CHUNG `resolveLossParams` với script: trạm trung thế hoặc chưa đủ
+   *   P0/Pk thì không hiện, đúng như nó không có dòng trong file số liệu.
    */
   const metaByCode = useMemo(() => {
-    const lookup = buildMbaLookup(mba);
     const map = new Map<string, StationMeta>();
-    for (const m of meters) {
-      if ((m.ROLE || '').trim() !== 'chinh') continue;
-      const code = (m.CODE || '').trim();
+    for (const s of dmSt) {
+      const code = (s.code || '').trim();
       if (!code || map.has(code)) continue;
       const zc = zoneCodeOf(code);
-      if (userZone && zc !== userZone) continue;   // chỉ KCN của tài khoản
-      const p = lookup(code);
-      if (!p || !p.hasParams) continue;            // không đủ Po/Pk => không tính
-      map.set(code, {
-        kcn: ZONE_MAP[zc] || (m.ADDRESS || '').trim() || 'Khác',
-        name: (m.LINE_NAME || '').trim() || code,
-        sdm: p.sdm,
-      });
+      if (userZone && zc !== userZone) continue;
+      /* Không đủ thông số (hoặc là điểm đo trung thế) => không tính, không hiện. */
+      if (!resolveLossParams(s, dmSt).ok) continue;
+      /* Nhãn = MÃ TRẠM, không phải tên khách: một khách có nhiều trạm (T1, T2…)
+         nên lấy tên khách thì các dòng trùng nhãn, không phân biệt được.
+         Bản cũ hiển thị LINE_NAME của HES, vốn gần như trùng mã trạm. */
+      map.set(code, { kcn: ZONE_MAP[zc] || 'Khác', name: code, sdm: Number(s.sdm_kva) || 0 });
     }
     return map;
-  }, [meters, mba, userZone]);
+  }, [dmSt, userZone]);
 
   const dates = useMemo(() => [...new Set(daily.map(r => r.date))].sort().reverse(), [daily]);
   useEffect(() => {
