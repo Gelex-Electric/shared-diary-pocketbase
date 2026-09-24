@@ -1,7 +1,7 @@
 import { useState, Fragment } from 'react';
 import { CheckCircle2, AlertTriangle, RefreshCw, Undo2, MapPin, ChevronDown } from 'lucide-react';
 import type { AlertRecord, AlertDetail } from '../../lib/alerts';
-import { setResolved, detailsOf, groupByZone, sumValue, isReactive, unitOf, reactiveCount } from '../../lib/alerts';
+import { setResolved, detailsOf, groupByZone, totalOf, isReactive, unitOf } from '../../lib/alerts';
 
 /**
  * Danh sách cảnh báo của MỘT nhóm.
@@ -50,8 +50,8 @@ const fmtDay = (d: string | undefined) => {
 
 function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay: string }) {
   const groups = groupByZone(rows);
-  const total = sumValue(rows);
-  const nReactive = reactiveCount(rows);
+  const total = totalOf(rows);
+  const nReactive = total.excluded;
   /* Số cột trước cột tổng — để dòng tổng nhập ô cho đúng. */
   const LEAD = 7;
 
@@ -98,6 +98,8 @@ function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay:
                       {r.customer || <span className="text-faint italic">chưa khai</span>}
                     </div>
                     {r.station && <div className="text-[11px] text-faint">{r.station}</div>}
+                    {/* Ghi chú (vd đỉnh phát ngược) hiện THÊM dưới trạm, không thay trạm. */}
+                    {r.note && <div className="text-[11px] text-soft">{r.note}</div>}
                   </td>
                   {/* Bản ghi cũ chưa có `day` từng dòng — lùi về ngày của cảnh báo. */}
                   <td className="px-2.5 py-1.5 font-mono text-soft whitespace-nowrap">
@@ -113,7 +115,7 @@ function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay:
                   {/* Vô công để mờ + ghi rõ kVArh: nó KHÔNG vào tổng, phải nhìn
                       ra ngay chứ không để người đọc tự cộng nhẩm rồi thấy lệch. */}
                   <td className={`px-2.5 py-1.5 text-right font-mono font-bold whitespace-nowrap
-                    ${isReactive(r) ? 'text-faint' : 'text-ink'}`}>
+                    ${isReactive(r) && nReactive > 0 ? 'text-faint' : 'text-ink'}`}>
                     {fmtValue(r.value)} <span className="font-sans font-normal text-[10px]">{unitOf(r)}</span>
                   </td>
                 </tr>
@@ -124,7 +126,7 @@ function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay:
                     Cộng {g.zone || 'chưa rõ KCN'}
                   </td>
                   <td className="px-2.5 py-1.5 text-right font-mono font-black text-ink whitespace-nowrap">
-                    {fmtValue(sumValue(g.rows))} <span className="font-sans font-normal text-[10px]">kWh</span>
+                    {fmtValue(totalOf(g.rows).value)} <span className="font-sans font-normal text-[10px]">{totalOf(g.rows).unit}</span>
                   </td>
                 </tr>
               )}
@@ -141,7 +143,7 @@ function RegressTable({ rows, fallbackDay }: { rows: AlertDetail[]; fallbackDay:
               )}
             </td>
             <td className="px-2.5 py-2 text-right font-mono font-black text-accent whitespace-nowrap">
-              {fmtValue(total)} <span className="font-sans font-normal text-[10px]">kWh</span>
+              {fmtValue(total.value)} <span className="font-sans font-normal text-[10px]">{total.unit}</span>
             </td>
           </tr>
         </tbody>
@@ -189,9 +191,8 @@ function DetailTable({ rows }: { rows: AlertDetail[] }) {
                     <div className="font-medium text-ink">
                       {r.customer || <span className="text-faint italic">chưa khai</span>}
                     </div>
-                    {(r.station || r.note) && (
-                      <div className="text-[11px] text-faint">{r.station || r.note}</div>
-                    )}
+                    {r.station && <div className="text-[11px] text-faint">{r.station}</div>}
+                    {r.note && <div className="text-[11px] text-soft">{r.note}</div>}
                   </td>
                   <td className="px-2.5 py-1.5 text-soft whitespace-nowrap">{r.zone || '—'}</td>
                 </tr>
@@ -316,8 +317,9 @@ export function AlertList({ items, loading, empty, onChanged }: {
               </div>
               {isOpen && rows.length > 0 && (
                 /* `lui` và `lamtron` cùng là ca lùi chỉ số nên dùng chung bảng —
-                   khác nhau ở mức độ nghiêm trọng, không ở dữ liệu. */
-                it.kind === 'lui' || it.kind === 'lamtron'
+                   khác nhau ở mức độ nghiêm trọng, không ở dữ liệu. `phatnguoc`
+                   cũng mang khung giờ + chỉ số đầu/cuối + kWh nên dùng bảng này. */
+                it.kind === 'lui' || it.kind === 'lamtron' || it.kind === 'phatnguoc' || it.kind === 'dubu'
                   ? <RegressTable rows={rows} fallbackDay={it.day} />
                   : <DetailTable rows={rows} />
               )}

@@ -60,6 +60,7 @@ import { pathToFileURL } from 'node:url';
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
 import { raiseAlert, zoneOf } from './lib/pb_alert.mjs';
+import { detectReverse, peakNote, buildReverseAlert } from './lib/exportCheck.mjs';
 
 /**
  * Chi tiết 30 phút — 115 công tơ × 48 mốc ≈ 5.520 dòng ≈ 385 KB MỘT NGÀY.
@@ -433,7 +434,9 @@ const results = await mapLimit(meters, CONCURRENCY, async (m) => {
     for (const [k, src] of Object.entries(FIELD_MAP)) row[k] = r[src] ?? '';
     return row;
   });
-  return { daily: buildRow(m.serial, m.hsn, day, s, e), detail, drops: scanRegress(recs) };
+  return { daily: buildRow(m.serial, m.hsn, day, s, e), detail, drops: scanRegress(recs),
+    /* Phát ngược soi trên CHÍNH mẻ này — không tốn thêm lời gọi API. */
+    reverse: detectReverse(recs, m.hsn) };
 });
 
 const rows = results.filter(r => r?.daily?.METER_NO).map(r => r.daily);
@@ -666,6 +669,31 @@ if (crossReal.length) {
   }
 } else if (crossDay.length) {
   console.log(`Nối ngày: ${crossDay.length} ca lùi nhưng đều ở mức làm tròn.`);
+}
+
+/* ---------------------------- Phát ngược ---------------------------- */
+/*
+  Hữu công CHIỀU NHẬN tăng = khách phát điện lên lưới (plan 24/09/2026), ngưỡng
+  > 0. Vô công chiều nhận ≥ 10% vô công giao = dư bù (ngưỡng > 0 bắt 96/124 công
+  tơ tháng 9 nên đo theo tỷ lệ). Mỗi loại gom 1 cảnh báo/ngày.
+
+  Mẻ chỉ tới 23:59:59 nên khoảng 23:30 → 00:00 không được soi — phát ngược ban
+  đêm không xảy ra với nguồn mặt trời, chấp nhận.
+*/
+for (const [kind, label] of [['phatnguoc', 'PHÁT NGƯỢC'], ['dubu', 'DƯ BÙ']]) {
+  const hits = results
+    .map((r, i) => ({ m: meters[i], r: r?.reverse?.[kind] }))
+    .filter(h => h.r);
+  if (!hits.length) { console.log(`${label}: không công tơ nào.`); continue; }
+  console.log(`\n[CẢNH BÁO] ${hits.length} công tơ ${label}:`);
+  for (const { m, r } of hits) {
+    console.log(`   ${m.serial.padEnd(12)} ${m.code}  ${r.value} ${r.unit}  `
+      + `${r.fromTime.slice(11, 16)}→${r.toTime.slice(11, 16)}  ${peakNote(r)}`);
+  }
+  if (process.argv.includes('--notify')) {
+    const ok = await raiseAlert(pbToken, buildReverseAlert(ymd(day), hits, shortNameOf, zoneOf, kind));
+    console.log(`Cảnh báo ${label.toLowerCase()}: ${ok ? 'đã ghi 1 bản' : 'bỏ qua (đã có bản cho ngày này)'}.`);
+  }
 }
 
 const noData = rows.filter(r => r.NO_DATA === '1');

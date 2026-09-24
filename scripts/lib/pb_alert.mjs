@@ -18,7 +18,48 @@
  * lỗi — đã gặp ngày 16/09/2026 khi `kind` chưa có cột. Thêm trường mới ở đây thì
  * phải thêm cột trong `alerts_schema.mjs` trước.
  */
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { PB_URL } from './pb_meters.mjs';
+
+/*
+  Cùng lý do với `pb_meters.mjs`: chạy TAY ở máy công ty thì `fetch` hỏng cert
+  (gặp 24/09/2026 khi ghi cảnh báo phát ngược). Thử fetch trước, hỏng thì curl.
+  Trả { ok, status, json }.
+*/
+let useCurl = false;
+async function request(method, url, headers, body) {
+  if (!useCurl) {
+    try {
+      const r = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      const text = await r.text();
+      return { ok: r.ok, status: r.status, json: text ? JSON.parse(text) : {}, text };
+    } catch (e) {
+      useCurl = true;
+      console.error(`[pb_alert] fetch hỏng (${e?.message ?? e}) → chuyển sang curl.`);
+    }
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'pba-'));
+  try {
+    const args = ['-s', '-m', '60', '-X', method, url, '-w', '\n%{http_code}',
+      ...Object.entries(headers).flatMap(([k, v]) => ['-H', `${k}: ${v}`])];
+    if (body !== undefined) {
+      const f = join(dir, 'body.json');
+      writeFileSync(f, JSON.stringify(body));
+      args.push('--data-binary', `@${f}`);
+    }
+    const out = execFileSync('curl', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const i = out.lastIndexOf('\n');
+    const status = Number(out.slice(i + 1));
+    const text = out.slice(0, i);
+    let json = {}; try { json = text ? JSON.parse(text) : {}; } catch { /* thân không phải JSON */ }
+    return { ok: status >= 200 && status < 300, status, json, text };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 /** Collection DUY NHẤT module này được phép ghi. */
 const COLLECTION = 'alerts';
@@ -32,9 +73,13 @@ const COLLECTION = 'alerts';
  * `lamtron` TÁCH khỏi `lui`: sai số làm tròn của HES sinh ~80 ca mỗi ngày, gộp
  * chung thì ca lùi thật lẫn vào giữa và không ai nhìn ra.
  *
+ * `phatnguoc` (24/09/2026): thanh ghi hữu công CHIỀU NHẬN tăng — khách phát ngược lên
+ * lưới. `dubu`: vô công chiều nhận ≥ 10% vô công giao cùng ngày (ngưỡng > 0 bắt
+ * 96/124 công tơ nên đo theo tỷ lệ).
+ *
  * KHÔNG còn `tram` (16/09/2026): chưa cần tới, nơi sinh đã ngừng ghi.
  */
-export const ALERT_KINDS = ['lui', 'lamtron', 'congto'];
+export const ALERT_KINDS = ['lui', 'lamtron', 'congto', 'phatnguoc', 'dubu'];
 
 /**
  * Tạo một cảnh báo nếu chưa có cái nào trùng `kind` + `day` + `message`.
@@ -68,21 +113,23 @@ export async function raiseAlert(token, { kind, title, message, zone = '', meter
 
   const dupUrl = `${api}?perPage=1&filter=` + encodeURIComponent(
     `kind=${JSON.stringify(kind)} && day=${JSON.stringify(d)} && message=${JSON.stringify(message)}`);
-  const dup = await fetch(dupUrl, { headers });
-  if (dup.ok && ((await dup.json()).totalItems ?? 0) > 0) return false;
+  const dup = await request('GET', dupUrl, headers);
+  /* Không kiểm được trùng thì KHÔNG ghi — ghi mù là nhân đôi cảnh báo mỗi lần chạy lại. */
+  if (!dup.ok) {
+    console.log(`[WARN] Không kiểm được trùng (${dup.status}) — bỏ qua, không ghi.`);
+    return false;
+  }
+  if ((dup.json.totalItems ?? 0) > 0) return false;
 
-  const r = await fetch(api, {
-    method: 'POST', headers,
-    body: JSON.stringify({
-      kind, title, message, zone,
-      meters: meters.join(', '),
-      details,
-      day: d,
-      resolved: false,
-    }),
+  const r = await request('POST', api, headers, {
+    kind, title, message, zone,
+    meters: meters.join(', '),
+    details,
+    day: d,
+    resolved: false,
   });
   if (!r.ok) {
-    console.log(`[WARN] Ghi cảnh báo thất bại (${r.status}): ${(await r.text()).slice(0, 200)}`);
+    console.log(`[WARN] Ghi cảnh báo thất bại (${r.status}): ${String(r.text).slice(0, 200)}`);
     return false;
   }
   return true;

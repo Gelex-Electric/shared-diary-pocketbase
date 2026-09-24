@@ -100,6 +100,22 @@ export const sumValue = (rows: AlertDetail[]): number =>
 export const reactiveCount = (rows: AlertDetail[]): number =>
   rows.filter(r => isReactive(r) && typeof r.value === 'number').length;
 
+/**
+ * Tổng để hiện ở dòng Cộng/TỔNG, kèm đúng đơn vị.
+ *
+ * Nhóm TOÀN vô công (cảnh báo dư bù) thì cộng theo kVArh — theo luật cũ sẽ ra
+ * "0 kWh", sai lệch. Nhóm lẫn hai loại giữ luật 16/09: chỉ cộng kWh, và
+ * `excluded` = số dòng vô công bị để ngoài.
+ */
+export function totalOf(rows: AlertDetail[]): { value: number; unit: string; excluded: number } {
+  const nReactive = reactiveCount(rows);
+  const nMeasured = rows.filter(r => typeof r.value === 'number').length;
+  if (nReactive > 0 && nReactive === nMeasured) {
+    return { value: rows.reduce((t, r) => t + (typeof r.value === 'number' ? r.value : 0), 0), unit: 'kVArh', excluded: 0 };
+  }
+  return { value: sumValue(rows), unit: 'kWh', excluded: nReactive };
+}
+
 export interface AlertRecord {
   id: string;
   /** NHÓM cảnh báo, quyết định sub-side. */
@@ -140,7 +156,7 @@ export const ALERT_KINDS = [
   /* Mã `lui` giữ nguyên trong dữ liệu — đổi mã là mọi bản ghi cũ rơi ra ngoài
      nhóm. Chỉ đổi NHÃN: "bất thường" rộng hơn "chạy lùi", để sau này thêm được
      các kiểu sai khác của chỉ số mà không phải đặt lại tên mục. */
-  { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số công tơ giảm giữa hai mốc' },
+  { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số công tơ giảm giữa hai mốc, hoặc chiều nhận tăng (phát ngược, vô công dư bù)' },
   { kind: 'congto', label: 'Đối chiếu công tơ', desc: 'Công tơ lệch giữa HES và Danh mục' },
 ] as const;
 
@@ -155,7 +171,9 @@ export type AlertKind = typeof ALERT_KINDS[number]['kind'];
  * làm nặng thanh điều hướng.
  */
 const KIND_ALIASES: Record<string, string[]> = {
-  lui: ['lui', 'lamtron'],
+  /* `phatnguoc`, `dubu` cũng là bất thường của chỉ số (chiều nhận tăng) — user
+     chốt 24/09/2026 gộp vào mục này thay vì mục riêng. Vẫn ĐẾM vào badge. */
+  lui: ['lui', 'lamtron', 'phatnguoc', 'dubu'],
 };
 const kindsOf = (kind: string): string[] => KIND_ALIASES[kind] ?? [kind];
 

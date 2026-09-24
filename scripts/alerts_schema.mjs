@@ -34,7 +34,7 @@ const NAME = 'alerts';
  * hiện tại (`dm_point.hsn`), không đối chiếu với HES nữa, nên lệch với HES không
  * còn là sự cố cần cảnh báo.
  */
-const ALERT_KINDS = ['lui', 'lamtron', 'congto'];
+const ALERT_KINDS = ['lui', 'lamtron', 'congto', 'phatnguoc', 'dubu'];
 /** Từng là cảnh báo, nay bỏ — cần biết để dọn bản ghi cũ. */
 const RETIRED_KINDS = ['hsn', 'tram'];
 
