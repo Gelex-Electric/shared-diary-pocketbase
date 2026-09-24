@@ -62,7 +62,15 @@ const FIELDS_30 = ['CODE', 'LINE_NAME', 'DATE_TIME', 'DUR_H', 'N_METERS', 'P_KW'
 const FIELDS_DAY = ['CODE', 'LINE_NAME', 'DATE', 'OUTPUT_KWH', 'LOSS_NOLOAD_KWH', 'LOSS_LOAD_KWH',
   'LOSS_KWH', 'LOSS_PCT', 'MAX_LOAD_PCT', 'AVG_LOAD_PCT', 'N_INTERVALS', 'OUTPUT_SRC', 'PARAM_SRC'];
 
-/** Ngày cần tính. Mặc định: HÔM QUA và HÔM KIA (xem điều 1 ở đầu file). */
+/**
+ * Ngày cần tính, theo thứ tự ưu tiên:
+ *   1. `--date` hoặc `--from`/`--to` (chạy tay);
+ *   2. biến môi trường `TARGET_DATE` — `daily-pipeline.yml` đặt nó ở cấp job từ
+ *      input `target_date`, và MỌI script khác trong pipeline đều đọc. Bỏ qua nó
+ *      thì chạy tay workflow để backfill ngày 10/09 sẽ cho các bước khác xử lý
+ *      10/09 còn bước tổn thất vẫn tính hôm qua — lệch âm thầm;
+ *   3. mặc định: HÔM QUA và HÔM KIA (xem điều 1 ở đầu file).
+ */
 function targetDays() {
   const one = arg('--date', '');
   if (one) return [one];
@@ -72,6 +80,9 @@ function targetDays() {
     for (let d = from; d <= to; d = addDays(d, 1)) out.push(d);
     return out;
   }
+  const env = (process.env.TARGET_DATE || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(env)) return [env];
+
   const vnToday = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
   return [addDays(vnToday, -2), addDays(vnToday, -1)];
 }
