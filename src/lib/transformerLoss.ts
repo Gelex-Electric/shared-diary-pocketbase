@@ -11,21 +11,24 @@
  */
 
 /**
- * TẠM DỪNG toàn bộ phần tổn thất (user chốt 16/09/2026).
+ * ĐÃ BẬT LẠI 24/09/2026 (tạm dừng từ 16/09 vì cả chuỗi lấy HSN từ `METER_NAME`
+ * của HES chứ không phải `dm_point.hsn`).
  *
- * Vì sao: cả chuỗi lấy HSN từ `METER_NAME` của HES chứ không phải `dm_point.hsn`
- * của Danh mục, nên HSN sai ⇒ sai cả P, Q (dùng tính ΔP = P0 + Pk×(S/Sdm)²) lẫn
- * OUTPUT (mẫu số của LOSS_PCT). Số hiện ra không tin được, thà không hiện.
+ * Điều kiện bật lại đã đủ:
+ *   · nguồn HSN chuyển sang Danh mục (22/09);
+ *   · lõi viết lại bằng `scripts/loss_daily.mjs` — P, Q, sản lượng suy từ HIỆU
+ *     CHỈ SỐ 30 phút, thông số trạm và vai trò điểm đo lấy từ PocketBase;
+ *   · tháng 9 đã tính lại trọn vẹn bằng lõi mới.
  *
- * Pipeline cũng đã gỡ bước 5 và 6 trong `daily-pipeline.yml` nên dữ liệu không
- * sinh thêm nữa. Ba file CSV cũ GIỮ NGUYÊN trong `public/` để còn đối chiếu
- * trước/sau khi tính lại.
+ * ⚠️ LỊCH SỬ ĐỨT MẠCH Ở 01/09 (user chốt 23/09): mã trạm của Danh mục khác mã cũ
+ * bên HES (`03.TMD.3000KVA` → `03.TMD.T1.3000kVA`, `03.LOGOS` → `03.LOGOI`…).
+ * Số từ 01/09 mang mã MỚI, số trước đó giữ mã CŨ — cùng một trạm vật lý có thể
+ * hiện thành hai dòng lịch sử. Đó là chủ ý, không phải lỗi dữ liệu.
+ * Chi tiết: `logs/2026-09-23-t6-tinh-lai-thang-9-bang-loi-moi.md`.
  *
- * Bật lại: đổi cờ này về `false` và bỏ chú thích 2 bước trong workflow — sau khi
- * chuyển nguồn HSN sang Danh mục và tính lại lịch sử (xem
- * `plans/2026-09-16-hes-chi-so-chieu-nhan.md`).
+ * Giữ lại hằng này (thay vì xoá) để lần sau cần tắt gấp thì đổi một dòng.
  */
-export const LOSS_DISABLED = true;
+export const LOSS_DISABLED = false;
 
 export interface LossDailyRow {
   code: string;
