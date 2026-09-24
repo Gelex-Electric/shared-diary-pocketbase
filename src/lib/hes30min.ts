@@ -1,6 +1,6 @@
 /**
  * Reader cho chỉ số công tơ tại từng mốc 30 phút, do `scripts/fetch_hes_index.mjs`
- * sinh mỗi đêm vào `public/hes_30min/` — MỖI NGÀY MỘT FILE, giữ 30 ngày gần nhất,
+ * sinh mỗi đêm vào `public/ChiSo_30min/` — MỖI NGÀY MỘT FILE, giữ 30 ngày gần nhất,
  * kèm `index.json` liệt kê các ngày đang có.
  *
  * Mỗi dòng = 1 công tơ × 1 mốc. Chỉ số lưu RAW, CHƯA nhân HSN — cột `HSN` đi
@@ -82,7 +82,7 @@ export function parseHes30(text: string): Hes30Data {
 }
 
 /** Thư mục chứa file 30 phút, mỗi ngày một file `YYYY-MM-DD.csv`. */
-const DIR = '/hes_30min';
+const DIR = '/ChiSo_30min';
 
 /** Danh mục ngày đang có, do pipeline ghi kèm. Nhỏ (~1 KB), tải một lần. */
 export interface Hes30Index { days: string[]; first: string; last: string }
@@ -93,7 +93,7 @@ const EMPTY_INDEX: Hes30Index = { days: [], first: '', last: '' };
   KHÔNG tin vào mã HTTP để biết file có tồn tại hay không.
 
   Máy chủ phục vụ SPA trả về `index.html` kèm mã 200 cho MỌI đường dẫn không
-  khớp file nào (đã đo trên dev server: `/hes_30min/2020-01-01.csv` → 200,
+  khớp file nào (đã đo trên dev server: `/ChiSo_30min/2020-01-01.csv` → 200,
   content-type text/html). Cứ `res.ok` là parse thì ta đem HTML đi đọc như CSV
   và ra một mớ dữ liệu rác trông như thật. Vì vậy phải KIỂM NỘI DUNG.
 */

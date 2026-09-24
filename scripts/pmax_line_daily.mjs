@@ -9,7 +9,7 @@
  * phút, thứ chỉ giữ 30 ngày. Nên tính ngay mỗi đêm và lưu lại VĨNH VIỄN, để sau
  * này tra tháng cũ vẫn có số đúng.
  *
- * NGUỒN: `public/hes_30min/<ngày>.csv` — chỉ số lũy kế 30 phút, RAW (chưa nhân
+ * NGUỒN: `public/ChiSo_30min/<ngày>.csv` — chỉ số lũy kế 30 phút, RAW (chưa nhân
  * HSN), kèm cột HSN.
  *
  *   P = (PG[i] − PG[i−1]) × HSN ÷ (thời gian THỰC giữa hai bản đọc)
@@ -40,7 +40,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { pbLogin } from './lib/pb_meters.mjs';
 
-const DIR_30 = process.env.HES_30MIN_DIR || 'public/hes_30min';
+const DIR_30 = process.env.CHISO_30MIN_DIR || process.env.HES_30MIN_DIR || 'public/ChiSo_30min';
 const OUT = process.env.PMAX_LINE_OUT || 'public/pmax_line_daily.csv';
 const PB_URL = (process.env.PB_URL || 'https://getc.up.railway.app/pb').replace(/\/$/, '');
 
@@ -253,6 +253,11 @@ function snap(hhmm) {
 const days = (() => {
   const one = arg('--date');
   if (one) return [one];
+  /* Chạy tay workflow với target_date: job đặt TARGET_DATE, bước 4 vừa ghi đúng
+     ngày đó — phải tính ĐÚNG ngày đó, không phải file mới nhất (có thể là ngày
+     khác). Thiếu dòng này thì backfill một ngày cũ lặng lẽ tính lại hôm qua. */
+  const env = (process.env.TARGET_DATE || '').trim();
+  if (env) return [env];
   const have = existsSync(DIR_30)
     ? readdirSync(DIR_30).filter(f => f.endsWith('.csv')).map(f => f.slice(0, -4)).sort()
     : [];

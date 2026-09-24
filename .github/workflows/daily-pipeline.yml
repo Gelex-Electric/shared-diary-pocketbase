@@ -55,7 +55,9 @@ jobs:
       # PB_ADMIN_EMAIL/PB_ADMIN_PASS (khong phai PB_EMAIL/PB_PASS), lech ten nay
       # tung lam buoc 4 do va lam buoc 1 khong gui duoc canh bao HSN suot thoi
       # gian dai ma khong ai biet.
-      # 1) Danh sach cong to + HSN + LINE_ID/CODE/ROLE + canh bao (tram, HSN)
+      # 1) Danh sach cong to + HSN + LINE_ID/CODE/ROLE tu HES -> metterinfo.csv
+      #    (nguon cua buoc 2). Khong con ghi line_info/mba_info, khong con canh bao
+      #    tram/HSN (bo 16/09 va 24/09/2026).
       - name: Refresh meter info (GetMeterAccount + GetLineList + GetMeter)
         env:
           PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
@@ -103,7 +105,7 @@ jobs:
       #    va viet lai loi bang Node (scripts/loss_daily.mjs).
       #
       #    Tam dung tu 16/09 vi ca chuoi lay HSN tu METER_NAME cua HES. Nay:
-      #      · P, Q va san luong tu hieu chi so 30' (public/hes_30min/), HSN tu
+      #      · P, Q va san luong tu hieu chi so 30' (public/ChiSo_30min/), HSN tu
       #        dm_point — cung nguon voi fetch_hes_index;
       #      · thong so tram, vai tro diem do tu dm_station / dm_point.
       #
@@ -129,10 +131,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # `git add -A` cho thu muc hes_30min: file qua 30 ngay bi XOA, phai
+          # `git add -A` cho thu muc ChiSo_30min: file qua 30 ngay bi XOA, phai
           # ghi nhan ca xoa chu khong chi them.
-          git add -A public/hes_30min
-          git add public/metterinfo.csv public/line_info.csv public/mba_info.csv public/datametter.csv public/pmax_daily.csv public/pmax_line_daily.csv
+          git add -A public/ChiSo_30min
+          git add public/metterinfo.csv public/datametter.csv public/pmax_daily.csv public/pmax_line_daily.csv
           # Ba file ton that: BO khoi day 16/09 luc tam dung, THEM LAI 24/09.
           # Quen dong nay thi buoc 5+6 van chay, van sinh file, roi bi vut di ma
           # khong ai biet — pipeline van xanh.

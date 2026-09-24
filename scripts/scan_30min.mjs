@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Soi CHỈ SỐ BẤT THƯỜNG trong toàn bộ `public/hes_30min/` — chỉ ĐỌC, không ghi
+ * Soi CHỈ SỐ BẤT THƯỜNG trong toàn bộ `public/ChiSo_30min/` — chỉ ĐỌC, không ghi
  * gì vào PocketBase và không sửa file.
  *
  * Khác `scanRegress` trong `fetch_hes_index.mjs`: hàm kia soi bản ghi THÔ từ API
@@ -31,7 +31,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const DIR = process.env.HES_30MIN_DIR || 'public/hes_30min';
+const DIR = process.env.CHISO_30MIN_DIR || process.env.HES_30MIN_DIR || 'public/ChiSo_30min';
 /** Lùi đúng một bước chữ số cuối = sai số làm tròn của HES. */
 const ROUNDING_STEP = Number(process.env.REGRESS_ROUNDING || 0.001);
 const FLOAT_SLOP = 1e-9;

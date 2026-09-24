@@ -2,7 +2,7 @@
 /**
  * Xuất danh sách CA LÙI CHỈ SỐ ra file Excel.
  *
- * Nguồn là collection `alerts` trên PocketBase, KHÔNG phải `public/hes_30min/`:
+ * Nguồn là collection `alerts` trên PocketBase, KHÔNG phải `public/ChiSo_30min/`:
  * file 30 phút chỉ lưu 5 biểu chiều ACTIVE, thiếu hẳn chiều NHẬN, nên soi từ đó
  * ra thiếu khoảng 20% số ca (59 so với 76 tại mốc 15/09 02:30, và mất trắng
  * khung 13/09). `alerts` được ghi từ API đủ 10 biểu.

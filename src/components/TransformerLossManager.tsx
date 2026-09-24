@@ -392,7 +392,7 @@ export default function TransformerLossManager() {
         <div className="vl-card"><EmptyState icon={Gauge} title="Đang tải dữ liệu tổn thất…" /></div>
       ) : !hasData ? (
         <div className="vl-card"><EmptyState icon={Zap} title="Chưa có dữ liệu tổn thất"
-          hint="Cần nhập thông số MBA vào public/mba_info.csv và chờ pipeline chạy (00:00 hằng ngày)." /></div>
+          hint="Cần khai P0/Pk của trạm ở Danh mục → Trạm (hoặc bật Tính tự động) và chờ pipeline chạy (00:00 hằng ngày)." /></div>
       ) : view === 'chart' ? (
         /* ---------- BIỂU ĐỒ ---------- */
         <>
@@ -583,7 +583,7 @@ export default function TransformerLossManager() {
           <div className="space-y-1.5">
             <p className="font-bold text-ink">Ký hiệu chung</p>
             <ul className="list-disc pl-5 space-y-0.5">
-              <li><strong>P0</strong> — tổn thất không tải (công suất, kW), tra từ mba_info.csv (đơn vị gốc W ÷ 1000).</li>
+              <li><strong>P0</strong> — tổn thất không tải (công suất, kW), lấy từ Danh mục → Trạm (đơn vị gốc W ÷ 1000).</li>
               <li><strong>Pk</strong> — tổn thất ngắn mạch / có tải định mức (kW).</li>
               <li><strong>Sdm</strong> — công suất đặt (định mức) của MBA (kVA); <strong>Idm</strong> — dòng định mức tương ứng.</li>
               <li><strong>S</strong> = √(P² + Q²) — công suất biểu kiến tức thời (kVA), với P, Q là công suất tác dụng/phản kháng đo được.</li>

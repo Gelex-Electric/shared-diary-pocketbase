@@ -6,7 +6,7 @@
  * NGUỒN (user chốt 23/09/2026):
  *   · Trạm, thông số nhãn, vai trò điểm đo, công tơ đang treo → **PocketBase Danh mục**
  *     (`dm_station` / `dm_point` / `dm_asset`), qua `lib/pb_meters.mjs`.
- *   · Công suất P, Q và sản lượng → **`public/hes_30min/`** qua `lib/hes30.mjs`
+ *   · Công suất P, Q và sản lượng → **`public/ChiSo_30min/`** qua `lib/hes30.mjs`
  *     (P = ΔPG × HSN ÷ Δt thực). KHÔNG dùng mẫu tức thời của `datametter.csv` nữa.
  *   · P0/Pk → `lib/lossParams.mjs` (hiểu 2 cờ `auto_loss_param` / `mv_metering`).
  *
@@ -193,7 +193,7 @@ function computeDay(day) {
         if (vs?.seen.has(slot) && !vs.live.has(slot)) mismatch++;
       }
     }
-    if (!haveIndex) { note('KHONG_CO_CHI_SO', `${label} — ${mine.length} công tơ, không có dòng nào trong hes_30min`); continue; }
+    if (!haveIndex) { note('KHONG_CO_CHI_SO', `${label} — ${mine.length} công tơ, không có dòng nào trong ChiSo_30min`); continue; }
     if (slotAgg.size === 0) { note('KHONG_CO_CHI_SO', `${label} — có công tơ nhưng không mốc nào tính được`); continue; }
 
     /* --- tích phân tổn thất trên các mốc CÓ ĐIỆN --- */
@@ -273,7 +273,7 @@ function merge(file, fields, keyOf, fresh, prune) {
 
 /* -------------------------------- chạy -------------------------------- */
 const days = targetDays();
-console.log(`\nTỔN THẤT MBA — nguồn: PocketBase + hes_30min`);
+console.log(`\nTỔN THẤT MBA — nguồn: PocketBase + ChiSo_30min`);
 console.log(`Ngày tính: ${days.join(', ')}`);
 console.log(`Danh mục: ${stations.length} trạm · ${pointById.size} điểm đo · ${meters.length} công tơ đang treo`);
 console.log(`Ghi vào : ${OUT_DIR}/\n`);
@@ -286,7 +286,7 @@ for (const day of days) {
   const bo = [...r.skipped.entries()].reduce((a, [, v]) => a + v.length, 0);
   console.log(`── ${day}: tính được ${r.rowsDay.length}/${stations.length} trạm · bỏ ${bo}`);
   if (r.series.nextDayMissing) {
-    console.log(`   ⚠️  thiếu file hes_30min ngày ${addDays(day, 1)} ⇒ hụt mốc 23:30. `
+    console.log(`   ⚠️  thiếu file ChiSo_30min ngày ${addDays(day, 1)} ⇒ hụt mốc 23:30. `
       + `Chạy lại ngày này sau khi có file đó.`);
   }
   if (r.series.prevDayMissing) console.log(`   ⚠️  thiếu file ngày ${addDays(day, -1)} ⇒ hụt mốc 00:00.`);

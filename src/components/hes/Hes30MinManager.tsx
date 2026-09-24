@@ -14,7 +14,7 @@ import { ZoneTables, type ZoneGroup } from '../dm/ZoneTables';
 import { fmtTime, INDEX_COLUMNS, INDEX_MIN_WIDTH, ValueCell } from './hesShared';
 
 /* ================================================================
-   Tab "Chỉ số trong 30 ngày" — đọc `public/hes_30min/<ngày>.csv`.
+   Tab "Chỉ số trong 30 ngày" — đọc `public/ChiSo_30min/<ngày>.csv`.
 
    Khác tab theo hóa đơn ở chỗ hai đầu kỳ là MỐC 30 PHÚT bất kỳ, không
    bắt buộc 00:00: đó là lý do lấy dữ liệu chi tiết này về.

@@ -12,10 +12,12 @@ CUSTOMER_NAME, ADDRESS, LINE_NAME, STATUS.
   (datametter.csv chi giu ~7 ngay gan nhat nen INACTIVE_DAYS mac dinh = 7.)
 
 File nay la nguon danh sach cong to + HSN cho fetch_meter_data.py (chay moi gio).
+
+KHONG con ghi line_info.csv / mba_info.csv (bo 24/09/2026): ton that va man Ton
+that da doc tram + P0/Pk tu PocketBase (dm_station), khong con ai doc hai file do.
 """
 import csv
 import os
-import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -26,8 +28,6 @@ from fetch_meter_data import BASE_URL, VN_TZ, get_retry, login_data
 
 CSV_PATH = "public/metterinfo.csv"
 DATAMETTER_PATH = "public/datametter.csv"
-LINE_INFO_PATH = "public/line_info.csv"
-MBA_PATH = "public/mba_info.csv"
 
 # ==================== CANH BAO HSN BAT THUONG ====================
 # HSN (cot METER_NAME) coi la SAI khi > nguong hoac trung so cong to
@@ -242,66 +242,6 @@ def fetch_meter_line(meter_no: str, token: str):
     return "", ""
 
 
-def write_line_info(lines: dict):
-    """Ghi public/line_info.csv (nguon GetLineList): LINE_ID, LINE_NAME, ADDRESS, CODE."""
-    fields = ["LINE_ID", "LINE_NAME", "ADDRESS", "CODE"]
-    rows = [{"LINE_ID": lid, **{k: v.get(k, "") for k in ("LINE_NAME", "ADDRESS", "CODE")}}
-            for lid, v in sorted(lines.items(), key=lambda kv: kv[0])]
-    os.makedirs(os.path.dirname(LINE_INFO_PATH), exist_ok=True)
-    with open(LINE_INFO_PATH, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fields)
-        w.writeheader()
-        w.writerows(rows)
-    print(f"line_info.csv: {len(rows)} tram -> {LINE_INFO_PATH}")
-
-
-def _norm_code(s) -> str:
-    return re.sub(r"\s+", "", str(s or "").strip().upper())
-
-
-def sync_mba_info(meters: dict):
-    """Tu sinh cot TBA cho mba_info.csv: THEM dong moi cho tram chinh chua co,
-    Sdm/P0/PK de TRONG cho nguoi dung nhap tay. KHONG dung cac dong da co (giu
-    nguyen format + gia tri tay). Khop theo ma chuan hoa + tien to (CODE viet gon van khop)."""
-    codes = sorted({(m.get("CODE") or "").strip()
-                    for m in meters.values()
-                    if str(m.get("ROLE") or "").strip() == "chinh" and (m.get("CODE") or "").strip()})
-    # Doc mba_info hien co (giu nguyen text)
-    if os.path.isfile(MBA_PATH):
-        with open(MBA_PATH, encoding="utf-8-sig") as f:
-            text = f.read()
-        header = text.splitlines()[0] if text.strip() else "TBA;Sdm(kVA);DEP0(W);DEPK(W)"
-        delim = ";" if ";" in header else ","
-        existing = set()
-        for ln in text.splitlines()[1:]:
-            if not ln.strip():
-                continue
-            tba = ln.split(delim)[0].strip()
-            if tba:
-                existing.add(_norm_code(tba))
-    else:
-        header = "TBA;Sdm(kVA);DEP0(W);DEPK(W)"
-        delim = ";"
-        text = header + "\n"
-        existing = set()
-
-    def matched(nc):
-        return any(nc == e or nc.startswith(e) or e.startswith(nc) for e in existing)
-
-    new = [c for c in codes if not matched(_norm_code(c))]
-    if not new:
-        print("mba_info.csv: khong co tram chinh moi.")
-        return
-    ncol = len(header.split(delim))
-    blanks = delim.join([""] * (ncol - 1))   # Sdm;P0;PK de trong
-    if not text.endswith("\n"):
-        text += "\n"
-    text += "".join(f"{c}{delim}{blanks}\n" for c in new)
-    with open(MBA_PATH, "w", encoding="utf-8") as f:
-        f.write(text)
-    print(f"mba_info.csv: them {len(new)} tram chinh moi (TBA), Sdm/P0/PK de trong: {new}")
-
-
 def enrich_stations(meters: dict, token: str, lines: dict) -> list:
     """Gan LINE_ID/LINE_NAME (tu GetMeter) + CODE/ROLE (tu GetLineList) cho tung cong to.
     Tra ve danh sach tram bat thuong (CODE != rong nhung KHONG phai tien to LINE_NAME)."""
@@ -377,13 +317,9 @@ def main():
     # Anh xa cong to -> tram (LINE_ID/LINE_NAME tu GetMeter; CODE/ROLE tu GetLineList)
     lines = fetch_line_list(USER_ID, token)
     print(f"GetLineList: {len(lines)} tram.")
-    write_line_info(lines)                       # public/line_info.csv
     bad_stations = enrich_stations(meters, token, lines)
     n_chinh = sum(1 for m in meters.values() if m.get("ROLE") == "chinh")
     print(f"Phan loai diem do: {n_chinh} chinh / {len(meters) - n_chinh} phu.")
-
-    # Tu sinh TBA cho mba_info.csv (them tram chinh moi; Sdm/P0/PK nhap tay)
-    sync_mba_info(meters)
 
     # STATUS: "Yes" neu co dien ap pha > 0 trong INACTIVE_DAYS ngay gan nhat
     last_day = os.environ.get("TARGET_DATE", "").strip() or (datetime.now(VN_TZ).date() - timedelta(days=1)).isoformat()

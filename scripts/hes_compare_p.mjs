@@ -2,7 +2,7 @@
 /**
  * T2 — đối chiếu CÔNG SUẤT giữa hai nguồn, trước khi đổi lõi tính tổn thất.
  *
- *   NGUỒN MỚI: `public/hes_30min/` — P = ΔPG × HSN ÷ Δt thực (qua `lib/hes30.mjs`).
+ *   NGUỒN MỚI: `public/ChiSo_30min/` — P = ΔPG × HSN ÷ Δt thực (qua `lib/hes30.mjs`).
  *   NGUỒN CŨ : `public/datametter.csv` — `TOTAL_KW` tức thời, ĐÃ nhân HSN sẵn.
  *
  * Hai đại lượng KHÁC NHAU về bản chất, nên mục tiêu KHÔNG phải là chúng bằng nhau:
@@ -51,7 +51,7 @@ if (fs.existsSync(MI_PATH)) {
 /* ---- nguồn MỚI ---- */
 const series = buildDaySeries(DAY);
 if (series.meters.size === 0) {
-  console.error(`Không có dữ liệu chỉ số 30 phút cho ${DAY} (public/hes_30min/${DAY}.csv).`);
+  console.error(`Không có dữ liệu chỉ số 30 phút cho ${DAY} (public/ChiSo_30min/${DAY}.csv).`);
   process.exit(1);
 }
 

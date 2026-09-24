@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Lấp KHOẢNG TRỐNG nhiều ngày cho `public/hes_30min/`.
+ * Lấp KHOẢNG TRỐNG nhiều ngày cho `public/ChiSo_30min/`.
  *
  * `fetch_hes_index.mjs` chạy hằng đêm cho ĐÚNG MỘT ngày. Khi pipeline nghỉ vài
  * ngày, hoặc khi mới bật tính năng và muốn có sẵn lịch sử, gọi script này.
@@ -22,20 +22,14 @@
  */
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
-import { writeCsv30ByDay, writeIndex30 } from './fetch_hes_index.mjs';
+/* Dùng CHUNG FIELD_MAP với script hằng đêm — bản chép riêng từng làm backfill thiếu cột. */
+import { writeCsv30ByDay, writeIndex30, FIELD_MAP } from './fetch_hes_index.mjs';
 
-const OUT_30_DIR = process.env.HES_30MIN_DIR || 'public/hes_30min';
+const OUT_30_DIR = process.env.CHISO_30MIN_DIR || process.env.HES_30MIN_DIR || 'public/ChiSo_30min';
 const FROM = process.env.FROM || '';
 const TO = process.env.TO || '';
 const DRY_RUN = process.argv.includes('--dry-run');
 
-const FIELD_MAP = {
-  PG: 'ACTIVE_KW_INDICATE_TOTAL',
-  BT: 'ACTIVE_KW_INDICATE_RATE1',
-  CD: 'ACTIVE_KW_INDICATE_RATE2',
-  TD: 'ACTIVE_KW_INDICATE_RATE3',
-  VC: 'REACTIVE_KVAR_INDICATE_TOTAL',
-};
 
 const isDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 if (!isDay(FROM) || !isDay(TO)) {

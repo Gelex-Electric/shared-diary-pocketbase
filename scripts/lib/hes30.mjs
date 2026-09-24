@@ -1,5 +1,5 @@
 /**
- * Đọc chỉ số 30 phút (`public/hes_30min/<ngày>.csv`) và quy về LƯỚI 48 MỐC/NGÀY.
+ * Đọc chỉ số 30 phút (`public/ChiSo_30min/<ngày>.csv`) và quy về LƯỚI 48 MỐC/NGÀY.
  *
  * Cột nguồn: `METER_NO, DATE_TIME, HSN, PG, BT, CD, TD, VC` — chỉ số LŨY KẾ, RAW
  * (chưa nhân HSN). `PG` = hữu công tổng (kWh), `VC` = vô công tổng (kVarh).
@@ -36,7 +36,7 @@ import path from 'node:path';
 export const SLOT_MIN = 30;
 export const SLOTS_PER_DAY = (24 * 60) / SLOT_MIN;
 
-const DIR = process.env.HES_30MIN_DIR || 'public/hes_30min';
+const DIR = process.env.CHISO_30MIN_DIR || process.env.HES_30MIN_DIR || 'public/ChiSo_30min';
 
 /** `0` → `'00:00'`, `47` → `'23:30'`. */
 export const slotLabel = (i) =>

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Lấy chỉ số công tơ từ `GetMeterDataByDate`, ghi chi tiết 30 phút vào thư mục
- * `public/hes_30min/` — MỖI NGÀY MỘT FILE `YYYY-MM-DD.csv`, giữ 30 ngày gần
+ * `public/ChiSo_30min/` — MỖI NGÀY MỘT FILE `YYYY-MM-DD.csv`, giữ 30 ngày gần
  * nhất, kèm `index.json` liệt kê các ngày đang có.
  *
  * Một lời gọi API cho mỗi công tơ lấy TRỌN ngày: 48 mốc 30 phút (00:00 → 23:30).
@@ -49,7 +49,7 @@
  * Biến môi trường:
  *   TARGET_DATE   rỗng = hôm qua · "YYYY-MM-DD" · số N = lùi N ngày
  *   KEEP_DAYS_30  số ngày giữ trong file 30 phút. Mặc định 30
- *   HES_30MIN_DIR   thư mục CSV 30 phút.   Mặc định public/hes_30min
+ *   CHISO_30MIN_DIR thư mục CSV 30 phút (tên cũ HES_30MIN_DIR vẫn nhận). Mặc định public/ChiSo_30min
  *   PB_EMAIL/PB_PASS (hoặc PB_ADMIN_*), API_TOKEN hoặc API_USER/API_PASS
  *
  * Vẫn cần tài khoản PocketBase, nhưng CHỈ ĐỂ ĐỌC danh mục công tơ (`dm_*`).
@@ -69,17 +69,26 @@ import { detectReverse, peakNote, buildReverseAlert } from './lib/exportCheck.mj
  * Nên tách mỗi ngày một file (user chốt 16/09/2026): tra một kỳ chỉ tải 2 file
  * ~770 KB, và mỗi đêm Git chỉ nhận thêm một blob nhỏ thay vì ghi lại cả file.
  */
-const OUT_30_DIR = process.env.HES_30MIN_DIR || 'public/hes_30min';
+const OUT_30_DIR = process.env.CHISO_30MIN_DIR || process.env.HES_30MIN_DIR || 'public/ChiSo_30min';
 const KEEP_DAYS_30 = Number(process.env.KEEP_DAYS_30 || 30);
 const CONCURRENCY = Number(process.env.CONCURRENCY || 6);
 
-/** Cột CSV → trường HES. Thứ tự này cũng là thứ tự cột trong file. */
-const FIELD_MAP = {
+/**
+ * Cột CSV → trường HES. Thứ tự này cũng là thứ tự cột trong file.
+ *
+ * `NG`, `NVC` (chiều NHẬN, thêm 24/09/2026) NỐI VÀO CUỐI: mọi nơi đọc đều đọc
+ * theo tên cột nên không phải sửa. Có chúng thì (1) phép so chỗ nối ngày soi
+ * được cả chiều nhận, (2) tổn thất của trạm phát ngược (FOT) sau này tính được
+ * mà không phải gọi lại API. File cũ không có hai cột ⇒ ô rỗng ⇒ bỏ qua.
+ */
+export const FIELD_MAP = {
   PG: 'ACTIVE_KW_INDICATE_TOTAL',
   BT: 'ACTIVE_KW_INDICATE_RATE1',
   CD: 'ACTIVE_KW_INDICATE_RATE2',
   TD: 'ACTIVE_KW_INDICATE_RATE3',
   VC: 'REACTIVE_KVAR_INDICATE_TOTAL',
+  NG: 'NEGACTIVE_KW_INDICATE_TOTAL',
+  NVC: 'NEGACTIVE_KVAR_INDICATE_TOTAL',
 };
 const KEYS = Object.keys(FIELD_MAP);
 const OUT_FIELDS = [
@@ -319,7 +328,7 @@ export function readCsv(path) {
 }
 
 /**
- * Ghi chi tiết 30 phút, MỖI NGÀY MỘT FILE trong `public/hes_30min/`.
+ * Ghi chi tiết 30 phút, MỖI NGÀY MỘT FILE trong `public/ChiSo_30min/`.
  *
  * Vì sao tách (user chốt 16/09/2026): app chỉ cần chỉ số ở mốc đầu kỳ và mốc
  * cuối kỳ, tức đúng HAI ngày. Gộp 30 ngày vào một file thì mỗi lần tra phải tải
@@ -598,7 +607,8 @@ if (real.length) {
   (23:30 hôm qua → 00:00 hôm nay) phải xét riêng. Đây chính là chỗ bắt được công
   tơ bị thay hoặc reset trong đêm.
 
-  Chỉ so được 5 thanh ghi mà file 30 phút lưu — chiều nhận không nằm trong file.
+  So mọi thanh ghi mà file 30 phút lưu — gồm cả chiều nhận `NG`/`NVC` từ
+  24/09/2026 (trước đó chiều nhận là điểm mù ở chỗ nối ngày).
 */
 const { prev, rows: prevRows, src } = prevDayRows(day);
 console.log(`Mốc cuối ngày liền trước (${prev}): ${prevRows.size} công tơ, nguồn ${src}.`);

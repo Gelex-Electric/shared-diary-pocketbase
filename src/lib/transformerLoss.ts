@@ -5,9 +5,9 @@
  *   - /transformer_loss_30min.csv   : mốc 30 phút (OUTPUT=P×Δt) — chỉ để VẼ biểu đồ trong ngày.
  *   - /transformer_loss_monthly.csv : tổn thất theo tháng theo trạm (lưu vĩnh viễn).
  *
- * Trạm = CODE (1 máy biến áp). Công thức ở scripts/daily_transformer_loss.py:
+ * Trạm = CODE (1 máy biến áp). Công thức ở scripts/loss_daily.mjs:
  *   S = √(P² + Q²); ΔP = P0 + Pk×(S/Sdm)²; LOSS = Σ ΔP×Δt.
- * File có thể chưa tồn tại (chưa nhập mba_info.csv) → coi như rỗng, không báo lỗi.
+ * File có thể chưa tồn tại → coi như rỗng, không báo lỗi.
  */
 
 /**

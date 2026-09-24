@@ -84,10 +84,10 @@ ok('có báo thiếu file', r2.missingFiles.includes('2026-09-25'));
 eq('readDayFile ngày không tồn tại → []', readDayFile('2099-01-01', dir), []);
 
 /* ---------- chạy thử trên dữ liệu THẬT ---------- */
-console.log('\nDữ liệu thật (public/hes_30min)');
+console.log('\nDữ liệu thật (public/ChiSo_30min)');
 /* Chọn ngày MỚI NHẤT đang có thay vì cố định: cây làm việc có thể sau `main`
    vài commit dữ liệu, cố định một ngày là test tự im lặng bỏ qua. */
-const realDir = 'public/hes_30min';
+const realDir = 'public/ChiSo_30min';
 const realDay = fs.existsSync(realDir)
   ? fs.readdirSync(realDir).filter(f => /^\d{4}-\d{2}-\d{2}\.csv$/.test(f))
       .sort().slice(-1)[0]?.replace('.csv', '')

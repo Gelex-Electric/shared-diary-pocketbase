@@ -8,7 +8,7 @@ name: Pmax theo lo duong day (chay tay)
 # doi HSN, doi trang thai diem do) hoac backfill thi phai tinh lai CA KHOANG —
 # va chay tay tren may thi so chi nam o may do, khong ai khac thay.
 #
-# Nguon la public/hes_30min/ nen CHI tinh lai duoc trong pham vi con file (30
+# Nguon la public/ChiSo_30min/ nen CHI tinh lai duoc trong pham vi con file (30
 # ngay gan nhat). Ngay cu hon da duoc chot vao pmax_line_daily.csv tu truoc va
 # GIU NGUYEN — script chi ghi de dung nhung ngay no vua tinh.
 #
@@ -23,7 +23,7 @@ on:
         default: "all"
         type: choice
         options:
-          - all          # moi ngay dang co trong public/hes_30min
+          - all          # moi ngay dang co trong public/ChiSo_30min
           - one          # dung mot ngay, dien o o duoi
       date:
         description: "Ngay can tinh (YYYY-MM-DD) — chi dung khi mode = one"
@@ -84,8 +84,8 @@ jobs:
           API_USER: ${{ secrets.API_USER }}
           API_PASS: ${{ secrets.API_PASS }}
         run: |
-          FROM=$(ls public/hes_30min/*.csv | head -1 | xargs basename | sed 's/.csv//')
-          TO=$(ls public/hes_30min/*.csv | tail -1 | xargs basename | sed 's/.csv//')
+          FROM=$(ls public/ChiSo_30min/*.csv | head -1 | xargs basename | sed 's/.csv//')
+          TO=$(ls public/ChiSo_30min/*.csv | tail -1 | xargs basename | sed 's/.csv//')
           node scripts/verify_pmax_api.mjs --from "$FROM" --to "$TO"
 
       - name: Commit & push CSV
