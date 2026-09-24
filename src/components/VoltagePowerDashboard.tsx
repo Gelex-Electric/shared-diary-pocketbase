@@ -28,6 +28,7 @@ import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { DatePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
 import { Tabs, TabItem } from './ui/Tabs';
+import { isHeadLine, HEAD_LABEL, HEAD_HINT } from '../lib/headMeters';
 import CustomerPmaxTab from './CustomerPmaxTab';
 import LinePmaxTab from './LinePmaxTab';
 
@@ -103,6 +104,57 @@ interface Reading {
 
 // meterNo -> dateKey -> danh sách bản ghi (sắp theo thời gian)
 type ReadingIndex = Map<string, Map<string, Reading[]>>;
+
+/** Dựng chuỗi biểu đồ của MỘT trạm trong ngày. Trả null khi không đủ điều kiện vẽ.
+    Dùng chung cho thẻ khách hàng và thẻ điểm đo đầu nguồn. */
+function buildStation(
+  meterNo: string,
+  line: string,
+  list: Reading[] | undefined,
+): StationSeries | null {
+  if (!list || list.length === 0) return null;
+
+  // Trạm chỉ vẽ khi có điện áp 3 pha > 0 (ít nhất 1 bản ghi)
+  let hasVoltage = false;
+  for (const r of list) {
+    if (r.ua > 0 && r.ub > 0 && r.uc > 0) { hasVoltage = true; break; }
+  }
+  if (!hasVoltage) return null;
+
+  // Sắp theo thời gian thực — KHÔNG làm tròn, giữ nguyên mốc & giá trị
+  const sorted = [...list].sort((a, b) => a.t - b.t);
+  let peakP = 0;
+  let peakLabel = '';
+  const data = sorted.map(r => {
+    if (r.kw > peakP) { peakP = r.kw; peakLabel = r.label; }
+    return {
+      t: r.t,
+      label: r.label,
+      ua: r.ua,   // giữ nguyên 0 để đường xuống đáy khi mất điện
+      ub: r.ub,
+      uc: r.uc,
+      p: r.kw,
+    };
+  });
+
+  // Phát hiện khoảng mất điện: đoạn liên tiếp UA=UB=UC=0
+  const outagePeriods: { x1: string; x2: string }[] = [];
+  let outStart: string | null = null;
+  for (const r of sorted) {
+    const isOut = r.ua === 0 && r.ub === 0 && r.uc === 0;
+    if (isOut && outStart === null) {
+      outStart = r.label;
+    } else if (!isOut && outStart !== null) {
+      outagePeriods.push({ x1: outStart, x2: r.label });
+      outStart = null;
+    }
+  }
+  if (outStart !== null && sorted.length > 0) {
+    outagePeriods.push({ x1: outStart, x2: sorted[sorted.length - 1].label });
+  }
+
+  return { meterNo, line, data, peakP, peakLabel, outagePeriods };
+}
 
 interface CustomerInfo {
   id: string;
@@ -278,6 +330,8 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
       : (userAreas.length > 0 ? new Set(userAreas) : null);
     for (const r of meterRows) {
       if (allowed && !allowed.has(normArea(r.ADDRESS))) continue;
+      // Điểm đo đầu nguồn KHÔNG phải khách hàng — tách ra thẻ riêng, xem `headStations`.
+      if (isHeadLine(r.LINE_NAME)) continue;
       const cid = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
       if (!cid) continue;
       if (!map.has(cid)) {
@@ -364,49 +418,8 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
       const stations: StationSeries[] = [];
 
       for (const m of info.meters) {
-        const list = readingIndex.get(m.meterNo)?.get(selectedDate);
-        if (!list || list.length === 0) continue;
-
-        // Trạm chỉ vẽ khi có điện áp 3 pha > 0 (ít nhất 1 bản ghi)
-        let hasVoltage = false;
-        for (const r of list) {
-          if (r.ua > 0 && r.ub > 0 && r.uc > 0) { hasVoltage = true; break; }
-        }
-        if (!hasVoltage) continue;
-
-        // Sắp theo thời gian thực — KHÔNG làm tròn, giữ nguyên mốc & giá trị
-        const sorted = [...list].sort((a, b) => a.t - b.t);
-        let peakP = 0;
-        let peakLabel = '';
-        const data = sorted.map(r => {
-          if (r.kw > peakP) { peakP = r.kw; peakLabel = r.label; }
-          return {
-            t: r.t,
-            label: r.label,
-            ua: r.ua,   // giữ nguyên 0 để đường xuống đáy khi mất điện
-            ub: r.ub,
-            uc: r.uc,
-            p: r.kw,
-          };
-        });
-
-        // Phát hiện khoảng mất điện: đoạn liên tiếp UA=UB=UC=0
-        const outagePeriods: { x1: string; x2: string }[] = [];
-        let outStart: string | null = null;
-        for (const r of sorted) {
-          const isOut = r.ua === 0 && r.ub === 0 && r.uc === 0;
-          if (isOut && outStart === null) {
-            outStart = r.label;
-          } else if (!isOut && outStart !== null) {
-            outagePeriods.push({ x1: outStart, x2: r.label });
-            outStart = null;
-          }
-        }
-        if (outStart !== null && sorted.length > 0) {
-          outagePeriods.push({ x1: outStart, x2: sorted[sorted.length - 1].label });
-        }
-
-        stations.push({ meterNo: m.meterNo, line: m.line, data, peakP, peakLabel, outagePeriods });
+        const st = buildStation(m.meterNo, m.line, readingIndex.get(m.meterNo)?.get(selectedDate));
+        if (st) stations.push(st);
       }
 
       if (stations.length === 0) continue;
@@ -495,6 +508,23 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
   ];
   // Danh sách khách hàng đã lọc theo KCN của tài khoản → dùng chung cho tab Pmax.
   const pmaxCustomers = useMemo(() => Array.from(customerInfoMap.values()), [customerInfoMap]);
+
+  /* ---- Điểm đo ĐẦU NGUỒN: tách hẳn khỏi danh sách khách hàng, vẽ thẻ riêng ----
+     Nó đo TỔNG cả KCN nên để chung sẽ luôn chiếm thẻ "P max cao nhất". */
+  const headStations = useMemo<StationSeries[]>(() => {
+    if (!selectedDate) return [];
+    const allowed = zoneFilter !== undefined
+      ? (zoneFilter ? new Set([normArea(zoneFilter)]) : null)
+      : (userAreas.length > 0 ? new Set(userAreas) : null);
+    const out: StationSeries[] = [];
+    for (const r of meterRows) {
+      if (!isHeadLine(r.LINE_NAME)) continue;
+      if (allowed && !allowed.has(normArea(r.ADDRESS))) continue;
+      const st = buildStation(r.METER_NO, r.LINE_NAME || '', readingIndex.get(r.METER_NO)?.get(selectedDate));
+      if (st) out.push(st);
+    }
+    return out;
+  }, [meterRows, readingIndex, selectedDate, userAreas, zoneFilter]);
 
   /* ---- Render 1 thẻ biểu đồ (1 trạm: 3 đường điện áp + 1 cột P) ---- */
   const renderCard = (i: number) => {
@@ -651,6 +681,69 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
     );
   };
 
+  /* ---- Thẻ riêng cho điểm đo đầu nguồn (không phải khách hàng, không có bộ chọn) ---- */
+  const renderHeadCard = (st: StationSeries) => (
+    <div key={st.meterNo} className="vl-card p-5 flex flex-col min-h-[440px] border-l-4 border-l-[var(--warning)]">
+      <div className="flex flex-col gap-2.5 mb-4">
+        <div className="flex items-center gap-2">
+          <Cable className="w-4 h-4 text-warn" />
+          <span className="text-[10px] font-black text-faint tracking-wider uppercase font-mono">
+            {HEAD_LABEL} · tính riêng
+          </span>
+        </div>
+        <div className="border rounded p-2.5 flex items-center gap-2.5 bg-[var(--warning-soft)] border-[var(--warning)]">
+          <Gauge className="w-5 h-5 shrink-0 text-warn" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-ink truncate">{st.line}</p>
+            <p className="text-[11px] text-soft">{HEAD_HINT}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-soft">
+          <span className="inline-flex items-center gap-1 font-mono font-bold text-warn bg-[var(--warning-soft)] px-1.5 py-0.5 rounded">
+            <Gauge className="w-3 h-3" /> {st.meterNo}
+          </span>
+          <span className="font-mono">
+            P max: <strong className="text-warn">{fmtVal(st.peakP)} kW</strong>
+            {st.peakLabel && <span className="text-faint"> @ {st.peakLabel}</span>}
+          </span>
+        </div>
+      </div>
+
+      <div className="w-full text-dim h-[280px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={st.data} margin={{ top: 16, right: 4, left: 4, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-inset)" />
+            <XAxis
+              dataKey="label"
+              tickLine={false}
+              stroke="var(--text-4)"
+              style={{ fontSize: '10px', fontWeight: 'bold' }}
+              interval="preserveStartEnd"
+              minTickGap={24}
+            />
+            <YAxis yAxisId="v" hide />
+            <YAxis yAxisId="p" orientation="right" hide />
+            <Tooltip
+              content={<ChartTooltip />}
+              cursor={{ fill: 'var(--accent-soft)' }}
+              wrapperStyle={{ zIndex: 60, outline: 'none' }}
+            />
+            <Bar yAxisId="p" dataKey="p" name="P (kW)" radius={[2, 2, 0, 0]} maxBarSize={10}>
+              {st.data.map((entry: any, idx: number) => (
+                <Cell key={`head-cell-${idx}`} fill={entry.label === st.peakLabel ? '#f43f5e' : P_FILL} />
+              ))}
+            </Bar>
+            <Line yAxisId="v" type="monotone" dataKey="ua" name="Ua" stroke={PHASE_COLOR.ua} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+            <Line yAxisId="v" type="monotone" dataKey="ub" name="Ub" stroke={PHASE_COLOR.ub} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+            <Line yAxisId="v" type="monotone" dataKey="uc" name="Uc" stroke={PHASE_COLOR.uc} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <ChartLegend hasOutages={st.outagePeriods.length > 0} />
+    </div>
+  );
+
   /* ================================================================
      RENDER
   ================================================================ */
@@ -749,6 +842,13 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
       {tab === 'chart' && isReady && !noData && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {[0, 1, 2, 3, 4, 5].map(i => renderCard(i))}
+        </div>
+      )}
+
+      {/* Điểm đo đầu nguồn — để CUỐI, tách hẳn khỏi lưới khách hàng */}
+      {tab === 'chart' && isReady && headStations.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {headStations.map(st => renderHeadCard(st))}
         </div>
       )}
     </div>

@@ -15,6 +15,7 @@ import { generateOutageDocx } from '../lib/outageDocx';
 import { loadLowNameMap, withLowNames } from '../lib/outageNames';
 import type { LowNameMap } from '../lib/outageNames';
 import { toast as notify } from '../lib/toast';
+import { isHeadLine } from '../lib/headMeters';
 
 const TOAST_TITLE: Record<ToastType, string> = {
   success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
@@ -196,6 +197,8 @@ export default function PowerOutageManager() {
       rows
         .filter(r => r.ADDRESS === a)
         .forEach(r => {
+          // Điểm đo đầu nguồn không phải khách hàng → không có ai để gửi thông báo.
+          if (isHeadLine(r.LINE_NAME)) return;
           const id = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
           if (id && !map.has(id)) map.set(id, { id, MKH: r.CUSTOMER_CODE || '?', Name: r.CUSTOMER_NAME || '?' });
         });

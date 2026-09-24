@@ -19,7 +19,7 @@ export default function SldHtmlViewer({ src, title }: { src: string; title?: str
         rel="noopener noreferrer"
         title="Mở bản vẽ trong tab mới"
         className="absolute top-2 right-2 z-10 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg
-                   bg-[var(--surface)] border border-[var(--border)] text-xs text-soft
+                   bg-surface border border-[var(--border)] text-xs text-soft
                    hover:text-ink shadow-sm"
       >
         <ExternalLink className="w-3.5 h-3.5" /> Tab mới

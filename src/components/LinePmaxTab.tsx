@@ -184,7 +184,10 @@ export default function LinePmaxTab() {
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} />
                 <YAxis tick={{ fontSize: 11 }} width={62}
                   label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
-                <Tooltip content={<MonthTooltip />} cursor={{ fill: 'var(--subtle)' }} />
+                {/* cursor phải trỏ vào biến CSS CÓ THẬT. Trước đây để tên "subtle" (chỉ tồn tại
+                    dưới dạng token Tailwind --color-subtle) nên fill không hợp lệ và SVG tô ĐEN.
+                    Dùng --accent-soft như mọi biểu đồ khác trong app. */}
+                <Tooltip content={<MonthTooltip />} cursor={{ fill: 'var(--accent-soft)' }} />
                 <Bar dataKey="pmax" name="Pmax" radius={[3, 3, 0, 0]} maxBarSize={56}>
                   {series.map((r, i) => (
                     /* Tháng thiếu công tơ tô khác màu — nhìn là thấy cột nào

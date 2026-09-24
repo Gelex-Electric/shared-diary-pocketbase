@@ -12,6 +12,7 @@ import { usePmaxDaily } from '../lib/pmax';
 import { MonthPicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
 import { StatTile, ChartTooltip, EmptyState, CHART } from './ui/dashboard';
+import { isHeadLine } from '../lib/headMeters';
 
 /** Khách hàng + danh sách công tơ — khớp cấu trúc CustomerInfo của trang cha. */
 export interface PmaxCustomer {
@@ -47,12 +48,9 @@ const fmtDateVN = (key: string) => {
 
 const fmtKw = (v: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(v);
 
-/** Điểm đo ĐẦU NGUỒN — đo tổng toàn bộ các điểm đo khác trong KCN, KHÔNG phải phụ tải
-    của một khách hàng. Phải tách khỏi bảng xếp hạng, nếu không nó luôn đứng hạng 1 và
-    làm sai Pmax trung bình. Nhận diện theo LINE_NAME (user xác nhận 03/09/2026: chỉ
-    KCN Thuận Thành I có, các KCN khác không có điểm đo kiểu này). */
-const HEAD_LINES = new Set(['TTI.DIEMDOPHU']);
-const isHeadMeter = (line: string) => HEAD_LINES.has((line || '').trim().toUpperCase());
+/* Điểm đo ĐẦU NGUỒN phải tách khỏi bảng xếp hạng, nếu không nó luôn đứng hạng 1 (vì là
+   tổng của tất cả) và làm sai Pmax trung bình. Danh sách + cách nhận diện nay dùng chung
+   ở `lib/headMeters` — màn Đồ thị điện áp và Thông báo ngừng cấp điện cũng cần. */
 
 export default function CustomerPmaxTab({ customers }: Props) {
   const { rows, loading, error } = usePmaxDaily();
@@ -62,9 +60,9 @@ export default function CustomerPmaxTab({ customers }: Props) {
     const load: PmaxCustomer[] = [];
     const head: { meterNo: string; line: string; name: string }[] = [];
     for (const c of customers) {
-      const own = c.meters.filter(m => !isHeadMeter(m.line));
+      const own = c.meters.filter(m => !isHeadLine(m.line));
       c.meters
-        .filter(m => isHeadMeter(m.line))
+        .filter(m => isHeadLine(m.line))
         .forEach(m => head.push({ meterNo: m.meterNo, line: m.line, name: c.name }));
       if (own.length > 0) load.push({ ...c, meters: own });
     }
