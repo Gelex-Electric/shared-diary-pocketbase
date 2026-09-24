@@ -76,6 +76,19 @@ export interface Station extends PbRecord {
   p0_w?: number;
   /** Tổn hao ngắn mạch, đơn vị W. */
   pk_w?: number;
+  /**
+   * "Tính tự động P0, Pk" — trạm chưa có biên bản kiểm định thì lấy TRUNG BÌNH
+   * của các trạm cùng `sdm_kva` đã có số thật. Chỉ lưu CỜ, không lưu giá trị:
+   * khai thêm trạm có số thật thì ước lượng tự tốt lên, và số ước lượng không
+   * nằm trong `p0_w` để ai đó tưởng là số đo. Luật ở `scripts/lib/lossParams.mjs`.
+   */
+  auto_loss_param?: boolean;
+  /**
+   * "Điểm đo trung thế" — mua bán điện phía trung thế, tổn hao máy biến áp là
+   * của khách hàng ⇒ KHÔNG tính tổn thất trạm này. Là CHỦ Ý bỏ, khác hẳn thiếu
+   * dữ liệu, nên log in ở mục riêng.
+   */
+  mv_metering?: boolean;
   note?: string;
 }
 

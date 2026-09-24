@@ -24,6 +24,10 @@ import { Select } from '../ui/Select';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { toast } from '../../lib/toast';
 import { Toggle } from '../ui/Toggle';
+import { Switch } from '../ui/Switch';
+/* Luật chọn P0/Pk nằm ở `scripts/lib/lossParams.mjs` để pipeline (Node thuần,
+   Actions không `npm ci` nên không có tsx) và app dùng CHUNG một bản. */
+import { estimateLossParams } from '@/scripts/lib/lossParams.mjs';
 import { DatePicker } from '../ui/DateTimePickers';
 import { assets, customers, devices, isAbortError, lines, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
@@ -129,6 +133,9 @@ const EMPTY_S = {
   line: '',
   zone: '', customer: '', ident: '',
   sdm_kva: '', p0_w: '', pk_w: '', note: '',
+  /* Hai cờ tổn thất — xem `scripts/lib/lossParams.mjs`. Chỉ lưu CỜ, giá trị P0/Pk
+     ước lượng được suy lại mỗi lần tính chứ không ghi vào `p0_w`/`pk_w`. */
+  auto_loss_param: false, mv_metering: false,
 };
 const EMPTY_C = { mkh: '', name: '', low_name: '', short_name: '', address: '', zone: '' };
 /** `code` cũng do hệ thống sinh; `customer` chỉ dùng khi là điểm đo phụ. */
@@ -326,6 +333,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     setSForm({
       zone: s.zone, line: s.line ?? '', customer: s.customer ?? '', ident: s.ident ?? '',
       sdm_kva: str(s.sdm_kva), p0_w: str(s.p0_w), pk_w: str(s.pk_w), note: s.note ?? '',
+      auto_loss_param: !!s.auto_loss_param, mv_metering: !!s.mv_metering,
     });
     setModal('station');
   };
@@ -385,6 +393,20 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const stationCodeMissing = missingStationCodeParts(codeParts);
   /** KH đã chọn nhưng chưa khai tên tắt → không ghép được mã, phải chỉ rõ. */
   const customerLacksShortName = !!sCustomer && !sCustomer.short_name;
+
+  /* ---- Hai cờ tổn thất ----
+     Chỉ khi cả hai cờ TẮT thì P0/Pk mới nhập tay được. Bật "tự động" thì giá trị
+     suy từ các trạm cùng công suất; bật "trung thế" thì trạm nằm ngoài bảng tổn
+     thất nên hai ô này vô nghĩa. Dùng CHUNG `estimateLossParams` với script tính
+     thật — xem trước bằng hàm khác thì sớm muộn hai bên lệch nhau. */
+  const lossParamEditable = !sForm.auto_loss_param && !sForm.mv_metering;
+  const lossEstimate = useMemo(() => {
+    if (!sForm.auto_loss_param) return null;
+    /* Loại chính trạm đang sửa khỏi tập mẫu: nó đang bật cờ tự động nên không
+       phải mẫu, nhưng bản trong `d.stations` có thể là bản CŨ chưa bật cờ. */
+    const pool = (d?.stations ?? []).filter(s => s.id !== editingId);
+    return estimateLossParams(pool, toNum(sForm.sdm_kva));
+  }, [d?.stations, editingId, sForm.auto_loss_param, sForm.sdm_kva]);
 
   /* ------------------ mã điểm đo do hệ thống sinh ------------------ */
   const pStation = d?.stations.find(s => s.id === pForm.station);
@@ -1113,7 +1135,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       const body = {
         code: stationCode, zone: sForm.zone, line: sForm.line,
         customer: sForm.customer, ident: sForm.ident.trim().toUpperCase(),
-        sdm_kva: toNum(sForm.sdm_kva), p0_w: toNum(sForm.p0_w), pk_w: toNum(sForm.pk_w),
+        sdm_kva: toNum(sForm.sdm_kva),
+        /* Trung thế hoặc tự động ⇒ KHÔNG ghi P0/Pk: số ước lượng không được nằm
+           trong ô số đo, còn trạm trung thế thì hai ô này vô nghĩa. */
+        p0_w: lossParamEditable ? toNum(sForm.p0_w) : null,
+        pk_w: lossParamEditable ? toNum(sForm.pk_w) : null,
+        auto_loss_param: sForm.auto_loss_param,
+        mv_metering: sForm.mv_metering,
         note: sForm.note.trim(),
       };
       return void persist(
@@ -1976,8 +2004,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 </td>
                 <td className="px-6 py-4 font-mono text-xs font-bold text-soft">{customerMkh(s.customer)}</td>
                 <td className="px-6 py-4 text-sm font-semibold text-dim">{s.sdm_kva ?? '—'}</td>
+                {/* Nhìn bảng phải biết ngay số nào là ĐO, số nào là ƯỚC LƯỢNG, trạm nào
+                    cố ý nằm ngoài bảng tổn thất — nếu không thì ba thứ trông như một. */}
                 <td className="px-6 py-4 text-sm text-soft">
-                  {s.p0_w ?? '—'} / {s.pk_w ?? '—'}
+                  {s.mv_metering
+                    ? <span className="vl-badge-info text-[10px]">Trung thế</span>
+                    : s.auto_loss_param
+                      ? <span className="vl-badge-warning text-[10px]">Tự tính</span>
+                      : <>{s.p0_w ?? '—'} / {s.pk_w ?? '—'}</>}
                 </td>
                 <td className="px-6 py-4 text-sm font-semibold text-dim">{pointsOfStation(s.id)}</td>
                 <td className="px-6 py-4 pr-10 text-right">
@@ -2206,18 +2240,76 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </p>
             )}
 
-            <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Tổn hao không tải" hint="P0 — đơn vị W, không phải kW.">
-                <NumberInput value={sForm.p0_w} suffix="W"
-                  min={P0_RANGE[0]} max={P0_RANGE[1]}
-                  onChange={v => setSForm(f => ({ ...f, p0_w: v }))} />
-              </Field>
-              <Field label="Tổn hao ngắn mạch" hint="Pk — đơn vị W, không phải kW.">
-                <NumberInput value={sForm.pk_w} suffix="W"
-                  min={PK_RANGE[0]} max={PK_RANGE[1]}
-                  onChange={v => setSForm(f => ({ ...f, pk_w: v }))} />
-              </Field>
+            {/* ---- Thông số tổn hao: hai cờ quyết định ô P0/Pk có nhập tay được không ---- */}
+            {/* `Switch` là inline-flex nên phải xếp cột tường minh, `space-y` không ăn. */}
+            <div className="flex flex-col items-start gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-subtle p-4">
+              <Switch
+                checked={sForm.auto_loss_param}
+                onChange={v => setSForm(f => ({
+                  /* Hai cờ loại trừ nhau: trạm trung thế thì không tính tổn thất,
+                     bật thêm "tự động" là vô nghĩa. */
+                  ...f, auto_loss_param: v, mv_metering: v ? false : f.mv_metering,
+                }))}
+                label="Tính tự động P0, Pk"
+                title="Lấy trung bình của các trạm cùng công suất đã có số thật"
+              />
+              <Switch
+                checked={sForm.mv_metering}
+                onChange={v => setSForm(f => ({
+                  ...f, mv_metering: v, auto_loss_param: v ? false : f.auto_loss_param,
+                }))}
+                label="Điểm đo trung thế — không tính tổn thất trạm này"
+                title="Mua bán điện phía trung thế: tổn hao máy biến áp là của khách hàng"
+              />
             </div>
+
+            {sForm.mv_metering ? (
+              <div className="vl-alert vl-alert-light-primary text-[13px]">
+                Trạm mua bán điện phía trung thế nên tổn hao máy biến áp là của khách hàng.
+                Trạm này <strong>nằm ngoài bảng tổn thất</strong>, không cần khai P0/Pk.
+              </div>
+            ) : sForm.auto_loss_param ? (
+              <div className="grid gap-6 sm:grid-cols-2">
+                <Field label="Tổn hao không tải" hint="P0 — ước lượng, không phải số đo.">
+                  <DerivedValue value={lossEstimate ? `${lossEstimate.p0_w} W` : ''}
+                    placeholder="Chưa có trạm nào cùng công suất để lấy mẫu" />
+                </Field>
+                <Field label="Tổn hao ngắn mạch" hint="Pk — ước lượng, không phải số đo.">
+                  <DerivedValue value={lossEstimate ? `${lossEstimate.pk_w} W` : ''}
+                    placeholder="Chưa có trạm nào cùng công suất để lấy mẫu" />
+                </Field>
+              </div>
+            ) : (
+              <div className="grid gap-6 sm:grid-cols-2">
+                <Field label="Tổn hao không tải" hint="P0 — đơn vị W, không phải kW.">
+                  <NumberInput value={sForm.p0_w} suffix="W"
+                    min={P0_RANGE[0]} max={P0_RANGE[1]}
+                    onChange={v => setSForm(f => ({ ...f, p0_w: v }))} />
+                </Field>
+                <Field label="Tổn hao ngắn mạch" hint="Pk — đơn vị W, không phải kW.">
+                  <NumberInput value={sForm.pk_w} suffix="W"
+                    min={PK_RANGE[0]} max={PK_RANGE[1]}
+                    onChange={v => setSForm(f => ({ ...f, pk_w: v }))} />
+                </Field>
+              </div>
+            )}
+
+            {sForm.auto_loss_param && (
+              lossEstimate ? (
+                <p className="-mt-3 ml-1 text-[11px] font-semibold text-soft">
+                  Trung bình của {lossEstimate.samples} trạm cùng {toNum(sForm.sdm_kva)} kVA:{' '}
+                  {lossEstimate.codes.slice(0, 4).join(', ')}
+                  {lossEstimate.codes.length > 4 && ` và ${lossEstimate.codes.length - 4} trạm nữa`}.
+                  Số này <strong>không lưu vào trạm</strong> — khai thêm trạm có số thật thì nó tự cập nhật.
+                </p>
+              ) : (
+                <p className="-mt-3 ml-1 text-[11px] font-semibold text-warn">
+                  {toNum(sForm.sdm_kva)
+                    ? `Chưa trạm nào ${toNum(sForm.sdm_kva)} kVA có P0/Pk thật để lấy mẫu — trạm này sẽ nằm ngoài bảng tổn thất cho tới khi có.`
+                    : 'Khai công suất trạm trước thì mới tìm được trạm cùng công suất để lấy mẫu.'}
+                </p>
+              )
+            )}
             <Field label="Ghi chú">
               <TextInput value={sForm.note} onChange={v => setSForm(f => ({ ...f, note: v }))} />
             </Field>

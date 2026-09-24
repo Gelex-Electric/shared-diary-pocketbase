@@ -11,7 +11,71 @@
  * (xem `src/lib/dm/hsn.ts`). Script chỉ ĐỌC, tuyệt đối không tính lại: luật HSN
  * phải nằm một chỗ duy nhất, sai một ly là sai toàn bộ sản lượng.
  */
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 export const PB_URL = (process.env.PB_URL || 'https://getc.up.railway.app/pb').replace(/\/$/, '');
+
+/*
+  MẠNG CÔNG TY CHẶN CERT CỦA NODE.
+
+  Trên GitHub Actions `fetch` chạy bình thường, nhưng chạy TAY ở máy công ty thì
+  `fetch` ném lỗi cert, `pbLogin` nuốt lỗi rồi báo "sai tài khoản/mật khẩu" —
+  thông báo dẫn người đọc đi sai hướng hoàn toàn (đã mất thời gian vì nó ngày
+  23/09/2026). `curl` thì tin trust store của Windows nên vẫn gọi được.
+
+  Cách xử lý: thử `fetch` trước, hỏng thì rơi sang `curl`. Không đảo thứ tự —
+  Actions không có gì bảo đảm là có `curl`.
+*/
+let useCurl = false;
+
+const curlJson = (args) => {
+  const out = execFileSync('curl', ['-s', '-m', '60', ...args],
+    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return out ? JSON.parse(out) : {};
+};
+
+/** GET JSON, tự rơi sang curl khi fetch hỏng vì cert. */
+async function getJson(url, headers = {}) {
+  if (!useCurl) {
+    try {
+      return await (await fetch(url, { headers })).json();
+    } catch (e) {
+      useCurl = true;
+      console.error(`[pb] fetch hỏng (${e?.message ?? e}) → chuyển sang curl.`);
+    }
+  }
+  const h = Object.entries(headers).flatMap(([k, v]) => ['-H', `${k}: ${v}`]);
+  return curlJson([url, ...h]);
+}
+
+/** POST JSON với thân đi qua FILE tạm — không để mật khẩu lộ trên dòng lệnh. */
+async function postJson(url, body) {
+  if (!useCurl) {
+    try {
+      const r = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return { ok: r.ok, json: await r.json() };
+    } catch (e) {
+      useCurl = true;
+      console.error(`[pb] fetch hỏng (${e?.message ?? e}) → chuyển sang curl.`);
+    }
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'pb-'));
+  const f = join(dir, 'body.json');
+  try {
+    writeFileSync(f, JSON.stringify(body));
+    const j = curlJson(['-X', 'POST', url, '-H', 'Content-Type: application/json',
+      '--data-binary', `@${f}`]);
+    return { ok: !!j?.token, json: j };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 /** Ngày dạng `YYYY-MM-DD`; PB lưu ISO nên cắt lấy phần ngày. */
 export const ymd = (v) => String(v ?? '').slice(0, 10);
@@ -38,14 +102,9 @@ export async function pbLogin(email = process.env.PB_EMAIL || process.env.PB_ADM
   }
   for (const coll of ['_superusers', 'users']) {
     try {
-      const r = await fetch(`${PB_URL}/api/collections/${coll}/auth-with-password`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identity: email, password }),
-      });
-      if (r.ok) {
-        const j = await r.json();
-        if (j.token) return j.token;
-      }
+      const { ok, json } = await postJson(
+        `${PB_URL}/api/collections/${coll}/auth-with-password`, { identity: email, password });
+      if (ok && json?.token) return json.token;
     } catch { /* thử collection tiếp theo */ }
   }
   throw new Error(`Đăng nhập PocketBase thất bại (${PB_URL}) — sai tài khoản/mật khẩu, `
@@ -57,8 +116,8 @@ export async function allOf(col, token) {
   const headers = { Authorization: token };
   const out = [];
   for (let p = 1; ; p++) {
-    const r = await (await fetch(
-      `${PB_URL}/api/collections/${col}/records?perPage=500&page=${p}`, { headers })).json();
+    const r = await getJson(
+      `${PB_URL}/api/collections/${col}/records?perPage=500&page=${p}`, headers);
     out.push(...(r.items ?? []));
     if (p >= (r.totalPages ?? 1)) return out;
   }
