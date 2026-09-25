@@ -101,6 +101,17 @@ jobs:
           PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
         run: node scripts/pmax_line_daily.mjs
 
+      # 4c) Doi soat DIEM DO DAU NGUON (role dau_nguon): san luong dau nguon vs tong
+      #     diem do chinh cung lo, Pmax dau nguon vs Pmax lo (buoc 4b vua ghi).
+      #     Luu vinh vien public/head_balance_daily.csv (ChiSo_30min chi giu 30 ngay).
+      #     --notify: canh bao kind `daunguon` (lech ton that > 1,5 diem % so voi trung
+      #     vi 7 ngay; Pmax lo/dau nguon ngoai [90,105] %; thieu du lieu diem do).
+      - name: Doi soat dau nguon
+        env:
+          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
+        run: node scripts/head_balance_daily.mjs --notify
+
       # 5) Ton that MBA — BAT LAI 24/09/2026 sau khi doi nguon HSN sang Danh muc
       #    va viet lai loi bang Node (scripts/loss_daily.mjs).
       #
@@ -134,7 +145,7 @@ jobs:
           # `git add -A` cho thu muc ChiSo_30min: file qua 30 ngay bi XOA, phai
           # ghi nhan ca xoa chu khong chi them.
           git add -A public/ChiSo_30min
-          git add public/metterinfo.csv public/datametter.csv public/pmax_daily.csv public/pmax_line_daily.csv
+          git add public/metterinfo.csv public/datametter.csv public/pmax_daily.csv public/pmax_line_daily.csv public/head_balance_daily.csv
           # Ba file ton that: BO khoi day 16/09 luc tam dung, THEM LAI 24/09.
           # Quen dong nay thi buoc 5+6 van chay, van sinh file, roi bi vut di ma
           # khong ai biet — pipeline van xanh.

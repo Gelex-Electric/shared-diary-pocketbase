@@ -21,6 +21,7 @@ import {
   TrendingUp,
   TrendingDown,
   ZapOff,
+  Zap,
   Cable,
 } from 'lucide-react';
 import { pb, ID_TO_AREA, AREAS } from '../lib/pocketbase';
@@ -28,9 +29,10 @@ import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
 import { DatePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
 import { Tabs, TabItem } from './ui/Tabs';
-import { isHeadLine, HEAD_LABEL, HEAD_HINT } from '../lib/headMeters';
+import { useHeadSerials, HEAD_LABEL, HEAD_HINT } from '../lib/headMeters';
 import CustomerPmaxTab from './CustomerPmaxTab';
 import LinePmaxTab from './LinePmaxTab';
+import HeadBalanceTab from './HeadBalanceTab';
 
 /* ================================================================
    CACHE CSV (module-level) — datametter.csv chỉ tải 1 lần/phiên.
@@ -267,11 +269,13 @@ interface VoltagePowerDashboardProps {
   onZoneFilterChange?: (zone: string) => void;
 }
 
-type PageTab = 'chart' | 'pmax' | 'linePmax';
+type PageTab = 'chart' | 'pmax' | 'linePmax' | 'head';
 
 export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }: VoltagePowerDashboardProps = {}) {
   /* ---- Tab đang xem ---- */
   const [tab, setTab] = useState<PageTab>('chart');
+  /* Công tơ đầu nguồn theo Danh mục (role dau_nguon) — không còn theo tên LINE_NAME. */
+  const headSerials = useHeadSerials();
 
   /* ---- CSV ---- */
   const [csvContent, setCsvContent] = useState<string>(_meterCsvCache ?? '');
@@ -310,6 +314,14 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
     return items.map(item => normArea(ID_TO_AREA[item] || item));
   }, [JSON.stringify(pb.authStore.model?.area)]);
 
+  /* KCN được xem — cùng luật với danh sách khách hàng bên dưới (Văn phòng: bộ chọn KCN,
+     '' = tất cả; Vận hành: KCN của tài khoản). Dùng cho tab Đầu nguồn. */
+  const allowedZones = useMemo<Set<string> | null>(() => (
+    zoneFilter !== undefined
+      ? (zoneFilter ? new Set([normArea(zoneFilter)]) : null)
+      : (userAreas.length > 0 ? new Set(userAreas) : null)
+  ), [zoneFilter, userAreas]);
+
   useEffect(() => {
     let mounted = true;
     setIsLoadingMeters(true);
@@ -331,7 +343,7 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
     for (const r of meterRows) {
       if (allowed && !allowed.has(normArea(r.ADDRESS))) continue;
       // Điểm đo đầu nguồn KHÔNG phải khách hàng — tách ra thẻ riêng, xem `headStations`.
-      if (isHeadLine(r.LINE_NAME)) continue;
+      if (headSerials.has(r.METER_NO)) continue;
       const cid = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
       if (!cid) continue;
       if (!map.has(cid)) {
@@ -345,7 +357,7 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
       map.get(cid)!.meters.push({ meterNo: r.METER_NO, line: r.LINE_NAME || '' });
     }
     return map;
-  }, [meterRows, userAreas, zoneFilter]);
+  }, [meterRows, userAreas, zoneFilter, headSerials]);
 
   /* ---- Phân tích CSV → chỉ mục theo công tơ / ngày (giữ nguyên thời điểm) ---- */
   const { readingIndex, dateKeys } = useMemo(() => {
@@ -505,6 +517,7 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
     /* Ghi rõ "trung bình 30 phút" ngay trên tab: con số này KHÁC đơn vị với tab
        bên cạnh (~18%), không nói ra thì chắc chắn bị đem so thẳng. */
     { id: 'linePmax', label: 'Pmax theo lộ', icon: Cable, sub: 'Đỉnh cả lộ · trung bình 30 phút' },
+    { id: 'head', label: 'Đầu nguồn', icon: Zap, sub: 'Đối soát đầu nguồn ↔ tổng điểm đo' },
   ];
   // Danh sách khách hàng đã lọc theo KCN của tài khoản → dùng chung cho tab Pmax.
   const pmaxCustomers = useMemo(() => Array.from(customerInfoMap.values()), [customerInfoMap]);
@@ -518,13 +531,13 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
       : (userAreas.length > 0 ? new Set(userAreas) : null);
     const out: StationSeries[] = [];
     for (const r of meterRows) {
-      if (!isHeadLine(r.LINE_NAME)) continue;
+      if (!headSerials.has(r.METER_NO)) continue;
       if (allowed && !allowed.has(normArea(r.ADDRESS))) continue;
       const st = buildStation(r.METER_NO, r.LINE_NAME || '', readingIndex.get(r.METER_NO)?.get(selectedDate));
       if (st) out.push(st);
     }
     return out;
-  }, [meterRows, readingIndex, selectedDate, userAreas, zoneFilter]);
+  }, [meterRows, readingIndex, selectedDate, userAreas, zoneFilter, headSerials]);
 
   /* ---- Render 1 thẻ biểu đồ (1 trạm: 3 đường điện áp + 1 cột P) ---- */
   const renderCard = (i: number) => {
@@ -819,6 +832,8 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
 
       {/* ---- Tab Pmax theo lộ đường dây (theo tháng) ---- */}
       {tab === 'linePmax' && <LinePmaxTab />}
+
+      {tab === 'head' && <HeadBalanceTab allowedZones={allowedZones} />}
 
       {/* ---- Trạng thái tải / rỗng (lỗi hiển thị bằng toast) ---- */}
       {tab === 'chart' && !isReady && !csvError && (

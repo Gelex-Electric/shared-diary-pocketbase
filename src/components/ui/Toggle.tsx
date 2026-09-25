@@ -3,7 +3,8 @@
  * chọn (cùng ngôn ngữ chuyển động với `ui/Tabs`, dùng `layoutId` của motion).
  *
  * Dùng cho các cặp lựa chọn loại trừ nhau mà người dùng cần thấy ngay cả hai
- * phương án: Trực tiếp/Gián tiếp, Chính/Phụ.
+ * phương án: Trực tiếp/Gián tiếp, Chính/Phụ. Nhận từ 2 lựa chọn trở lên — Chính/
+ * Phụ/Đầu nguồn (24/09/2026) — cùng một kiểu, chỉ thêm ô.
  *
  * Vì sao không dùng công tắc bật/tắt thường: cả hai phía đều là giá trị nghiệp
  * vụ có tên, không phải bật/tắt — giấu một nhãn đi sẽ phải đoán.
@@ -21,7 +22,8 @@ export interface ToggleOption<T extends string> {
 interface ToggleProps<T extends string> {
   value: T;
   onChange: (v: T) => void;
-  options: [ToggleOption<T>, ToggleOption<T>];
+  /** Ít nhất 2 lựa chọn (bộ gạt 1 ô là vô nghĩa). */
+  options: [ToggleOption<T>, ToggleOption<T>, ...ToggleOption<T>[]];
   disabled?: boolean;
   className?: string;
 }

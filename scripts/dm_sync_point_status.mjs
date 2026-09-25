@@ -105,7 +105,8 @@ async function main() {
         a.type === 'CONGTO' && a.active
         && L.segmentOf(L.segmentsOf(invBySerial.get(a.serial) ?? []), mkh)?.isCurrent === true);
 
-      const next = S.derivePointStatus({ ...S.countAssets(rows), hasRecentInvoice });
+      const next = S.derivePointStatus({ ...S.countAssets(rows), hasRecentInvoice,
+        isHead: p.role === 'dau_nguon' });
       tally[next] = (tally[next] ?? 0) + 1;
       if ((p.status ?? '') !== next) changes.push({ id: p.id, code: p.code, from: p.status ?? '', to: next });
     }

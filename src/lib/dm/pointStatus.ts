@@ -42,6 +42,12 @@ export interface PointStatusInput {
    * điện cả năm nay mà vẫn còn công tơ treo thì không thể coi là đang vận hành.
    */
   hasRecentInvoice: boolean;
+  /**
+   * Điểm ĐẦU NGUỒN (`role = dau_nguon`): đo tổng lộ, KHÔNG phát sinh hóa đơn nào ⇒
+   * không dùng hóa đơn làm bằng chứng vận hành. Có công tơ đang treo, đủ ngày treo
+   * là đang vận hành (24/09/2026). Thiếu cờ này thì nó mãi "chưa vận hành".
+   */
+  isHead?: boolean;
 }
 
 /** Bộ TI của một điểm đo gián tiếp: 3 cái chạy song song trên 3 pha. */
@@ -58,7 +64,7 @@ export function derivePointStatus(i: PointStatusInput): PointStatus {
   // Còn công tơ chưa khai ngày treo ⇒ chưa chứng minh được đã lắp, vẫn dự kiến.
   if (i.metersWithoutDateOn > 0) return 'du_kien';
 
-  return i.hasRecentInvoice ? 'active' : 'chua_van_hanh';
+  return i.isHead || i.hasRecentInvoice ? 'active' : 'chua_van_hanh';
 }
 
 /**

@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 import { Building2, Cable, Factory, Gauge, MousePointerClick, X } from 'lucide-react';
 import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, ROLE_LABEL, STATUS_LABEL } from '../../lib/dm/types';
+import { pointZoneId } from '../../lib/dm/pointScope';
 import type { Asset, Line, Point, PointStatus, Station, Zone } from '../../lib/dm/types';
 import { invoicesOfSerial } from '../../lib/dm/invoiceRepo';
 import { dmyRange, segmentOf, segmentsOf, ymd } from '../../lib/dm/lifecycle';
@@ -283,7 +284,7 @@ function PointDetail({ point, d }: { point: Point; d: CatalogData }) {
   const rows = d.assets.filter(a => a.point === point.id);
   const station = d.stations.find(s => s.id === point.station);
   const customer = d.customers.find(c => c.id === point.customer);
-  const zone = d.zones.find(z => z.id === station?.zone);
+  const zone = d.zones.find(z => z.id === pointZoneId(point, d.stations, d.lines));
   const color = kcnColorOf(zone?.name);
 
   const meters = rows.filter(a => a.type === 'CONGTO');
@@ -328,7 +329,11 @@ function PointDetail({ point, d }: { point: Point; d: CatalogData }) {
   return (
     <div className="space-y-5">
       <Head icon={Gauge} hex={color.hex} title={point.code || point.line_name || point.id}
-        sub={station ? `${station.code}${zone ? ` · ${zone.name}` : ''}` : 'chưa gắn trạm'} />
+        sub={station ? `${station.code}${zone ? ` · ${zone.name}` : ''}`
+          /* Đầu nguồn không có trạm — nêu lộ nó đo thay vì báo "chưa gắn trạm" như lỗi. */
+          : point.role === 'dau_nguon'
+            ? `Đầu nguồn lộ ${d.lines.find(l => l.id === point.line)?.code ?? '—'}${zone ? ` · ${zone.name}` : ''}`
+            : 'chưa gắn trạm'} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat n={rows.length} label="Vật tư" hint={`${rows.filter(a => a.active).length} đang hoạt động`} />

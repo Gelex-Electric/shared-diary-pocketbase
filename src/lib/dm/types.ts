@@ -7,8 +7,14 @@
  * `plans/2026-08-14-quan-ly-tram-va-diem-do.md`.
  */
 
-/** Điểm đo chính hay phụ (phụ = nằm trong phạm vi đo của điểm chính). */
-export type PointRole = 'chinh' | 'phu';
+/**
+ * Vai trò điểm đo:
+ * - `chinh`     : điểm đo tính tiền của khách, thuộc một trạm.
+ * - `phu`       : nằm trong phạm vi đo của một điểm chính.
+ * - `dau_nguon` : đo TỔNG một lộ (vd TTI.DIEMDOPHU) — KHÔNG thuộc trạm, KHÔNG có
+ *                 khách hàng; bắt buộc có `line` (schema v17, 24/09/2026).
+ */
+export type PointRole = 'chinh' | 'phu' | 'dau_nguon';
 
 /**
  * Đấu nối trực tiếp hay gián tiếp:
@@ -133,7 +139,13 @@ export interface Point extends PbRecord {
   /** Mã bên HES — thường chưa có lúc khai, nên để tuỳ chọn. */
   line_id?: string;
   line_name?: string;
+  /**
+   * Trạm. Có với `chinh`/`phu`; TRỐNG với `dau_nguon` (schema v17 bỏ bắt buộc —
+   * ràng buộc nay nằm ở form). Nơi đọc phải chịu được chuỗi rỗng.
+   */
   station: string;
+  /** Lộ — chỉ dùng cho `dau_nguon` (bắt buộc với vai trò đó). */
+  line?: string;
   zone?: string;
   customer?: string;
   role: PointRole;
@@ -247,6 +259,7 @@ export const ASSET_LABEL: Record<AssetType, string> = {
 export const ROLE_LABEL: Record<PointRole, string> = {
   chinh: 'Chính',
   phu: 'Phụ',
+  dau_nguon: 'Đầu nguồn',
 };
 
 export const CONNECTION_LABEL: Record<Connection, string> = {

@@ -16,6 +16,7 @@
  *   PB_EMAIL=... PB_PASS=... API_TOKEN=... \
  *   FROM=2026-08-27 TO=2026-09-17 node scripts/backfill_hes_30min.mjs
  *   ... thêm --dry-run để chỉ xem sẽ ghi gì.
+ *   ... ONLY_METERS=2246006313 để chỉ lấy vài công tơ.
  *
  * TO là cận trên KHÔNG bao gồm. Ngày quá `KEEP_DAYS_30` vẫn bị dọn như thường,
  * nên đừng backfill xa hơn cửa sổ giữ ngày — ghi xong lại xoá ngay.
@@ -40,7 +41,12 @@ const day0 = (s) => new Date(`${s}T00:00:00`);
 if (day0(TO) <= day0(FROM)) { console.error('TO phải sau FROM.'); process.exit(1); }
 
 const pbToken = await pbLogin();
-const { meters } = await liveMeters(pbToken);
+const { meters: liveAll } = await liveMeters(pbToken);
+/* ONLY_METERS=a,b — chỉ lấy vài công tơ (vd công tơ vừa khai vào Danh mục), không
+   ghi lại số của mọi công tơ khác. Gộp theo (METER_NO, DATE_TIME) nên an toàn. */
+const only = new Set((process.env.ONLY_METERS || '').split(',').map(x => x.trim()).filter(Boolean));
+const meters = only.size ? liveAll.filter(m => only.has(m.serial)) : liveAll;
+if (only.size) console.log(`ONLY_METERS: ${meters.map(m => m.serial).join(', ') || '(không khớp công tơ nào đang treo)'}`);
 console.log(`Danh mục: ${meters.length} công tơ ĐANG TREO (nguồn PocketBase).`);
 if (!meters.length) { console.error('Không có công tơ nào — dừng.'); process.exit(1); }
 

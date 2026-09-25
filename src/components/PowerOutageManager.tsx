@@ -15,7 +15,7 @@ import { generateOutageDocx } from '../lib/outageDocx';
 import { loadLowNameMap, withLowNames } from '../lib/outageNames';
 import type { LowNameMap } from '../lib/outageNames';
 import { toast as notify } from '../lib/toast';
-import { isHeadLine } from '../lib/headMeters';
+import { loadHeadMeters } from '../lib/headMeters';
 
 const TOAST_TITLE: Record<ToastType, string> = {
   success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
@@ -192,13 +192,14 @@ export default function PowerOutageManager() {
     if (!a) { setCustomerList([]); return; }
     setLoadingCustomers(true);
     try {
-      const rows = await fetchMeterInfo();
+      const [rows, heads] = await Promise.all([fetchMeterInfo(), loadHeadMeters()]);
+      const headSerials = new Set(heads.map(h => h.serial));
       const map = new Map<string, OutageCustomer>();
       rows
         .filter(r => r.ADDRESS === a)
         .forEach(r => {
           // Điểm đo đầu nguồn không phải khách hàng → không có ai để gửi thông báo.
-          if (isHeadLine(r.LINE_NAME)) return;
+          if (headSerials.has(r.METER_NO)) return;
           const id = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
           if (id && !map.has(id)) map.set(id, { id, MKH: r.CUSTOMER_CODE || '?', Name: r.CUSTOMER_NAME || '?' });
         });

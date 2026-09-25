@@ -38,6 +38,7 @@ import {
 import { isAbortError, loadCatalog, pbErrorMessage } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
 import type { Line, Point, Station, Zone } from '../../lib/dm/types';
+import { isHeadPoint } from '../../lib/dm/pointScope';
 import { kcnColorOf } from '../../lib/kcnColors';
 import { PointBadgeIcon, StatusIcon } from './pointIcons';
 import { TreeDetail } from './TreeDetail';
@@ -166,6 +167,8 @@ export default function DataTree() {
         zone: z,
         lines: zoneLines.map(l => ({
           line: l,
+          /* Điểm ĐẦU NGUỒN nằm thẳng dưới lộ — nó đo tổng lộ, không thuộc trạm nào. */
+          heads: data.points.filter(p => isHeadPoint(p) && p.line === l.id),
           stations: zoneStations.filter(s => s.line === l.id).map(withPoints),
         })),
         loose: zoneStations.filter(s => !s.line || !lineIds.has(s.line)).map(withPoints),
@@ -190,10 +193,11 @@ export default function DataTree() {
       .map(({ zone, lines, loose }) => {
         const zoneHit = matchZone(zone);
         const ls = lines
-          .map(({ line, stations }) => {
+          .map(({ line, heads, stations }) => {
             const lineHit = zoneHit || matchLine(line);
             const sts = filterStations(stations, lineHit);
-            return { line, stations: sts, keep: lineHit || sts.length > 0 };
+            const hs = heads.filter(p => lineHit || matchPoint(p));
+            return { line, heads: hs, stations: sts, keep: lineHit || sts.length > 0 || hs.length > 0 };
           })
           .filter(l => l.keep);
         const lo = filterStations(loose, zoneHit);
@@ -207,7 +211,8 @@ export default function DataTree() {
   const orphanStations = useMemo(
     () => (data?.stations ?? []).filter(s => !data?.zones.some(z => z.id === s.zone)), [data]);
   const orphanPoints = useMemo(
-    () => (data?.points ?? []).filter(p => !data?.stations.some(s => s.id === p.station)), [data]);
+    /* Điểm đầu nguồn không có trạm là ĐÚNG thiết kế (nằm dưới lộ) — không phải mồ côi. */
+    () => (data?.points ?? []).filter(p => !isHeadPoint(p) && !data?.stations.some(s => s.id === p.station)), [data]);
 
   const totalPoints = data?.points.length ?? 0;
   const isEmpty = !loading && !error && (data?.zones.length ?? 0) === 0
@@ -373,7 +378,7 @@ export default function DataTree() {
                       <p className="px-3 py-2 text-[12px] italic text-faint">Chưa có trạm nào trong KCN này.</p>
                     ) : (<>
                       {/* --- Cấp 2: Lộ đường dây --- */}
-                      {lines.map(({ line, stations }) => {
+                      {lines.map(({ line, heads, stations }) => {
                         const lOpen = openIds.has(line.id);
                         const lPoints = stations.reduce((n, x) => n + x.points.length, 0);
                         return (
@@ -382,7 +387,7 @@ export default function DataTree() {
                               className={`flex w-full items-center gap-2.5 rounded-lg border-l-2 px-2 py-2 text-left transition-colors ${
                                 isSel('line', line.id) ? 'border-accent bg-accent-soft' : 'border-transparent hover:bg-subtle'
                               }`}>
-                              <Caret open={lOpen} hidden={stations.length === 0} />
+                              <Caret open={lOpen} hidden={stations.length === 0 && heads.length === 0} />
                               <Cable className="h-4 w-4 shrink-0" style={{ color: color.hex }} />
                               <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-bold text-dim"
                                 title={line.name || line.code}>
@@ -395,8 +400,10 @@ export default function DataTree() {
                               <Count n={stations.length} label="trạm" hex={color.hex} />
                               <Count n={lPoints} label="điểm đo" hex={color.hex} />
                             </button>
-                            {lOpen && stations.length > 0 && (
+                            {lOpen && (stations.length > 0 || heads.length > 0) && (
                               <div className="ml-[9px] border-l-2 pl-4" style={{ borderColor: `${color.hex}4d` }}>
+                                {/* Đầu nguồn đứng TRƯỚC các trạm: nó đo tổng của cả nhánh bên dưới. */}
+                                {heads.map(p => <PointRow key={p.id} p={p} hex={color.hex} />)}
                                 <StationBlock list={stations} hex={color.hex} />
                               </div>
                             )}

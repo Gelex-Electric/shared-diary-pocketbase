@@ -24,7 +24,7 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(from ?? '') || !/^\d{4}-\d{2}-\d{2}$/.test(to ??
   console.error('Dùng: --date YYYY-MM-DD hoặc --from YYYY-MM-DD --to YYYY-MM-DD'); process.exit(1);
 }
 const parse = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-/* Dư bù đo theo TỶ LỆ với vô công giao (xem DUBU_RATIO) — `--only-phatnguoc` để bỏ qua. */
+/* Dư bù: ≥ DUBU_RATIO (10 %) vô công giao VÀ > DUBU_MIN_KVARH (1.000 kVArh) — `--only-phatnguoc` để bỏ qua. */
 const KINDS = process.argv.includes('--only-phatnguoc') ? ['phatnguoc'] : ['phatnguoc', 'dubu'];
 const recTime = (r) => r?.DATE_TIME || r?.DATA_TIME || '';
 

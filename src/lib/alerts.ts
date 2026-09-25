@@ -156,7 +156,7 @@ export const ALERT_KINDS = [
   /* Mã `lui` giữ nguyên trong dữ liệu — đổi mã là mọi bản ghi cũ rơi ra ngoài
      nhóm. Chỉ đổi NHÃN: "bất thường" rộng hơn "chạy lùi", để sau này thêm được
      các kiểu sai khác của chỉ số mà không phải đặt lại tên mục. */
-  { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số công tơ giảm giữa hai mốc, hoặc chiều nhận tăng (phát ngược, vô công dư bù)' },
+  { kind: 'lui', label: 'Chỉ số bất thường', desc: 'Chỉ số công tơ giảm giữa hai mốc, hoặc chiều nhận tăng (phát ngược, vô công dư bù), hoặc đầu nguồn lệch tổng điểm đo' },
   { kind: 'congto', label: 'Đối chiếu công tơ', desc: 'Công tơ lệch giữa HES và Danh mục' },
 ] as const;
 
@@ -172,8 +172,9 @@ export type AlertKind = typeof ALERT_KINDS[number]['kind'];
  */
 const KIND_ALIASES: Record<string, string[]> = {
   /* `phatnguoc`, `dubu` cũng là bất thường của chỉ số (chiều nhận tăng) — user
-     chốt 24/09/2026 gộp vào mục này thay vì mục riêng. Vẫn ĐẾM vào badge. */
-  lui: ['lui', 'lamtron', 'phatnguoc', 'dubu'],
+     chốt 24/09/2026 gộp vào mục này thay vì mục riêng. Vẫn ĐẾM vào badge.
+     `daunguon` (25/09): đối soát điểm đo đầu nguồn ↔ tổng điểm đo cùng lộ. */
+  lui: ['lui', 'lamtron', 'phatnguoc', 'dubu', 'daunguon'],
 };
 const kindsOf = (kind: string): string[] => KIND_ALIASES[kind] ?? [kind];
 

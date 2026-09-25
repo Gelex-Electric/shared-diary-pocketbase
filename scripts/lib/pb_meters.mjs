@@ -141,7 +141,13 @@ export async function liveMeters(token) {
   const sdmOf = (id) => stations.find(s => s.id === id)?.sdm_kva;
   const zoneName = new Map(zones.map(z => [z.id, z.name]));
   /* KCN lấy theo TRẠM: khách thuê nhà xưởng có thể khai ở KCN khác nơi đặt công tơ. */
-  const zoneOfPoint = (p) => zoneName.get(stations.find(s => s.id === p?.station)?.zone) ?? '';
+  const lines = await allOf('dm_line', token);
+  /* Điểm ĐẦU NGUỒN (role dau_nguon, schema v17) không có trạm ⇒ lấy `zone` của chính
+     nó, thiếu thì KCN của lộ. Thiếu nhánh này thì KCN rỗng, cảnh báo mất KCN. */
+  const zoneOfPoint = (p) => zoneName.get(
+    stations.find(s => s.id === p?.station)?.zone
+    || p?.zone
+    || lines.find(l => l.id === p?.line)?.zone) ?? '';
 
   const meters = assets
     .filter(a => a.type === 'CONGTO' && ymd(a.date_on) && !ymd(a.date_off) && a.point)

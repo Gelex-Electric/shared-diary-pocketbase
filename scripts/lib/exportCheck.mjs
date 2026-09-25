@@ -7,10 +7,9 @@
  *
  * Luật (user chốt 24/09/2026):
  *   · phát ngược — hữu công nhận TĂNG bất kỳ mức nào (> 0) là báo;
- *   · dư bù — vô công nhận ≥ DUBU_RATIO × vô công GIAO cùng ngày VÀ ≥ DUBU_MIN_KVARH.
- *     Tháng 9: ngưỡng > 0 bắt 96/124 công tơ; riêng tỷ lệ 10% vẫn 84 công tơ vì một
- *     nửa số dòng có vô công giao = 0 (tụ đóng cả ngày ⇒ tỷ lệ vô cực). Thêm LƯỢNG
- *     ≥ 200 kVArh còn 9 công tơ, ~3,5 công tơ/ngày — các ca dư bù lớn thật.
+ *   · dư bù — vô công nhận ≥ DUBU_RATIO (10 %) × vô công GIAO cùng ngày VÀ > DUBU_MIN_KVARH
+ *     (1.000 kVArh). 24/09: 10 % & ≥ 200 kVArh (~9 công tơ tháng 9). 25/09 user nâng lượng
+ *     lên > 1.000 và GIỮ điều kiện 10 %. Vô công giao = 0 (tụ đóng cả ngày) ⇒ tỷ lệ vô cực.
  * Bước LÙI (thay công tơ, sai số làm tròn HES) KHÔNG được cộng vào — việc đó đã có
  * cảnh báo `lui` riêng.
  */
@@ -20,10 +19,10 @@ export const REVERSE_REGISTERS = {
   dubu:      { field: 'NEGACTIVE_KVAR_INDICATE_TOTAL', register: 'Vô công nhận – tổng',  unit: 'kVArh' },
 };
 
-/** Dư bù: vô công nhận / vô công giao ≥ ngưỡng này mới báo (user chốt 24/09/2026). */
+/** Dư bù: vô công nhận / vô công giao ≥ ngưỡng này (user chốt 24/09, GIỮ LẠI 25/09/2026). */
 export const DUBU_RATIO = Number(process.env.DUBU_RATIO || 0.1);
-/** Dư bù: lượng vô công nhận tối thiểu trong ngày (×HSN) mới báo. */
-export const DUBU_MIN_KVARH = Number(process.env.DUBU_MIN_KVARH || 200);
+/** Dư bù: vô công nhận trong ngày (×HSN) phải LỚN HƠN mức này (user chốt 25/09/2026). */
+export const DUBU_MIN_KVARH = Number(process.env.DUBU_MIN_KVARH || 1000);
 const REACTIVE_GIAO = 'REACTIVE_KVAR_INDICATE_TOTAL';
 
 const recTime = (r) => r?.DATE_TIME || r?.DATA_TIME || '';
@@ -80,7 +79,7 @@ export function detectReverse(recs, hsn) {
   if (out.dubu) {
     const giao = scanOne(recs, REACTIVE_GIAO, h)?.value ?? 0;
     const ratio = giao > 0 ? out.dubu.value / giao : Infinity;
-    out.dubu = ratio + FLOAT_SLOP >= DUBU_RATIO && out.dubu.value + FLOAT_SLOP >= DUBU_MIN_KVARH
+    out.dubu = ratio + FLOAT_SLOP >= DUBU_RATIO && out.dubu.value > DUBU_MIN_KVARH + FLOAT_SLOP
       ? { ...out.dubu, giao, ratio } : null;
   }
   return out;
@@ -100,7 +99,7 @@ export function peakNote(res) {
 
 const KIND_TEXT = {
   phatnguoc: { title: 'Công tơ phát ngược lên lưới', what: 'hữu công chiều nhận tăng' },
-  dubu: { title: 'Công tơ dư bù (vô công chiều nhận)', what: `vô công chiều nhận ≥ ${Math.round(DUBU_RATIO * 100)}% vô công giao và ≥ ${DUBU_MIN_KVARH} kVArh` },
+  dubu: { title: 'Công tơ dư bù (vô công chiều nhận)', what: `vô công chiều nhận ≥ ${Math.round(DUBU_RATIO * 100)}% vô công giao và > ${DUBU_MIN_KVARH.toLocaleString('vi-VN')} kVArh` },
 };
 
 /**

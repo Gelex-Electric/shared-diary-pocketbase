@@ -79,7 +79,7 @@ const COLLECTION = 'alerts';
  *
  * KHÔNG còn `tram` (16/09/2026): chưa cần tới, nơi sinh đã ngừng ghi.
  */
-export const ALERT_KINDS = ['lui', 'lamtron', 'congto', 'phatnguoc', 'dubu'];
+export const ALERT_KINDS = ['lui', 'lamtron', 'congto', 'phatnguoc', 'dubu', 'daunguon'];
 
 /**
  * Tạo một cảnh báo nếu chưa có cái nào trùng `kind` + `day` + `message`.

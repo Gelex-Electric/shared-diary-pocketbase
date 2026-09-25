@@ -11,7 +11,7 @@
 import {
   Gauge, Lightbulb, Flame, Droplets, Building2, Factory,
   BatteryCharging, Users, Tag, GlassWater, GitBranch,
-  CircleCheck, CircleAlert, CircleDashed, CircleSlash, CircleHelp,
+  Zap, CircleCheck, CircleAlert, CircleDashed, CircleSlash, CircleHelp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { purposeLabelOf } from '../../lib/dm/naming';
@@ -47,6 +47,10 @@ const PURPOSE_ICON: Record<string, { icon: LucideIcon; hex: string }> = {
 };
 
 export function pointBadge(p: Point): PointBadge {
+  /* Đo TỔNG một lộ, không phải phụ tải của khách — phải nhìn ra khác ngay (schema v17). */
+  if (p.role === 'dau_nguon') {
+    return { icon: Zap, hex: '#f59e0b', code: 'Đầu nguồn', title: 'Điểm đo đầu nguồn — đo tổng lộ' };
+  }
   if (p.role !== 'phu') {
     return { icon: Gauge, hex: '#3b82f6', code: 'Chính', title: 'Điểm đo chính' };
   }

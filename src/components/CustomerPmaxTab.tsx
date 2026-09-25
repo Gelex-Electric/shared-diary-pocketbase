@@ -12,7 +12,7 @@ import { usePmaxDaily } from '../lib/pmax';
 import { MonthPicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
 import { StatTile, ChartTooltip, EmptyState, CHART } from './ui/dashboard';
-import { isHeadLine } from '../lib/headMeters';
+import { useHeadSerials } from '../lib/headMeters';
 
 /** Khách hàng + danh sách công tơ — khớp cấu trúc CustomerInfo của trang cha. */
 export interface PmaxCustomer {
@@ -54,20 +54,22 @@ const fmtKw = (v: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDig
 
 export default function CustomerPmaxTab({ customers }: Props) {
   const { rows, loading, error } = usePmaxDaily();
+  /* Công tơ đầu nguồn theo Danh mục (role dau_nguon) — không còn theo tên LINE_NAME. */
+  const headSerials = useHeadSerials();
 
   /* Tách công tơ đầu nguồn khỏi danh sách khách hàng (tính riêng bên dưới) */
   const { loadCustomers, headMeters } = useMemo(() => {
     const load: PmaxCustomer[] = [];
     const head: { meterNo: string; line: string; name: string }[] = [];
     for (const c of customers) {
-      const own = c.meters.filter(m => !isHeadLine(m.line));
+      const own = c.meters.filter(m => !headSerials.has(m.meterNo));
       c.meters
-        .filter(m => isHeadLine(m.line))
+        .filter(m => headSerials.has(m.meterNo))
         .forEach(m => head.push({ meterNo: m.meterNo, line: m.line, name: c.name }));
       if (own.length > 0) load.push({ ...c, meters: own });
     }
     return { loadCustomers: load, headMeters: head };
-  }, [customers]);
+  }, [customers, headSerials]);
 
   /* Tháng có dữ liệu trong CSV → mặc định chọn tháng mới nhất */
   const monthsWithData = useMemo(() => {

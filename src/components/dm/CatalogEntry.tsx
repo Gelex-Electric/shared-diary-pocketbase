@@ -32,6 +32,7 @@ import { DatePicker } from '../ui/DateTimePickers';
 import { assets, customers, devices, isAbortError, lines, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
+import { isHeadPoint, pointZoneId } from '../../lib/dm/pointScope';
 import type {
   AssetStatus, AssetType, Customer, Device, Line, Point, PointRole, Station,
   VoltageLevel, Zone,
@@ -141,6 +142,8 @@ const EMPTY_C = { mkh: '', name: '', low_name: '', short_name: '', address: '', 
 /** `code` cũng do hệ thống sinh; `customer` chỉ dùng khi là điểm đo phụ. */
 const EMPTY_P = {
   station: '', role: 'chinh' as PointRole,
+  /** Chỉ cho điểm ĐẦU NGUỒN (schema v17): lộ nó đo + mã nhập tay (khớp LINE_NAME HES). */
+  line: '', head_code: '',
   customer: '', parent_point: '', ident: '', hsn: '1',
   /** Chỉ dùng khi điểm phụ trùng KH với điểm chính: mã nhãn, hoặc CUSTOM. */
   purpose: '', purpose_custom: '',
@@ -369,6 +372,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       ...EMPTY_P,
       assetRows: rows,
       station: p.station, role: p.role,
+      line: p.line ?? '', head_code: p.role === 'dau_nguon' ? (p.code ?? '') : '',
       customer: p.customer ?? '', parent_point: p.parent_point ?? '',
       ident: p.ident ?? '', hsn: str(p.hsn),
       purpose: isPreset ? saved : (saved ? CUSTOM : ''),
@@ -414,6 +418,17 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const pStationCustomer = d?.customers.find(c => c.id === pStation?.customer);
   const pSubCustomer = d?.customers.find(c => c.id === pForm.customer);
   const isSub = pForm.role === 'phu';
+  /** Điểm đo ĐẦU NGUỒN: đo tổng một lộ, không trạm, không khách (schema v17). */
+  const isHead = pForm.role === 'dau_nguon';
+  const pLine = d?.lines.find(l => l.id === pForm.line);
+  /** Lộ đã có điểm đầu nguồn khác — mỗi lộ một điểm (plan 24/09). */
+  const lineHeadTaken = isHead && !!pForm.line && (d?.points ?? [])
+    .some(p => p.role === 'dau_nguon' && p.line === pForm.line && p.id !== editingId);
+  /** Mọi lộ, nhãn kèm KCN — điểm đầu nguồn chọn lộ trực tiếp, không qua trạm. */
+  const allLineOpts = (d?.lines ?? []).map(l => ({
+    value: l.id,
+    label: `${l.code} — ${d?.zones.find(z => z.id === l.zone)?.name ?? '—'}${l.active === false ? ' (đã ngưng)' : ''}`,
+  }));
 
   /** Điểm đo chính mà điểm phụ này thuộc về (nếu đã chọn). */
   const pParent = d?.points.find(p => p.id === pForm.parent_point);
@@ -1022,6 +1037,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     // Dùng `inWindow`: chỉ chặng ĐÚNG quãng treo mới chứng minh điểm đo này
     // đang phát sinh tiền điện — chặng ở quãng khác là của lần lắp khác.
     hasRecentInvoice: meterRefs.some(m => m.row.active && m.inWindow?.isCurrent),
+    isHead,
   });
 
   /**
@@ -1168,6 +1184,44 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       return void persist(
         () => (editingId ? customers.update(editingId, body) : customers.create(body)),
         `Khách hàng ${body.mkh}`);
+    }
+
+    if (modal === 'point' && isHead) {
+      const code = pForm.head_code.trim().toUpperCase();
+      if (!pForm.line) return toast.warning('Thiếu thông tin', 'Điểm đo đầu nguồn phải chọn lộ nó đo.');
+      if (!code) return toast.warning('Thiếu mã', 'Nhập mã điểm đo đầu nguồn (khớp LINE_NAME bên HES).');
+      if (lineHeadTaken) return toast.error('Chưa lưu được', 'Lộ này đã có điểm đo đầu nguồn.');
+      /* Mã nhập tay nên kiểm trùng ở đây — để PB báo thì chỉ ra "Value must be unique". */
+      const clash = d?.points.find(p => (p.code ?? '').toUpperCase() === code && p.id !== editingId);
+      if (clash) return toast.error('Chưa lưu được', `Mã ${code} đã thuộc về một điểm đo khác.`);
+      if (saveBlocks.length) return toast.error('Chưa lưu được', `${saveBlocks.join('. ')}.`);
+      const body = {
+        code, line_name: code, ident: '', sub_label: '',
+        /* Không trạm, không khách, không điểm cha — đo TỔNG lộ. */
+        station: '', customer: '', parent_point: '',
+        line: pForm.line, zone: pLine?.zone || undefined,
+        role: 'dau_nguon' as PointRole,
+        connection: connectionOfHsn(effectiveHsn),
+        hsn: effectiveHsn ?? undefined,
+        status: derivedStatus || undefined,
+        note: pForm.note.trim(),
+      };
+      return void persist(async () => {
+        for (const b of reclaim) {
+          if (!b.swapTo) { await assets.remove(b.asset.id); continue; }
+          const dev = (d?.devices ?? []).find(x => x.serial.trim() === b.swapTo);
+          await assets.update(b.asset.id, {
+            serial: b.swapTo,
+            ...(dev ? {
+              device: dev.id, type: dev.type,
+              ratio_primary: dev.ratio_primary, ratio_secondary: dev.ratio_secondary,
+            } : {}),
+          });
+          if (dev) await devices.update(dev.id, { hold_point: b.asset.point ?? '' });
+        }
+        const rec = editingId ? await points.update(editingId, body) : await points.create(body);
+        await syncAssets((rec as { id: string }).id);
+      }, `Điểm đo đầu nguồn ${code}`);
     }
 
     if (modal === 'point') {
@@ -1620,6 +1674,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const stationsOfLine = (id: string) => d?.stations.filter(s => s.line === id).length ?? 0;
   const lineCodeOf = (id?: string) => d?.lines.find(l => l.id === id)?.code;
   const stationCodeOf = (id?: string) => d?.stations.find(s => s.id === id)?.code ?? '—';
+  /** Cột "Trạm": điểm đầu nguồn không có trạm — hiện lộ nó đo. */
+  const placeOf = (p: Point) => isHeadPoint(p)
+    ? `Lộ ${d?.lines.find(l => l.id === p.line)?.code ?? '—'}`
+    : stationCodeOf(p.station);
   const childrenOf = (id: string) => d?.points.filter(p => p.parent_point === id).length ?? 0;
 
   /* ---------------------------------------------------------------------
@@ -1683,7 +1741,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     const sorted = sortByCode(clusters, c => codeOfPoint(c.head));
     // KCN của cụm lấy theo trạm của điểm chính (điểm đo không giữ KCN riêng).
     const zoneOfCluster = (c: (typeof clusters)[number]) =>
-      d?.stations.find(s => s.id === c.head.station)?.zone;
+      d ? pointZoneId(c.head, d.stations, d.lines) : undefined;
 
     return groupByZone(sorted, zoneOfCluster, d?.zones ?? [])
       .map(g => ({ zone: g.zone, rows: g.rows.flatMap(c => c.rows) }));
@@ -2097,7 +2155,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                     </span>
                   </span>
                 </td>
-                <td className="truncate px-6 py-4 font-mono text-xs text-soft" title={stationCodeOf(p.station)}>{stationCodeOf(p.station)}</td>
+                <td className="truncate px-6 py-4 font-mono text-xs text-soft" title={placeOf(p)}>{placeOf(p)}</td>
                 <td className="px-6 py-4 font-mono text-xs font-bold text-soft">{customerMkh(p.customer)}</td>
                 <td className="px-6 py-4"><PointBadgeChip point={p} /></td>
                 <td className="px-6 py-4"><StatusTag status={p.status} /></td>
@@ -2373,6 +2431,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
           <>
             {/* Mã điểm đo đứng ĐẦU form: nó là kết quả của mọi ô bên dưới, để
                 trên cùng thì vừa gõ vừa thấy mã đổi theo, khỏi cuộn xuống. */}
+            {isHead ? (
+              <Field label="Mã điểm đo đầu nguồn" required
+                hint="Nhập tay, khớp LINE_NAME bên HES (vd TTI.DIEMDOPHU). Đầu nguồn không thuộc trạm nên không sinh mã theo trạm được.">
+                <TextInput value={pForm.head_code} mono placeholder="TTI.DIEMDOPHU"
+                  onChange={v => setPForm(f => ({ ...f, head_code: v }))} />
+              </Field>
+            ) : (<>
             <Field label={codeLocked ? 'Mã điểm đo (đang giữ nguyên)' : 'Mã điểm đo (hệ thống tự sinh)'}
               hint={codeLocked
                 ? 'Điểm đo đã chuyển chủ thể nên mã được giữ nguyên để khớp LINE_NAME bên HES.'
@@ -2406,7 +2471,16 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 Còn thiếu: {pointCodeMissing.join(', ')}. Các mảnh này lấy từ hồ sơ trạm và khách hàng.
               </p>
             )}
+            </>)}
 
+            {isHead ? (
+              <Field label="Lộ đường dây" required
+                hint={lineHeadTaken ? 'Lộ này đã có điểm đo đầu nguồn — mỗi lộ một điểm.'
+                  : pLine ? `KCN ${d?.zones.find(z => z.id === pLine.zone)?.name ?? '—'} · đo TỔNG mọi trạm của lộ` : undefined}>
+                <Select value={pForm.line} onChange={v => setPForm(f => ({ ...f, line: v }))}
+                  options={allLineOpts} placeholder="Chọn lộ" searchable />
+              </Field>
+            ) : (
             <Field label="Trạm" required
               hint={pStation ? `KCN ${pStationZone?.code ?? '—'} · KH ${pStationCustomer?.short_name ?? '—'} · ${pStation.ident ?? '—'} · ${pStation.sdm_kva ?? '—'} kVA` : undefined}>
               <Select value={pForm.station}
@@ -2420,6 +2494,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 })}
                 options={stationOpts} placeholder="Chọn trạm" searchable />
             </Field>
+            )}
 
             {/*
               Không còn ô "Đấu nối": HSN = 1 đã là đấu trực tiếp rồi, hỏi thêm
@@ -2431,9 +2506,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 options={[
                   { value: 'chinh', label: ROLE_LABEL.chinh },
                   { value: 'phu', label: ROLE_LABEL.phu, hex: '#8b5cf6' },
+                  { value: 'dau_nguon', label: ROLE_LABEL.dau_nguon, hex: '#f59e0b' },
                 ]} />
             </Field>
 
+            {/* Đầu nguồn: không khách, không điểm cha, không đuôi mã — bỏ cả cụm. */}
+            {!isHead && (<>
             {/*
               Khách hàng của điểm đo — cho CẢ điểm chính. Mặc định là chủ trạm,
               nhưng trạm cho thuê thì điểm đo thuộc khách thuê, khác chủ trạm.
@@ -2506,6 +2584,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 </Field>
               )}
             </div>
+            </>)}
 
             {/* ---------------- Bảng vật tư gắn ở điểm đo ---------------- */}
             <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">

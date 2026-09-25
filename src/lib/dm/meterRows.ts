@@ -14,6 +14,7 @@
  */
 import type { MeterInfoRow } from '../meterInfo';
 import type { CatalogData } from './repo';
+import { pointZoneId } from './pointScope';
 
 /** Một khách hàng kèm toàn bộ công tơ của họ. */
 export interface CustomerMeters {
@@ -55,7 +56,7 @@ export function customerMetersOf(d: CatalogData): CustomerMeters[] {
     const station = point.station ? stationById.get(point.station) : undefined;
     // KCN lấy theo TRẠM chứ không theo khách hàng: khách thuê nhà xưởng có thể
     // được khai ở KCN khác với nơi đặt công tơ.
-    const zid = station?.zone;
+    const zid = pointZoneId(point, stationById, d.lines);
     const group = point.customer ? out.get(point.customer) : undefined;
     if (!group) continue;
 
@@ -113,7 +114,7 @@ export function hesMeterRowsOf(d: CatalogData): MeterInfoRow[] {
     if (!point) continue;
     const station = point.station ? stationById.get(point.station) : undefined;
     // KCN lấy theo TRẠM — khách thuê nhà xưởng có thể khai ở KCN khác.
-    const zid = station?.zone;
+    const zid = pointZoneId(point, stationById, d.lines);
     const customer = point.customer ? customerById.get(point.customer) : undefined;
 
     rows.push({

@@ -8,7 +8,7 @@ export interface MeterInfoRow {
   LINE_NAME: string;
   LINE_ID: string;
   CODE: string;
-  ROLE: string;   // 'chinh' | 'phu'
+  ROLE: string;   // 'chinh' | 'phu' | 'dau_nguon'
   STATUS: string;
 }
 

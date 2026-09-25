@@ -32,6 +32,7 @@ import {
 import {
   ASSET_LABEL, DEVICE_STATUS_LABEL, type AssetType, type Device, type DeviceStatus,
 } from '../../lib/dm/types';
+import { pointZoneId } from '../../lib/dm/pointScope';
 import {
   buildStock, findExisting, guessType, idleDays, parsePaste, SERIAL_RE,
   IDLE_WARN_DAYS, REUSE_MIN, type PastedRow, type StockRow,
@@ -96,9 +97,9 @@ export default function StockEntry() {
   };
   useEffect(() => { void load(); }, []);
 
-  /** KCN của điểm đo nằm ở TRẠM chứ không ở chính điểm đo — tra hộ. */
+  /** KCN của điểm đo nằm ở TRẠM (đầu nguồn: ở chính nó / lộ) — tra hộ. */
   const zoneOfPoint = (p?: Point) =>
-    p ? d?.stations.find(x => x.id === p.station)?.zone : undefined;
+    d ? pointZoneId(p, d.stations, d.lines) : undefined;
 
   const rows = useMemo(
     () => (d ? buildStock(d.devices, d.assets, d.points, zoneOfPoint) : []),
