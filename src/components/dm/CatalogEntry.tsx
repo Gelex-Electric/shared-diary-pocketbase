@@ -38,6 +38,7 @@ import type {
   VoltageLevel, Zone,
 } from '../../lib/dm/types';
 import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio, pickRatio } from '../../lib/dm/hsn';
+import { parseHsnInput } from '../../lib/dm/tutiPick';
 import { REMOTE_LABEL, TI_PER_SET, countAssets, derivePointStatus, missingRemote } from '../../lib/dm/pointStatus';
 import type { Scope } from '../../lib/scope';
 import {
@@ -144,7 +145,7 @@ const EMPTY_P = {
   station: '', role: 'chinh' as PointRole,
   /** Chỉ cho điểm ĐẦU NGUỒN (schema v17): lộ nó đo + mã nhập tay (khớp LINE_NAME HES). */
   line: '', head_code: '',
-  customer: '', parent_point: '', ident: '', hsn: '1',
+  customer: '', parent_point: '', ident: '', hsn: '',
   /** Chỉ dùng khi điểm phụ trùng KH với điểm chính: mã nhãn, hoặc CUSTOM. */
   purpose: '', purpose_custom: '',
   note: '',
@@ -780,15 +781,21 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const refHsn = invoiceHsn
     ?? meterRefs.map(m => m.mine?.hsn).filter((h): h is number => h != null).pop();
   /**
-   * HSN thực sự ghi xuống: suy từ TI/TU trước; suy không ra (hoặc ra 0 vì tỷ số
-   * khai sai) thì lấy HSN hóa đơn. Thà lấy hóa đơn còn hơn để 0.
+   * HSN thực sự ghi xuống = HSN NHẬP TAY ở ô HSN (user chốt 28/09/2026 — plan
+   * `2026-09-28-diem-do-chon-vat-tu-tu-kho-theo-hsn`). Trước đây suy từ TI/TU
+   * rồi lùi về hóa đơn; nay hai con số đó chỉ còn là THAM CHIẾU hiện dưới ô,
+   * còn bộ TI/TU phải chọn cho khớp HSN chứ không phải ngược lại.
    */
-  const effectiveHsn = derivedHsn != null && derivedHsn > 0 ? derivedHsn : refHsn;
+  const manualHsn = parseHsnInput(pForm.hsn);
+  const effectiveHsn = manualHsn;
 
   if (refHsn != null && derivedHsn != null && derivedHsn !== refHsn) {
     invoiceNotes.push(tuRow
       ? `TI × TU đang ra HSN ${derivedHsn}, hóa đơn ghi ${refHsn} — tích hai tỷ số phải bằng ${refHsn}`
       : `HSN khai ra ${derivedHsn} nhưng hóa đơn ghi ${refHsn} — kiểm tra lại tỷ số TI`);
+  }
+  if (refHsn != null && manualHsn != null && manualHsn !== refHsn) {
+    invoiceNotes.push(`HSN nhập ${manualHsn} nhưng hóa đơn ghi ${refHsn} — kiểm tra lại HSN của điểm đo`);
   }
 
   /* ---------------- Trùng số chế tạo (số No) ---------------- */
@@ -941,8 +948,15 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     ] : []),
   ];
 
-  /** Mọi thứ CHẶN lưu điểm đo: đụng độ số chế tạo + thiếu/sai tỷ số. */
-  const saveBlocks = [...serialBlocks, ...ratioBlocks];
+  /** HSN là ô bắt buộc — thiếu hoặc gõ sai thì không có gì để nhân sản lượng. */
+  const hsnBlocks: string[] = !pForm.hsn.trim()
+    ? ['chưa nhập HSN của điểm đo']
+    : manualHsn == null
+      ? [`HSN "${pForm.hsn.trim()}" không hợp lệ — phải là số lớn hơn 0 (1 = đo thẳng)`]
+      : [];
+
+  /** Mọi thứ CHẶN lưu điểm đo: HSN + đụng độ số chế tạo + thiếu/sai tỷ số. */
+  const saveBlocks = [...hsnBlocks, ...serialBlocks, ...ratioBlocks];
 
   /**
    * Cảnh báo vật tư — CHỈ nhắc, không chặn lưu (user chốt 14/08). Điểm đo đang
@@ -2586,6 +2600,35 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             </div>
             </>)}
 
+            {/*
+              HSN NHẬP TAY, đặt TRÊN bảng vật tư (user chốt 28/09/2026): khai HSN
+              trước rồi mới chọn bộ TI/TU cho khớp. HSN suy từ vật tư và HSN hóa
+              đơn chỉ hiện để tham chiếu, bấm mới điền — không tự điền ngầm.
+            */}
+            <Field label="HSN điểm đo" required
+              hint={`Vật tư đang khai: ${hsnFormula(hsnInput)}`
+                + (hsnFromPlan ? ' (theo vật tư dự kiến)' : '')
+                + (refHsn != null ? ` · Hóa đơn: HSN ${refHsn}` : '')}>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="min-w-[10rem] flex-1">
+                  <TextInput value={pForm.hsn} mono placeholder="vd 40 (TI 200/5) · 1 = đo thẳng"
+                    onChange={v => setPForm(f => ({ ...f, hsn: v }))} />
+                </div>
+                {derivedHsn != null && derivedHsn > 0 && derivedHsn !== manualHsn && (
+                  <button type="button" className="vl-btn vl-btn-sm vl-btn-outline-primary"
+                    onClick={() => setPForm(f => ({ ...f, hsn: String(derivedHsn) }))}>
+                    Dùng {derivedHsn} theo vật tư
+                  </button>
+                )}
+                {refHsn != null && refHsn !== manualHsn && refHsn !== derivedHsn && (
+                  <button type="button" className="vl-btn vl-btn-sm vl-btn-outline-primary"
+                    onClick={() => setPForm(f => ({ ...f, hsn: String(refHsn) }))}>
+                    Dùng {refHsn} theo hóa đơn
+                  </button>
+                )}
+              </div>
+            </Field>
+
             {/* ---------------- Bảng vật tư gắn ở điểm đo ---------------- */}
             <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -2685,15 +2728,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
               </button>
             </div>
 
-            {/* HSN: chỉ đọc, suy từ tỷ số vừa nhập. Điểm đo dự kiến cũng có HSN. */}
-            <Field label={hsnFromPlan ? 'HSN dự kiến (suy từ tỷ số TI / TU)' : 'HSN (suy từ tỷ số TI / TU)'}
-              required
-              hint={hsnFromPlan
-                ? `${hsnFormula(hsnInput)} — theo vật tư DỰ KIẾN, tính lại khi khai ngày treo`
-                : hsnFormula(hsnInput)}>
-              <DerivedValue value={derivedHsn == null ? '' : String(derivedHsn)}
-                placeholder="Nhập tỷ số TI ở phần vật tư" />
-            </Field>
 
             {/*
               Đối chiếu hóa đơn — THAM CHIẾU, không tự điền gì cả.
