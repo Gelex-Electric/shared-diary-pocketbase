@@ -1085,7 +1085,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   }
   const tiSet = hasTi ? ratioOfSet('TI') : null;
   const tuSet = ratioOfSet('TU');
-  const hsnMismatch = manualHsn != null && hsnTouched && !ratioBlocks.length
+  /*
+    CHƯA KHAI TI NÀO mà HSN > 1 ⇒ CHO LƯU (user chốt 28/09/2026: điền HSN
+    trước, TI bổ sung sau). Chỉ nhắc ở `assetWarnings`. Đã có TI thì bộ TI phải
+    khớp HSN như cũ; HSN = 1 mà có TI vẫn chặn.
+  */
+  const tiLater = manualHsn != null && manualHsn > 1 && !hasTi;
+  const hsnMismatch = manualHsn != null && hsnTouched && !ratioBlocks.length && !tiLater
     && !setMatchesHsn(manualHsn, tiSet, tuSet);
   if (hsnMismatch) {
     hsnBlocks.push(manualHsn === 1
@@ -1126,6 +1132,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   /** Các dòng dự kiến — khai rồi nhưng chưa có ngày treo. */
   const plannedRows = filledRows.filter(r => !isHung(r));
   const assetWarnings: string[] = [];
+  if (tiLater) {
+    assetWarnings.push(`HSN ${manualHsn} là đo gián tiếp nhưng chưa khai TI — lưu được, `
+      + 'nhớ bổ sung bộ TI khớp HSN sau');
+  }
   if (countType('CONGTO') === 0) assetWarnings.push('chưa có công tơ đang hoạt động');
   else if (countType('CONGTO') > 1) assetWarnings.push('có nhiều hơn 1 công tơ đang hoạt động');
   // Không nhắc "thiếu GP-03" nữa: user bỏ ràng buộc bắt buộc có đo xa (20/08/2026).
