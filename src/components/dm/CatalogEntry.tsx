@@ -34,11 +34,11 @@ import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
 import { isHeadPoint, pointZoneId } from '../../lib/dm/pointScope';
 import type {
-  AssetStatus, AssetType, Customer, Device, Line, Point, PointRole, Station,
+  AssetStatus, AssetType, Customer, Line, Point, PointRole, Station,
   VoltageLevel, Zone,
 } from '../../lib/dm/types';
 import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio, pickRatio } from '../../lib/dm/hsn';
-import { parseHsnInput } from '../../lib/dm/tutiPick';
+import { deviceRatio, freeDevices, parseHsnInput } from '../../lib/dm/tutiPick';
 import { REMOTE_LABEL, TI_PER_SET, countAssets, derivePointStatus, missingRemote } from '../../lib/dm/pointStatus';
 import type { Scope } from '../../lib/scope';
 import {
@@ -818,6 +818,56 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const dupInForm = [...serialInForm.entries()].filter(([, rows]) => rows.length > 1);
 
   /**
+   * Ô Số No CHỌN TỪ KHO (user chốt 28/09/2026 — plan
+   * `2026-09-28-diem-do-chon-vat-tu-tu-kho-theo-hsn`, task 3): vật tư phải khai ở
+   * tab Kho vật tư trước, form điểm đo không còn tạo thiết bị.
+   *
+   * - Bỏ thiết bị ĐÃ THANH LÝ và số No đã nằm ở dòng khác của form.
+   * - Thiết bị rảnh xếp trước. Thiết bị đang treo ở điểm đo KHÁC vẫn hiện (xếp
+   *   cuối, ghi rõ nơi treo) chứ không ẩn: khai lần lắp CŨ của nó và đổi chỗ
+   *   giữa hai điểm đo dự kiến là hai luồng hợp lệ đã có — luật (4) và
+   *   `reclaim`/`busyElsewhere` vẫn lo phần chặn.
+   * - Số No hiện tại của dòng mà không có trong kho vẫn giữ trong danh sách,
+   *   kèm nhãn, để ô không hiện trống với dữ liệu cũ.
+   */
+  const serialOptions = (r: AssetRow) => {
+    const taken = new Set(pForm.assetRows.filter(x => x.key !== r.key).map(x => x.serial.trim()));
+    const pool = (d?.devices ?? []).filter(dev => {
+      const sn = dev.serial.trim();
+      return !!sn && !taken.has(sn) && (!r.type || dev.type === r.type) && !ymdOf(dev.liquidated_at);
+    });
+    const free = new Set(freeDevices(pool, d?.assets ?? [], { pointId: editingId }).map(x => x.id));
+    const opts = pool
+      .map(dev => {
+        const sn = dev.serial.trim();
+        const bits = [sn];
+        if (!r.type) bits.push(ASSET_LABEL[dev.type] ?? dev.type);
+        const ratio = deviceRatio(dev);
+        if (ratio) bits.push(ratio);
+        if (dev.model_desc?.trim()) bits.push(dev.model_desc.trim());
+        if (!free.has(dev.id)) {
+          const at = (d?.assets ?? []).find(a =>
+            (a.device === dev.id || a.serial.trim() === sn) && a.date_on && !a.date_off
+            && a.point !== editingId);
+          bits.push(`đang treo ở ${pointCodeOf(at?.point)}`);
+        } else if (dev.hold_point && dev.hold_point !== editingId) {
+          bits.push(`dành cho ${pointCodeOf(dev.hold_point)}`);
+        }
+        return { value: sn, label: bits.join(' · '), busy: !free.has(dev.id) };
+      })
+      .sort((a, b) => Number(a.busy) - Number(b.busy) || a.value.localeCompare(b.value))
+      .map(({ value, label }) => ({ value, label }));
+    const cur = r.serial.trim();
+    if (cur && !opts.some(o => o.value === cur)) {
+      opts.unshift({ value: cur, label: `${cur} · không có trong Kho` });
+    }
+    return opts;
+  };
+
+  /** Số No của dòng MỚI phải nằm trong kho — chốt chặn phòng khi ô chọn bị lách. */
+  const notInStock = pForm.assetRows.filter(r => !r.id && r.serial.trim() && !deviceOf(r.serial));
+
+  /**
    * Cùng số chế tạo mà HAI NƠI CÙNG ĐANG TREO — chỉ thế mới chặn.
    *
    * Khai một vật tư vào điểm đo CŨ trong khi nó đang chạy ở nơi khác là hợp lệ:
@@ -895,6 +945,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     : undefined;
 
   const serialBlocks: string[] = [
+    ...(notInStock.length ? [
+      `số No ${notInStock.map(r => r.serial.trim()).join(', ')} chưa có trong Kho vật tư `
+      + '— khai thiết bị ở tab Kho vật tư trước rồi chọn lại',
+    ] : []),
     ...dupInForm.map(([serial, rows]) =>
       `số No ${serial} bị khai ${rows.length} lần trong cùng điểm đo `
       + `(${rows.map(r => ASSET_LABEL[r.type as AssetType] ?? '—').join(', ')})`),
@@ -1530,18 +1584,17 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         Có sẵn trong kho thì DÙNG LẠI bản ghi đó — đây là chỗ dễ đẻ dữ liệu rác
         nhất: gõ lại số No ở form điểm đo mà tạo thiết bị thứ hai thì kho có hai
         dòng cùng số, `serial` UNIQUE sẽ chặn và người dùng nhận một câu lỗi
-        không hiểu gì. Chưa có thì tạo mới ngay tại đây, không bắt phải vào màn
-        Kho khai trước.
+        không hiểu gì.
 
-        Tỷ số ghi lên thiết bị chứ không chỉ lên lần lắp: đó là thuộc tính của
-        thiết bị (schema v13).
+        Chưa có trong kho thì DỪNG (user chốt 28/09/2026): vật tư phải khai ở
+        tab Kho vật tư trước. Trước đây chỗ này tạo thiết bị ngầm; `notInStock`
+        đã chặn ở form, ném lỗi ở đây là chốt chặn cuối để không bao giờ lặng lẽ
+        đẻ thiết bị mới nữa.
       */
-      const dev = (d?.devices ?? []).find(x => x.serial.trim() === serial)
-        ?? await devices.create({
-          serial, type: r.type as AssetType,
-          ratio_primary: hasRatio ? (primary ?? undefined) : undefined,
-          ratio_secondary: hasRatio ? (secondary ?? undefined) : undefined,
-        }) as unknown as Device;
+      const dev = (d?.devices ?? []).find(x => x.serial.trim() === serial);
+      if (!dev) {
+        throw new Error(`Số No ${serial} chưa có trong Kho vật tư — khai thiết bị ở tab Kho vật tư trước.`);
+      }
 
       /*
         GIỮ CHỖ đồng bộ ngay: dòng chưa có ngày treo nghĩa là thiết bị mới chỉ
@@ -1658,18 +1711,30 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       Thiết bị đã khai một lần trong kho thì không việc gì phải gõ lại loại và
       tỷ số — vừa mất công vừa là cơ hội gõ lệch với bản ghi gốc.
 
-      Chỉ điền vào ô CÒN TRỐNG: người dùng đã tự chọn khác thì tôn trọng, và
-      chênh lệch tỷ số đã có cảnh báo riêng lo.
+      Dòng ĐÃ LƯU: chỉ điền vào ô CÒN TRỐNG — dữ liệu cũ giữ nguyên, chênh
+      lệch tỷ số đã có cảnh báo riêng lo.
+
+      Dòng MỚI (từ 28/09/2026 chỉ chọn được số No có trong kho): loại và tỷ số
+      LUÔN theo thiết bị. Tỷ số là thuộc tính của thiết bị (schema v13), ô tỷ
+      số của dòng mới chỉ đọc nên không có gì của người dùng để tôn trọng.
     */
     const fromStock = patch.serial !== undefined ? deviceOf(me.serial) : undefined;
+    const stockRatio = fromStock ? formatRatio(fromStock.ratio_primary, fromStock.ratio_secondary) : '';
     const filled = fromStock
-      ? withOff.map(r => (r.key === key ? {
+      ? withOff.map(r => (r.key !== key ? r : r.id ? {
         ...r,
         type: r.type || fromStock.type,
-        ratio: r.ratio.trim() || (fromStock.ratio_primary != null
-          ? `${fromStock.ratio_primary}/${fromStock.ratio_secondary ?? ''}` : ''),
-      } : r))
-      : withOff;
+        ratio: r.ratio.trim() || stockRatio,
+      } : {
+        ...r,
+        type: fromStock.type,
+        ratio: HAS_RATIO.includes(fromStock.type) ? stockRatio : '',
+      }))
+      // Dòng mới đổi sang loại khác loại của số No đang chọn ⇒ bỏ số No đó.
+      : patch.type !== undefined && !me.id && me.serial.trim()
+          && deviceOf(me.serial) && deviceOf(me.serial)!.type !== type
+        ? withOff.map(r => (r.key === key ? { ...r, serial: '', ratio: '' } : r))
+        : withOff;
 
     return normalizeActive(filled);
   };
@@ -2690,11 +2755,30 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                           )}
                         </td>
                         <td className="p-2">
-                          <CellInput value={r.serial} mono placeholder="Nhập số chế tạo"
-                            onChange={v => setRow(r.key, { serial: v })} />
+                          {(() => {
+                            const opts = serialOptions(r);
+                            return (<>
+                              <Select value={r.serial.trim()} variant="bare" searchable
+                                onChange={v => setRow(r.key, { serial: v })}
+                                options={opts} placeholder="Chọn từ Kho" />
+                              {opts.length === 0 && (
+                                <span className="mt-1 block text-[11px] leading-snug text-bad">
+                                  Kho chưa có {r.type ? ASSET_LABEL[r.type as AssetType] : 'vật tư'} nào
+                                  — khai ở tab Kho vật tư trước
+                                </span>
+                              )}
+                            </>);
+                          })()}
                         </td>
                         <td className="p-2">
-                          {HAS_RATIO.includes(r.type as AssetType) ? (
+                          {/* Dòng MỚI: tỷ số theo thiết bị trong kho, chỉ đọc.
+                              Dòng đã lưu giữ ô nhập như cũ. */}
+                          {!r.id && HAS_RATIO.includes(r.type as AssetType) ? (
+                            <span className={`block p-2 font-mono ${r.ratio ? 'text-ink' : 'text-faint'}`}
+                              title="Tỷ số lấy theo thiết bị trong Kho — sửa ở tab Kho vật tư">
+                              {r.ratio || '—'}
+                            </span>
+                          ) : HAS_RATIO.includes(r.type as AssetType) ? (
                             <CellInput value={r.ratio} mono
                               placeholder={r.type === 'TU' ? '22000/100' : '200/5'}
                               onChange={v => setRow(r.key, { ratio: v })} />
