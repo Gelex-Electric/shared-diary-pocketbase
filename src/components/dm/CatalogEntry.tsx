@@ -38,7 +38,9 @@ import type {
   VoltageLevel, Zone,
 } from '../../lib/dm/types';
 import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio, pickRatio } from '../../lib/dm/hsn';
-import { deviceRatio, freeDevices, parseHsnInput } from '../../lib/dm/tutiPick';
+import {
+  deviceRatio, freeDevices, parseHsnInput, setMatchesHsn, suggestSets, type SetOption,
+} from '../../lib/dm/tutiPick';
 import { REMOTE_LABEL, TI_PER_SET, countAssets, derivePointStatus, missingRemote } from '../../lib/dm/pointStatus';
 import type { Scope } from '../../lib/scope';
 import {
@@ -170,6 +172,11 @@ interface AssetRow {
   dateOff: string;
   /** Đang đo ở điểm đo này hay không — thiết bị cũ đã thay vẫn giữ trong bảng. */
   active: boolean;
+  /**
+   * Tỷ số MUỐN chọn — đặt khi bấm một bộ gợi ý theo HSN. Ô Số No của dòng mới
+   * chỉ lọc thiết bị đúng tỷ số này. Không lưu xuống PB.
+   */
+  want?: string;
 }
 
 let rowSeq = 0;
@@ -196,6 +203,10 @@ const ymdOf = (v?: string) => (v ?? '').slice(0, 10);
  * một việc chỉ đẻ ra mâu thuẫn — cảnh báo "đang hoạt động nhưng đã khai ngày
  * tháo" từng phải tồn tại chính vì thế.
  */
+/** Chữ ký phần HSN + vật tư của form (bỏ `key`, `want` — chỉ là phụ trợ giao diện). */
+const hsnSig = (hsn: string, rows: AssetRow[]) =>
+  JSON.stringify([hsn.trim(), rows.map(({ key: _k, want: _w, ...rest }) => rest)]);
+
 const normalizeActive = (rows: AssetRow[]): AssetRow[] =>
   rows.map(r => ({ ...r, active: !r.dateOff.trim() }));
 
@@ -249,6 +260,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     [cForm.name, cForm.low_name],
   );
   const [pForm, setPForm] = useState(EMPTY_P);
+  /**
+   * Chữ ký HSN + vật tư lúc MỞ form sửa điểm đo — để chỉ chặn "TI×TU lệch HSN"
+   * khi người dùng thực sự đụng vào phần đó (user chốt 28/09: dữ liệu cũ giữ
+   * nguyên, mở ra sửa ghi chú không bị chặn). Điểm đo mới: rỗng ⇒ luôn chặn.
+   */
+  const [pSnap, setPSnap] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -314,7 +331,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     if (tab === 'station') setSForm({ ...EMPTY_S, zone: sForm.zone });
     if (tab === 'customer') setCForm({ ...EMPTY_C, zone: cForm.zone });
     // Giữ trạm đang chọn để khai liên tiếp nhiều điểm đo trong cùng một trạm.
-    if (tab === 'point') setPForm({ ...EMPTY_P, station: pForm.station });
+    if (tab === 'point') { setPForm({ ...EMPTY_P, station: pForm.station }); setPSnap(''); }
     setModal(tab);
   };
 
@@ -380,6 +397,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       purpose_custom: isPreset ? '' : saved,
       note: p.note ?? '',
     });
+    setPSnap(hsnSig(str(p.hsn), rows));
     setModal('point');
   };
 
@@ -834,7 +852,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     const taken = new Set(pForm.assetRows.filter(x => x.key !== r.key).map(x => x.serial.trim()));
     const pool = (d?.devices ?? []).filter(dev => {
       const sn = dev.serial.trim();
-      return !!sn && !taken.has(sn) && (!r.type || dev.type === r.type) && !ymdOf(dev.liquidated_at);
+      return !!sn && !taken.has(sn) && (!r.type || dev.type === r.type) && !ymdOf(dev.liquidated_at)
+        // Dòng thêm từ bộ gợi ý theo HSN: chỉ đúng tỷ số của bộ đó.
+        && (!r.want || r.id || deviceRatio(dev) === r.want);
     });
     const free = new Set(freeDevices(pool, d?.assets ?? [], { pointId: editingId }).map(x => x.id));
     const opts = pool
@@ -1008,6 +1028,47 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     : manualHsn == null
       ? [`HSN "${pForm.hsn.trim()}" không hợp lệ — phải là số lớn hơn 0 (1 = đo thẳng)`]
       : [];
+
+  /**
+   * BỘ TI × TU PHẢI KHỚP HSN NHẬP TAY — CHẶN LƯU (user chốt 28/09/2026).
+   *
+   * Xét đúng bộ dòng đang dùng để suy HSN (`hsnRows`: vật tư đã treo, hoặc
+   * vật tư dự kiến khi cả điểm đo còn dự kiến). Điểm đo cũ đang lệch sẵn chỉ
+   * bị chặn khi người dùng sửa HSN hoặc vật tư (`pSnap`).
+   */
+  const hsnTouched = hsnSig(pForm.hsn, pForm.assetRows) !== pSnap;
+  /*
+    Dòng thêm từ bộ gợi ý mang sẵn tỷ số (`want`) nhưng chưa chọn Số No: hàm lưu
+    BỎ QUA dòng không có số No, trong khi tỷ số của nó vẫn góp vào phép so HSN
+    bên dưới — không chặn thì khớp HSN trên form mà xuống PB lại thiếu bộ TI.
+  */
+  const unpicked = pForm.assetRows.filter(r => !r.id && r.want && !r.serial.trim());
+  if (unpicked.length) {
+    hsnBlocks.push(`chưa chọn Số No cho ${unpicked.length} dòng `
+      + `${[...new Set(unpicked.map(r => `${r.type} ${r.want}`))].join(', ')} — chọn từ Kho hoặc bỏ dòng`);
+  }
+  const tiSet = hasTi ? ratioOfSet('TI') : null;
+  const tuSet = ratioOfSet('TU');
+  const hsnMismatch = manualHsn != null && hsnTouched && !ratioBlocks.length
+    && !setMatchesHsn(manualHsn, tiSet, tuSet);
+  if (hsnMismatch) {
+    hsnBlocks.push(manualHsn === 1
+      ? 'HSN = 1 (đo thẳng) nhưng điểm đo đang có TI — bỏ TI hoặc sửa HSN'
+      : !hasTi
+        ? `HSN ${manualHsn} cần bộ TI (× TU) có tích tỷ số bằng ${manualHsn} — chọn bộ ở mục gợi ý`
+        : `bộ vật tư đang ra ${hsnFormula(hsnInput).replace(/^.*→ /, '')}, `
+          + `không khớp HSN nhập ${manualHsn} — chọn bộ TI/TU khác hoặc sửa HSN`);
+  }
+
+  /**
+   * Gợi ý bộ TI (× TU) còn rảnh trong kho có tích tỷ số = HSN. Số No đã có
+   * trong form không tính là rảnh.
+   */
+  const setSuggestions = manualHsn != null && manualHsn > 1
+    ? suggestSets(manualHsn, freeDevices(d?.devices ?? [], d?.assets ?? [], {
+        pointId: editingId, exclude: pForm.assetRows.map(r => r.serial),
+      }))
+    : [];
 
   /** Mọi thứ CHẶN lưu điểm đo: HSN + đụng độ số chế tạo + thiếu/sai tỷ số. */
   const saveBlocks = [...hsnBlocks, ...serialBlocks, ...ratioBlocks];
@@ -1741,6 +1802,23 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
   const setRow = (key: string, patch: Partial<AssetRow>) =>
     setPForm(f => ({ ...f, assetRows: applyRowRules(f.assetRows, key, patch) }));
+
+  /**
+   * Chọn một bộ gợi ý theo HSN ⇒ thêm sẵn `TI_PER_SET` dòng TI (+ 1 dòng TU
+   * nếu bộ có TU; cần thêm TU thì bấm "Thêm dòng"). Các dòng mang `want` để ô
+   * Số No chỉ lọc thiết bị đúng tỷ số; tỷ số thật vẫn lấy từ thiết bị khi chọn.
+   * Dòng trắng (chưa loại, chưa số No) có sẵn thì dọn đi cho gọn.
+   */
+  const applySet = (s: SetOption) =>
+    setPForm(f => {
+      const mk = (type: AssetType, want: string): AssetRow => ({ ...newRow(type), want, ratio: want });
+      const rows = [
+        ...Array.from({ length: TI_PER_SET }, () => mk('TI', s.ti)),
+        ...(s.tu ? [mk('TU', s.tu)] : []),
+      ];
+      const kept = f.assetRows.filter(r => r.id || r.type || r.serial.trim());
+      return { ...f, assetRows: normalizeActive([...kept, ...rows]) };
+    });
 
   const addRow = (type: AssetType | '' = '') =>
     setPForm(f => {
@@ -2693,6 +2771,33 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                 )}
               </div>
             </Field>
+
+            {/* Gợi ý bộ TI/TU trong kho khớp HSN — chỉ khi đo gián tiếp (HSN > 1). */}
+            {manualHsn != null && manualHsn > 1 && (hsnMismatch || !hasTi) && (
+              setSuggestions.length ? (
+                <div className="vl-alert vl-alert-light-primary space-y-2 text-[12px]">
+                  <p className="font-bold">Bộ TI / TU còn trong Kho khớp HSN {manualHsn}:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {setSuggestions.map(s => (
+                      <button key={`${s.ti}|${s.tu ?? ''}`} type="button"
+                        className="vl-btn vl-btn-sm vl-btn-outline-primary"
+                        onClick={() => applySet(s)}>
+                        TI {s.ti} ({s.tiFree} rảnh)
+                        {s.tu && <> × TU {s.tu} ({s.tuFree} rảnh)</>}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] opacity-80">
+                    Bấm một bộ để thêm sẵn {TI_PER_SET} dòng TI (và 1 dòng TU) rồi chọn Số No.
+                  </p>
+                </div>
+              ) : (
+                <div className="vl-alert vl-alert-light-warning text-[12px]">
+                  Kho chưa có bộ TI / TU nào (đủ {TI_PER_SET} TI rảnh) khớp HSN {manualHsn}
+                  — khai thiết bị ở tab Kho vật tư trước.
+                </div>
+              )
+            )}
 
             {/* ---------------- Bảng vật tư gắn ở điểm đo ---------------- */}
             <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
