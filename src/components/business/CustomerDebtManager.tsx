@@ -9,7 +9,7 @@ import { ProgressBar } from '../ui/dashboard';
 import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
-  RefreshCw, X, Loader2, Save, Banknote, LayoutDashboard, Table2, CalendarClock,
+  RefreshCw, X, Loader2, Save, Banknote, LayoutDashboard, Table2, CalendarClock, AlertTriangle,
 } from 'lucide-react';
 
 /* ============================================================
@@ -100,6 +100,33 @@ const sumTotals = (list: Totals[]): Totals => {
   return t;
 };
 
+/* ── Hạn thanh toán tính từ NGÀY CHỐT CHỈ SỐ ──
+   - quá 5 ngày → thanh tiến trình chuyển VÀNG (cảnh báo)
+   - quá 7 ngày → thanh tiến trình chuyển ĐỎ (trễ hạn)
+   - quá 3 ngày → ghi thêm "Quá hạn N ngày" (N = số ngày kể từ ngày chốt)
+   Chỉ áp cho đợt CHƯA thu đủ; đợt đã thu đủ luôn màu xanh. */
+const DUE_WARN_DAYS = 5;
+const DUE_LATE_DAYS = 7;
+const DUE_NOTE_DAYS = 3;
+
+/** Số ngày đã trôi qua kể từ `date` (YYYY-MM-DD) đến hôm nay; <0 nếu chưa tới. */
+const daysSince = (date: string) => {
+  if (!date) return 0;
+  const d = new Date();
+  const today = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const [y, m, dd] = date.split('-').map(Number);
+  if (!y || !m || !dd) return 0;
+  return Math.floor((today - Date.UTC(y, m - 1, dd)) / 86400000);
+};
+
+/** Màu thanh tiến trình theo mức trễ hạn (đợt đã thu đủ luôn xanh). */
+const dueTone = (paid: number, total: number, elapsed: number): 'ok' | 'bad' | 'warn' | 'accent' => {
+  if (total > 0 && paid >= total) return 'ok';
+  if (elapsed >= DUE_LATE_DAYS) return 'bad';
+  if (elapsed >= DUE_WARN_DAYS) return 'warn';
+  return 'accent';
+};
+
 /* Giới hạn theo KCN của tài khoản (khối Vận hành) và áp các thay đổi ngày thanh
    toán đang soạn (chưa lưu) để bảng/tiến trình phản ánh ngay. */
 const applyScopeAndPending = (
@@ -179,6 +206,8 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
   const [tab, setTab] = useState<DebtTab>('summary');
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
+  // Lọc đúng MỘT đợt chốt (YYYY-MM-DD) khi bấm "Chi tiết" từ bảng tiến trình; '' = không lọc
+  const [focusDate, setFocusDate] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // Bảng KCN bị thu gọn (mặc định mở); key = mã KCN
   const [collapsedZones, setCollapsedZones] = useState<Record<string, boolean>>({});
@@ -435,23 +464,39 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
         });
       });
     });
-    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+    return Array.from(map.values())
+      .map(g => ({ ...g, elapsed: daysSince(g.date) }))
+      .sort((a, b) => b.date.localeCompare(a.date));
   }, [effectiveYearCustomers]);
 
   /* Mỗi THÁNG một bảng: gom các ngày chốt trong năm theo tháng (mới → cũ). */
   const monthProgress = useMemo(() => {
-    const map = new Map<string, { ym: string; rows: typeof dateProgress; paid: number; total: number; unpaidVAT: number }>();
+    const map = new Map<string, { ym: string; rows: typeof dateProgress; paid: number; total: number; unpaidVAT: number; worstElapsed: number }>();
     dateProgress.forEach(r => {
       const ym = r.date.slice(0, 7);
       let g = map.get(ym);
-      if (!g) { g = { ym, rows: [], paid: 0, total: 0, unpaidVAT: 0 }; map.set(ym, g); }
+      if (!g) { g = { ym, rows: [], paid: 0, total: 0, unpaidVAT: 0, worstElapsed: 0 }; map.set(ym, g); }
       g.rows.push(r);
       g.paid += r.paid;
       g.total += r.total;
       g.unpaidVAT += r.unpaidVAT;
+      // Mức trễ của tháng = đợt CHƯA thu đủ trễ nhất
+      if (r.paid < r.total) g.worstElapsed = Math.max(g.worstElapsed, r.elapsed);
     });
     return Array.from(map.values()).sort((a, b) => b.ym.localeCompare(a.ym));
   }, [dateProgress]);
+
+  /* Bấm "Chi tiết" ở một đợt chưa thu đủ: nhảy sang tab Chi tiết, đặt đúng tháng,
+     bật bộ lọc "Còn nợ" và ghim đúng ngày chốt của đợt đó. */
+  const openUnpaidDetail = (date: string) => {
+    setPending({});
+    setSearch('');
+    setMonthFilter(date.slice(0, 7));
+    setPaymentFilter('unpaid');
+    setFocusDate(date);
+    setExpandedGroups({});
+    setTab('detail');
+  };
 
   /* ── lọc theo tìm kiếm + trạng thái thanh toán ──
      Lọc Ở CẤP KỲ: tab "Đã xong" chỉ giữ các kỳ đã có ngày thanh toán, tab "Còn nợ"
@@ -462,8 +507,12 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
     const out: CustomerGroup[] = [];
     effectiveCustomers.forEach(c => {
       if (q && !c.mkh.toLowerCase().includes(q) && !c.nMua.toLowerCase().includes(q)) return;
-      if (paymentFilter === 'all') { out.push(c); return; }
-      const kyList = c.kyList.filter(ky => (paymentFilter === 'paid' ? !!ky.nTToan : !ky.nTToan));
+      if (paymentFilter === 'all' && !focusDate) { out.push(c); return; }
+      const kyList = c.kyList.filter(ky => {
+        if (focusDate && ky.endDate !== focusDate) return false;
+        if (paymentFilter === 'all') return true;
+        return paymentFilter === 'paid' ? !!ky.nTToan : !ky.nTToan;
+      });
       if (kyList.length === 0) return;
       const unpaidCount = kyList.filter(ky => !ky.nTToan).length;
       out.push({
@@ -471,7 +520,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       });
     });
     return out;
-  }, [effectiveCustomers, search, paymentFilter]);
+  }, [effectiveCustomers, search, paymentFilter, focusDate]);
 
   /* ── tách theo Khu công nghiệp ── */
   const zoneGroups = useMemo<ZoneGroup[]>(() => {
@@ -737,7 +786,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
           ) : (
             <MonthPicker
               value={monthFilter}
-              onChange={v => { setPending({}); setMonthFilter(v); }}
+              onChange={v => { setPending({}); setFocusDate(''); setMonthFilter(v); }}
               allowAll
               className="min-w-[170px]"
             />
@@ -876,39 +925,72 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                 <table className="vl-table w-full text-left border-collapse table-fixed min-w-[640px]">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
-                      <th className="py-3 px-4 w-[150px]">Ngày chốt chỉ số</th>
-                      <th className="py-3 px-4 w-[110px] text-center">Khách hàng</th>
+                      <th className="py-3 px-4 w-[170px]">Ngày chốt chỉ số</th>
+                      <th className="py-3 px-4 w-[100px] text-center">Khách hàng</th>
                       <th className="py-3 px-4">Tiến trình thanh toán</th>
-                      <th className="py-3 px-4 w-[120px] text-center">Đã / Tổng</th>
-                      <th className="py-3 px-4 w-[160px] text-right">Còn phải thu</th>
+                      <th className="py-3 px-4 w-[110px] text-center">Đã / Tổng</th>
+                      <th className="py-3 px-4 w-[150px] text-right">Còn phải thu</th>
+                      <th className="py-3 px-4 w-[100px] text-center">Chi tiết</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {mp.rows.map(g => (
-                      <tr key={g.date} className="text-sm">
-                        <td className="py-3 px-4 font-mono font-bold text-ink">{fmtDate(g.date)}</td>
-                        <td className="py-3 px-4 text-center font-mono text-xs text-soft">{g.total}</td>
-                        <td className="py-3 px-4">
-                          <ProgressBar
-                            value={g.paid}
-                            total={g.total}
-                            tone={g.paid === g.total ? 'ok' : 'accent'}
-                            title={`${g.paid}/${g.total} khách hàng đã thanh toán`}
-                          />
-                        </td>
-                        <td className="py-3 px-4 text-center font-mono text-xs font-bold">
-                          <span className={g.paid === g.total ? 'text-ok' : 'text-accent'}>{g.paid}</span>
-                          <span className="text-faint">/{g.total}</span>
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-xs font-bold">
-                          {g.unpaidVAT > 0 ? (
-                            <span className="text-rose-600">{fmtVND(g.unpaidVAT)}</span>
-                          ) : (
-                            <span className="text-ok">Đã thu đủ</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {mp.rows.map(g => {
+                      const done = g.paid >= g.total;
+                      const tone = dueTone(g.paid, g.total, g.elapsed);
+                      const overdue = !done && g.elapsed > DUE_NOTE_DAYS;
+                      return (
+                        <tr key={g.date} className="text-sm">
+                          <td className="py-3 px-4 font-mono font-bold text-ink">
+                            <div>{fmtDate(g.date)}</div>
+                            {overdue && (
+                              <div
+                                className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black ${
+                                  tone === 'bad' ? 'bg-rose-100 text-rose-700' : 'bg-[var(--warning-soft)] text-warn'
+                                }`}
+                                title={`Hạn cảnh báo ${DUE_WARN_DAYS} ngày, trễ hạn ${DUE_LATE_DAYS} ngày kể từ ngày chốt`}
+                              >
+                                <AlertTriangle className="w-3 h-3 shrink-0" />
+                                Quá hạn {g.elapsed} ngày
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center font-mono text-xs text-soft">{g.total}</td>
+                          <td className="py-3 px-4">
+                            <ProgressBar
+                              value={g.paid}
+                              total={g.total}
+                              tone={tone}
+                              title={`${g.paid}/${g.total} khách hàng đã thanh toán${overdue ? ` · quá hạn ${g.elapsed} ngày` : ''}`}
+                            />
+                          </td>
+                          <td className="py-3 px-4 text-center font-mono text-xs font-bold">
+                            <span className={done ? 'text-ok' : 'text-accent'}>{g.paid}</span>
+                            <span className="text-faint">/{g.total}</span>
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-xs font-bold">
+                            {g.unpaidVAT > 0 ? (
+                              <span className="text-rose-600">{fmtVND(g.unpaidVAT)}</span>
+                            ) : (
+                              <span className="text-ok">Đã thu đủ</span>
+                            )}
+                          </td>
+                          {/* Đợt chưa thu đủ → mở thẳng danh sách khách còn nợ của đúng đợt này */}
+                          <td className="py-3 px-4 text-center">
+                            {done ? (
+                              <span className="text-faint text-xs">—</span>
+                            ) : (
+                              <button
+                                onClick={() => openUnpaidDetail(g.date)}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-accent hover:underline"
+                                title={`Xem ${g.total - g.paid} khách hàng chưa thanh toán của đợt ${fmtDate(g.date)}`}
+                              >
+                                Chi tiết <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                   <tfoot>
                     {/* Dòng tổng — tô nền accent + viền trên dày để tách hẳn khỏi các dòng ngày chốt */}
@@ -920,7 +1002,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                         <ProgressBar
                           value={mp.paid}
                           total={mp.total}
-                          tone={mp.paid === mp.total ? 'ok' : 'accent'}
+                          tone={dueTone(mp.paid, mp.total, mp.worstElapsed)}
                           title={`${mp.paid}/${mp.total} khách hàng đã thanh toán trong tháng`}
                         />
                       </td>
@@ -935,6 +1017,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                           <span className="text-ok">Đã thu đủ</span>
                         )}
                       </td>
+                      <td className="py-3.5 px-4" />
                     </tr>
                   </tfoot>
                 </table>
@@ -950,13 +1033,27 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       <>
       {/* Thanh điều khiển: tải lại + lọc trạng thái + chú thích màu */}
       <div className="vl-card p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4 text-[11px] font-semibold text-soft">
+        <div className="flex items-center gap-4 text-[11px] font-semibold text-soft flex-wrap">
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-emerald-100 border-l-4 border-l-emerald-400 shrink-0" /> Đã thanh toán
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-rose-100 border-l-4 border-l-rose-500 shrink-0" /> Còn nợ
           </span>
+          {/* Đang ghim một đợt chốt (mở từ bảng tiến trình) — bấm X để xem cả tháng */}
+          {focusDate && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-accent-soft text-accent text-[11px] font-black">
+              <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+              Đợt chốt {fmtDate(focusDate)}
+              <button
+                onClick={() => setFocusDate('')}
+                title="Bỏ lọc theo đợt chốt"
+                className="p-0.5 rounded hover:bg-[var(--danger-soft)] hover:text-red-500 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
