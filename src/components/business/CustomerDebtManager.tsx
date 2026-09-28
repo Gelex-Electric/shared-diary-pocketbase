@@ -4,6 +4,7 @@ import { pb } from '../../lib/pocketbase';
 import { DatePicker, MonthPicker } from '../ui/DateTimePickers';
 import { createNotification } from '../ui/NotificationBell';
 import { Tabs, type TabItem } from '../ui/Tabs';
+import { Select } from '../ui/Select';
 import { ProgressBar } from '../ui/dashboard';
 import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle,
@@ -97,6 +98,25 @@ const sumTotals = (list: Totals[]): Totals => {
   const t = emptyTotals();
   list.forEach(x => addTotals(t, x));
   return t;
+};
+
+/* Giới hạn theo KCN của tài khoản (khối Vận hành) và áp các thay đổi ngày thanh
+   toán đang soạn (chưa lưu) để bảng/tiến trình phản ánh ngay. */
+const applyScopeAndPending = (
+  list: CustomerGroup[],
+  pending: Record<string, string>,
+  zoneLock: string,
+): CustomerGroup[] => {
+  const scoped = zoneLock ? list.filter(c => zoneOf(c.mkh) === zoneLock) : list;
+  return scoped.map(c => {
+    let unpaidCount = 0;
+    const kyList = c.kyList.map(ky => {
+      const nTToan = ky.key in pending ? pending[ky.key] : ky.nTToan;
+      if (!nTToan) unpaidCount += 1;
+      return { ...ky, nTToan };
+    });
+    return { ...c, kyList, unpaidCount, isPaid: unpaidCount === 0 };
+  });
 };
 
 /* Khu công nghiệp suy từ tiền tố MKHang (vd "KCNTH-002" → "KCNTH"). */
@@ -206,15 +226,58 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
     fetchLatestInvoiceMonth().then(ym => {
       if (!alive) return;
       const d = new Date();
-      setMonthFilter(ym || `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`);
+      const ymFinal = ym || `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+      setMonthFilter(ymFinal);
+      setYear(ymFinal.slice(0, 4));
     });
     return () => { alive = false; };
   }, []);
 
   useEffect(() => { loadRecords(monthFilter); }, [loadRecords, monthFilter]);
 
-  /* ── gộp cấp 1: theo MKHang ; cấp 2: HÓA ĐƠN (gộp khoảng đổi giá theo công tơ) ── */
-  const customers = useMemo<CustomerGroup[]>(() => {
+  /* ── dữ liệu CẢ NĂM cho tab Tổng hợp (tiến trình thanh toán mỗi tháng một bảng).
+        Chỉ lấy các trường cần cho việc gộp kỳ + tính tiền, tránh kéo cả bảng chỉ số. ── */
+  /* Tab Tổng hợp chọn theo NĂM (độc lập với bộ chọn tháng của tab Chi tiết);
+     khởi tạo theo năm của tháng có hóa đơn mới nhất. */
+  const [year, setYear] = useState<string>(String(new Date().getFullYear()));
+  const yearOptions = useMemo(() => {
+    const now = new Date().getFullYear();
+    const years = new Set<number>();
+    for (let y = now; y >= now - 5; y--) years.add(y);
+    years.add(Number(year));
+    return Array.from(years).sort((a, b) => b - a).map(y => ({ value: String(y), label: `Năm ${y}` }));
+  }, [year]);
+  const [yearRecords, setYearRecords] = useState<DebtInvoiceRecord[]>([]);
+  const [yearLoading, setYearLoading] = useState(false);
+
+  const loadYearRecords = useCallback(async (y: string) => {
+    if (!y) return;
+    setYearLoading(true);
+    try {
+      const filter = pb.filter('EndDate >= {:start} && EndDate < {:nextStart}', {
+        start: `${y}-01-01`,
+        nextStart: `${Number(y) + 1}-01-01`,
+      });
+      const list = await pb.collection('invoice').getFullList<DebtInvoiceRecord>({
+        filter,
+        sort: '-EndDate',
+        fields: 'id,MKHang,NMua,SCT,StartDate,EndDate,IndexId,BillId,NTToan,LoaiHD,ThTien,ThTien_HC,ThTien_PK,ThTienVAT,VAT,TongSL_HC,TongSL_PK',
+        requestKey: null,
+      });
+      setYearRecords(list);
+    } catch (err: any) {
+      showToast(`Lỗi tải tiến trình năm ${y}: ${err?.data?.message || err?.message || ''}`, 'error');
+    } finally {
+      setYearLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => { loadYearRecords(year); }, [loadYearRecords, year]);
+
+  /* ── gộp cấp 1: theo MKHang ; cấp 2: HÓA ĐƠN (gộp khoảng đổi giá theo công tơ) ──
+     Dùng chung cho dữ liệu THÁNG đang xem (bảng chi tiết) và dữ liệu CẢ NĂM
+     (bảng tiến trình ở tab Tổng hợp). */
+  const buildCustomers = useCallback((recs: DebtInvoiceRecord[]): CustomerGroup[] => {
     const kyMap = new Map<string, KyGroup & { mkh: string; nMua: string }>();
     const ntByKey = new Map<string, string[]>();
 
@@ -238,7 +301,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
 
     // Tách 2 nhóm: có BillId (gộp thẳng theo BillId) và không có BillId (nối ngày theo công tơ)
     const noBill = new Map<string, DebtInvoiceRecord[]>();
-    records.forEach(r => {
+    recs.forEach(r => {
       const mkh = (r.MKHang || '').trim();
       const end = dateOnly(r.EndDate);
       if (!mkh || !end) return;
@@ -294,7 +357,9 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
     custMap.forEach(c => c.kyList.sort((a, b) => b.endDate.localeCompare(a.endDate)));
 
     return Array.from(custMap.values()).sort((a, b) => a.mkh.localeCompare(b.mkh, 'vi'));
-  }, [records]);
+  }, []);
+
+  const customers = useMemo(() => buildCustomers(records), [buildCustomers, records]);
 
   /* ── tra cứu kỳ theo key (ids + ngày gốc) phục vụ lưu thay đổi ── */
   const kyIndex = useMemo(() => {
@@ -307,18 +372,10 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
 
   /* ── áp các thay đổi đang soạn (pending) lên dữ liệu để hiển thị tức thì
         nhưng CHƯA lưu vào collection ── */
-  const effectiveCustomers = useMemo<CustomerGroup[]>(() => {
-    const scoped = zoneLock ? customers.filter(c => zoneOf(c.mkh) === zoneLock) : customers;
-    return scoped.map(c => {
-      let unpaidCount = 0;
-      const kyList = c.kyList.map(ky => {
-        const nTToan = ky.key in pending ? pending[ky.key] : ky.nTToan;
-        if (!nTToan) unpaidCount += 1;
-        return { ...ky, nTToan };
-      });
-      return { ...c, kyList, unpaidCount, isPaid: unpaidCount === 0 };
-    });
-  }, [customers, pending, zoneLock]);
+  const effectiveCustomers = useMemo<CustomerGroup[]>(
+    () => applyScopeAndPending(customers, pending, zoneLock),
+    [customers, pending, zoneLock],
+  );
 
   /* ── số thay đổi thực sự (khác giá trị gốc) đang chờ lưu ── */
   const pendingCount = useMemo(
@@ -353,9 +410,14 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
      khách hàng. Một khách được tính "đã thanh toán" của ngày đó khi MỌI kỳ chốt
      đúng ngày đó của họ đều đã có ngày thanh toán. Không phụ thuộc tìm kiếm/tab
      lọc (giống các thẻ KPI). */
+  const effectiveYearCustomers = useMemo<CustomerGroup[]>(
+    () => applyScopeAndPending(buildCustomers(yearRecords), pending, zoneLock),
+    [buildCustomers, yearRecords, pending, zoneLock],
+  );
+
   const dateProgress = useMemo(() => {
     const map = new Map<string, { date: string; paid: number; total: number; unpaidVAT: number; dtVAT: number }>();
-    effectiveCustomers.forEach(c => {
+    effectiveYearCustomers.forEach(c => {
       const byDate = new Map<string, KyGroup[]>();
       c.kyList.forEach(ky => {
         if (!ky.endDate) return;
@@ -374,7 +436,22 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       });
     });
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [effectiveCustomers]);
+  }, [effectiveYearCustomers]);
+
+  /* Mỗi THÁNG một bảng: gom các ngày chốt trong năm theo tháng (mới → cũ). */
+  const monthProgress = useMemo(() => {
+    const map = new Map<string, { ym: string; rows: typeof dateProgress; paid: number; total: number; unpaidVAT: number }>();
+    dateProgress.forEach(r => {
+      const ym = r.date.slice(0, 7);
+      let g = map.get(ym);
+      if (!g) { g = { ym, rows: [], paid: 0, total: 0, unpaidVAT: 0 }; map.set(ym, g); }
+      g.rows.push(r);
+      g.paid += r.paid;
+      g.total += r.total;
+      g.unpaidVAT += r.unpaidVAT;
+    });
+    return Array.from(map.values()).sort((a, b) => b.ym.localeCompare(a.ym));
+  }, [dateProgress]);
 
   /* ── lọc theo tìm kiếm + trạng thái thanh toán ──
      Lọc Ở CẤP KỲ: tab "Đã xong" chỉ giữ các kỳ đã có ngày thanh toán, tab "Còn nợ"
@@ -458,7 +535,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
         }
         setSaveProgress({ done: i + 1, total: entries.length });
       }
-      await loadRecords(monthFilter);
+      await Promise.all([loadRecords(monthFilter), loadYearRecords(year)]);
       setPending({});
       showToast(`Đã lưu ${entries.length} thay đổi thanh toán`, 'success');
     } catch (err: any) {
@@ -648,12 +725,23 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
 
         {/* Bộ chọn tháng + tìm kiếm (bên phải) */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:shrink-0">
-          <MonthPicker
-            value={monthFilter}
-            onChange={v => { setPending({}); setMonthFilter(v); }}
-            allowAll
-            className="min-w-[170px]"
-          />
+          {/* Tổng hợp: chọn NĂM (tiến trình cả năm). Chi tiết: chọn THÁNG (bảng KCN). */}
+          {tab === 'summary' ? (
+            <Select
+              value={year}
+              onChange={v => { setPending({}); setYear(v); }}
+              options={yearOptions}
+              icon={CalendarClock}
+              className="min-w-[170px]"
+            />
+          ) : (
+            <MonthPicker
+              value={monthFilter}
+              onChange={v => { setPending({}); setMonthFilter(v); }}
+              allowAll
+              className="min-w-[170px]"
+            />
+          )}
           {tab === 'detail' && (
             <div className="relative">
               <Search className="w-4 h-4 text-faint absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -733,59 +821,128 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
         </div>
       </div>
 
-      {/* Tiến trình thanh toán theo ngày chốt chỉ số */}
-      <div className="vl-card p-6 md:p-7">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="p-2 bg-accent-soft rounded-xl text-accent shrink-0">
-            <CalendarClock className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-black text-ink uppercase tracking-wide">Tiến trình thanh toán theo ngày chốt chỉ số</h3>
-            <p className="text-[11px] font-semibold text-soft">
-              Mỗi dòng là nhóm khách hàng có cùng ngày chốt — tỷ lệ khách đã thanh toán đủ mọi hóa đơn của ngày đó.
-            </p>
+      {/* Tiến trình thanh toán theo ngày chốt chỉ số — CẢ NĂM, mỗi tháng một bảng */}
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-accent-soft rounded-xl text-accent shrink-0">
+          <CalendarClock className="w-5 h-5" />
+        </div>
+        <div>
+          <h3 className="text-sm font-black text-ink uppercase tracking-wide">
+            Tiến trình thanh toán theo ngày chốt chỉ số — năm {year}
+          </h3>
+          <p className="text-[11px] font-semibold text-soft">
+            Mỗi tháng một bảng; mỗi dòng là nhóm khách hàng có cùng ngày chốt — tỷ lệ khách đã thanh toán đủ mọi hóa đơn của ngày đó.
+          </p>
+        </div>
+      </div>
+
+      {yearLoading ? (
+        <div className="vl-card p-16 text-center text-faint">
+          <Loader2 className="w-6 h-6 animate-spin inline-block mr-2" /> Đang tải tiến trình năm {year}...
+        </div>
+      ) : monthProgress.length === 0 ? (
+        <div className="vl-card p-16 text-center text-faint">
+          <div className="flex flex-col items-center justify-center">
+            <FileSpreadsheet className="w-12 h-12 text-faint mb-3" />
+            <p className="text-sm">Chưa có hóa đơn nào trong năm {year}</p>
           </div>
         </div>
-
-        {loading ? (
-          <div className="py-10 text-center text-faint text-sm">
-            <Loader2 className="w-5 h-5 animate-spin inline-block mr-2" /> Đang tải dữ liệu...
-          </div>
-        ) : dateProgress.length === 0 ? (
-          <div className="py-10 text-center text-faint text-sm">Chưa có hóa đơn nào trong kỳ đang chọn</div>
-        ) : (
-          <div className="space-y-4">
-            {dateProgress.map(g => (
-              <div key={g.date} className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="sm:w-[150px] shrink-0">
-                  <div className="font-mono text-sm font-black text-ink">{fmtDate(g.date)}</div>
-                  <div className="text-[11px] font-semibold text-soft">{g.total} khách hàng</div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <ProgressBar
-                    value={g.paid}
-                    total={g.total}
-                    tone={g.paid === g.total ? 'ok' : 'accent'}
-                    title={`${g.paid}/${g.total} khách hàng đã thanh toán`}
-                  />
-                </div>
-                <div className="sm:w-[210px] shrink-0 sm:text-right">
-                  <div className="font-mono text-xs font-bold text-ink">
-                    <span className={g.paid === g.total ? 'text-ok' : 'text-accent'}>{g.paid}</span>
-                    <span className="text-faint">/{g.total}</span>
-                    <span className="text-[10px] font-semibold text-faint"> đã thanh toán</span>
+      ) : (
+        monthProgress.map(mp => {
+          const [my, mm] = mp.ym.split('-');
+          return (
+            <div key={mp.ym} className="vl-card overflow-hidden">
+              {/* Header tháng — cùng kiểu thanh gradient với bảng KCN */}
+              <div className={`bg-gradient-to-r ${ZONE_HEADER_GRADIENT} px-5 md:px-7 py-4 flex items-center justify-between gap-3`}>
+                <div className="flex items-center gap-3 text-white min-w-0">
+                  <div className="p-2 bg-surface/20 rounded-xl shrink-0">
+                    <CalendarClock className="w-5 h-5" />
                   </div>
-                  {g.unpaidVAT > 0 && (
-                    <div className="font-mono text-[11px] font-bold text-rose-600">
-                      Còn {fmtVND(g.unpaidVAT)} <span className="text-[9px] text-faint font-semibold">đ</span>
-                    </div>
-                  )}
+                  <div className="min-w-0">
+                    <h3 className="text-base font-black tracking-tight leading-tight">Tháng {mm}/{my}</h3>
+                    <p className="text-[11px] font-semibold text-white/80">
+                      {mp.rows.length} đợt chốt · {mp.paid}/{mp.total} khách hàng đã thanh toán
+                    </p>
+                  </div>
                 </div>
+                {mp.unpaidVAT > 0 && (
+                  <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-black shadow-sm shrink-0 font-mono">
+                    Còn {fmtVND(mp.unpaidVAT)} đ
+                  </span>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+              <div className="overflow-x-auto">
+                <table className="vl-table w-full text-left border-collapse table-fixed min-w-[640px]">
+                  <thead>
+                    <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
+                      <th className="py-3 px-4 w-[150px]">Ngày chốt chỉ số</th>
+                      <th className="py-3 px-4 w-[110px] text-center">Khách hàng</th>
+                      <th className="py-3 px-4">Tiến trình thanh toán</th>
+                      <th className="py-3 px-4 w-[120px] text-center">Đã / Tổng</th>
+                      <th className="py-3 px-4 w-[160px] text-right">Còn phải thu</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {mp.rows.map(g => (
+                      <tr key={g.date} className="text-sm">
+                        <td className="py-3 px-4 font-mono font-bold text-ink">{fmtDate(g.date)}</td>
+                        <td className="py-3 px-4 text-center font-mono text-xs text-soft">{g.total}</td>
+                        <td className="py-3 px-4">
+                          <ProgressBar
+                            value={g.paid}
+                            total={g.total}
+                            tone={g.paid === g.total ? 'ok' : 'accent'}
+                            title={`${g.paid}/${g.total} khách hàng đã thanh toán`}
+                          />
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono text-xs font-bold">
+                          <span className={g.paid === g.total ? 'text-ok' : 'text-accent'}>{g.paid}</span>
+                          <span className="text-faint">/{g.total}</span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-xs font-bold">
+                          {g.unpaidVAT > 0 ? (
+                            <span className="text-rose-600">{fmtVND(g.unpaidVAT)}</span>
+                          ) : (
+                            <span className="text-ok">Đã thu đủ</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    {/* Dòng tổng — tô nền accent + viền trên dày để tách hẳn khỏi các dòng ngày chốt */}
+                    <tr className="bg-accent-soft border-t-2 border-t-[var(--accent)] text-sm font-black text-ink">
+                      <td colSpan={2} className="py-3.5 px-4 text-right uppercase text-[11px] tracking-widest text-accent">
+                        Tổng tháng {mm}/{my}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <ProgressBar
+                          value={mp.paid}
+                          total={mp.total}
+                          tone={mp.paid === mp.total ? 'ok' : 'accent'}
+                          title={`${mp.paid}/${mp.total} khách hàng đã thanh toán trong tháng`}
+                        />
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-sm font-black">
+                        <span className={mp.paid === mp.total ? 'text-ok' : 'text-accent'}>{mp.paid}</span>
+                        <span className="text-faint">/{mp.total}</span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono text-sm font-black">
+                        {mp.unpaidVAT > 0 ? (
+                          <span className="text-rose-600">{fmtVND(mp.unpaidVAT)}</span>
+                        ) : (
+                          <span className="text-ok">Đã thu đủ</span>
+                        )}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          );
+        })
+      )}
       </>
       )}
 
@@ -827,7 +984,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
           )}
 
           <button
-            onClick={() => { setPending({}); loadRecords(monthFilter); }}
+            onClick={() => { setPending({}); loadRecords(monthFilter); loadYearRecords(year); }}
             disabled={loading || saving}
             className="flex items-center gap-1.5 px-3 py-2 bg-surface border border-[var(--border)] rounded-lg text-sm font-bold text-dim hover:bg-subtle transition-colors disabled:opacity-50"
           >
@@ -930,8 +1087,8 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                   {zone.customers.map(renderCustomerRows)}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-surface border-t-2 border-[var(--border-strong)] text-sm font-black text-ink">
-                    <td colSpan={4} className="py-3.5 px-4 text-right uppercase text-xs tracking-wider text-dim">
+                  <tr className="bg-accent-soft border-t-2 border-t-[var(--accent)] text-sm font-black text-ink">
+                    <td colSpan={4} className="py-3.5 px-4 text-right uppercase text-[11px] tracking-widest text-accent">
                       Tổng cộng
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono text-warn">
