@@ -194,14 +194,22 @@ export function FormModal({ open, title, onClose, onSubmit, saving, wide, submit
  * Khuôn lấy từ bảng "tình hình vận hành" ở sổ nhật ký (`HandoverManager`):
  * viền là của ô bảng, nên chữ được trọn bề ngang thay vì bị bóp trong hộp con.
  */
-export function CellInput({ value, onChange, placeholder, mono, align = 'left', type = 'text' }: {
+export function CellInput({ value, onChange, placeholder, mono, align = 'left', type = 'text', onPasteText }: {
   value: string; onChange: (v: string) => void; placeholder?: string;
   mono?: boolean; align?: 'left' | 'center'; type?: 'text' | 'number';
+  /**
+   * Bắt khối DÁN (vd nhiều dòng từ Excel). Trả `true` = đã tự xử lý, chặn dán
+   * mặc định; `false` = để ô dán bình thường. Không truyền thì như cũ.
+   */
+  onPasteText?: (text: string) => boolean;
 }) {
   return (
     <input
       type={type}
       value={value}
+      onPaste={onPasteText ? e => {
+        if (onPasteText(e.clipboardData.getData('text'))) e.preventDefault();
+      } : undefined}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       className={`w-full rounded-lg bg-transparent p-2 text-sm outline-none transition-colors focus:bg-subtle placeholder:font-normal placeholder:text-faint ${

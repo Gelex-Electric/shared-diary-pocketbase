@@ -14,10 +14,11 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Plus, RefreshCw, Trash2, Edit2, ClipboardPaste, Link2, PackageOpen, Search,
+  Plus, RefreshCw, Trash2, Edit2, Link2, PackageOpen, PackagePlus, Search,
   ChevronDown, ChevronRight, Recycle,
 } from 'lucide-react';
 import { Select } from '../ui/Select';
+import { DatePicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { toast } from '../../lib/toast';
 import {
@@ -35,7 +36,7 @@ import {
 import { pointZoneId } from '../../lib/dm/pointScope';
 import {
   buildStock, findExisting, guessType, idleDays, parsePaste, SERIAL_RE,
-  IDLE_WARN_DAYS, REUSE_MIN, type PastedRow, type StockRow,
+  IDLE_WARN_DAYS, REUSE_MIN, type StockRow,
 } from '../../lib/dm/stock';
 import type { Point } from '../../lib/dm/types';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
@@ -45,6 +46,11 @@ const TYPES: AssetType[] = ['CONGTO', 'TI', 'TU', 'GP03', 'SIM', 'KHAC'];
 /** Loại có tỷ số — chỉ hai loại này mới hiện ô tỷ số, giống form điểm đo. */
 const HAS_RATIO: AssetType[] = ['TI', 'TU'];
 const today = () => new Date().toISOString().slice(0, 10);
+
+/** Một dòng của bảng "Thêm mới". Loại/tỷ số trống = lấy theo ô chung. */
+interface AddRow { key: string; serial: string; type: AssetType | ''; ratio: string; model: string }
+let addSeq = 0;
+const newAddRow = (): AddRow => ({ key: `a${++addSeq}`, serial: '', type: '', ratio: '', model: '' });
 
 /** Chip lọc bấm một phát — nhanh hơn mở select rồi chọn rồi đóng. */
 function Chip({ on, onClick, children }: {
@@ -83,7 +89,8 @@ export default function StockEntry() {
   /** Dòng đang mở xem lịch sử lắp đặt. */
   const [openRow, setOpenRow] = useState<string | null>(null);
 
-  const [modal, setModal] = useState<'one' | 'paste' | 'attach' | null>(null);
+  /** `one` = SỬA một thiết bị; thêm mới (lẻ hay theo lô) đều qua `add`. */
+  const [modal, setModal] = useState<'one' | 'add' | 'attach' | null>(null);
   const [editing, setEditing] = useState<Device | null>(null);
   /** Các thiết bị đang tích chọn — để gắn cả bộ vào một điểm đo một lượt. */
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -137,7 +144,6 @@ export default function StockEntry() {
   };
   const [form, setForm] = useState(EMPTY);
 
-  const openAdd = () => { setEditing(null); setForm({ ...EMPTY }); setModal('one'); };
   const openEdit = (dev: Device) => {
     setEditing(dev);
     setForm({
@@ -190,53 +196,101 @@ export default function StockEntry() {
     } catch (e) { toast.error('Không lưu được', pbErrorMessage(e)); } finally { setSaving(false); }
   };
 
-  /* ---------------------------- dán theo lô ---------------------------- */
-  const [pasteText, setPasteText] = useState('');
-  const [pasteType, setPasteType] = useState<AssetType | ''>('');
-  const [pasteRatio, setPasteRatio] = useState('');
-  const [pasteBatch, setPasteBatch] = useState('');
-  const [pasteDate, setPasteDate] = useState(today());
-  const [pasteHold, setPasteHold] = useState('');
+  /* ------------------- THÊM MỚI: bảng nhiều dòng + dán ------------------- */
+  /*
+    Gộp "Thêm một" và "Dán danh sách" thành MỘT nút "Thêm mới" (user chốt
+    28/09/2026): một bảng mở rộng được hàng, cùng khuôn bảng vật tư ở form điểm
+    đo. Thêm một cái = một dòng; nhập lô = dán cột Excel vào ô Số No, bảng tự
+    nở thêm dòng. Các ô CHUNG phía trên là mặc định cho mọi dòng để trống.
+  */
+  const [addRows, setAddRows] = useState<AddRow[]>([]);
+  const [addType, setAddType] = useState<AssetType | ''>('');
+  const [addRatio, setAddRatio] = useState('');
+  const [addBatch, setAddBatch] = useState('');
+  const [addDate, setAddDate] = useState(today());
+  const [addHold, setAddHold] = useState('');
 
-  const parsed = useMemo(() => parsePaste(pasteText), [pasteText]);
-  const existing = useMemo(
-    () => findExisting(d?.devices ?? [], parsed.map(r => r.serial)),
-    [d, parsed]);
+  const openAddMany = () => {
+    setAddRows([newAddRow(), newAddRow(), newAddRow()]);
+    setAddType(''); setAddRatio(''); setAddBatch(''); setAddDate(today()); setAddHold('');
+    setModal('add');
+  };
+  const setAddRow = (key: string, patch: Partial<AddRow>) =>
+    setAddRows(rs => rs.map(r => (r.key === key ? { ...r, ...patch } : r)));
 
   /**
-   * Loại của từng dòng: ô chọn chung là mặc định, nhưng DẠNG SỐ được ưu tiên
-   * khi nó chắc chắn (IMEI của GP-03, ICCID của SIM). Dán 20 số lẫn lộn
-   * GP-03 và SIM thì vẫn vào đúng chỗ.
+   * Dán vào ô Số No: một số lẻ thì để ô dán bình thường; nhiều dòng (hoặc có
+   * tab — nhiều cột Excel) thì tách bằng `parsePaste`, đổ vào dòng hiện tại và
+   * các dòng TRỐNG phía sau, thiếu thì thêm dòng.
    */
-  const typeOfRow = (r: PastedRow): AssetType | '' => guessType(r.serial) ?? pasteType;
+  const pasteInto = (key: string, text: string): boolean => {
+    if (!/[\r\n\t]/.test(text.trim())) return false;
+    const got = parsePaste(text).filter(p => p.serial);
+    if (!got.length) return false;
+    setAddRows(rs => {
+      const at = rs.findIndex(r => r.key === key);
+      const next = [...rs];
+      let i = at;
+      for (const p of got) {
+        while (i < next.length && i !== at && next[i].serial.trim()) i++;
+        const fill = { serial: p.serial, ratio: p.ratio, type: guessType(p.serial) ?? '' as AssetType | '' };
+        if (i < next.length) next[i] = { ...next[i], ...fill, type: fill.type || next[i].type };
+        else next.push({ ...newAddRow(), ...fill });
+        i++;
+      }
+      return next;
+    });
+    return true;
+  };
 
-  const pasteReady = parsed.filter(r => !r.problem && !existing.has(r.serial) && typeOfRow(r));
-  const pasteDup = parsed.filter(r => !r.problem && existing.has(r.serial));
-  const pasteBad = parsed.filter(r => r.problem);
-  const pasteNoType = parsed.filter(r => !r.problem && !existing.has(r.serial) && !typeOfRow(r));
+  const existing = useMemo(
+    () => findExisting(d?.devices ?? [], addRows.map(r => r.serial.trim())),
+    [d, addRows]);
 
-  const savePaste = async () => {
-    if (!pasteReady.length) return;
-    // Tỷ số bắt buộc với TI/TU, kể cả khi nhập lô.
-    const lackRatio = pasteReady.filter(
-      r => HAS_RATIO.includes(typeOfRow(r) as AssetType) && !(r.ratio || pasteRatio).trim());
-    if (lackRatio.length) {
-      return toast.warning('Thiếu tỷ số',
-        `${lackRatio.length} dòng TI/TU chưa có tỷ số — điền ô "Tỷ số chung" hoặc dán kèm cột tỷ số.`);
+  /**
+   * Loại của từng dòng: chọn ở dòng > DẠNG SỐ khi chắc chắn (IMEI của GP-03,
+   * ICCID của SIM) > loại chung. Tỷ số: dòng > tỷ số chung.
+   */
+  const typeOfAdd = (r: AddRow): AssetType | '' => r.type || guessType(r.serial.trim()) || addType;
+  const ratioOfAdd = (r: AddRow) => (r.ratio.trim() || addRatio.trim());
+
+  /** Tình trạng từng dòng — hiện ngay trong bảng, như bản xem trước cũ. */
+  const addState = (r: AddRow, i: number): { kind: 'empty' | 'new' | 'dup' | 'bad'; text: string } => {
+    const sn = r.serial.trim();
+    if (!sn) return { kind: 'empty', text: '' };
+    if (!SERIAL_RE.test(sn)) return { kind: 'bad', text: 'số No phải là 8–20 chữ số' };
+    if (addRows.slice(0, i).some(x => x.serial.trim() === sn)) return { kind: 'bad', text: 'trùng dòng trên' };
+    const had = existing.get(sn);
+    if (had) return { kind: 'dup', text: `đã có (${ASSET_LABEL[had.type]})` };
+    const t = typeOfAdd(r);
+    if (!t) return { kind: 'bad', text: 'chưa chọn loại' };
+    if (HAS_RATIO.includes(t) && !ratioOfAdd(r)) return { kind: 'bad', text: 'thiếu tỷ số' };
+    return { kind: 'new', text: 'mới' };
+  };
+  const addStates = addRows.map((r, i) => addState(r, i));
+  const addReady = addRows.filter((_, i) => addStates[i].kind === 'new');
+  const addBad = addStates.filter(s => s.kind === 'bad').length;
+  const addDup = addStates.filter(s => s.kind === 'dup').length;
+
+  const saveAdd = async () => {
+    if (addBad) {
+      return toast.warning('Chưa ghi được', `${addBad} dòng còn lỗi — xem cột "Tình trạng".`);
     }
+    if (!addReady.length) return toast.warning('Chưa có gì để ghi', 'Nhập hoặc dán số No vào bảng.');
     setSaving(true);
     let n = 0;
     try {
-      for (const r of pasteReady) {
+      // Tuần tự: lỗi giữa chừng thì biết chính xác đã ghi tới đâu.
+      for (const r of addReady) {
         await deviceRepo.create({
-          serial: r.serial, type: typeOfRow(r) as AssetType,
-          ...ratioOf(r.ratio || pasteRatio),
-          date_in: pasteDate || '', batch: pasteBatch.trim(), hold_for_note: pasteHold.trim(),
+          serial: r.serial.trim(), type: typeOfAdd(r) as AssetType,
+          ...ratioOf(ratioOfAdd(r)), model_desc: r.model.trim(),
+          date_in: addDate || '', batch: addBatch.trim(), hold_for_note: addHold.trim(),
         });
         n++;
       }
       toast.success('Đã nhập kho', `${n} thiết bị.`);
-      setModal(null); setPasteText('');
+      setModal(null);
       await load();
     } catch (e) {
       toast.error(`Dừng sau ${n} thiết bị`, pbErrorMessage(e));
@@ -340,13 +394,10 @@ export default function StockEntry() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Nạp lại
           </button>
-          <button onClick={openAdd} className="vl-btn vl-btn-secondary flex items-center gap-2">
-            <Plus className="h-5 w-5" /> Thêm một
-          </button>
-          {/* Lối nhập CHÍNH — để nổi bật hơn nút thêm lẻ. */}
-          <button onClick={() => { setPasteText(''); setModal('paste'); }}
+          {/* MỘT nút cho cả thêm lẻ lẫn nhập lô (dán Excel) — 28/09/2026. */}
+          <button onClick={openAddMany}
             className="flex flex-1 items-center justify-center gap-2 vl-btn vl-btn-primary md:flex-none">
-            <ClipboardPaste className="h-5 w-5" /> Dán danh sách
+            <Plus className="h-5 w-5" /> Thêm mới
           </button>
         </div>
       </div>
@@ -512,86 +563,116 @@ export default function StockEntry() {
           return history ? [row, history] : row;
         }} />
 
-      {/* ===================== Dán danh sách ===================== */}
-      <FormModal open={modal === 'paste'} title="Nhập kho theo lô — dán danh sách" wide
-        onClose={() => setModal(null)} onSubmit={() => void savePaste()} saving={saving}
-        submitLabel={pasteReady.length ? `Ghi ${pasteReady.length} thiết bị` : 'Chưa có gì để ghi'}>
+      {/* ===================== Thêm mới (lẻ + theo lô) ===================== */}
+      <FormModal open={modal === 'add'} title="Thêm vật tư vào kho" wide
+        onClose={() => setModal(null)} onSubmit={() => void saveAdd()} saving={saving}
+        submitLabel={addReady.length ? `Ghi ${addReady.length} thiết bị` : 'Chưa có gì để ghi'}>
+        {/* Ô CHUNG: mặc định cho mọi dòng để trống loại / tỷ số. */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="Loại chung"
-            hint="GP-03 và SIM tự nhận theo dạng số, không cần chọn">
-            <Select value={pasteType} onChange={v => setPasteType(v as AssetType)}
+          <Field label="Loại chung" hint="Dòng nào chọn loại riêng thì theo dòng đó">
+            <Select value={addType} onChange={v => setAddType(v as AssetType)}
               options={TYPES.map(t => ({ value: t, label: ASSET_LABEL[t] }))} placeholder="Chọn loại" />
           </Field>
-          <Field label="Tỷ số chung" hint="Bỏ trống nếu đã dán kèm cột tỷ số">
-            <TextInput value={pasteRatio} onChange={setPasteRatio} mono placeholder="200/5" />
+          <Field label="Tỷ số chung" hint="Cho TI / TU — dòng có tỷ số riêng thì theo dòng">
+            <TextInput value={addRatio} onChange={setAddRatio} mono placeholder="200/5" />
           </Field>
           <Field label="Mã lô">
-            <TextInput value={pasteBatch} onChange={setPasteBatch} placeholder="LO-2026-08" />
+            <TextInput value={addBatch} onChange={setAddBatch} placeholder="LO-2026-08" />
           </Field>
           <Field label="Ngày nhập kho">
-            <input type="date" value={pasteDate} onChange={e => setPasteDate(e.target.value)}
-              className={INPUT_CLS} />
+            <DatePicker value={addDate} onChange={setAddDate} usePortal />
           </Field>
           <Field label="Dành cho" hint="Khách chưa có trong danh mục thì gõ tự do">
-            <TextInput value={pasteHold} onChange={setPasteHold} placeholder="Nhà máy X, lô B3" />
+            <TextInput value={addHold} onChange={setAddHold} placeholder="Nhà máy X, lô B3" />
           </Field>
         </div>
 
-        <Field label="Dán số No từ Excel"
-          hint="Mỗi dòng một số. Dán được nhiều cột — cột nào có dạng 200/5 sẽ nhận làm tỷ số.">
-          <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={6}
-            placeholder={'2620063128\t2000/5\n2620063141\t2000/5\n869035071138651'}
-            className={`${INPUT_CLS} font-mono text-[13px]`} />
-        </Field>
-
-        {parsed.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-4 text-[12px] font-bold">
-              <span className="text-emerald-600">Sẽ ghi: {pasteReady.length}</span>
-              {pasteDup.length > 0 && <span className="text-warn">Đã có trong kho: {pasteDup.length}</span>}
-              {pasteNoType.length > 0 && <span className="text-warn">Chưa rõ loại: {pasteNoType.length}</span>}
-              {pasteBad.length > 0 && <span className="text-red-500">Sai định dạng: {pasteBad.length}</span>}
-            </div>
-            <div className="max-h-64 overflow-y-auto rounded-lg border border-[var(--border)]">
-              <table className="w-full text-left text-[12px]">
-                <thead className="sticky top-0 bg-subtle">
-                  <tr>
-                    <th className="px-3 py-2 font-bold text-faint">Số No</th>
-                    <th className="px-3 py-2 font-bold text-faint">Loại</th>
-                    <th className="px-3 py-2 font-bold text-faint">Tỷ số</th>
-                    <th className="px-3 py-2 font-bold text-faint">Tình trạng</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border)]">
-                  {parsed.map((r, i) => {
-                    const had = existing.get(r.serial);
-                    const t = typeOfRow(r);
-                    const bad = !!r.problem;
-                    return (
-                      <tr key={`${r.serial}-${i}`} className={bad || had ? 'opacity-70' : ''}>
-                        <td className="px-3 py-1.5 font-mono text-dim">{r.serial || '(trống)'}</td>
-                        <td className="px-3 py-1.5 text-soft">
-                          {t ? ASSET_LABEL[t as AssetType] : <span className="text-warn">chưa rõ</span>}
-                          {guessType(r.serial) && <span className="ml-1 text-[10px] text-faint">(theo dạng số)</span>}
-                        </td>
-                        <td className="px-3 py-1.5 font-mono text-soft">{r.ratio || pasteRatio || '—'}</td>
-                        <td className="px-3 py-1.5">
-                          {bad ? <span className="text-red-500">{r.problem}</span>
-                            : had ? <span className="text-warn">đã có ({ASSET_LABEL[had.type]})</span>
-                              : !t ? <span className="text-warn">chọn "Loại chung" ở trên</span>
-                                : <span className="text-emerald-600">mới</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="text-[11px] text-faint">
-              Dòng đã có trong kho và dòng sai định dạng sẽ bị bỏ qua, không ghi đè gì.
+        <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-dim">
+              <PackagePlus className="h-4 w-4" /> Danh sách thiết bị
             </p>
+            <span className="flex flex-wrap gap-3 text-[11px] font-bold">
+              <span className="text-emerald-600">Sẽ ghi: {addReady.length}</span>
+              {addDup > 0 && <span className="text-warn">Đã có trong kho (bỏ qua): {addDup}</span>}
+              {addBad > 0 && <span className="text-red-500">Lỗi: {addBad}</span>}
+            </span>
           </div>
-        )}
+
+          <div className="max-h-[45vh] overflow-y-auto rounded-lg border border-[var(--border)] bg-surface">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col style={{ width: '26%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '6%' }} />
+              </colgroup>
+              <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-subtle">
+                <tr>
+                  <th className="px-4 py-3 text-left font-bold text-soft">Số No</th>
+                  <th className="px-4 py-3 text-left font-bold text-soft">Loại</th>
+                  <th className="px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
+                  <th className="px-4 py-3 text-left font-bold text-soft">Model / mô tả</th>
+                  <th className="px-4 py-3 text-left font-bold text-soft">Tình trạng</th>
+                  <th className="px-2 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {addRows.map((r, i) => {
+                  const st = addStates[i];
+                  const t = typeOfAdd(r);
+                  return (
+                    <tr key={r.key} className={st.kind === 'dup' ? 'opacity-60' : ''}>
+                      <td className="p-2">
+                        <CellInput value={r.serial} mono placeholder="Gõ hoặc dán từ Excel"
+                          onPasteText={text => pasteInto(r.key, text)}
+                          onChange={v => setAddRow(r.key, { serial: v })} />
+                      </td>
+                      <td className="p-2">
+                        <Select value={r.type} variant="bare"
+                          onChange={v => setAddRow(r.key, { type: v as AssetType })}
+                          options={TYPES.map(x => ({ value: x, label: ASSET_LABEL[x] }))}
+                          placeholder={t && !r.type ? `${ASSET_LABEL[t]} (chung)` : 'Chọn loại'} />
+                      </td>
+                      <td className="p-2">
+                        {HAS_RATIO.includes(t as AssetType) ? (
+                          <CellInput value={r.ratio} mono placeholder={addRatio || '200/5'}
+                            onChange={v => setAddRow(r.key, { ratio: v })} />
+                        ) : <span className="block p-2 text-faint">—</span>}
+                      </td>
+                      <td className="p-2">
+                        <CellInput value={r.model} onChange={v => setAddRow(r.key, { model: v })} />
+                      </td>
+                      <td className="px-3 py-2 text-[12px]">
+                        {st.kind === 'new' && <span className="text-emerald-600">{st.text}</span>}
+                        {st.kind === 'dup' && <span className="text-warn">{st.text}</span>}
+                        {st.kind === 'bad' && <span className="text-red-500">{st.text}</span>}
+                      </td>
+                      <td className="p-2 text-center">
+                        <button type="button" title="Bỏ dòng"
+                          onClick={() => setAddRows(rs => rs.filter(x => x.key !== r.key))}
+                          className="p-1 text-faint transition-colors hover:text-red-500">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <button type="button" onClick={() => setAddRows(rs => [...rs, newAddRow()])}
+            className="mt-3 flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline">
+            <Plus className="h-4 w-4" /> Thêm dòng
+          </button>
+          <p className="mt-2 text-[11px] text-faint">
+            Dán cả cột số No từ Excel vào một ô Số No — bảng tự thêm dòng; cột dạng 200/5 nhận làm tỷ số.
+            Dòng đã có trong kho được bỏ qua, không ghi đè.
+          </p>
+        </div>
       </FormModal>
 
       {/* ===================== Khai một thiết bị ===================== */}
