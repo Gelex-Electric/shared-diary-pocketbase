@@ -13,6 +13,12 @@ import { ChevronDown, Check, Search } from 'lucide-react';
 export interface SelectOption {
   value: string;
   label: string;
+  /** Icon trạng thái hiện trước nhãn (trong danh sách lẫn ô đã chọn) — tùy chọn. */
+  icon?: React.ElementType;
+  /** Lớp màu cho icon, vd 'text-amber-500'. */
+  iconClass?: string;
+  /** Chú thích khi rê chuột — chi tiết không nhét vừa nhãn. */
+  title?: string;
 }
 
 interface SelectProps {
@@ -123,7 +129,9 @@ export function Select({
         className={`${triggerBase} ${triggerSkin} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         {Icon && <Icon className={`w-4 h-4 shrink-0 ${open ? 'text-accent' : 'text-faint'}`} />}
-        <span className={`flex-1 min-w-0 truncate ${selected ? 'text-dim' : 'text-faint font-normal'}`}>
+        {selected?.icon && <selected.icon className={`w-4 h-4 shrink-0 ${selected.iconClass ?? 'text-faint'}`} />}
+        <span title={selected?.title}
+          className={`flex-1 min-w-0 truncate ${selected ? 'text-dim' : 'text-faint font-normal'}`}>
           {selected ? selected.label : placeholder}
         </span>
         <ChevronDown
@@ -161,6 +169,7 @@ export function Select({
                 return (
                   <button
                     key={o.value}
+                    title={o.title}
                     onClick={() => pick(o.value)}
                     className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
                       isSel
@@ -168,6 +177,7 @@ export function Select({
                         : 'text-dim font-medium hover:bg-accent-soft hover:text-accent'
                     }`}
                   >
+                    {o.icon && <o.icon className={`w-4 h-4 shrink-0 ${isSel ? '' : (o.iconClass ?? 'text-faint')}`} />}
                     <span className="flex-1 min-w-0 truncate">{o.label}</span>
                     {isSel && <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={3} />}
                   </button>

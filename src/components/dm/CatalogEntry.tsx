@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Building2, Cable, Factory, Users, Gauge, Package,
   Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText, History, ArrowLeftRight, Search,
-  CaseLower,
+  CaseLower, TriangleAlert, UserCheck, Zap,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import type { TabItem } from '../ui/Tabs';
@@ -203,6 +203,14 @@ const ymdOf = (v?: string) => (v ?? '').slice(0, 10);
  * một việc chỉ đẻ ra mâu thuẫn — cảnh báo "đang hoạt động nhưng đã khai ngày
  * tháo" từng phải tồn tại chính vì thế.
  */
+/** Trạng thái thiết bị trong ô chọn Số No — icon thay cho nhãn dài (28/09/2026). */
+type SerialState = 'kho' | 'du_kien' | 'dang_treo';
+const SERIAL_STATE: Record<SerialState, { icon: typeof Package; cls: string; label: string }> = {
+  kho: { icon: Package, cls: 'text-emerald-500', label: 'Trong kho' },
+  du_kien: { icon: UserCheck, cls: 'text-amber-500', label: 'Đã gắn khách hàng dự kiến' },
+  dang_treo: { icon: Zap, cls: 'text-red-500', label: 'Đang treo, hoạt động' },
+};
+
 /** Chữ ký phần HSN + vật tư của form (bỏ `key`, `want` — chỉ là phụ trợ giao diện). */
 const hsnSig = (hsn: string, rows: AssetRow[]) =>
   JSON.stringify([hsn.trim(), rows.map(({ key: _k, want: _w, ...rest }) => rest)]);
@@ -857,35 +865,55 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         && (!r.want || r.id || deviceRatio(dev) === r.want);
     });
     const free = new Set(freeDevices(pool, d?.assets ?? [], { pointId: editingId }).map(x => x.id));
+    /*
+      Nhãn CHỈ là Số No + ICON trạng thái (user chốt 28/09/2026): nhãn dài
+      "tỷ số · dành cho …" bị cắt trong ô hẹp của bảng. Chi tiết nằm ở `title`
+      (rê chuột). Ba trạng thái — xem `SERIAL_STATE`:
+        kho      — rảnh, chưa dành cho ai
+        du_kien  — đã gắn khách hàng / điểm đo dự kiến
+        dang_treo — đang treo, hoạt động ở điểm đo khác
+    */
     const opts = pool
       .map(dev => {
         const sn = dev.serial.trim();
-        const bits = [sn];
-        if (!r.type) bits.push(ASSET_LABEL[dev.type] ?? dev.type);
-        const ratio = deviceRatio(dev);
-        if (ratio) bits.push(ratio);
-        if (dev.model_desc?.trim()) bits.push(dev.model_desc.trim());
+        const detail = [ASSET_LABEL[dev.type] ?? dev.type, deviceRatio(dev), dev.model_desc?.trim()];
+        let state: SerialState = 'kho';
         if (!free.has(dev.id)) {
           const at = (d?.assets ?? []).find(a =>
             (a.device === dev.id || a.serial.trim() === sn) && a.date_on && !a.date_off
             && a.point !== editingId);
-          bits.push(`đang treo ở ${pointCodeOf(at?.point)}`);
+          state = 'dang_treo';
+          detail.push(`đang treo ở ${pointCodeOf(at?.point)}`);
         } else if (dev.hold_point && dev.hold_point !== editingId) {
-          bits.push(`dành cho ${pointCodeOf(dev.hold_point)}`);
+          state = 'du_kien';
+          detail.push(`dành cho ${pointCodeOf(dev.hold_point)}`);
+        } else if (dev.hold_for_customer || dev.hold_for_note?.trim()) {
+          state = 'du_kien';
+          detail.push(`dành cho ${[customerMkh(dev.hold_for_customer), dev.hold_for_note?.trim()]
+            .filter(x => x && x !== '—').join(' · ')}`);
         }
-        return { value: sn, label: bits.join(' · '), busy: !free.has(dev.id) };
+        const s = SERIAL_STATE[state];
+        return {
+          value: sn, label: sn, icon: s.icon, iconClass: s.cls,
+          title: `${s.label} — ${detail.filter(Boolean).join(' · ')}`,
+          rank: state === 'kho' ? 0 : state === 'du_kien' ? 1 : 2,
+        };
       })
-      .sort((a, b) => Number(a.busy) - Number(b.busy) || a.value.localeCompare(b.value))
-      .map(({ value, label }) => ({ value, label }));
+      .sort((a, b) => a.rank - b.rank || a.value.localeCompare(b.value))
+      .map(({ rank: _r, ...o }) => o);
     const cur = r.serial.trim();
     if (cur && !opts.some(o => o.value === cur)) {
-      opts.unshift({ value: cur, label: `${cur} · không có trong Kho` });
+      opts.unshift({ value: cur, label: cur, icon: TriangleAlert, iconClass: 'text-bad',
+        title: 'Không có trong Kho vật tư' });
     }
     return opts;
   };
 
   /** Số No của dòng MỚI phải nằm trong kho — chốt chặn phòng khi ô chọn bị lách. */
   const notInStock = pForm.assetRows.filter(r => !r.id && r.serial.trim() && !deviceOf(r.serial));
+  /** Chốt chặn: dòng mới đã có ngày treo mà thiết bị còn treo ở điểm đo khác. */
+  const datedWhileHung = pForm.assetRows.filter(r => !r.id && r.dateOn.trim() && (d?.assets ?? []).some(a =>
+    a.serial === r.serial.trim() && a.active && a.point && a.point !== editingId && a.date_on));
 
   /**
    * Cùng số chế tạo mà HAI NƠI CÙNG ĐANG TREO — chỉ thế mới chặn.
@@ -917,7 +945,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       if (!rows.some(r => !r.dateOff.trim())) return null;
       const other = (d?.assets ?? []).find(a =>
         a.serial === serial && a.active && a.point && a.point !== editingId);
-      return other ? { serial, asset: other, code: pointCodeOf(other.point) } : null;
+      if (!other) return null;
+      // Dòng MỚI giữ thiết bị đang treo nơi khác ở dạng DỰ KIẾN (chưa ngày treo)
+      // là hợp lệ từ 28/09/2026 — ngày treo đã bị khoá, không phải đụng độ.
+      if (other.date_on && rows.every(r => !r.id && !r.dateOn.trim())) return null;
+      return { serial, asset: other, code: pointCodeOf(other.point) };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
@@ -968,6 +1000,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
     ...(notInStock.length ? [
       `số No ${notInStock.map(r => r.serial.trim()).join(', ')} chưa có trong Kho vật tư `
       + '— khai thiết bị ở tab Kho vật tư trước rồi chọn lại',
+    ] : []),
+    ...(datedWhileHung.length ? [
+      `số No ${datedWhileHung.map(r => r.serial.trim()).join(', ')} còn đang treo ở điểm đo khác `
+      + '— khai ngày tháo ở điểm đo cũ trước rồi mới khai ngày treo ở đây',
     ] : []),
     ...dupInForm.map(([serial, rows]) =>
       `số No ${serial} bị khai ${rows.length} lần trong cùng điểm đo `
@@ -1067,7 +1103,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   const setSuggestions = manualHsn != null && manualHsn > 1
     ? suggestSets(manualHsn, freeDevices(d?.devices ?? [], d?.assets ?? [], {
         pointId: editingId, exclude: pForm.assetRows.map(r => r.serial),
-      }))
+      // Trước mắt CHỈ bộ TI (user chốt 28/09/2026) — bỏ các tổ hợp có TU.
+      })).filter(s => !s.tu)
     : [];
 
   /** Mọi thứ CHẶN lưu điểm đo: HSN + đụng độ số chế tạo + thiếu/sai tỷ số. */
@@ -1704,6 +1741,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
   };
 
   /**
+   * Dòng MỚI chọn thiết bị ĐANG TREO, HOẠT ĐỘNG ở điểm đo khác ⇒ KHÔNG được khai
+   * ngày treo cho tới khi điểm đo cũ khai ngày tháo (user chốt 28/09/2026).
+   * Chỉ được giữ ở dạng dự kiến. Dòng đã lưu không áp — đó là lịch sử cũ.
+   */
+  const lockedOn = (r: AssetRow) => !r.id && !!liveElsewhere(r.serial);
+
+  /**
    * Sửa một dòng rồi áp các luật nghiệp vụ lên những dòng còn lại.
    *
    * 1. **Tỷ số dùng chung theo loại** — 3 TI của một bộ luôn cùng tỷ số, TU
@@ -1749,6 +1793,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
         // Dòng trắng tinh thì bỏ qua; dòng đã bắt đầu khai (có loại hoặc có số No)
         // thì coi là cùng đợt lắp.
         if (!r.type && !r.serial.trim()) return r;
+        // Dòng mới mang thiết bị còn treo ở điểm đo khác: KHÔNG lan ngày treo —
+        // phải đợi điểm đo cũ khai ngày tháo (xem `lockedOn`).
+        if (lockedOn(r)) return r;
         // (2) cả bộ lên cùng ngày
         if (!r.dateOn.trim() && !r.dateOff.trim()) return { ...r, dateOn: on };
         // (3) cái cũ cùng loại nhường chỗ cho cái mới
@@ -1761,7 +1808,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
     // (4) Số No này đang treo ở điểm đo khác ⇒ lần lắp ở đây đã kết thúc từ ngày
     // nó sang bên kia. Chỉ điền khi ô ngày tháo còn trống.
-    const busy = liveElsewhere(me.serial);
+    // CHỈ cho dòng ĐÃ LƯU (ghi lại lịch sử). Dòng MỚI chọn thiết bị đang treo là
+    // lần lắp SẮP TỚI: để trống cả hai ngày, khoá ngày treo (28/09/2026).
+    const busy = me.id ? liveElsewhere(me.serial) : undefined;
     const withOff = busy && !me.dateOff.trim()
       ? dated.map(r => (r.key === key ? { ...r, dateOff: ymdOf(busy.date_on) } : r))
       : dated;
@@ -1796,6 +1845,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
           && deviceOf(me.serial) && deviceOf(me.serial)!.type !== type
         ? withOff.map(r => (r.key === key ? { ...r, serial: '', ratio: '' } : r))
         : withOff;
+
+    // Vừa chọn thiết bị đang treo nơi khác cho dòng mới ⇒ bỏ ngày treo đã gõ.
+    if (patch.serial !== undefined) {
+      const mine = filled.find(r => r.key === key);
+      if (mine && lockedOn(mine) && mine.dateOn) {
+        return normalizeActive(filled.map(r => (r.key === key ? { ...r, dateOn: '' } : r)));
+      }
+    }
 
     return normalizeActive(filled);
   };
@@ -2776,7 +2833,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
             {manualHsn != null && manualHsn > 1 && (hsnMismatch || !hasTi) && (
               setSuggestions.length ? (
                 <div className="vl-alert vl-alert-light-primary space-y-2 text-[12px]">
-                  <p className="font-bold">Bộ TI / TU còn trong Kho khớp HSN {manualHsn}:</p>
+                  <p className="font-bold">Bộ TI còn trong Kho khớp HSN {manualHsn}:</p>
                   <div className="flex flex-wrap gap-2">
                     {setSuggestions.map(s => (
                       <button key={`${s.ti}|${s.tu ?? ''}`} type="button"
@@ -2788,12 +2845,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                     ))}
                   </div>
                   <p className="text-[11px] opacity-80">
-                    Bấm một bộ để thêm sẵn {TI_PER_SET} dòng TI (và 1 dòng TU) rồi chọn Số No.
+                    Bấm một bộ để thêm sẵn {TI_PER_SET} dòng TI rồi chọn Số No.
                   </p>
                 </div>
               ) : (
                 <div className="vl-alert vl-alert-light-warning text-[12px]">
-                  Kho chưa có bộ TI / TU nào (đủ {TI_PER_SET} TI rảnh) khớp HSN {manualHsn}
+                  Kho chưa có bộ TI nào (đủ {TI_PER_SET} cái rảnh) khớp HSN {manualHsn}
                   — khai thiết bị ở tab Kho vật tư trước.
                 </div>
               )
@@ -2810,6 +2867,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                   {pForm.assetRows.some(r => !r.active) &&
                     ` · ${pForm.assetRows.filter(r => r.active).length} đang hoạt động`}
                 </span>
+              </div>
+              {/* Chú giải icon ở ô chọn Số No. */}
+              <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-faint">
+                {Object.values(SERIAL_STATE).map(s => (
+                  <span key={s.label} className="flex items-center gap-1">
+                    <s.icon className={`h-3.5 w-3.5 ${s.cls}`} /> {s.label}
+                  </span>
+                ))}
               </div>
 
               <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-surface">
@@ -2892,8 +2957,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
                         <td className="p-2">
                           {/* usePortal: bảng nằm trong khung overflow-hidden,
                               không có portal thì lịch bị cắt mất. */}
-                          <DatePicker value={r.dateOn} usePortal
-                            onChange={v => setRow(r.key, { dateOn: v })} />
+                          {lockedOn(r) ? (
+                            // Thiết bị còn treo ở điểm đo cũ — khoá ngày treo.
+                            <span className="flex items-center gap-1 p-2 text-[11px] leading-snug text-faint"
+                              title={`Đang treo ở ${pointCodeOf(liveElsewhere(r.serial)?.point)} — `
+                                + 'khai ngày tháo ở điểm đo đó trước rồi mới khai ngày treo ở đây'}>
+                              <Zap className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                              Chờ tháo ở {pointCodeOf(liveElsewhere(r.serial)?.point)}
+                            </span>
+                          ) : (
+                            <DatePicker value={r.dateOn} usePortal
+                              onChange={v => setRow(r.key, { dateOn: v })} />
+                          )}
                         </td>
                         <td className="p-2">
                           <DatePicker value={r.dateOff} usePortal
