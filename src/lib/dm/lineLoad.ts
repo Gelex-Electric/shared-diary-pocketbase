@@ -39,13 +39,20 @@ const labelOf = (t: number): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-/** Một bản đọc 30 phút của một công tơ. Khớp hình dạng `datametter.csv`. */
+/** Một bản đọc 30 phút của một công tơ, sau khi nơi gọi đã quy đổi xong. */
 export interface Reading {
   /** Mốc thời gian đã sắp được, dùng để xếp thứ tự. */
   t: number;
   /** Nhãn giờ `HH:mm`. */
   label: string;
-  /** Công suất tác dụng, kW — đã ×HSN từ lúc pipeline ghi. */
+  /**
+   * Công suất tác dụng, kW — **đã ×HSN rồi**.
+   *
+   * Từ 29/09/2026 nguồn là `public/ThongSo_30min/<ngày>.csv`, lưu RAW; việc
+   * nhân HSN là của nơi ĐỌC, theo điểm đo mà công tơ gắn vào tại thời điểm của
+   * mốc (`src/lib/thongso.ts`). Trước đó là `datametter.csv`, HSN đã nhân cứng
+   * từ lúc pipeline ghi. Module này nhận số ĐÃ quy đổi, không tự nhân.
+   */
   kw: number;
 }
 

@@ -5,11 +5,12 @@ Cot luu: METER_NO, METER_NAME (dung lam HSN), METER_MODEL_DESC, CUSTOMER_CODE,
 CUSTOMER_NAME, ADDRESS, LINE_NAME, STATUS.
 
 - Che do MERGE: chi them moi va cap nhat, KHONG xoa cong to cu da co trong file.
-- STATUS (Yes/No): xet dien ap 3 pha (PHASE_A_VOLTS, PHASE_B_VOLTS, PHASE_C_VOLTS)
-  cua INACTIVE_DAYS ngay lien tiep gan nhat trong public/datametter.csv.
+- STATUS (Yes/No): xet dien ap 3 pha (U_A, U_B, U_C) cua INACTIVE_DAYS ngay lien
+  tiep gan nhat, doc tu public/ThongSo_30min/<ngay>.csv (moi ngay mot file).
     + Co BAT KY ban ghi nao trong khoang do co U_A/U_B/U_C > 0 -> "Yes".
     + TAT CA ban ghi trong khoang (hoac khong co du lieu) deu U_A=U_B=U_C=0 -> "No".
-  (datametter.csv chi giu ~7 ngay gan nhat nen INACTIVE_DAYS mac dinh = 7.)
+  Truoc 29/09/2026 doc datametter.csv (mot file cuon ~7 ngay) nen INACTIVE_DAYS
+  mac dinh = 7; nguon moi giu 40 ngay nen nang nguong len duoc neu can.
 
 File nay la nguon danh sach cong to + HSN cho fetch_meter_data.py (chay moi gio).
 
@@ -27,7 +28,7 @@ import requests
 from fetch_meter_data import BASE_URL, VN_TZ, get_retry, login_data
 
 CSV_PATH = "public/metterinfo.csv"
-DATAMETTER_PATH = "public/datametter.csv"
+THONGSO_30MIN_DIR = os.environ.get("THONGSO_30MIN_DIR", "public/ThongSo_30min")
 
 # ==================== CANH BAO HSN BAT THUONG ====================
 # HSN (cot METER_NAME) coi la SAI khi > nguong hoac trung so cong to
@@ -91,22 +92,33 @@ def _to_float(v):
 
 def phase_active_meters(last_day: str, num_days: int):
     """Tra ve tap cong to co U_A/U_B/U_C > 0 it nhat 1 ban ghi trong `num_days`
-    ngay gan nhat ket thuc tai `last_day`, doc tu datametter.csv."""
+    ngay gan nhat ket thuc tai `last_day`.
+
+    Nguon: public/ThongSo_30min/<ngay>.csv — MOI NGAY MOT FILE (doi 29/09/2026,
+    truoc do la datametter.csv mot file cuon 7 ngay).
+
+    DIEN AP la truong KHONG nhan HSN (TU ha the 1/1) nen doc thang so RAW,
+    khong can tra Danh muc — xem THONGSO_FIELDS trong scripts/lib/thongso.mjs.
+
+    Ngay khong co file thi bo qua: co the no da ra khoi vong giu 40 ngay, hoac
+    pipeline dem do khong chay. Thieu ngay chi lam tap `active` HEP lai (cong to
+    bi coi la im lang), khong bao gio lam no rong sai."""
     end = datetime.fromisoformat(last_day).date()
-    days = {(end - timedelta(days=i)).isoformat() for i in range(num_days)}
+    days = [(end - timedelta(days=i)).isoformat() for i in range(num_days)]
 
     active = set()
-    if os.path.isfile(DATAMETTER_PATH):
-        with open(DATAMETTER_PATH, newline="", encoding="utf-8") as f:
+    for day in days:
+        path = os.path.join(THONGSO_30MIN_DIR, f"{day}.csv")
+        if not os.path.isfile(path):
+            continue
+        with open(path, newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                if row.get("DATE_TIME", "")[:10] not in days:
-                    continue
                 no = str(row.get("METER_NO") or "").strip()
                 if not no or no in active:
                     continue
-                a = _to_float(row.get("PHASE_A_VOLTS"))
-                b = _to_float(row.get("PHASE_B_VOLTS"))
-                c = _to_float(row.get("PHASE_C_VOLTS"))
+                a = _to_float(row.get("U_A"))
+                b = _to_float(row.get("U_B"))
+                c = _to_float(row.get("U_C"))
                 if a > 0 or b > 0 or c > 0:
                     active.add(no)
     return active

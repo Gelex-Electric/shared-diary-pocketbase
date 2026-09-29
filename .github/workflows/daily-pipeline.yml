@@ -84,9 +84,15 @@ jobs:
           PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
         run: node scripts/fetch_thongso_30min.mjs
 
-      # 3) Pmax ngay
+      # 3) Pmax ngay (dinh TUC THOI tu mau 30 phut) — ban Node tu 29/09/2026.
+      #    Nguon doi sang ThongSo_30min (RAW) nen script phai tu tra HSN cua
+      #    DIEM DO tai thoi diem cua moc => can PB_EMAIL/PB_PASS, khac ban
+      #    Python cu doc datametter.csv da nhan san HSN.
       - name: Compute daily Pmax
-        run: python scripts/daily_pmax.py
+        env:
+          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
+        run: node scripts/pmax_daily.mjs
 
       # 4) Chi so HES chi tiet 30 phut, giu 30 ngay.
       # Ban Node thay ban Python tu 16/09/2026. Khac hai cho:
