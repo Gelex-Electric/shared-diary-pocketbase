@@ -33,33 +33,10 @@ import { useHeadSerials, HEAD_LABEL, HEAD_HINT } from '../lib/headMeters';
 import CustomerPmaxTab from './CustomerPmaxTab';
 import LinePmaxTab from './LinePmaxTab';
 import HeadBalanceTab from './HeadBalanceTab';
-
-/* ================================================================
-   CACHE CSV (module-level) — datametter.csv chỉ tải 1 lần/phiên.
-================================================================ */
-let _meterCsvCache: string | null = null;
-let _meterCsvPromise: Promise<string> | null = null;
-
-function loadMeterCsv(): Promise<string> {
-  if (_meterCsvCache !== null) return Promise.resolve(_meterCsvCache);
-  if (_meterCsvPromise) return _meterCsvPromise;
-
-  _meterCsvPromise = fetch('/datametter.csv')
-    .then(res => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.text();
-    })
-    .then(text => {
-      _meterCsvCache = text.replace(/^﻿/, ''); // bỏ BOM nếu có
-      return _meterCsvCache;
-    })
-    .catch(err => {
-      _meterCsvPromise = null;
-      throw err;
-    });
-
-  return _meterCsvPromise;
-}
+import {
+  loadThongSoIndex, loadThongSoDay, scaleRow, hsnOk, HSN_MISS_TEXT, type RawRow,
+} from '../lib/thongso';
+import { useHsnResolver } from '../lib/hsnResolver';
 
 /* ================================================================
    HELPERS
@@ -277,8 +254,19 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
   /* Công tơ đầu nguồn theo Danh mục (role dau_nguon) — không còn theo tên LINE_NAME. */
   const headSerials = useHeadSerials();
 
-  /* ---- CSV ---- */
-  const [csvContent, setCsvContent] = useState<string>(_meterCsvCache ?? '');
+  /* ================================================================
+     DỮ LIỆU ĐO XA — public/ThongSo_30min/<ngày>.csv
+     Trước 29/09/2026 là `datametter.csv`: một file cuộn 7 ngày, ĐÃ nhân sẵn
+     HSN lúc ghi. Nay file lưu RAW và nhân HSN lúc ĐỌC, theo điểm đo mà công tơ
+     gắn vào TẠI THỜI ĐIỂM của mốc — sửa HSN trong Danh mục là số lịch sử tự
+     đúng theo, không phải tải lại (xem `src/lib/thongso.ts`).
+
+     Nạp TỪNG NGÀY chứ không nạp cả thư mục: 40 ngày × ~450 KB = 18 MB.
+  ================================================================ */
+  const { hsnAt, ready: hsnReady } = useHsnResolver();
+  const [dateKeys, setDateKeys] = useState<string[]>([]);
+  const [dayRows, setDayRows] = useState<RawRow[]>([]);
+  const [isLoadingDay, setIsLoadingDay] = useState(true);
   const [csvError, setCsvError] = useState<string>('');
 
   // Lỗi đọc dữ liệu → toast (thay cho banner inline cũ).
@@ -286,14 +274,14 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
     if (csvError) notify.error('Lỗi dữ liệu', csvError);
   }, [csvError]);
 
+  /* Danh sách ngày có dữ liệu — chỉ đọc index.json, không kéo số liệu. */
   useEffect(() => {
-    if (_meterCsvCache !== null) return;
     let mounted = true;
-    loadMeterCsv()
-      .then(text => { if (mounted) setCsvContent(text); })
+    loadThongSoIndex()
+      .then(idx => { if (mounted) setDateKeys(idx.days); })
       .catch(err => {
-        console.error('Không tải được datametter.csv:', err);
-        if (mounted) setCsvError('Không tải được dữ liệu đo xa (datametter.csv).');
+        console.error('Không tải được ThongSo_30min/index.json:', err);
+        if (mounted) setCsvError('Không tải được danh sách ngày có dữ liệu đo xa.');
       });
     return () => { mounted = false; };
   }, []);
@@ -359,48 +347,43 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
     return map;
   }, [meterRows, userAreas, zoneFilter, headSerials]);
 
-  /* ---- Phân tích CSV → chỉ mục theo công tơ / ngày (giữ nguyên thời điểm) ---- */
-  const { readingIndex, dateKeys } = useMemo(() => {
+  /* ---- Dòng RAW của ngày đang xem → chỉ mục theo công tơ (giữ nguyên thời điểm) ----
+     Điện áp giữ nguyên (TU hạ thế 1/1), công suất ×HSN của điểm đo tại đúng mốc.
+     Công tơ không tra được HSN thì BỎ, và đếm lại để nói ra — hiện số chưa nhân
+     là hiện công suất nhỏ đi vài trăm lần mà trông vẫn như thật. */
+  const { readingIndex, unresolved } = useMemo(() => {
     const index: ReadingIndex = new Map();
-    const dateSet = new Set<string>();
+    const miss = new Map<string, string>();
 
-    if (csvContent) {
-      const lines = csvContent.split(/\r?\n/);
-      // Header: METER_NO,DATE_TIME,PHASE_A_VOLTS,PHASE_B_VOLTS,PHASE_C_VOLTS,TOTAL_KW
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const cols = line.split(',');
-        if (cols.length < 6) continue;
+    for (const row of dayRows) {
+      const meterNo = row.METER_NO;
+      const dt = new Date(row.DATE_TIME.replace(' ', 'T'));
+      if (isNaN(dt.getTime())) continue;
 
-        const meterNo = cols[0].trim();
-        const dtRaw = cols[1].trim();
-        if (!meterNo || !dtRaw) continue;
+      const r = hsnAt(meterNo, row.DATE_TIME);
+      if (!hsnOk(r)) { miss.set(meterNo, HSN_MISS_TEXT[r.reason]); continue; }
+      const s = scaleRow(row, r.hsn);
+      const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-        const dt = new Date(dtRaw.replace(' ', 'T'));
-        if (isNaN(dt.getTime())) continue;
+      const dateKey = fmtDateKey(dt);
+      const reading: Reading = {
+        t: dt.getHours() * 60 + dt.getMinutes(),
+        label: timeLabel(dt),
+        ua: num(s.U_A),
+        ub: num(s.U_B),
+        uc: num(s.U_C),
+        kw: num(s.P),
+      };
 
-        const dateKey = fmtDateKey(dt);
-        const reading: Reading = {
-          t: dt.getHours() * 60 + dt.getMinutes(),
-          label: timeLabel(dt),
-          ua: parseFloat(cols[2]) || 0,
-          ub: parseFloat(cols[3]) || 0,
-          uc: parseFloat(cols[4]) || 0,
-          kw: parseFloat(cols[5]) || 0,
-        };
-
-        let byDate = index.get(meterNo);
-        if (!byDate) { byDate = new Map(); index.set(meterNo, byDate); }
-        let list = byDate.get(dateKey);
-        if (!list) { list = []; byDate.set(dateKey, list); }
-        list.push(reading);
-        dateSet.add(dateKey);
-      }
+      let byDate = index.get(meterNo);
+      if (!byDate) { byDate = new Map(); index.set(meterNo, byDate); }
+      let list = byDate.get(dateKey);
+      if (!list) { list = []; byDate.set(dateKey, list); }
+      list.push(reading);
     }
 
-    return { readingIndex: index, dateKeys: Array.from(dateSet).sort() };
-  }, [csvContent]);
+    return { readingIndex: index, unresolved: miss };
+  }, [dayRows, hsnAt]);
 
   /* ---- Ngày mặc định = HÔM QUA (fallback ngày gần nhất có dữ liệu) ---- */
   const defaultDate = useMemo(() => {
@@ -418,6 +401,37 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
   useEffect(() => {
     if (defaultDate && !selectedDate) setSelectedDate(defaultDate);
   }, [defaultDate, selectedDate]);
+
+  /* Nạp ĐÚNG ngày đang chọn. `loadThongSoDay` tự nhớ, đổi qua lại vài ngày thì
+     không tải lại. Đổi ngày nhanh tay: chỉ nhận kết quả của lần gọi cuối. */
+  useEffect(() => {
+    if (!selectedDate) return;
+    let alive = true;
+    setIsLoadingDay(true);
+    loadThongSoDay(selectedDate)
+      .then(rows => { if (alive) { setDayRows(rows); setIsLoadingDay(false); } })
+      .catch(err => {
+        console.error(`Không tải được ThongSo_30min/${selectedDate}.csv:`, err);
+        if (alive) {
+          setDayRows([]);
+          setIsLoadingDay(false);
+          setCsvError(`Không tải được dữ liệu đo xa ngày ${fmtDateVN(selectedDate)}.`);
+        }
+      });
+    return () => { alive = false; };
+  }, [selectedDate]);
+
+  /* Thiếu HSN thì nói ra MỘT lần cho mỗi ngày, kèm số công tơ — im lặng bỏ công
+     tơ khỏi biểu đồ là kiểu sai khó thấy nhất. */
+  useEffect(() => {
+    if (!unresolved.size || isLoadingDay || !hsnReady) return;
+    const lines = [...unresolved].slice(0, 5).map(([sn, why]) => `${sn} (${why})`);
+    notify.error(
+      `${unresolved.size} công tơ chưa hiện được`,
+      `Chưa tra được hệ số nhân từ Danh mục: ${lines.join(', ')}`
+        + (unresolved.size > lines.length ? `… và ${unresolved.size - lines.length} công tơ nữa.` : ''),
+    );
+  }, [unresolved, isLoadingDay, hsnReady]);
 
   /* ---- Dựng dữ liệu biểu đồ cho từng khách hàng theo ngày chọn ----
      Mỗi TRẠM (công tơ) là một chuỗi riêng; khách nhiều điểm đo → nhiều trạm
@@ -507,7 +521,9 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
     { title: 'P max thấp thứ 3', Icon: TrendingDown, tone: 'text-emerald-400' },
   ];
 
-  const isReady = !!csvContent && !isLoadingMeters;
+  /* Phải chờ CẢ Danh mục: chưa có nó thì chưa tra được HSN, dựng biểu đồ lúc này
+     là vẽ ra một màn trống rồi mới nhảy số — trông như mất dữ liệu. */
+  const isReady = !isLoadingDay && !isLoadingMeters && hsnReady;
   const noData = isReady && chartableCustomers.length === 0;
 
   /* ---- Tab của trang ---- */
