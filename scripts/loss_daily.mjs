@@ -7,7 +7,7 @@
  *   · Trạm, thông số nhãn, vai trò điểm đo, công tơ đang treo → **PocketBase Danh mục**
  *     (`dm_station` / `dm_point` / `dm_asset`), qua `lib/pb_meters.mjs`.
  *   · Công suất P, Q và sản lượng → **`public/ChiSo_30min/`** qua `lib/hes30.mjs`
- *     (P = ΔPG × HSN ÷ Δt thực). KHÔNG dùng mẫu tức thời của `datametter.csv` nữa.
+ *     (P = ΔPG × HSN ÷ Δt thực). KHÔNG dùng mẫu tức thời của `ThongSo_30min` nữa.
  *   · P0/Pk → `lib/lossParams.mjs` (hiểu 2 cờ `auto_loss_param` / `mv_metering`).
  *
  * CÔNG THỨC giữ NGUYÊN của bản Python (đã kiểm chứng, không đụng):
@@ -30,7 +30,7 @@
  *      ngày nên reader cũ (đọc theo TÊN cột) không phải sửa.
  *
  * MẤT ĐIỆN (user chốt 23/09): mốc nào không khoảng chỉ số nào phủ qua thì KHÔNG tính,
- * kể cả P0. Không bịa số. Có `datametter.csv` thì đối chiếu thêm với điện áp = 0 và in
+ * kể cả P0. Không bịa số. Có `ThongSo_30min` thì đối chiếu thêm với điện áp = 0 và in
  * cảnh báo khi hai luật không khớp — giả định này chưa được kiểm chứng trên dữ liệu thật.
  *
  *   railway.exe run --service shared-diary-pocketbase --environment staging -- \
@@ -51,7 +51,7 @@ const arg = (n, d = '') => {
 const OUT_DIR = arg('--out-dir', 'public');
 const SLOT_H = 0.5;                                   // mỗi mốc nửa giờ
 const KEEP_DAYS_30 = Number(process.env.KEEP_DAYS_30 || 40);
-const DM_PATH = process.env.DATAMETTER_PATH || 'public/datametter.csv';
+const THONGSO_DIR = process.env.THONGSO_30MIN_DIR || 'public/ThongSo_30min';
 
 const F30 = path.join(OUT_DIR, 'transformer_loss_30min.csv');
 const FDAY = path.join(OUT_DIR, 'transformer_loss_daily.csv');
@@ -107,32 +107,39 @@ for (const m of meters) {
   metersOfStation.get(p.station).push({ serial: m.serial, hsn: m.hsn, pointCode: p.code || p.line_name || '' });
 }
 
-/* ------------------- đối chiếu mất điện bằng datametter ------------------- */
+/* ------------------ đối chiếu mất điện bằng ThongSo_30min ------------------ */
 /**
  * serial → { seen: Set(slot có DÒNG), live: Set(slot có điện áp > 0) }.
  *
  * PHẢI tách hai tập. Bản đầu chỉ lưu `live` rồi coi "không có trong tập" là mất
- * điện — nhưng `datametter.csv` chỉ giữ ~7 ngày và RÌA cửa sổ thì thưa (ngày
- * 07/09 chỉ ~13 mốc/công tơ thay vì 48). Hệ quả: cảnh báo nổ 2.466 mốc "có chỉ
- * số mà điện áp = 0" trong khi thật ra chỉ là KHÔNG CÓ DÒNG NÀO để so.
+ * điện — nhưng nguồn cũ `datametter.csv` chỉ giữ ~7 ngày và RÌA cửa sổ thì thưa
+ * (ngày 07/09 chỉ ~13 mốc/công tơ thay vì 48). Hệ quả: cảnh báo nổ 2.466 mốc
+ * "có chỉ số mà điện áp = 0" trong khi thật ra chỉ là KHÔNG CÓ DÒNG NÀO để so.
+ * Nguồn mới mỗi ngày một file đủ 48 mốc nên rìa hết thưa, nhưng vẫn giữ hai tập:
+ * ngày ngoài vòng 40 ngày thì không có file, và công tơ vẫn có thể im lặng.
+ *
+ * Điện áp là trường KHÔNG nhân HSN (TU hạ thế 1/1) nên ở đây đọc thẳng số RAW,
+ * không cần Danh mục — xem `THONGSO_FIELDS` trong `lib/thongso.mjs`.
  *
  * Trả `null` khi không so được — thà im lặng còn hơn báo động giả.
  */
 function voltageSlots(day) {
-  if (!fs.existsSync(DM_PATH)) return null;
+  const src = path.join(THONGSO_DIR, `${day}.csv`);
+  if (!fs.existsSync(src)) return null;
   const out = new Map();
-  const lines = fs.readFileSync(DM_PATH, 'utf8').split(/\r?\n/);
-  const H = lines[0].split(',');
-  const iA = H.indexOf('PHASE_A_VOLTS'), iB = H.indexOf('PHASE_B_VOLTS'), iC = H.indexOf('PHASE_C_VOLTS');
-  if (iA < 0) return null;
+  const lines = fs.readFileSync(src, 'utf8').replace(/^﻿/, '').split(/\r?\n/);
+  const H = lines[0].split(',').map(h => h.trim());
+  const iNo = H.indexOf('METER_NO'), iTime = H.indexOf('DATE_TIME');
+  const iA = H.indexOf('U_A'), iB = H.indexOf('U_B'), iC = H.indexOf('U_C');
+  if (iNo < 0 || iTime < 0 || iA < 0) return null;
   for (const l of lines.slice(1)) {
     if (!l) continue;
     const c = l.split(',');
-    const stamp = c[1] || '';
+    const stamp = c[iTime] || '';
     if (!stamp.startsWith(day)) continue;
     const slot = Math.min(SLOTS_PER_DAY - 1,
       Math.floor((Number(stamp.slice(11, 13)) * 60 + Number(stamp.slice(14, 16))) / 30));
-    const k = c[0].trim();
+    const k = (c[iNo] ?? '').trim();
     if (!out.has(k)) out.set(k, { seen: new Set(), live: new Set() });
     const e = out.get(k);
     e.seen.add(slot);
@@ -186,9 +193,9 @@ function computeDay(day) {
         cur.p += v.p; cur.q += v.q; cur.n++;
         slotAgg.set(slot, cur);
 
-        /* Chốt chặn: mốc CÓ chỉ số mà datametter ghi nhận điện áp = 0 thì giả
+        /* Chốt chặn: mốc CÓ chỉ số mà ThongSo_30min ghi nhận điện áp = 0 thì giả
            định "không có số = mất điện" đang sai ở đâu đó. Chỉ so khi mốc đó
-           THỰC SỰ có dòng trong datametter — vắng dòng không phải là mất điện. */
+           THỰC SỰ có dòng trong ThongSo_30min — vắng dòng không phải là mất điện. */
         const vs = volt?.get(mt.serial);
         if (vs?.seen.has(slot) && !vs.live.has(slot)) mismatch++;
       }
@@ -291,7 +298,7 @@ for (const day of days) {
   }
   if (r.series.prevDayMissing) console.log(`   ⚠️  thiếu file ngày ${addDays(day, -1)} ⇒ hụt mốc 00:00.`);
   if (r.mismatch) {
-    console.log(`   ⚠️  ${r.mismatch} mốc CÓ chỉ số nhưng điện áp = 0 trong datametter — `
+    console.log(`   ⚠️  ${r.mismatch} mốc CÓ chỉ số nhưng điện áp = 0 trong ThongSo_30min — `
       + `giả định "không có số = mất điện" cần xem lại.`);
   }
   for (const [reason, list] of r.skipped) {
