@@ -69,7 +69,14 @@ const FIELDS_DAY = ['CODE', 'LINE_NAME', 'DATE', 'OUTPUT_KWH', 'LOSS_NOLOAD_KWH'
  *      input `target_date`, và MỌI script khác trong pipeline đều đọc. Bỏ qua nó
  *      thì chạy tay workflow để backfill ngày 10/09 sẽ cho các bước khác xử lý
  *      10/09 còn bước tổn thất vẫn tính hôm qua — lệch âm thầm;
- *   3. mặc định: HÔM QUA và HÔM KIA (xem điều 1 ở đầu file).
+ *   3. mặc định: MỌI NGÀY còn file ChiSo_30min trong LOSS_RECALC_DAYS (30) ngày gần nhất,
+ *      tới hôm qua (user chốt 30/09/2026 — "tính bù").
+ *
+ * Vì sao tính lại cả 30 ngày mỗi đêm: trạm vừa được khai P0/Pk (hoặc bật tự động), công
+ * tơ vừa được khai ngày treo, điểm đo vừa đổi trạng thái… thì các ngày TRƯỚC đó vẫn nằm
+ * sai/thiếu mãi nếu chỉ tính hôm kia + hôm qua (gặp 03.BROTHERS.T1: bật tự động 28/09,
+ * thiếu 23–26/09). Tính lại là đọc file cục bộ, vài giây; ngày cũ hơn 30 ngày (hết file
+ * ChiSo) giữ nguyên số đã chốt.
  */
 function targetDays() {
   const one = arg('--date', '');
@@ -84,7 +91,15 @@ function targetDays() {
   if (/^\d{4}-\d{2}-\d{2}$/.test(env)) return [env];
 
   const vnToday = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
-  return [addDays(vnToday, -2), addDays(vnToday, -1)];
+  const recalc = Number(process.env.LOSS_RECALC_DAYS || 30);
+  const dir = process.env.CHISO_30MIN_DIR || process.env.HES_30MIN_DIR || 'public/ChiSo_30min';
+  const since = addDays(vnToday, -recalc);
+  const have = fs.existsSync(dir)
+    ? fs.readdirSync(dir).map(f => /^(\d{4}-\d{2}-\d{2})\.csv$/.exec(f)?.[1]).filter(Boolean) : [];
+  /* Cần cả file HÔM TRƯỚC (mốc 00:00 nằm ở đó): ngày đầu cửa sổ mà file hôm trước đã
+     bị dọn thì tính lại sẽ HỤT mốc và ghi đè số đã chốt bằng số kém hơn — bỏ qua, giữ số cũ. */
+  const days = have.filter(d => d >= since && d < vnToday && have.includes(addDays(d, -1))).sort();
+  return days.length ? days : [addDays(vnToday, -2), addDays(vnToday, -1)];
 }
 
 const num = (x, d = 6) => {
@@ -102,9 +117,14 @@ const pointById = new Map(points.map(p => [p.id, p]));
 const metersOfStation = new Map();          // stationId → [{serial, hsn, pointCode}]
 for (const m of meters) {
   const p = m.point;
-  if (!p || p.role !== 'chinh' || p.status !== 'active' || !p.station) continue;
+  /* Mọi điểm đo chính CÒN treo, KỂ CẢ "chưa vận hành" (user chốt 30/09/2026): trạng thái
+     đó chỉ nói "chưa có hóa đơn", còn MBA đã mang điện là đã có tổn thất không tải — gặp
+     03.VMP.T1: có số 24–29/09 mà không có tổn thất. Chỉ bỏ điểm đo đã tháo gỡ. */
+  if (!p || p.role !== 'chinh' || p.status === 'thao_go' || !p.station) continue;
   if (!metersOfStation.has(p.station)) metersOfStation.set(p.station, []);
-  metersOfStation.get(p.station).push({ serial: m.serial, hsn: m.hsn, pointCode: p.code || p.line_name || '' });
+  metersOfStation.get(p.station).push({ serial: m.serial, hsn: m.hsn, pointCode: p.code || p.line_name || '',
+    /* Ngày treo — tính lại ngày cũ thì công tơ chỉ thuộc trạm này TỪ ngày treo (xem vòng ngày). */
+    dateOn: m.dateOn || '' });
 }
 
 /* ------------------ đối chiếu mất điện bằng ThongSo_30min ------------------ */
@@ -162,7 +182,13 @@ function computeDay(day) {
 
   for (const st of stations) {
     const label = st.code || '(chưa có mã)';
-    const mine = metersOfStation.get(st.id) || [];
+    /*
+      Chỉ công tơ ĐÃ TREO ở trạm này vào ngày `day`. `liveMeters` là lần treo HIỆN TẠI —
+      không lọc ngày thì khi tính lại ngày cũ (mặc định 30 ngày, 30/09/2026), công tơ vừa
+      chuyển trạm bị tính CẢ ở trạm mới cho những ngày nó còn ở trạm cũ (gặp YM.FUMAO:
+      đổi MBA 800 → 1.250 kVA ngày 27/09 ⇒ 01–26/09 bị đếm hai lần).
+    */
+    const mine = (metersOfStation.get(st.id) || []).filter(m => !m.dateOn || m.dateOn <= day);
 
     /*
       THỨ TỰ XÉT quyết định log có dùng được hay không — phải xếp theo VIỆC CẦN LÀM:

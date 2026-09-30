@@ -143,9 +143,11 @@ jobs:
       #    KHONG dung `npx tsx` o day: workflow nay khong chay `npm ci` nen chi co
       #    Node tran. Script viet bang .mjs thuan la vi the.
       #
-      #    Script tu tinh LAI ca ngay hom kia: khoang 23:30->00:00 co ban doc cuoi
-      #    nam o file ngay SAU, luc chay cho "hom qua" thi file hom nay chua ghi ->
-      #    hut moc 23:30 ~2% san luong lan ton that. Khu trung theo (CODE, DATE).
+      #    Tu 30/09/2026 script TINH LAI MOI NGAY con file ChiSo_30min (30 ngay gan
+      #    nhat, bo ngay dau cua so khi file hom truoc da bi don): tram vua khai P0/Pk,
+      #    cong to vua khai ngay treo... tu duoc tinh bu. Cong to chi tinh cho tram tu
+      #    ngay treo (tranh dem doi khi chuyen tram). Van tinh lai hom qua vi khoang
+      #    23:30->00:00 nam o file ngay SAU. Khu trung theo (CODE, DATE).
       - name: Transformer loss (30 min + daily)
         env:
           PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
