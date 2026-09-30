@@ -4,7 +4,7 @@ import {
 } from 'recharts';
 import {
   TrendingDown, Info, CalendarDays, CalendarRange, BarChart3, Building2, Zap, Gauge,
-  ChevronDown, ArrowUpRight, ArrowDownRight, Minus, AlertTriangle,
+  ChevronDown, ArrowUpRight, ArrowDownRight, Minus, AlertTriangle, Cable,
 } from 'lucide-react';
 import { toast as notify } from '../lib/toast';
 import { StatTile, EmptyState, ChartTooltip, CHART } from './ui/dashboard';
@@ -12,8 +12,8 @@ import { Tabs, TabItem } from './ui/Tabs';
 import { Select } from './ui/Select';
 import { DatePicker } from './ui/DateTimePickers';
 import { fetchLoss30min, fetchLossDaily, fetchLossMonthly, Loss30minRow, LossDailyRow, LossMonthlyRow } from '../lib/transformerLoss';
-import { stations as dmStations } from '../lib/dm/repo';
-import type { Station as DmStation } from '../lib/dm/types';
+import { stations as dmStations, lines as dmLinesRepo } from '../lib/dm/repo';
+import type { Station as DmStation, Line as DmLine } from '../lib/dm/types';
 import { resolveLossParams } from '@/scripts/lib/lossParams.mjs';
 import { pb } from '../lib/pocketbase';
 import { zoneFromArea, zoneCodeOf, ZONE_MAP } from '../lib/invoices';
@@ -135,7 +135,89 @@ interface ZoneDay { kcn: string; capacity: number; output: number; loss: number;
 interface StationMonth { code: string; name: string; kcn: string; sdm: number; active: boolean; output: number; loss: number; noload: number; load: number; lossPct: number; }
 interface ZoneMonth { kcn: string; capacity: number; output: number; loss: number; lossPct: number; stations: StationMonth[]; }
 
-interface StationMeta { kcn: string; name: string; sdm: number; }
+interface StationMeta { kcn: string; name: string; sdm: number; lineId: string; }
+
+/** Một LỘ trong bảng "Theo lộ" — cộng từ tổn thất các trạm gắn vào lộ đó. */
+interface LineAgg {
+  key: string; code: string; name: string; kcn: string;
+  nStations: number; nActive: number; capacity: number; output: number; loss: number; lossPct: number;
+}
+interface ZoneLines { kcn: string; capacity: number; output: number; loss: number; lossPct: number; nStations: number; lines: LineAgg[]; }
+
+/**
+ * Gom tổn thất TRẠM thành tổn thất LỘ (tab "Theo lộ", 25/09/2026).
+ *
+ * Chỉ CỘNG lại số của từng trạm — không tính gì mới — nên tổng các lộ của một KCN
+ * đúng bằng tổng KCN ở tab Theo ngày / Theo tháng. Trạm chưa gắn lộ (hoặc lộ đã bị
+ * xoá) gom vào dòng "Chưa gắn lộ", không bị rơi mất. % = tổn thất ÷ (sản lượng + tổn
+ * thất), cùng công thức với trạm.
+ */
+function aggregateByLine(
+  stations: { code: string; kcn: string; sdm: number; active: boolean; output: number; loss: number }[],
+  metaByCode: Map<string, StationMeta>, lineById: Map<string, DmLine>,
+): ZoneLines[] {
+  const zones = new Map<string, Map<string, LineAgg>>();
+  for (const st of stations) {
+    const ln = lineById.get(metaByCode.get(st.code)?.lineId ?? '');
+    const key = ln?.id ?? '__none__';
+    if (!zones.has(st.kcn)) zones.set(st.kcn, new Map());
+    const m = zones.get(st.kcn)!;
+    let a = m.get(key);
+    if (!a) {
+      a = { key, code: ln?.code ?? 'Chưa gắn lộ', name: ln?.name ?? '', kcn: st.kcn,
+        nStations: 0, nActive: 0, capacity: 0, output: 0, loss: 0, lossPct: 0 };
+      m.set(key, a);
+    }
+    a.nStations++; if (st.active) a.nActive++;
+    a.capacity += st.sdm; a.output += st.output; a.loss += st.loss;
+  }
+  return [...zones.entries()].map(([kcn, m]) => {
+    const lines = [...m.values()].map(l => ({ ...l, lossPct: ratio(l.loss, l.output) }))
+      /* "Chưa gắn lộ" xuống cuối, còn lại theo mã lộ. */
+      .sort((x, y) => (x.key === '__none__' ? 1 : 0) - (y.key === '__none__' ? 1 : 0)
+        || x.code.localeCompare(y.code, 'vi', { numeric: true }));
+    const output = lines.reduce((t, l) => t + l.output, 0);
+    const loss = lines.reduce((t, l) => t + l.loss, 0);
+    return { kcn, lines, output, loss, lossPct: ratio(loss, output),
+      capacity: lines.reduce((t, l) => t + l.capacity, 0), nStations: lines.reduce((t, l) => t + l.nStations, 0) };
+  }).sort(byKcn);
+}
+
+/** Bảng các lộ của một KCN — cùng kiểu cột với bảng trạm. */
+function LineTable({ lines }: { lines: LineAgg[] }) {
+  return (
+    <table className="w-full text-left border-collapse min-w-[760px]">
+      <thead>
+        <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
+          <th className="py-3 px-4">Lộ</th>
+          <th className="py-3 px-4 text-right">Số trạm</th>
+          <th className="py-3 px-4 text-right">Công suất đặt (kVA)</th>
+          <th className="py-3 px-4 text-right">Sản lượng (kWh)</th>
+          <th className="py-3 px-4 text-right">Tổn thất (kWh)</th>
+          <th className="py-3 px-4 text-right">Tỷ lệ tổn thất (%)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {lines.map(l => (
+          <tr key={l.key} className="border-b border-[var(--border)] last:border-0 hover:bg-subtle/40">
+            <td className="py-3 px-4">
+              <div className={`font-mono text-sm font-bold ${l.key === '__none__' ? 'italic text-faint' : 'text-ink'}`}>{l.code}</div>
+              {l.name && <div className="text-[11px] text-faint">{l.name}</div>}
+            </td>
+            <td className="py-3 px-4 text-right tabular-nums text-soft">
+              {l.nActive}/{l.nStations}
+              <div className="text-[10px] text-faint">có số / tổng</div>
+            </td>
+            <td className="py-3 px-4 text-right tabular-nums text-soft">{fmt(l.capacity, 0)}</td>
+            <td className="py-3 px-4 text-right tabular-nums text-ink">{fmt(l.output)}</td>
+            <td className="py-3 px-4 text-right tabular-nums font-bold text-ink">{fmt(l.loss)}</td>
+            <td className="py-3 px-4 text-right"><LossPctBadge v={l.lossPct} /></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 /** Slot 30 phút cho biểu đồ TRONG NGÀY (chỉ để vẽ hình dạng; số liệu báo cáo lấy file ngày). */
 function slotsByStation(rows: Loss30minRow[], date: string) {
@@ -151,10 +233,11 @@ function slotsByStation(rows: Loss30minRow[], date: string) {
 }
 
 /* ================= component ================= */
-type View = 'table' | 'monthly' | 'chart';
+type View = 'table' | 'monthly' | 'line' | 'chart';
 const TABS: TabItem<View>[] = [
   { id: 'table', label: 'Theo ngày', icon: CalendarDays },
   { id: 'monthly', label: 'Theo tháng', icon: CalendarRange },
+  { id: 'line', label: 'Theo lộ', icon: Cable },
   { id: 'chart', label: 'Biểu đồ', icon: BarChart3 },
 ];
 const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate(); // m: 1-based
@@ -164,6 +247,7 @@ export default function TransformerLossManager() {
   const [daily, setDaily] = useState<LossDailyRow[]>([]);
   const [monthly, setMonthly] = useState<LossMonthlyRow[]>([]);
   const [dmSt, setDmSt] = useState<DmStation[]>([]);
+  const [dmLn, setDmLn] = useState<DmLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('table');
   const [selDate, setSelDate] = useState('');
@@ -180,8 +264,10 @@ export default function TransformerLossManager() {
          sau khi lõi đổi nguồn sang Danh mục thì hai bên nói hai thứ tiếng và
          28/68 trạm không khớp được mã ⇒ giao diện báo "không có dữ liệu" dù có. */
       dmStations.list().catch(() => [] as DmStation[]),
+      /* Lộ — cho tab "Theo lộ". Lỗi thì mọi trạm rơi vào "Chưa gắn lộ", các tab khác vẫn chạy. */
+      dmLinesRepo.list().catch(() => [] as DmLine[]),
     ])
-      .then(([r, dy, mo, st]) => { if (ok) { setRows(r); setDaily(dy); setMonthly(mo); setDmSt(st); } })
+      .then(([r, dy, mo, st, ln]) => { if (ok) { setRows(r); setDaily(dy); setMonthly(mo); setDmSt(st); setDmLn(ln); } })
       .catch(e => { console.error(e); notify.error('Lỗi dữ liệu', e?.message || 'Không tải được tổn thất MBA.'); })
       .finally(() => { if (ok) setLoading(false); });
     return () => { ok = false; };
@@ -215,7 +301,7 @@ export default function TransformerLossManager() {
       /* Nhãn = MÃ TRẠM, không phải tên khách: một khách có nhiều trạm (T1, T2…)
          nên lấy tên khách thì các dòng trùng nhãn, không phân biệt được.
          Bản cũ hiển thị LINE_NAME của HES, vốn gần như trùng mã trạm. */
-      map.set(code, { kcn: ZONE_MAP[zc] || 'Khác', name: code, sdm: Number(s.sdm_kva) || 0 });
+      map.set(code, { kcn: ZONE_MAP[zc] || 'Khác', name: code, sdm: Number(s.sdm_kva) || 0, lineId: s.line ?? '' });
     }
     return map;
   }, [dmSt, userZone]);
@@ -314,6 +400,12 @@ export default function TransformerLossManager() {
     return { mZones, mKpi: { loss, output, capacity, pct: ratio(loss, output), n: stations.length } };
   }, [monthly, selMonth, metaByCode]);
 
+  /* ---- Gom theo LỘ: ngày đã chọn + tháng đã chọn (tab "Theo lộ") ---- */
+  const lineById = useMemo(() => new Map(dmLn.map(l => [l.id, l])), [dmLn]);
+  const dayLines = useMemo(() => aggregateByLine(allStations, metaByCode, lineById), [allStations, metaByCode, lineById]);
+  const monthLines = useMemo(
+    () => aggregateByLine(mZones.flatMap(z => z.stations), metaByCode, lineById), [mZones, metaByCode, lineById]);
+
   /* ---- Chuỗi theo NGÀY trong THÁNG đã chọn cho từng trạm (biểu đồ tháng) ---- */
   const monthSeriesByCode = useMemo(() => {
     const out = new Map<string, { label: string; lossPct: number; load: number; _d: string }[]>();
@@ -378,11 +470,11 @@ export default function TransformerLossManager() {
       <div className="flex flex-wrap items-center gap-3">
         <Tabs<View> tabs={TABS} value={view} onChange={setView} />
         <div className="ml-auto flex items-end gap-3">
-          {(view === 'monthly' || view === 'chart') && (
+          {(view === 'monthly' || view === 'chart' || view === 'line') && (
             <Select value={selMonth} onChange={onChangeMonth} label="Tháng" icon={CalendarRange} className="min-w-[170px]"
               options={months.map(m => ({ value: m, label: monthVN(m) }))} />
           )}
-          {(view === 'table' || view === 'chart') && (
+          {(view === 'table' || view === 'chart' || view === 'line') && (
             <DatePicker value={selDate} onChange={onChangeDate} label="Ngày" className="w-[190px]" usePortal />
           )}
         </div>
@@ -448,6 +540,35 @@ export default function TransformerLossManager() {
               </p>
             </div>
           )}
+        </>
+      ) : view === 'line' ? (
+        /* ---------- THEO LỘ: ngày đã chọn + tháng đã chọn ---------- */
+        <>
+          {([
+            { k: 'd', title: `ngày ${dateVN(selDate)}`, zl: dayLines, kp: kpi },
+            { k: 'm', title: monthVN(selMonth), zl: monthLines, kp: mKpi },
+          ]).map(({ k, title, zl, kp }) => (
+            <div key={k} className="space-y-4">
+              <div className="flex items-center gap-2 pt-2">
+                {k === 'd' ? <CalendarDays className="h-4 w-4 text-accent" /> : <CalendarRange className="h-4 w-4 text-accent" />}
+                <h2 className="text-sm font-black uppercase tracking-wider text-dim">Tổn thất theo lộ — {title}</h2>
+              </div>
+              <KpiRow kpi={kp} label={title} />
+              {zl.length === 0 ? (
+                <div className="vl-card"><EmptyState icon={Cable} title="Không có dữ liệu" /></div>
+              ) : zl.map(z => (
+                <ZoneCard key={k + z.kcn} kcn={z.kcn} count={z.nStations} capacity={z.capacity} loss={z.loss} lossPct={z.lossPct}
+                  collapsed={!!collapsed[`l${k}:` + z.kcn]} onToggle={() => toggleZone(`l${k}:` + z.kcn)}>
+                  <LineTable lines={z.lines} />
+                </ZoneCard>
+              ))}
+            </div>
+          ))}
+          <p className="text-[11px] text-faint">
+            Tổn thất lộ = tổng tổn thất máy biến áp (tính theo P0, Pk) của các trạm gắn vào lộ — KHÔNG gồm tổn thất
+            đường dây. Lộ có điểm đo đầu nguồn xem thêm tổn thất ĐO ĐƯỢC cả lộ ở màn Đồ thị điện áp &amp; công suất →
+            tab Đầu nguồn.
+          </p>
         </>
       ) : view === 'monthly' ? (
         /* ---------- THEO THÁNG ---------- */

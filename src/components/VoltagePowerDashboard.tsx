@@ -847,7 +847,7 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
       {tab === 'pmax' && <CustomerPmaxTab customers={pmaxCustomers} />}
 
       {/* ---- Tab Pmax theo lộ đường dây (theo tháng) ---- */}
-      {tab === 'linePmax' && <LinePmaxTab />}
+      {tab === 'linePmax' && <LinePmaxTab allowedZones={allowedZones} />}
 
       {tab === 'head' && <HeadBalanceTab allowedZones={allowedZones} />}
 

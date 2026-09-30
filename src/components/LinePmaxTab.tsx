@@ -13,10 +13,11 @@
  * chưa được treo khi đó. Hai thiên lệch chồng lên nhau thì con số không đọc ra
  * được điều gì đáng tin. Biểu đồ ngắn nhưng mọi cột cùng một thước đo.
  *
- * Nhờ bỏ ước lượng, màn này KHÔNG còn phải đọc danh mục PocketBase — chỉ cần
- * đúng một file CSV.
+ * Nhờ bỏ ước lượng, số liệu chỉ cần đúng một file CSV. Danh mục PocketBase chỉ còn
+ * dùng để biết LỘ THUỘC KCN NÀO — tài khoản vận hành chỉ thấy lộ của KCN mình,
+ * khối văn phòng theo bộ chọn KCN của trang (25/09/2026).
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, Bar, Cell,
 } from 'recharts';
@@ -25,6 +26,7 @@ import { usePmaxLineDaily } from '../lib/pmaxLine';
 import type { LineMonthPoint } from '../lib/pmaxLine';
 import { Select } from './ui/Select';
 import { StatTile, EmptyState, CHART } from './ui/dashboard';
+import { lines as dmLines, zones as dmZones } from '../lib/dm/repo';
 
 const p2 = (n: number) => String(n).padStart(2, '0');
 const fmtKw = (n: number) => Math.round(n).toLocaleString('vi-VN');
@@ -66,8 +68,53 @@ function MonthTooltip({ active, payload }: any) {
   );
 }
 
-export default function LinePmaxTab() {
-  const { rows: lineRows, loading, error } = usePmaxLineDaily();
+interface Props {
+  /**
+   * KCN được xem — cùng luật các tab khác của trang (Văn phòng: bộ chọn KCN; Vận hành:
+   * KCN của tài khoản). `null` = mọi KCN.
+   */
+  allowedZones: Set<string> | null;
+}
+
+const normArea = (s: string) => (s || '').normalize('NFC').trim();
+
+/** Mã lộ → tên KCN, từ Danh mục. Nạp một lần mỗi phiên. */
+let _zoneOfLine: Promise<Map<string, string>> | null = null;
+function loadZoneOfLine(): Promise<Map<string, string>> {
+  if (!_zoneOfLine) {
+    _zoneOfLine = Promise.all([dmLines.list(), dmZones.list()])
+      .then(([ls, zs]) => {
+        const zoneName = new Map(zs.map(z => [z.id, z.name]));
+        return new Map(ls.map(l => [l.code, normArea(zoneName.get(l.zone) ?? '')]));
+      })
+      .catch(err => { _zoneOfLine = null; throw err; });
+  }
+  return _zoneOfLine;
+}
+
+export default function LinePmaxTab({ allowedZones }: Props) {
+  const { rows: allLineRows, loading: loadingRows, error: rowsError } = usePmaxLineDaily();
+
+  /* Lộ thuộc KCN nào — chỉ cần khi có lọc. Lỗi tải Danh mục thì KHÔNG mở toang mọi
+     lộ cho tài khoản vận hành: báo lỗi, không đoán. */
+  const [zoneOfLine, setZoneOfLine] = useState<Map<string, string> | null>(null);
+  const [zoneError, setZoneError] = useState('');
+  useEffect(() => {
+    if (!allowedZones) return;
+    let alive = true;
+    loadZoneOfLine()
+      .then(m => { if (alive) setZoneOfLine(m); })
+      .catch(e => { if (alive) setZoneError(e?.message || 'Không tải được danh mục lộ'); });
+    return () => { alive = false; };
+  }, [allowedZones]);
+
+  const lineRows = useMemo(() => {
+    if (!allowedZones) return allLineRows;
+    if (!zoneOfLine) return [];
+    return allLineRows.filter(r => allowedZones.has(zoneOfLine.get(r.line) ?? ''));
+  }, [allLineRows, allowedZones, zoneOfLine]);
+  const loading = loadingRows || (!!allowedZones && !zoneOfLine && !zoneError);
+  const error = rowsError || zoneError;
 
   /* Mã lộ lấy thẳng từ chính file số liệu — lộ chưa có số đo nào thì cũng chẳng
      có gì để vẽ, nên không cần đọc danh mục. */
@@ -89,7 +136,8 @@ export default function LinePmaxTab() {
     for (const r of lineRows) if (r.pmax > mx) { mx = r.pmax; best = r.line; }
     return best || lineCodes[0] || '';
   }, [lineRows, lineCodes]);
-  const current = picked || defaultLine;
+  /* Lộ đã chọn không còn trong danh sách (vừa đổi KCN) ⇒ về lộ mặc định của KCN mới. */
+  const current = picked && lineCodes.includes(picked) ? picked : defaultLine;
 
   /* --------- Đỉnh của từng THÁNG: ngày có đỉnh cao nhất trong tháng --------- */
   const series = useMemo<LineMonthPoint[]>(() => {
@@ -141,6 +189,9 @@ export default function LinePmaxTab() {
 
       {loading ? (
         <div className="vl-card flex items-center justify-center py-20 text-faint">Đang tải…</div>
+      ) : lineCodes.length === 0 ? (
+        <EmptyState icon={HelpCircle} title="KCN này chưa có lộ nào có số liệu"
+          hint="Lộ phải được khai trong Danh mục (gắn KCN) và có trạm gắn vào lộ." />
       ) : series.length === 0 ? (
         <EmptyState icon={HelpCircle} title="Lộ này chưa có số liệu"
           hint="Chưa có công tơ nào trên lộ báo số, hoặc lộ chưa gắn trạm." />
