@@ -11,7 +11,14 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { CcisError, fetchCcisPdf, resolveBillval, type PdfViewType } from './ccis';
 
-const PB = () => (process.env.PB_INTERNAL_URL || 'http://localhost:8090').replace(/\/$/, '');
+/*
+  PocketBase để kiểm token và đọc/ghi einvoice phải là PB MÀ GIAO DIỆN ĐANG ĐĂNG NHẬP (`VITE_PB_URL`),
+  KHÔNG phải PB trong chính container: staging có PB riêng nhưng giao diện staging trỏ PB production
+  (dùng chung dữ liệu) — gọi `localhost:8090` ở staging thì token nào cũng "hết hạn" (sự cố 01/10/2026).
+  `PB_INTERNAL_URL` để ghi đè khi cần.
+*/
+const PB = () =>
+  (process.env.PB_INTERNAL_URL || process.env.VITE_PB_URL || 'http://localhost:8090').replace(/\/$/, '');
 const ID_RE = /^[a-z0-9]{15}$/; // id bản ghi PocketBase
 
 interface Authed extends Request { pbToken?: string }
