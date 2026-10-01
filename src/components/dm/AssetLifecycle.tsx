@@ -394,7 +394,7 @@ export default function AssetLifecycle({ scope: _scope = 'vanphong' }: { scope?:
               khách theo rowSpan để đọc theo khách chứ không theo dòng rời rạc. */}
           <IssueSection id="names" title="Tên khách hàng chưa khớp nhau" tone="warn"
             count={countNameIssues(nameAudit)}
-            desc="Tên đầy đủ phải khớp hóa đơn mới nhất; tên viết thường phải đúng và đủ chữ so với tên đầy đủ. CHỈ BÁO — sửa tên ở tab Khách hàng (nút Đồng bộ từ hóa đơn / Soát tên viết thường)."
+            desc="Tên đầy đủ phải khớp hóa đơn mới nhất; tên viết thường phải đúng và đủ chữ so với tên đầy đủ. CHỈ BÁO — sửa tên ở Hồ sơ kinh doanh → Khách hàng (nút Đồng bộ từ hóa đơn / Soát tên viết thường)."
             open={openSection} onToggle={setOpenSection}>
             <table className="vl-table w-full table-fixed border-collapse text-left">
               <thead>

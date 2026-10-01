@@ -1,33 +1,26 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { pb } from '../../lib/pocketbase';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { parseInvoiceXml, type ParsedInvoice, type MeterPeriodRow, type Bieu } from '../../lib/parseInvoiceXml';
-import { fetchFigureBooks, fetchInvoiceXmlForBook, type FetchProgress } from '../../lib/ccisApi';
-import { MonthPicker } from '../ui/DateTimePickers';
-import { Select } from '../ui/Select';
-import { Tabs, type TabItem } from '../ui/Tabs';
 import {
   Upload, FileCode2, Database, Trash2,
-  Users, Loader2, FileSpreadsheet, CloudDownload, Check, Layers,
-  BookOpen, ListChecks,
+  Users, Loader2, FileSpreadsheet,
 } from 'lucide-react';
 
-const FIGUREBOOK_COLLECTION = 'FigureBook';
-interface BookOption { FigureBookId: number; BookName: string; }
-
-type ImportMode = 'direct' | 'manual';
-const IMPORT_TABS: TabItem<ImportMode>[] = [
-  { id: 'direct', label: 'Lấy trực tiếp từ CCIS', icon: CloudDownload },
-  { id: 'manual', label: 'Tải XML thủ công',      icon: Upload },
-];
-
 /* ============================================================
-   Nạp dữ liệu nhanh — tải nhiều XML hóa đơn điện, xem trước,
-   ghi hàng loạt vào collection `invoice`.
+   Nạp dữ liệu — tải nhiều XML hóa đơn điện tử, xem trước, ghi hàng loạt.
    Chỉ dành cho khối Kinh doanh.
+
+   User chốt 01/10/2026:
+   - CHỈ nhận XML tải lên (XML tải từ cổng hóa đơn). Đã BỎ "Lấy trực tiếp từ CCIS":
+     XML của CCIS `GetXML` không có mã CQT (`MCCQT`) ⇒ không gửi khách được.
+   - XML thiếu `MCCQT` hoặc thiếu mã tra cứu (`Fkey`) bị từ chối ngay khi đọc.
+   - Mỗi XML ghi MỘT bản ghi `einvoice` (đầu mục + toàn văn XML + trạng thái mail),
+     rồi các dòng chi tiết vào `invoice` NHƯ CŨ. Hai bên nối bằng `BillId`.
 ============================================================ */
 
 const INVOICE_COLLECTION = 'invoice';
+const EINVOICE_COLLECTION = 'einvoice';
 
 import { toast as notify } from '../../lib/toast';
 
@@ -58,6 +51,8 @@ const sanLuong = (row: MeterPeriodRow, b: Bieu) =>
 interface FileEntry {
   fileName: string;
   invoice: ParsedInvoice;
+  /** Toàn văn XML — lưu nguyên vào `einvoice.xml`. */
+  xml: string;
 }
 // 1 dòng xem trước = 1 công tơ/khoảng, kèm meta hóa đơn
 interface PreviewRow {
@@ -67,136 +62,15 @@ interface PreviewRow {
   row: MeterPeriodRow;
 }
 
-/* Thanh tiến trình dạng stepper ngang cho luồng 2 bước: Lấy sổ → Hóa đơn → XML → Hoàn tất. */
-const FETCH_STEPS: { phase: FetchProgress['phase']; label: string }[] = [
-  { phase: 'books', label: 'Lấy sổ' },
-  { phase: 'bills', label: 'Lấy hóa đơn' },
-  { phase: 'xml', label: 'Tải XML' },
-  { phase: 'done', label: 'Hoàn tất' },
-];
-
-interface StepperState {
-  current: number;          // chỉ số bước đang/đến lượt (>= length ⇒ hoàn tất)
-  running: boolean;         // có tác vụ đang chạy không
-  label?: string;           // mô tả chi tiết đang xử lý
-  count?: { done: number; total: number } | null;
-}
-
-function FetchStepper({ current, running, label, count, actions }: StepperState & { actions?: Record<number, React.ReactNode> }) {
-  const allDone = current >= FETCH_STEPS.length;
-  const len = FETCH_STEPS.length;
-  return (
-    <div className="mt-6 rounded-2xl bg-surface border border-[var(--border)] shadow-[0_8px_24px_-12px_rgba(25,42,70,0.18)] px-6 md:px-8 py-7">
-      <div className="flex items-stretch">
-        {FETCH_STEPS.map((step, i) => {
-          const done = i < current;
-          const isActive = !allDone && i === current;
-          const isLast = i === len - 1;
-          return (
-            <div key={step.phase} className={`flex flex-col ${isLast ? 'items-end' : 'flex-1 items-start'} min-w-0`}>
-              {/* Hàng vòng tròn + đường nối (co giãn để trải đều 0→100%) */}
-              <div className="flex items-center w-full">
-                <div
-                  className={`relative z-10 shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 ${
-                    done
-                      ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300/40'
-                      : isActive
-                      ? 'bg-[var(--accent)] shadow-lg shadow-[var(--accent)]/30'
-                      : 'bg-blue-100'
-                  }`}
-                >
-                  {done ? (
-                    <Check className="w-3.5 h-3.5" strokeWidth={3} />
-                  ) : isActive && running ? (
-                    <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
-                  ) : isActive ? (
-                    <span className="w-2.5 h-2.5 rounded-full bg-surface ring-2 ring-white/60" />
-                  ) : null}
-                </div>
-                {!isLast && (
-                  <div className="flex-1 h-[3px] mx-1.5 rounded-full bg-blue-100 overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        done ? 'w-full bg-emerald-500'
-                        : isActive ? 'w-1/2 bg-gradient-to-r from-[var(--accent)] to-blue-200'
-                        : 'w-0'
-                      }`}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Nhãn */}
-              <div className={`mt-3 ${isLast ? 'text-right pl-3' : 'pr-3'}`}>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-faint">
-                  Step {i + 1}
-                </div>
-                <div className={`text-sm font-bold mt-0.5 ${done || isActive ? 'text-ink' : 'text-faint'}`}>
-                  {step.label}
-                </div>
-                <div
-                  className={`text-[11px] font-semibold mt-0.5 ${
-                    done ? 'text-emerald-500' : isActive ? 'text-[var(--accent)]' : 'text-faint'
-                  }`}
-                >
-                  {done ? 'Hoàn tất' : isActive ? (running ? 'Đang xử lý' : 'Sẵn sàng') : 'Chờ'}
-                  {isActive && running && count && count.total > 0 && (
-                    <span className="font-mono"> · {count.done}/{count.total}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Nút hành động gắn dưới bước (nếu có) */}
-              {actions?.[i] && <div className="mt-3 pr-3">{actions[i]}</div>}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Dòng chi tiết đang xử lý */}
-      {running && label && (
-        <div className="mt-4 pt-3 border-t border-[var(--border)] text-[11px] font-semibold text-faint truncate">
-          {label}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function QuickImportManager() {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
-  const now = new Date();
-  const [fetchYM, setFetchYM] = useState(
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
-  ); // "YYYY-MM"
-  const [fetchTerm, setFetchTerm] = useState(1); // kỳ 1/2/3
-  const [books, setBooks] = useState<BookOption[]>([]);          // danh sách sổ (collection FigureBook)
-  const [selectedBookId, setSelectedBookId] = useState<number | ''>('');
-  const [isFetchingBooks, setIsFetchingBooks] = useState(false);
-  const [isFetchingInvoices, setIsFetchingInvoices] = useState(false);
-  const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
-  const [invoicesDone, setInvoicesDone] = useState(false);      // đã hoàn tất lấy hóa đơn (cho stepper)
-  const [mode, setMode] = useState<'direct' | 'manual'>('direct'); // tab: lấy trực tiếp / tải thủ công
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
     notify.show(t, TOAST_TITLE[t], message, { duration: 4500 });
   }, []);
-
-  // Nạp danh sách sổ từ collection FigureBook
-  const loadBooks = useCallback(async () => {
-    try {
-      const recs = await pb.collection(FIGUREBOOK_COLLECTION).getFullList<any>({ sort: 'BookName', requestKey: null });
-      const opts = recs.map(r => ({ FigureBookId: Number(r.FigureBookId), BookName: r.BookName || String(r.FigureBookId) }));
-      setBooks(opts);
-      setSelectedBookId(prev => (prev !== '' && opts.some(o => o.FigureBookId === prev) ? prev : (opts[0]?.FigureBookId ?? '')));
-    } catch {
-      /* collection có thể chưa có quyền/ chưa tạo — bỏ qua, để trống dropdown */
-    }
-  }, []);
-  useEffect(() => { loadBooks(); }, [loadBooks]);
 
   const previewRows = useMemo<PreviewRow[]>(() => {
     const out: PreviewRow[] = [];
@@ -255,13 +129,19 @@ export default function QuickImportManager() {
     [previewRows, selected],
   );
 
-  // Parse danh sách XML (từ file upload hoặc từ web service) rồi gộp vào danh sách xem trước.
-  const ingestXml = (list: { fileName: string; xml: string; billId?: string }[]): { ok: number; errors: string[] } => {
+  // Parse danh sách XML tải lên rồi gộp vào danh sách xem trước.
+  const ingestXml = (list: { fileName: string; xml: string }[]): { ok: number; errors: string[] } => {
     const parsed: FileEntry[] = [];
     const errors: string[] = [];
-    for (const { fileName, xml, billId } of list) {
+    for (const { fileName, xml } of list) {
       try {
-        parsed.push({ fileName, invoice: parseInvoiceXml(xml, billId || '') });
+        const invoice = parseInvoiceXml(xml);
+        // Chốt chặn: thiếu mã CQT = XML chưa qua cơ quan thuế (vd XML lấy từ CCIS) —
+        // không gửi khách được, không có mã tra cứu ⇒ không cho nạp.
+        if (!invoice.header.mccqt) throw new Error('không có mã CQT (MCCQT) — cần XML tải từ cổng hóa đơn, không phải từ CCIS');
+        if (!invoice.billId) throw new Error('không có BillId');
+        if (!invoice.header.maTraCuu) throw new Error('không có mã tra cứu (Fkey)');
+        parsed.push({ fileName, invoice, xml });
       } catch (err: any) {
         errors.push(`${fileName}: ${err?.message || 'lỗi đọc'}`);
       }
@@ -293,83 +173,7 @@ export default function QuickImportManager() {
     else if (ok) showToast(`Đã đọc ${ok} file`, 'success');
   };
 
-  const parseYM = () => {
-    const [yStr, mStr] = fetchYM.split('-');
-    return { year: Number(yStr), month: Number(mStr) };
-  };
-
-  // BƯỚC A — Lấy danh sách sổ (GetFigureBook) và lưu vào collection FigureBook.
-  const handleFetchBooks = async () => {
-    if (isFetchingBooks || isFetchingInvoices) return;
-    const { year, month } = parseYM();
-    if (!year || !month) { showToast('Chưa chọn tháng', 'warning'); return; }
-    setIsFetchingBooks(true);
-    setInvoicesDone(false);
-    setFetchProgress({ phase: 'books', done: 0, total: 1, label: 'Bắt đầu…' });
-    try {
-      const { books: fetched, errors } = await fetchFigureBooks(year, month, fetchTerm, setFetchProgress);
-      // Upsert theo FigureBookId vào collection FigureBook
-      const ids = Array.from(new Set(fetched.map(b => b.FigureBookId).filter(Boolean)));
-      const existing = ids.length
-        ? await pb.collection(FIGUREBOOK_COLLECTION).getFullList<any>({
-            filter: ids.map(id => pb.filter('FigureBookId = {:id}', { id })).join(' || '),
-            requestKey: null,
-          })
-        : [];
-      const idByBook = new Map<number, string>();
-      existing.forEach(r => idByBook.set(Number(r.FigureBookId), r.id));
-      let saved = 0;
-      for (const b of fetched) {
-        if (!b.FigureBookId) continue;
-        const data = { FigureBookId: b.FigureBookId, BookName: b.BookName || b.BookCode || String(b.FigureBookId) };
-        try {
-          const exId = idByBook.get(b.FigureBookId);
-          if (exId) await pb.collection(FIGUREBOOK_COLLECTION).update(exId, data);
-          else { const rec = await pb.collection(FIGUREBOOK_COLLECTION).create(data); idByBook.set(b.FigureBookId, rec.id); }
-          saved++;
-        } catch { /* bỏ qua lỗi từng sổ */ }
-      }
-      await loadBooks();
-      showToast(`Đã lưu ${saved} sổ` + (errors.length ? `, ${errors.length} lỗi` : ''), errors.length ? 'warning' : 'success');
-    } catch (err: any) {
-      showToast(`Lỗi lấy sổ: ${err?.data?.message || err?.message || ''}`, 'error');
-    } finally {
-      setIsFetchingBooks(false);
-      setFetchProgress(null);
-    }
-  };
-
-  // BƯỚC B — Lấy hóa đơn (GetBill + GetXML) theo FigureBookId đã chọn.
-  const handleFetchInvoices = async () => {
-    if (isFetchingBooks || isFetchingInvoices) return;
-    if (selectedBookId === '') { showToast('Chưa chọn sổ', 'warning'); return; }
-    const { year, month } = parseYM();
-    if (!year || !month) { showToast('Chưa chọn tháng', 'warning'); return; }
-    const bookName = books.find(b => b.FigureBookId === selectedBookId)?.BookName || String(selectedBookId);
-    setIsFetchingInvoices(true);
-    setInvoicesDone(false);
-    setFetchProgress({ phase: 'bills', done: 0, total: 1, label: 'Bắt đầu…' });
-    try {
-      const { items, errors } = await fetchInvoiceXmlForBook(Number(selectedBookId), fetchTerm, month, year, setFetchProgress);
-      if (items.length === 0) {
-        showToast(`Sổ "${bookName}" không có hóa đơn nào (kỳ ${fetchTerm} tháng ${month}/${year})` + (errors.length ? ` · ${errors[0]}` : ''), 'warning');
-      } else {
-        const { ok, errors: parseErrs } = ingestXml(items);
-        const allErr = errors.length + parseErrs.length;
-        setInvoicesDone(true);
-        showToast(
-          `Sổ "${bookName}": lấy ${ok}/${items.length} hóa đơn` + (allErr ? `, ${allErr} lỗi` : ''),
-          allErr ? 'warning' : 'success',
-        );
-      }
-    } catch (err: any) {
-      showToast(`Lỗi lấy hóa đơn: ${err?.message || ''}`, 'error');
-    } finally {
-      setIsFetchingInvoices(false);
-    }
-  };
-
-  const clearAll = () => { setFiles([]); setSelected({}); setInvoicesDone(false); };
+  const clearAll = () => { setFiles([]); setSelected({}); };
 
   const toggleRow = (id: string) =>
     setSelected(prev => ({ ...prev, [id]: !prev[id] }));
@@ -418,22 +222,71 @@ export default function QuickImportManager() {
     return data;
   };
 
+  // Bản ghi `einvoice` cho 1 file XML: đầu mục + toàn văn XML. KHÔNG có mail_* (xem doImport).
+  const buildEinvoicePayload = (f: FileEntry) => {
+    const inv = f.invoice;
+    const h = inv.header;
+    return {
+      BillId: inv.billId, LoaiHD: inv.loaiHD,
+      Year: h.year, Month: h.month, Term: h.term,
+      StartDate: h.startDate || null, EndDate: h.endDate || null,
+      KHMSHDon: h.khmshdon, KHHDon: h.khhdon, SHDon: h.shdon, NLap: h.nlap || null,
+      MCCQT: h.mccqt, MaTraCuu: h.maTraCuu,
+      MSTNBan: h.mstNBan, NBan: inv.nban.ten,
+      MKHang: inv.nmua.mkhang, NMua: inv.nmua.ten,
+      TgTTTBSo: inv.tgTTTBSo,
+      xml_name: f.fileName, xml: f.xml,
+    };
+  };
+
   const doImport = async () => {
     if (isImporting) return;
     const rows = previewRows.filter(p => selected[p.id]);
     if (rows.length === 0) { showToast('Chưa chọn dòng nào để ghi', 'warning'); return; }
+    // Các hóa đơn (file XML) có ít nhất một dòng được chọn.
+    const bills = Array.from(new Map(rows.map(p => [p.invoice.billId, p])).values());
     const ok = await confirm({
       title: 'Ghi vào hệ thống?',
-      message: `Sẽ ghi/cập nhật ${rows.length} bản ghi vào collection "${INVOICE_COLLECTION}". Bản trùng (số công tơ + kỳ) sẽ được cập nhật.`,
+      message: `Sẽ ghi ${bills.length} hóa đơn và ${rows.length} dòng chỉ số. Hóa đơn đã có (cùng BillId) `
+        + 'và dòng trùng (số công tơ + kỳ) sẽ được cập nhật; trạng thái gửi email của hóa đơn giữ nguyên.',
       confirmLabel: 'Ghi dữ liệu',
       variant: 'info',
     });
     if (!ok) return;
 
     setIsImporting(true);
-    setImportProgress({ done: 0, total: rows.length });
+    setImportProgress({ done: 0, total: bills.length + rows.length });
     let created = 0, updated = 0, failed = 0;
+    let eCreated = 0, eUpdated = 0;
+    /** Hóa đơn ghi `einvoice` lỗi ⇒ KHÔNG ghi các dòng của nó, kẻo có chi tiết mà không có hóa đơn gốc. */
+    const failedBills = new Set<string>();
     try {
+      // ── 1. Đầu mục hóa đơn → `einvoice` (upsert theo BillId) ──
+      const billFilter = bills.map(p => pb.filter('BillId = {:b}', { b: p.invoice.billId })).join(' || ');
+      const eExisting = await pb.collection(EINVOICE_COLLECTION).getFullList<{ id: string; BillId: string }>({
+        filter: billFilter, fields: 'id,BillId', requestKey: null,
+      });
+      const eIdByBill = new Map(eExisting.map(r => [r.BillId, r.id]));
+      for (let i = 0; i < bills.length; i++) {
+        const p = bills[i];
+        const file = files.find(f => f.fileName === p.fileName);
+        try {
+          if (!file) throw new Error('mất nội dung XML');
+          const body = buildEinvoicePayload(file);
+          const exId = eIdByBill.get(p.invoice.billId);
+          if (exId) { await pb.collection(EINVOICE_COLLECTION).update(exId, body); eUpdated++; }
+          else {
+            // Mới thì đánh dấu chưa gửi mail; cập nhật thì KHÔNG đụng mail_* (giữ lịch sử gửi).
+            await pb.collection(EINVOICE_COLLECTION).create({ ...body, mail_status: 'chua_gui' });
+            eCreated++;
+          }
+        } catch {
+          failedBills.add(p.invoice.billId);
+        }
+        setImportProgress({ done: i + 1, total: bills.length + rows.length });
+      }
+
+      // ── 2. Chi tiết chỉ số / thành tiền → `invoice` (như cũ) ──
       // Chỉ dò trùng trong các SCT đang nạp (không getFullList toàn bảng — không khả thi khi
       // collection invoice lên tới hàng triệu dòng).
       const scts = Array.from(new Set(rows.map(p => p.row.SCT).filter(Boolean)));
@@ -452,6 +305,7 @@ export default function QuickImportManager() {
       for (let i = 0; i < rows.length; i++) {
         const p = rows[i];
         try {
+          if (failedBills.has(p.invoice.billId)) throw new Error('hóa đơn gốc lỗi');
           const payload = buildPayload(p);
           const key = `${p.row.SCT}|${p.row.StartDate}|${p.row.EndDate}|${p.invoice.loaiHD}`;
           const existingId = idByKey.get(key);
@@ -466,11 +320,13 @@ export default function QuickImportManager() {
         } catch {
           failed++;
         }
-        setImportProgress({ done: i + 1, total: rows.length });
+        setImportProgress({ done: bills.length + i + 1, total: bills.length + rows.length });
       }
+      const bad = failed + failedBills.size;
       showToast(
-        `Hoàn tất: tạo mới ${created}, cập nhật ${updated}` + (failed ? `, lỗi ${failed}` : ''),
-        failed ? 'warning' : 'success',
+        `Hoàn tất: hóa đơn mới ${eCreated}, cập nhật ${eUpdated}` + (failedBills.size ? `, lỗi ${failedBills.size}` : '')
+          + ` · dòng chỉ số mới ${created}, cập nhật ${updated}` + (failed ? `, lỗi ${failed}` : ''),
+        bad ? 'warning' : 'success',
       );
     } catch (err: any) {
       showToast(`Lỗi khi ghi: ${err?.data?.message || err?.message || ''}`, 'error');
@@ -480,23 +336,6 @@ export default function QuickImportManager() {
     }
   };
 
-  // ── Trạng thái stepper (gộp 2 hành động Lấy sổ / Lấy hóa đơn) ──
-  const busy = isFetchingBooks || isFetchingInvoices;
-  const booksLoaded = books.length > 0;
-  const stepperState: StepperState = (() => {
-    if (busy && fetchProgress) {
-      const idx = FETCH_STEPS.findIndex(s => s.phase === fetchProgress.phase);
-      return {
-        current: idx < 0 ? 0 : idx,
-        running: true,
-        label: fetchProgress.label,
-        count: fetchProgress.total > 0 ? { done: fetchProgress.done, total: fetchProgress.total } : null,
-      };
-    }
-    if (invoicesDone) return { current: FETCH_STEPS.length, running: false };
-    return { current: booksLoaded ? 1 : 0, running: false };
-  })();
-
   return (
     <div className="space-y-6 pb-12 animate-fade-in relative">
       {/* Header */}
@@ -505,99 +344,17 @@ export default function QuickImportManager() {
           <div className="p-2.5 bg-accent-soft rounded-2xl text-accent">
             <Database className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl font-black text-ink tracking-tight uppercase">Nạp dữ liệu nhanh</h1>
+          <h1 className="text-2xl font-black text-ink tracking-tight uppercase">Nạp dữ liệu</h1>
         </div>
         <p className="text-sm text-soft max-w-2xl">
-          Cho phép đồng bộ hóa đơn xml từ CCIS hoặc tải lên hàng loạt file XML hóa đơn điện, xem trước rồi ghi vào hệ thống
+          Tải lên hàng loạt file XML hóa đơn điện tử (bản đã có mã cơ quan thuế), xem trước rồi ghi vào hệ thống.
+          Hóa đơn không thêm hay sửa tay được — muốn sửa thì xóa ở màn Biên bản rồi nạp lại XML.
         </p>
       </div>
 
-      {/* Card lấy dữ liệu — có tab chuyển chế độ */}
+      {/* Card tải XML */}
       <div className="vl-card p-6 md:p-8">
-        {/* Tab bar */}
-        <Tabs tabs={IMPORT_TABS} value={mode} onChange={m => setMode(m)} className="mb-6" />
 
-        {mode === 'direct' ? (
-          <>
-            <p className="text-xs text-faint mb-4">
-              Bước 1: chọn kỳ/tháng rồi <b>Lấy sổ</b> để cập nhật danh mục sổ. Bước 2: chọn sổ rồi <b>Lấy hóa đơn</b> của sổ đó.
-            </p>
-
-            {/* Hàng chọn: Kỳ + Tháng + Sổ (cùng một hàng) */}
-            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-              <div className="shrink-0">
-                <label className="block text-[11px] font-bold text-soft uppercase tracking-wider mb-1">Kỳ</label>
-                <Select
-                  value={String(fetchTerm)}
-                  onChange={v => setFetchTerm(Number(v))}
-                  disabled={busy}
-                  icon={Layers}
-                  options={[1, 2, 3].map(t => ({ value: String(t), label: `Kỳ ${t}` }))}
-                  className="w-28"
-                />
-              </div>
-              <div className="shrink-0">
-                <label className="block text-[11px] font-bold text-soft uppercase tracking-wider mb-1">Tháng</label>
-                <MonthPicker value={fetchYM} onChange={setFetchYM} className="w-44" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <label className="block text-[11px] font-bold text-soft uppercase tracking-wider mb-1">
-                  Sổ {books.length > 0 && <span className="text-faint font-semibold normal-case">({books.length})</span>}
-                </label>
-                <Select
-                  value={selectedBookId === '' ? '' : String(selectedBookId)}
-                  onChange={v => setSelectedBookId(v === '' ? '' : Number(v))}
-                  disabled={busy || books.length === 0}
-                  icon={BookOpen}
-                  searchable
-                  placeholder={books.length === 0 ? '— Chưa có sổ, hãy bấm "Lấy sổ" —' : 'Chọn sổ'}
-                  options={books.map(b => ({ value: String(b.FigureBookId), label: b.BookName }))}
-                />
-              </div>
-            </div>
-
-            <FetchStepper
-              {...stepperState}
-              actions={{
-                0: (
-                  <button
-                    onClick={handleFetchBooks}
-                    disabled={busy}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-accent bg-accent-soft hover:bg-[var(--accent-soft)] disabled:opacity-60 transition-all"
-                  >
-                    {isFetchingBooks ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
-                    {isFetchingBooks ? 'Đang lấy sổ…' : 'Lấy sổ'}
-                  </button>
-                ),
-                1: (
-                  <button
-                    onClick={handleFetchInvoices}
-                    disabled={busy || selectedBookId === ''}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] disabled:opacity-60 shadow-sm transition-all"
-                  >
-                    {isFetchingInvoices ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
-                    {isFetchingInvoices ? 'Đang lấy…' : 'Lấy hóa đơn'}
-                  </button>
-                ),
-              }}
-            />
-
-            {files.length > 0 && (
-              <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
-                <span className="text-xs font-semibold text-faint">
-                  Đã tải {files.length} hóa đơn vào danh sách xem trước.
-                </span>
-                <button
-                  onClick={clearAll}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-bad transition-colors hover:bg-[var(--danger-soft)]"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Xóa dữ liệu đã tải
-                </button>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
             <label
               htmlFor="xml-input"
               className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-[var(--border-strong)] rounded-2xl py-10 cursor-pointer hover:border-accent hover:bg-accent-soft/50 transition-colors"
@@ -632,8 +389,7 @@ export default function QuickImportManager() {
                 </button>
               </div>
             )}
-          </>
-        )}
+
       </div>
 
       {/* Preview + actions */}

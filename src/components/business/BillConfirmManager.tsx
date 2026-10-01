@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { pb } from '../../lib/pocketbase';
-import { DatePicker, TimePicker, MonthPicker } from '../ui/DateTimePickers';
+import { MonthPicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
@@ -9,15 +9,16 @@ import { zoneFromArea, zoneOf, ZONE_MAP, fetchLatestInvoiceMonth } from '../../l
 import { zoneHexOf } from '../../lib/kcnColors';
 import PizZip from 'pizzip';
 import {
-  FileCheck2, Save, Gauge, Building2, Users,
-  RotateCcw, Plus, X, ChevronRight,
-  Pencil, Trash2, FileDown, Search, FileSpreadsheet,
+  FileCheck2, Users, ChevronRight, Trash2, FileDown, Search, FileSpreadsheet,
   CreditCard, RefreshCw, Zap, CheckSquare, Square, Archive,
 } from 'lucide-react';
 
 /* ============================================================
    Biên bản xác nhận chỉ số (collection PocketBase: invoice)
-   - Nhập chỉ số đầu/cuối kỳ 5 thành phần: PG, BT, CD, TD, VC
+   - Dữ liệu CHỈ đến từ XML ở màn "Nạp dữ liệu" (user chốt 01/10/2026): đã bỏ
+     "Tạo biên bản mới" và nút Sửa. Còn xóa, tải Word, đồng bộ thời gian lấy chỉ số.
+   - Hóa đơn gốc (số HĐ, mã tra cứu, trạng thái mail) đọc từ `einvoice`, nối bằng BillId.
+   - Chỉ số đầu/cuối kỳ 5 thành phần: PG, BT, CD, TD, VC
    - Sản lượng = (cuối - đầu) * HSN
    - Biểu cuối = sản lượng - biểu phụ
    - Cosφ = biểu Tổng / √(biểu Tổng² + biểu VC²)
@@ -43,14 +44,6 @@ const COMPONENTS = [
 
 // Biểu phụ theo từng thành phần (không còn phu_Tong)
 const PHU_KEYS = ['BT', 'CD', 'TD', 'VC'] as const;
-
-// Hàng nhập trong bảng biên bản
-const ROWS = [
-  { comp: 'BT', res: 'BT', label: 'BT' },
-  { comp: 'CD', res: 'CD', label: 'CĐ' },
-  { comp: 'TD', res: 'TD', label: 'TĐ' },
-  { comp: 'VC', res: 'VC', label: 'Tổng Qg' },
-] as const;
 
 interface InvoiceRecord {
   id: string;
@@ -92,15 +85,6 @@ const currentYearMonth = () => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 };
 
-// Dựng câu "NN giờ NN phút ngày NN tháng NN năm NNNN" từ ngày + giờ chọn
-const buildNKySentence = (date: string, time: string): string => {
-  if (!date) return '';
-  const [y, m, d] = date.split('-');
-  const [hh, mi] = (time || '00:00').split(':');
-  if (!y || !m || !d) return '';
-  return `${pad2(Number(hh) || 0)} giờ ${pad2(Number(mi) || 0)} phút ngày ${pad2(Number(d))} tháng ${pad2(Number(m))} năm ${y}`;
-};
-
 // Đọc ngược câu NKy có sẵn (dữ liệu cũ) ra { date, time } để đổ vào picker
 const parseNKySentence = (s?: string): { date: string; time: string } => {
   if (!s) return { date: '', time: '00:00' };
@@ -123,10 +107,6 @@ const num = (v: any) => {
 
 const fmt = (n: number, digits = 0) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: digits }).format(n);
-
-// Chỉ số công tơ hiển thị tối đa 2 số lẻ (vd 6.829,33)
-const fmt2 = (n: number) =>
-  new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
 
 // Hiển thị ngày dd/mm/yyyy từ chuỗi PocketBase (YYYY-MM-DD hoặc ISO)
 const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
@@ -197,6 +177,35 @@ function computeResults(d: Record<string, any>) {
   return { sanLuong, bieu, cosphi };
 }
 
+/** Hóa đơn gốc (`einvoice`) rút gọn — KHÔNG tải trường `xml` (toàn văn, ~24 KB/hóa đơn). */
+interface EInvoiceLite {
+  id: string;
+  BillId: string;
+  KHHDon: string;
+  SHDon: string;
+  MaTraCuu: string;
+  mail_status?: 'chua_gui' | 'da_gui' | 'loi' | '';
+}
+
+const MAIL_BADGE: Record<string, { cls: string; label: string }> = {
+  da_gui: { cls: 'vl-badge-success', label: 'Đã gửi mail' },
+  loi: { cls: 'vl-badge-danger', label: 'Gửi mail lỗi' },
+};
+
+/** Tra `einvoice` theo danh sách BillId — chia lô để chuỗi lọc không quá dài. */
+async function loadEinvoices(billIds: string[]): Promise<Map<string, EInvoiceLite>> {
+  const ids = Array.from(new Set(billIds.filter(b => b && b !== '0')));
+  const out = new Map<string, EInvoiceLite>();
+  for (let i = 0; i < ids.length; i += 50) {
+    const filter = ids.slice(i, i + 50).map(b => pb.filter('BillId = {:b}', { b })).join(' || ');
+    const items = await pb.collection('einvoice').getFullList<EInvoiceLite>({
+      filter, fields: 'id,BillId,KHHDon,SHDon,MaTraCuu,mail_status', requestKey: null,
+    });
+    items.forEach(e => out.set(e.BillId, e));
+  }
+  return out;
+}
+
 export default function BillConfirmManager({ readOnly = false }: { readOnly?: boolean }) {
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -206,10 +215,9 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     [readOnly],
   );
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
   const [records, setRecords] = useState<InvoiceRecord[]>([]);
+  /** Hóa đơn gốc (`einvoice`) theo BillId của các dòng đang hiện. */
+  const [einvByBill, setEinvByBill] = useState<Map<string, EInvoiceLite>>(new Map());
   const [loadingList, setLoadingList] = useState(false);
   const [search, setSearch] = useState('');
   // '' = chưa xác định; sẽ đặt = tháng có dữ liệu mới nhất khi mở trang
@@ -226,25 +234,6 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ done: number; total: number } | null>(null);
 
-  /* ── form: meta ── */
-  const [startDate, setStartDate] = useState(todayStr());
-  const [endDate, setEndDate] = useState(todayStr());
-  const [nBan, setNBan] = useState('');
-  const [dChiNBan, setDChiNBan] = useState('');
-  const [nMua, setNMua] = useState('');
-  const [mKhang, setMKhang] = useState('');
-  const [dChiNMua, setDChiNMua] = useState('');
-  const [sct, setSct] = useState('');
-  const [hsn, setHsn] = useState('1');
-  const [nKyDate, setNKyDate] = useState('');
-  const [nKyTime, setNKyTime] = useState('00:00');
-  const [readings, setReadings] = useState<Record<string, string>>({});
-  const [phu, setPhu] = useState<Record<string, string>>({});
-
-  const setReading = (k: string, v: string) => setReadings(prev => ({ ...prev, [k]: v }));
-  const setPhuVal = (k: string, v: string) => setPhu(prev => ({ ...prev, [k]: v }));
-
-  const [isSaving, setIsSaving] = useState(false);
   const [exportingId, setExportingId] = useState<string | null>(null);
   const showToast = useCallback((message: string, t: ToastType = 'info') => {
     notify.show(t, TOAST_TITLE[t], message);
@@ -270,6 +259,7 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
         requestKey: null,
       });
       setRecords(list);
+      setEinvByBill(await loadEinvoices(list.map(r => (r.BillId ?? '').toString().trim())));
     } catch (err: any) {
       showToast(`Lỗi tải danh sách: ${err?.data?.message || err?.message || ''}`, 'error');
     } finally {
@@ -318,95 +308,6 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     }
   };
 
-  /* ── form helpers ── */
-  const resetForm = () => {
-    setStartDate(todayStr()); setEndDate(todayStr());
-    setNBan(''); setDChiNBan(''); setNMua(''); setMKhang(''); setDChiNMua(''); setSct(''); setHsn('1');
-    setNKyDate(''); setNKyTime('00:00');
-    setReadings({}); setPhu({});
-  };
-
-  const openCreate = () => {
-    resetForm();
-    setEditingId(null);
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingId(null);
-  };
-
-  const openEdit = (r: InvoiceRecord) => {
-    setStartDate((r.StartDate || '').split('T')[0].split(' ')[0] || todayStr());
-    setEndDate((r.EndDate || '').split('T')[0].split(' ')[0] || todayStr());
-    setNBan(r.NBan || ''); setDChiNBan(r.DChiNBan || '');
-    setNMua(r.NMua || ''); setMKhang(r.MKHang || ''); setDChiNMua(r.DChiNMua || '');
-    setSct(r.SCT || ''); setHsn(String(r.HSN ?? ''));
-    const parsedNKy = parseNKySentence(r.NKy);
-    setNKyDate(parsedNKy.date); setNKyTime(parsedNKy.time);
-    const rd: Record<string, string> = {};
-    COMPONENTS.forEach(c => {
-      rd[`${c.key}_dau`] = r[`${c.key}_dau`] != null ? String(r[`${c.key}_dau`]) : '';
-      rd[`${c.key}_cuoi`] = r[`${c.key}_cuoi`] != null ? String(r[`${c.key}_cuoi`]) : '';
-    });
-    setReadings(rd);
-    const rp: Record<string, string> = {};
-    PHU_KEYS.forEach(k => { rp[k] = r[`phu_${k}`] != null ? String(r[`phu_${k}`]) : ''; });
-    setPhu(rp);
-    setEditingId(r.id);
-    setIsModalOpen(true);
-  };
-
-  /* dữ liệu số để tính preview trong form */
-  const formData = useMemo(() => {
-    const d: Record<string, any> = { HSN: num(hsn) };
-    COMPONENTS.forEach(c => {
-      d[`${c.key}_dau`] = num(readings[`${c.key}_dau`]);
-      d[`${c.key}_cuoi`] = num(readings[`${c.key}_cuoi`]);
-    });
-    PHU_KEYS.forEach(k => { d[`phu_${k}`] = num(phu[k]); });
-    return d;
-  }, [hsn, readings, phu]);
-
-  const calc = useMemo(() => computeResults(formData), [formData]);
-
-  const save = async () => {
-    if (isSaving) return;
-    if (!sct.trim()) { showToast('Vui lòng nhập Số công tơ (SCT)', 'warning'); return; }
-    if (num(hsn) <= 0) { showToast('Hệ số nhân (HSN) phải lớn hơn 0', 'warning'); return; }
-
-    setIsSaving(true);
-    try {
-      const data: Record<string, any> = {
-        StartDate: startDate,
-        EndDate: endDate,
-        NBan: nBan, DChiNBan: dChiNBan, NMua: nMua, DChiNMua: dChiNMua, MKHang: mKhang,
-        SCT: sct, HSN: num(hsn), NKy: buildNKySentence(nKyDate, nKyTime),
-        phu_BT: num(phu.BT), phu_CD: num(phu.CD),
-        phu_TD: num(phu.TD), phu_VC: num(phu.VC),
-      };
-      COMPONENTS.forEach(c => {
-        data[`${c.key}_dau`] = num(readings[`${c.key}_dau`]);
-        data[`${c.key}_cuoi`] = num(readings[`${c.key}_cuoi`]);
-      });
-
-      if (editingId) {
-        await pb.collection('invoice').update(editingId, data);
-        showToast('Đã cập nhật biên bản', 'success');
-      } else {
-        await pb.collection('invoice').create(data);
-        showToast('Đã lưu biên bản xác nhận chỉ số', 'success');
-      }
-      await loadRecords(monthFilterDate);
-      closeModal();
-    } catch (err: any) {
-      showToast(`Lỗi khi lưu: ${err?.data?.message || err?.message || ''}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleDelete = async (row: BienBanRow) => {
     const r = row.data;
     const ok = await confirm({
@@ -419,8 +320,26 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     try {
       // Hóa đơn đổi giá tách nhiều bản ghi → xóa tất cả khoảng của biên bản
       await Promise.all(row.ids.map(id => pb.collection('invoice').delete(id)));
+      // Hóa đơn không còn dòng chi tiết nào (mọi công tơ đã xóa) ⇒ xóa luôn hóa đơn gốc
+      // `einvoice` (user chốt 01/10/2026), để nạp lại XML không vướng bản cũ.
+      const billId = (r.BillId ?? '').toString().trim();
+      let einvRemoved = false;
+      if (billId && billId !== '0') {
+        const left = await pb.collection('invoice').getList(1, 1, {
+          filter: pb.filter('BillId = {:b}', { b: billId }), fields: 'id', requestKey: null,
+        });
+        if (left.totalItems === 0) {
+          const einv = await pb.collection('einvoice').getList(1, 1, {
+            filter: pb.filter('BillId = {:b}', { b: billId }), fields: 'id', requestKey: null,
+          });
+          if (einv.items[0]) {
+            await pb.collection('einvoice').delete(einv.items[0].id);
+            einvRemoved = true;
+          }
+        }
+      }
       await loadRecords(monthFilterDate);
-      showToast('Đã xóa biên bản', 'success');
+      showToast(einvRemoved ? 'Đã xóa biên bản và hóa đơn gốc (không còn công tơ nào)' : 'Đã xóa biên bản', 'success');
     } catch (err: any) {
       showToast(`Lỗi khi xóa: ${err?.data?.message || err?.message || ''}`, 'error');
     }
@@ -670,20 +589,6 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     }
   };
 
-  /* ── style helpers ── */
-  const inputCls =
-    'w-full px-3 py-2 border border-[var(--border)] bg-surface rounded-lg text-sm text-dim ' +
-    'focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent transition-all';
-  const labelCls = 'block text-[11px] font-bold text-faint uppercase tracking-wider mb-1.5';
-  // input gọn nằm trong ô bảng (không viền riêng, dùng viền của ô)
-  const cellInputCls =
-    'w-full px-2 py-1.5 text-sm text-center font-mono tabular-nums bg-transparent outline-none ' +
-    'rounded focus:bg-accent-soft transition-colors';
-  const tdCls = 'border border-[var(--border-strong)] px-1 py-1';
-  const thCls = 'border border-[var(--border-strong)] px-2 py-2 text-center font-bold align-middle';
-  // ô số tính sẵn — căn giữa, đồng bộ cỡ chữ
-  const calcCell = tdCls + ' text-center font-mono text-sm tabular-nums';
-
   /* ===================== LIST VIEW ===================== */
   const renderList = () => (
     <div className="space-y-6 pb-12 animate-fade-in">
@@ -699,7 +604,7 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
           <p className="text-sm text-soft max-w-2xl">
             {readOnly
               ? 'Xem và tải biên bản của khách hàng thuộc khu công nghiệp phụ trách.'
-              : 'Lưu theo từng khách hàng. Tạo mới, xem lại, chỉnh sửa, xóa hoặc tải PDF.'}
+              : 'Dữ liệu lấy từ XML hóa đơn ở màn "Nạp dữ liệu" — không thêm hay sửa tay. Xem, tải Word hoặc xóa (xóa rồi nạp lại XML để sửa).'}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
@@ -720,14 +625,6 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
               className="pl-10 pr-4 py-2 border border-[var(--border)] bg-surface rounded text-dim text-sm focus:outline-none focus:ring-1 focus:ring-accent w-full sm:w-[260px]"
             />
           </div>
-          {!readOnly && (
-            <button
-              onClick={openCreate}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] shadow-sm transition-all shrink-0"
-            >
-              <Plus className="w-4 h-4" /> Tạo biên bản mới
-            </button>
-          )}
         </div>
       </div>
 
@@ -792,7 +689,7 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
         <div className="vl-card py-16 text-center text-faint">
           <div className="flex flex-col items-center justify-center">
             <FileSpreadsheet className="w-12 h-12 text-faint mb-3" />
-            <p className="text-sm">{readOnly ? 'Không có biên bản nào khớp bộ lọc.' : 'Không có biên bản nào khớp bộ lọc. Nhấn "Tạo biên bản mới".'}</p>
+            <p className="text-sm">{readOnly ? 'Không có biên bản nào khớp bộ lọc.' : 'Không có biên bản nào khớp bộ lọc. Nạp XML hóa đơn ở màn "Nạp dữ liệu".'}</p>
           </div>
         </div>
       ) : (
@@ -853,11 +750,12 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                       className="overflow-hidden vl-accordion-body"
                     >
                       <div className="overflow-x-auto">
-                        <table className="vl-table w-full text-left border-collapse min-w-[900px]">
+                        <table className="vl-table w-full text-left border-collapse min-w-[1000px]">
                           <thead>
                             <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
                               <th className="py-3 px-4">Số công tơ</th>
                               <th className="py-3 px-4">Kỳ</th>
+                              <th className="py-3 px-4">Hóa đơn</th>
                               <th className="py-3 px-4 text-right">Sản lượng Tổng</th>
                               <th className="py-3 px-4 text-center">Cosφ</th>
                               <th className="py-3 px-4 text-center">Thời gian lấy chỉ số</th>
@@ -883,6 +781,23 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                                       )}
                                     </div>
                                   </td>
+                                  <td className="py-3.5 px-4 text-xs">
+                                    {(() => {
+                                      const e = einvByBill.get((r.BillId ?? '').toString().trim());
+                                      if (!e) return <span className="text-faint italic">Chưa có hóa đơn gốc</span>;
+                                      const badge = MAIL_BADGE[e.mail_status || ''];
+                                      return (
+                                        <div className="flex flex-col gap-1">
+                                          <span className="font-mono font-bold text-dim" title={`Mã tra cứu: ${e.MaTraCuu}`}>
+                                            {e.KHHDon}/{e.SHDon}
+                                          </span>
+                                          {badge && (
+                                            <span className={`${badge.cls} w-fit rounded px-1.5 py-0.5 text-[10px] font-bold`}>{badge.label}</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                  </td>
                                   <td className="py-3.5 px-4 text-right font-mono font-bold text-warn">{fmt(res.bieu[0].cuoi)}</td>
                                   <td className="py-3.5 px-4 text-center font-mono font-bold text-dim">{res.cosphi.toFixed(3)}</td>
                                   <td className="py-3.5 px-4 text-center text-xs font-mono tabular-nums">
@@ -892,13 +807,6 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                                   </td>
                                   <td className="py-3.5 px-4">
                                     <div className="flex items-center justify-end gap-1.5">
-                                      {/* Hóa đơn đổi giá (gộp nhiều khoảng) không sửa tay được — ẩn nút Sửa */}
-                                      {!readOnly && !row.merged && (
-                                        <button onClick={() => openEdit(row.primary)} title="Sửa"
-                                          className="p-2 rounded-lg text-soft hover:bg-accent-soft hover:text-accent transition-colors">
-                                          <Pencil className="w-4 h-4" />
-                                        </button>
-                                      )}
                                       <button onClick={() => exportDocx(r, row.key)} disabled={exportingId === row.key} title="Tải Word"
                                         className="p-2 rounded-lg text-soft hover:bg-[var(--success-soft)] hover:text-ok transition-colors disabled:opacity-50">
                                         <FileDown className="w-4 h-4" />
@@ -934,216 +842,9 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     </div>
   );
 
-  /* ===================== FORM MODAL ===================== */
-  const renderModal = () => (
-    <AnimatePresence>
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-start md:items-center justify-center p-4 overflow-y-auto">
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={closeModal}
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-          />
-          {/* Modal */}
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 10 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            className="relative w-full max-w-5xl max-h-[90vh] my-4 flex flex-col bg-surface rounded-2xl shadow-2xl overflow-hidden"
-          >
-            {/* Modal header */}
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-[var(--border)] bg-subtle/60 shrink-0">
-              <div className="p-2 bg-accent-soft rounded-xl text-accent">
-                <FileCheck2 className="w-5 h-5" />
-              </div>
-              <h3 className="flex-1 text-lg font-black text-ink tracking-tight">
-                {editingId ? 'Sửa biên bản' : 'Tạo biên bản mới'}
-              </h3>
-              <button onClick={closeModal} className="p-2 rounded-lg text-faint hover:bg-subtle hover:text-dim transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal body */}
-            <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
-      {/* Thông tin đầu biên bản */}
-      <div className="vl-card p-6 md:p-8">
-        <h3 className="text-base font-black text-ink mb-5 flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-accent" /> Thông tin biên bản
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className={labelCls}>Từ ngày</label>
-            <DatePicker value={startDate} onChange={setStartDate} />
-          </div>
-          <div>
-            <label className={labelCls}>Đến ngày</label>
-            <DatePicker value={endDate} onChange={setEndDate} />
-          </div>
-          <div>
-            <label className={labelCls}>Bên bán điện (NBan)</label>
-            <input className={inputCls} value={nBan} onChange={e => setNBan(e.target.value)} placeholder="VD: CÔNG TY CỔ PHẦN MUA BÁN ĐIỆN GELEX" />
-          </div>
-          <div>
-            <label className={labelCls}>Địa chỉ bên bán</label>
-            <input className={inputCls} value={dChiNBan} onChange={e => setDChiNBan(e.target.value)} placeholder="Địa chỉ bên bán" />
-          </div>
-          <div>
-            <label className={labelCls}>Bên mua điện (NMua)</label>
-            <input className={inputCls} value={nMua} onChange={e => setNMua(e.target.value)} placeholder="VD: CÔNG TY TNHH HUM&C VINA" />
-          </div>
-          <div>
-            <label className={labelCls}>Mã khách hàng (MKHang)</label>
-            <input className={inputCls} value={mKhang} onChange={e => setMKhang(e.target.value)} placeholder="VD: KCN03-005" />
-          </div>
-          <div>
-            <label className={labelCls}>Địa chỉ sử dụng điện</label>
-            <input className={inputCls} value={dChiNMua} onChange={e => setDChiNMua(e.target.value)} placeholder="Địa chỉ sử dụng điện" />
-          </div>
-        </div>
-      </div>
-
-      {/* Bảng xác nhận chỉ số & sản lượng (giống biên bản giấy) */}
-      <div className="vl-card p-4 md:p-6">
-        <h3 className="text-base font-black text-ink mb-2 flex items-center gap-2 px-2">
-          <Gauge className="w-5 h-5 text-accent" /> Xác nhận chỉ số công tơ & sản lượng
-        </h3>
-        <p className="text-xs text-soft mb-4 px-2">Cùng nhau xác nhận chỉ số công tơ, sản lượng điện giao nhận giữa hai bên như sau:</p>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-dim min-w-[920px]">
-            <thead className="bg-subtle text-[11px] text-soft uppercase">
-              <tr>
-                <th className={thCls} rowSpan={2}>Số công tơ</th>
-                <th className={thCls} rowSpan={2}>Thanh ghi</th>
-                <th className={thCls} colSpan={2}>Chỉ số công tơ</th>
-                <th className={thCls} rowSpan={2}>Hệ số<br />nhân</th>
-                <th className={thCls} rowSpan={2}>Sản lượng<br />(kWh)</th>
-                <th className={thCls} rowSpan={2}>Sản lượng<br />trừ phụ (kWh)</th>
-                <th className={thCls} rowSpan={2}>Tổng sản<br />lượng (kWh)</th>
-                <th className={thCls} rowSpan={2}>cosφ</th>
-              </tr>
-              <tr>
-                <th className={thCls}>Đầu kỳ</th>
-                <th className={thCls}>Cuối kỳ</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm">
-              {(() => {
-                const totalRows = ROWS.length + 1; // Tổng Pg + BT/CĐ/TĐ/Tổng Qg
-                const sum3 = (suf: string) =>
-                  num(readings[`BT_${suf}`]) + num(readings[`CD_${suf}`]) + num(readings[`TD_${suf}`]);
-                const tongB = calc.bieu.find(b => b.key === 'Tong')!;
-                const phuTong = num(phu.BT) + num(phu.CD) + num(phu.TD);
-                return (
-                  <>
-                    {/* Hàng Tổng Pg (tính sẵn) + các ô gộp dọc SCT/HSN/cosφ */}
-                    <tr>
-                      <td className={tdCls + ' align-middle'} rowSpan={totalRows}>
-                        <input
-                          className={cellInputCls + ' font-bold text-accent'}
-                          value={sct}
-                          onChange={e => setSct(e.target.value)}
-                          placeholder="Số công tơ"
-                        />
-                      </td>
-                      <td className={tdCls + ' text-center font-bold text-dim'}>Tổng Pg</td>
-                      <td className={calcCell + ' text-soft'}>{fmt2(sum3('dau'))}</td>
-                      <td className={calcCell + ' text-soft'}>{fmt2(sum3('cuoi'))}</td>
-                      <td className={tdCls + ' align-middle'} rowSpan={totalRows}>
-                        <input className={cellInputCls + ' font-bold'} inputMode="decimal"
-                          value={hsn} onChange={e => setHsn(e.target.value)} placeholder="1" />
-                      </td>
-                      <td className={calcCell + ' font-bold text-warn'}>{fmt(tongB.sanLuong)}</td>
-                      <td className={calcCell}>{fmt(phuTong)}</td>
-                      <td className={calcCell + ' font-extrabold text-ink'}>{fmt(tongB.cuoi)}</td>
-                      <td className={tdCls + ' align-middle text-center'} rowSpan={totalRows}>
-                        <span className="text-base font-black font-mono text-accent">{calc.cosphi.toFixed(2)}</span>
-                      </td>
-                    </tr>
-
-                    {/* Các hàng nhập: BT, CĐ, TĐ, Tổng Qg */}
-                    {ROWS.map(row => {
-                      const bieu = calc.bieu.find(b => b.key === row.res)!;
-                      return (
-                        <tr key={row.comp}>
-                          <td className={tdCls + ' text-center font-bold text-dim'}>{row.label}</td>
-                          <td className={tdCls}>
-                            <input className={cellInputCls} inputMode="decimal"
-                              value={readings[`${row.comp}_dau`] ?? ''}
-                              onChange={e => setReading(`${row.comp}_dau`, e.target.value)} placeholder="0" />
-                          </td>
-                          <td className={tdCls}>
-                            <input className={cellInputCls} inputMode="decimal"
-                              value={readings[`${row.comp}_cuoi`] ?? ''}
-                              onChange={e => setReading(`${row.comp}_cuoi`, e.target.value)} placeholder="0" />
-                          </td>
-                          <td className={calcCell + ' font-bold text-warn'}>{fmt(bieu.sanLuong)}</td>
-                          <td className={tdCls}>
-                            <input className={cellInputCls} inputMode="decimal"
-                              value={phu[row.res] ?? ''}
-                              onChange={e => setPhuVal(row.res, e.target.value)} placeholder="0" />
-                          </td>
-                          <td className={calcCell + ' font-extrabold text-ink'}>{fmt(bieu.cuoi)}</td>
-                        </tr>
-                      );
-                    })}
-                  </>
-                );
-              })()}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Dòng ngày tháng cuối biên bản */}
-        <div className="mt-5 px-2 flex flex-col sm:flex-row sm:justify-end">
-          <div className="w-full sm:w-[460px]">
-            <label className={labelCls}>Dòng ký cuối biên bản (NKy)</label>
-            <div className="flex gap-3">
-              <DatePicker value={nKyDate} onChange={setNKyDate} className="flex-1" />
-              <TimePicker value={nKyTime} onChange={setNKyTime} className="flex-1" />
-            </div>
-            {nKyDate && (
-              <p className="mt-1.5 text-xs text-faint italic">{buildNKySentence(nKyDate, nKyTime)}</p>
-            )}
-          </div>
-        </div>
-      </div>
-            </div>
-
-            {/* Modal footer */}
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[var(--border)] bg-subtle/60 shrink-0">
-              <button
-                onClick={resetForm}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold text-soft border border-[var(--border)] hover:bg-subtle transition-colors"
-              >
-                <RotateCcw className="w-4 h-4" /> Làm mới
-              </button>
-              <button
-                onClick={closeModal}
-                className="px-4 py-2.5 rounded-lg text-sm font-bold text-dim border border-[var(--border)] hover:bg-subtle transition-colors"
-              >
-                Hủy
-              </button>
-              <button
-                onClick={save}
-                disabled={isSaving}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white bg-accent hover:bg-[var(--accent-hover)] disabled:opacity-60 shadow-sm transition-all"
-              >
-                <Save className="w-4 h-4" /> {isSaving ? 'Đang lưu...' : 'Lưu biên bản'}
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
-
   return (
     <div className="relative">
       {renderList()}
-      {renderModal()}
       {confirmDialog}
     </div>
   );
