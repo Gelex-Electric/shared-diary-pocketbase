@@ -20,6 +20,7 @@ RUN apk add --no-cache curl unzip && \
 # Copy code
 COPY --from=builder /app/dist ./dist
 COPY server.ts ./
+COPY server ./server
 COPY package*.json ./
 COPY start.sh ./
 

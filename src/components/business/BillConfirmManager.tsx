@@ -4,12 +4,13 @@ import { pb } from '../../lib/pocketbase';
 import { MonthPicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
+import { openEinvoicePdf, requestBillval, type EinvoicePdfType } from '../../lib/einvoiceApi';
 import { AccountHes, DataMetter } from '../../types';
 import { zoneFromArea, zoneOf, ZONE_MAP, fetchLatestInvoiceMonth } from '../../lib/invoices';
 import { zoneHexOf } from '../../lib/kcnColors';
 import PizZip from 'pizzip';
 import {
-  FileCheck2, Users, ChevronRight, Trash2, FileDown, Search, FileSpreadsheet,
+  FileCheck2, Users, ChevronRight, Trash2, Receipt, BellRing, KeyRound, FileDown, Search, FileSpreadsheet,
   CreditCard, RefreshCw, Zap, CheckSquare, Square, Archive,
 } from 'lucide-react';
 
@@ -184,6 +185,8 @@ interface EInvoiceLite {
   KHHDon: string;
   SHDon: string;
   MaTraCuu: string;
+  /** Có BILLVAL thì mở được PDF giấy báo / hóa đơn qua server (`/api/einvoice`). */
+  billval?: string;
   mail_status?: 'chua_gui' | 'da_gui' | 'loi' | '';
 }
 
@@ -199,7 +202,7 @@ async function loadEinvoices(billIds: string[]): Promise<Map<string, EInvoiceLit
   for (let i = 0; i < ids.length; i += 50) {
     const filter = ids.slice(i, i + 50).map(b => pb.filter('BillId = {:b}', { b })).join(' || ');
     const items = await pb.collection('einvoice').getFullList<EInvoiceLite>({
-      filter, fields: 'id,BillId,KHHDon,SHDon,MaTraCuu,mail_status', requestKey: null,
+      filter, fields: 'id,BillId,KHHDon,SHDon,MaTraCuu,billval,mail_status', requestKey: null,
     });
     items.forEach(e => out.set(e.BillId, e));
   }
@@ -343,6 +346,25 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     } catch (err: any) {
       showToast(`Lỗi khi xóa: ${err?.data?.message || err?.message || ''}`, 'error');
     }
+  };
+
+  /* ── PDF giấy báo / hóa đơn từ CCIS (qua server, không lưu) ── */
+  /** `<einvoiceId>|<NOTI|BILLPDF|BILLVAL>` đang chạy — khóa nút tránh bấm đúp. */
+  const [ccisBusy, setCcisBusy] = useState('');
+  const openPdf = async (e: EInvoiceLite, type: EinvoicePdfType) => {
+    setCcisBusy(`${e.id}|${type}`);
+    try { await openEinvoicePdf(e.id, type); }
+    catch (err: any) { showToast(`Không mở được PDF: ${err?.message || ''}`, 'error'); }
+    finally { setCcisBusy(''); }
+  };
+  const fetchBillval = async (e: EInvoiceLite) => {
+    setCcisBusy(`${e.id}|BILLVAL`);
+    try {
+      await requestBillval(e.id);
+      setEinvByBill(await loadEinvoices([e.BillId]).then(m => new Map([...einvByBill, ...m])));
+      showToast(`Đã lấy BILLVAL cho hóa đơn ${e.KHHDon}/${e.SHDon}`, 'success');
+    } catch (err: any) { showToast(`Không lấy được BILLVAL: ${err?.message || ''}`, 'error'); }
+    finally { setCcisBusy(''); }
   };
 
   /* ── xuất PDF ── */
@@ -794,6 +816,30 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                                           {badge && (
                                             <span className={`${badge.cls} w-fit rounded px-1.5 py-0.5 text-[10px] font-bold`}>{badge.label}</span>
                                           )}
+                                          {/* PDF CCIS chỉ khối KD (API server chặn khối VH). */}
+                                          {!readOnly && (e.billval ? (
+                                            <div className="flex items-center gap-1">
+                                              <button onClick={() => openPdf(e, 'NOTI')} disabled={!!ccisBusy}
+                                                title="Mở PDF giấy báo tiền điện"
+                                                className="vl-btn vl-btn-sm vl-btn-outline-primary flex items-center gap-1 !px-2 !py-0.5 text-[11px]">
+                                                {ccisBusy === `${e.id}|NOTI` ? <RefreshCw className="h-3 w-3 animate-spin" /> : <BellRing className="h-3 w-3" />}
+                                                Giấy báo
+                                              </button>
+                                              <button onClick={() => openPdf(e, 'BILLPDF')} disabled={!!ccisBusy}
+                                                title="Mở PDF hóa đơn điện tử"
+                                                className="vl-btn vl-btn-sm vl-btn-outline-primary flex items-center gap-1 !px-2 !py-0.5 text-[11px]">
+                                                {ccisBusy === `${e.id}|BILLPDF` ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Receipt className="h-3 w-3" />}
+                                                Hóa đơn
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button onClick={() => fetchBillval(e)} disabled={!!ccisBusy}
+                                              title="Tra CCIS để lấy BILLVAL (mở được PDF giấy báo / hóa đơn)"
+                                              className="vl-btn vl-btn-sm vl-btn-warning flex w-fit items-center gap-1 !px-2 !py-0.5 text-[11px]">
+                                              {ccisBusy === `${e.id}|BILLVAL` ? <RefreshCw className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+                                              Lấy BILLVAL
+                                            </button>
+                                          ))}
                                         </div>
                                       );
                                     })()}

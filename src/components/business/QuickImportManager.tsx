@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import { pb } from '../../lib/pocketbase';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { parseInvoiceXml, type ParsedInvoice, type MeterPeriodRow, type Bieu } from '../../lib/parseInvoiceXml';
+import { requestBillval } from '../../lib/einvoiceApi';
 import {
   Upload, FileCode2, Database, Trash2,
   Users, Loader2, FileSpreadsheet,
@@ -260,6 +261,8 @@ export default function QuickImportManager() {
     let eCreated = 0, eUpdated = 0;
     /** Hóa đơn ghi `einvoice` lỗi ⇒ KHÔNG ghi các dòng của nó, kẻo có chi tiết mà không có hóa đơn gốc. */
     const failedBills = new Set<string>();
+    /** id `einvoice` đã ghi được — bước 3 lấy BILLVAL cho chúng. */
+    const savedIds: string[] = [];
     try {
       // ── 1. Đầu mục hóa đơn → `einvoice` (upsert theo BillId) ──
       const billFilter = bills.map(p => pb.filter('BillId = {:b}', { b: p.invoice.billId })).join(' || ');
@@ -274,11 +277,11 @@ export default function QuickImportManager() {
           if (!file) throw new Error('mất nội dung XML');
           const body = buildEinvoicePayload(file);
           const exId = eIdByBill.get(p.invoice.billId);
-          if (exId) { await pb.collection(EINVOICE_COLLECTION).update(exId, body); eUpdated++; }
+          if (exId) { await pb.collection(EINVOICE_COLLECTION).update(exId, body); eUpdated++; savedIds.push(exId); }
           else {
             // Mới thì đánh dấu chưa gửi mail; cập nhật thì KHÔNG đụng mail_* (giữ lịch sử gửi).
-            await pb.collection(EINVOICE_COLLECTION).create({ ...body, mail_status: 'chua_gui' });
-            eCreated++;
+            const rec = await pb.collection(EINVOICE_COLLECTION).create({ ...body, mail_status: 'chua_gui' });
+            eCreated++; savedIds.push(rec.id);
           }
         } catch {
           failedBills.add(p.invoice.billId);
@@ -320,12 +323,24 @@ export default function QuickImportManager() {
         } catch {
           failed++;
         }
-        setImportProgress({ done: bills.length + i + 1, total: bills.length + rows.length });
+        setImportProgress({ done: bills.length + i + 1, total: bills.length + rows.length + savedIds.length });
       }
-      const bad = failed + failedBills.size;
+
+      // ── 3. BILLVAL (tra CCIS ở server) để mở PDF giấy báo / hóa đơn — PDF không lưu ──
+      // Lỗi ở bước này KHÔNG làm hỏng dữ liệu đã ghi: lấy lại được bằng nút ở màn Biên bản.
+      let bvOk = 0;
+      let bvErr = '';
+      for (let i = 0; i < savedIds.length; i++) {
+        try { await requestBillval(savedIds[i]); bvOk++; }
+        catch (err: any) { bvErr ||= err?.message || 'lỗi'; }
+        setImportProgress({ done: bills.length + rows.length + i + 1, total: bills.length + rows.length + savedIds.length });
+      }
+
+      const bad = failed + failedBills.size + (savedIds.length - bvOk);
       showToast(
         `Hoàn tất: hóa đơn mới ${eCreated}, cập nhật ${eUpdated}` + (failedBills.size ? `, lỗi ${failedBills.size}` : '')
-          + ` · dòng chỉ số mới ${created}, cập nhật ${updated}` + (failed ? `, lỗi ${failed}` : ''),
+          + ` · dòng chỉ số mới ${created}, cập nhật ${updated}` + (failed ? `, lỗi ${failed}` : '')
+          + ` · BILLVAL ${bvOk}/${savedIds.length}` + (bvErr ? ` (lỗi: ${bvErr})` : ''),
         bad ? 'warning' : 'success',
       );
     } catch (err: any) {
