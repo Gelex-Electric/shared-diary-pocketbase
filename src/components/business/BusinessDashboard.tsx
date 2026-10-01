@@ -9,7 +9,6 @@ import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
 import QuickImportManager from './QuickImportManager';
 import InvoiceExportManager from './InvoiceExportManager';
-import EinvoiceManager from './EinvoiceManager';
 import CustomerDebtManager from './CustomerDebtManager';
 import CustomerManager from '../CustomerManager';
 import HesReadingManager from '../hes/HesReadingManager';
@@ -27,7 +26,7 @@ import { ALERT_KINDS } from '../../lib/alerts';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
-  | 'summary' | 'alerts' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'customers' | 'einvoice' | 'invoice-export'
+  | 'summary' | 'alerts' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'customers' | 'invoice-export'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
   | 'dm-general' | 'dm-catalog'
   | 'qlvh';
@@ -37,7 +36,6 @@ const TAB_LABEL: Record<Tab, string> = {
   alerts:          'Cảnh báo',
   'bill-confirm':  'Biên bản xác nhận chỉ số',
   'quick-import':  'Nạp dữ liệu',
-  einvoice:        'Hóa đơn điện tử',
   'customer-debt': 'Công nợ khách hàng',
   customers:       'Khách hàng',
   'invoice-export': 'Xuất dữ liệu',
@@ -52,7 +50,7 @@ const TAB_LABEL: Record<Tab, string> = {
 };
 
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
-const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'einvoice', 'customer-debt', 'customers', 'invoice-export'];
+const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt', 'customers', 'invoice-export'];
 /**
  * Tab Khách hàng (`dm_customer`) chuyển từ Danh mục sang Hồ sơ kinh doanh (user chốt
  * 01/10/2026) — vẫn là MỘT màn `CatalogEntry`, mỗi nơi chỉ hiện phần tab của mình.
@@ -203,19 +201,6 @@ export default function BusinessDashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Nạp dữ liệu</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      id="nav-einvoice-sub"
-                      onClick={() => { setTopTab('einvoice'); onNavigate?.(); }}
-                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
-                        topTab === 'einvoice' ? 'text-accent' : 'text-soft hover:text-dim'
-                      }`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
-                      <span className="flex-1">Hóa đơn điện tử</span>
-                      <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
                   <li>
@@ -591,8 +576,6 @@ export default function BusinessDashboard() {
               <AlertCenter kind={alertKind} />
             ) : topTab === 'quick-import' ? (
               <QuickImportManager />
-            ) : topTab === 'einvoice' ? (
-              <EinvoiceManager />
             ) : topTab === 'invoice-export' ? (
               <InvoiceExportManager />
             ) : topTab === 'customer-debt' ? (

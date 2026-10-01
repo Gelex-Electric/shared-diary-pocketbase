@@ -38,12 +38,6 @@ export interface Zone extends PbRecord {
   code: string;
   name: string;
   address?: string;
-  /**
-   * BCC thư gửi hóa đơn của khách thuộc KCN này (user chốt 01/10/2026): email trực vận hành
-   * và email công ty mẹ. Mỗi ô một hoặc nhiều địa chỉ ngăn bằng `;` (xem `lib/dm/email.ts`).
-   */
-  email_ops?: string;
-  email_parent?: string;
   active?: boolean;
 }
 
