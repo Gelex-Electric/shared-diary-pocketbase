@@ -16,9 +16,15 @@ let transporter: Transporter | null = null;
 function smtp(): Transporter {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) throw new Error('Server chưa cấu hình SMTP_HOST / SMTP_USER / SMTP_PASS.');
+  /*
+    Thời gian chờ NGẮN: mặc định nodemailer chờ kết nối 2 phút + socket 10 phút. Railway gói Hobby CHẶN
+    SMTP ra ngoài (cổng 25/465/587 chỉ mở từ gói Pro) — sự cố 01/10/2026: lệnh gửi treo 5 phút rồi
+    502. Chờ ngắn để báo lỗi rõ và ghi `mail_status = loi` thay vì treo.
+  */
   transporter ??= nodemailer.createTransport({
     host: SMTP_HOST, port: Number(SMTP_PORT || 587), secure: false, requireTLS: true,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+    connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 60_000,
   });
   return transporter;
 }
@@ -110,6 +116,15 @@ ${sellerAddr ? `<p style="margin:0;font-style:italic;font-size:14px">${esc(selle
 }
 
 export async function sendInvoiceMail(input: MailInput): Promise<{ messageId: string; accepted: string[] }> {
-  const info = await smtp().sendMail(buildInvoiceMail(input));
+  let info;
+  try {
+    info = await smtp().sendMail(buildInvoiceMail(input));
+  } catch (err: any) {
+    if (err?.code === 'ETIMEDOUT' || err?.code === 'ECONNECTION' || /timeout/i.test(String(err?.message))) {
+      throw new Error(`Không kết nối được máy chủ SMTP (${process.env.SMTP_HOST}:${process.env.SMTP_PORT || 587}) từ Railway — `
+        + 'gói Railway hiện tại chặn SMTP ra ngoài (chỉ mở từ gói Pro).');
+    }
+    throw err;
+  }
   return { messageId: info.messageId, accepted: (info.accepted as unknown[]).map(String) };
 }
