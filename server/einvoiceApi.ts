@@ -129,9 +129,14 @@ export function einvoiceRouter() {
 
       let zoneName = '';
       let bcc: string[] = [];
+      let contact: string[] = [];
       if (customer?.zone) {
         const z = await pb(`/api/collections/dm_zone/records/${customer.zone}?fields=name,email_ops,email_parent`, token);
-        if (z.ok) { zoneName = z.body.name || ''; bcc = emailsOf(z.body.email_ops, z.body.email_parent).filter(e => !to.includes(e)); }
+        if (z.ok) {
+          zoneName = z.body.name || '';
+          bcc = emailsOf(z.body.email_ops, z.body.email_parent).filter(e => !to.includes(e));
+          contact = emailsOf(z.body.email_parent);
+        }
       }
 
       let billval = String(inv.billval || '');
@@ -145,7 +150,7 @@ export function einvoiceRouter() {
       }
       const [noticePdf, invoicePdf] = await Promise.all([fetchCcisPdf(billval, 'NOTI'), fetchCcisPdf(billval, 'BILLPDF')]);
 
-      const sent = await sendInvoiceMail({ inv: inv as EinvoiceForMail, to, bcc, zoneName, noticePdf, invoicePdf });
+      const sent = await sendInvoiceMail({ inv: inv as EinvoiceForMail, to, bcc, zoneName, contact, noticePdf, invoicePdf });
       const sentAt = new Date().toISOString();
       await pb(`/api/collections/einvoice/records/${inv.id}?fields=id`, token, {
         method: 'PATCH',

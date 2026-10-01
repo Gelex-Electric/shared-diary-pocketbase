@@ -13,7 +13,6 @@ import { buildInvoiceMail } from '../server/mail';
 
 (globalThis as any).DOMParser = DOMParser;
 process.env.SMTP_USER = 'hop-thu-smtp@example.com';
-process.env.MAIL_REPLY_TO = 'lien-he@example.com';
 
 const [dir, htmlOut] = process.argv.slice(2);
 if (!dir) { console.error('Cần thư mục XML.'); process.exit(1); }
@@ -33,13 +32,13 @@ for (const name of files) {
       KHMSHDon: h.khmshdon, KHHDon: h.khhdon, SHDon: h.shdon, NLap: h.nlap, MaTraCuu: h.maTraCuu, MSTNBan: h.mstNBan,
       NBan: p.nban.ten, MKHang: p.nmua.mkhang, NMua: p.nmua.ten, TgTTTBSo: p.tgTTTBSo, xml, xml_name: name,
     },
-    to: ['khach@example.com'], bcc: ['trucvh@example.com'], zoneName: 'KCN thử', noticePdf: fakePdf, invoicePdf: fakePdf,
+    to: ['khach@example.com'], bcc: ['trucvh@example.com'], zoneName: 'KCN thử', contact: ['ctyme@example.com'], noticePdf: fakePdf, invoicePdf: fakePdf,
   });
   sample ??= mail;
   const money = new Intl.NumberFormat('vi-VN').format(p.tgTTTBSo);
   if (!mail.subject.includes(p.nmua.mkhang) || !mail.subject.includes(`${h.khhdon}/`)) fail.push(`${name}: tiêu đề thiếu MKH/số HĐ`);
   if (mail.from.name !== p.nban.ten) fail.push(`${name}: tên người gửi ≠ công ty bán`);
-  for (const must of [h.maTraCuu, h.mstNBan, money, p.nmua.mkhang]) if (!mail.html.includes(must)) fail.push(`${name}: HTML thiếu "${must}"`);
+  for (const must of [h.maTraCuu, h.mstNBan, money, p.nmua.mkhang, 'mailto:ctyme@example.com']) if (!mail.html.includes(must)) fail.push(`${name}: HTML thiếu "${must}"`);
   if (mail.attachments.length !== 3 || mail.attachments[2].filename !== name) fail.push(`${name}: đính kèm sai`);
   if (p.loaiHD === 'VC' && !mail.subject.includes('phản kháng')) fail.push(`${name}: hóa đơn VC nhưng tiêu đề không ghi phản kháng`);
   const raw = (await nodemailer.createTransport({ streamTransport: true, buffer: true }).sendMail(mail)).message as Buffer;

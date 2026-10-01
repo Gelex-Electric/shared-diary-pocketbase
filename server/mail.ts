@@ -6,7 +6,8 @@
  * lấy theo CÔNG TY BÁN của chính hóa đơn (GELEX hoặc GELEX Hưng Yên), không cố định.
  *
  * Biến môi trường: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (bắt buộc);
- * MAIL_REPLY_TO (email liên hệ in trong thư + địa chỉ khách bấm Trả lời — để trống thì bỏ).
+ * Email LIÊN HỆ in trong thư + Reply-To = email CÔNG TY MẸ của KCN (`dm_zone.email_parent`, user chốt
+ * 01/10/2026 — không dùng biến môi trường). KCN chưa khai thì bỏ dòng liên hệ.
  * KHÔNG ghi địa chỉ hộp thư nào vào code (repo PUBLIC).
  */
 import nodemailer, { type Transporter } from 'nodemailer';
@@ -45,12 +46,15 @@ export interface MailInput {
   to: string[];
   bcc: string[];
   zoneName?: string;
+  /** Email công ty mẹ của KCN — dòng "Mọi thắc mắc…", chữ ký và Reply-To. Rỗng thì bỏ. */
+  contact: string[];
   noticePdf: Buffer;
   invoicePdf: Buffer;
 }
 
-export function buildInvoiceMail({ inv, to, bcc, zoneName, noticePdf, invoicePdf }: MailInput) {
-  const contact = (process.env.MAIL_REPLY_TO || '').trim();
+export function buildInvoiceMail({ inv, to, bcc, zoneName, contact: contactList, noticePdf, invoicePdf }: MailInput) {
+  const contact = contactList.join('; ');
+  const contactLinks = contactList.map(e => `<a href="mailto:${esc(e)}"><i>${esc(e)}</i></a>`).join('; ');
   const isVC = inv.LoaiHD === 'VC';
   const loai = isVC ? 'tiền công suất phản kháng' : 'tiền điện';
   const thang = `tháng ${pad2(inv.Month)} năm ${inv.Year}`;
@@ -76,7 +80,7 @@ ${row('Tổng tiền thanh toán', `<b>${money(inv.TgTTTBSo)} đồng</b>`)}
 ${row('Tra cứu hóa đơn', `<a href="https://hddtes78portal.hilo.com.vn/Invoice/Search?taxcode=${esc(inv.MSTNBan)}">hddtes78portal.hilo.com.vn</a> · MST bên bán <b>${esc(inv.MSTNBan)}</b> · Mã nhận HĐ <b style="font-family:Consolas,monospace">${esc(inv.MaTraCuu)}</b>`)}
 </table>
 <p style="margin:0 0 4px">Đính kèm: Giấy báo ${loai} (PDF), Hóa đơn điện tử (PDF) và tệp hóa đơn điện tử gốc (XML).</p>
-${contact ? `<p style="margin:0">Mọi thắc mắc xin vui lòng liên hệ qua email: <a href="mailto:${esc(contact)}"><i>${esc(contact)}</i></a></p>` : ''}
+${contact ? `<p style="margin:0">Mọi thắc mắc xin vui lòng liên hệ qua email: ${contactLinks}</p>` : ''}
 <p style="margin:0 0 24px">Trân trọng!</p>
 <p style="margin:0;color:#dc2626;font-size:14px">${esc(String(inv.NBan).toUpperCase())}</p>
 ${sellerAddr ? `<p style="margin:0;font-style:italic;font-size:14px">${esc(sellerAddr)}</p>` : ''}
@@ -93,7 +97,7 @@ ${sellerAddr ? `<p style="margin:0;font-style:italic;font-size:14px">${esc(selle
 
   return {
     from: { name: inv.NBan, address: process.env.SMTP_USER! },
-    ...(contact ? { replyTo: contact } : {}),
+    ...(contactList.length ? { replyTo: contactList } : {}),
     to, bcc, subject, html, text,
     attachments: [
       { filename: `${base} - Giay bao ${isVC ? 'CSPK' : 'tien dien'}.pdf`, content: noticePdf, contentType: 'application/pdf' },
