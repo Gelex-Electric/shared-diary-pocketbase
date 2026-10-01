@@ -124,7 +124,7 @@ const HEAD: Record<Exclude<CatTab, 'lifecycle' | 'stock'>, { title: string; desc
   },
 };
 
-const EMPTY_Z = { code: '', name: '', address: '' };
+const EMPTY_Z = { code: '', name: '', address: '', email_ops: '', email_parent: '' };
 /*
   Mã lộ NHẬP TAY, không sinh tự động như mã trạm/điểm đo: mã lộ là tên ngoài
   đời do ngành điện đặt ("471-E27.1"), không suy ra được từ dữ liệu trong app.
@@ -355,7 +355,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
 
   const editZone = (z: Zone) => {
     setEditingId(z.id);
-    setZForm({ code: z.code, name: z.name, address: z.address ?? '' });
+    setZForm({
+      code: z.code, name: z.name, address: z.address ?? '',
+      email_ops: z.email_ops ?? '', email_parent: z.email_parent ?? '',
+    });
     setModal('zone');
   };
   const editLine = (l: Line) => {
@@ -1306,9 +1309,17 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
       if (!zForm.code.trim() || !zForm.name.trim()) {
         return toast.warning('Thiếu thông tin', 'Mã và tên KCN là bắt buộc.');
       }
+      const ops = parseEmails(zForm.email_ops);
+      const parent = parseEmails(zForm.email_parent);
+      const badMail = [...ops.invalid, ...parent.invalid];
+      if (badMail.length) {
+        return toast.warning('Email không hợp lệ', `${badMail.join(', ')} — ${EMAIL_HINT}`);
+      }
       const body = {
         code: zForm.code.trim(), name: zForm.name.trim(),
-        address: zForm.address.trim(), active: true,
+        address: zForm.address.trim(),
+        email_ops: joinEmails(ops.valid), email_parent: joinEmails(parent.valid),
+        active: true,
       };
       return void persist(
         () => (editingId ? zones.update(editingId, body) : zones.create(body)),
@@ -2185,10 +2196,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
             ? `Không có khu công nghiệp nào khớp "${search.trim()}".`
             : 'Chưa có khu công nghiệp nào được khai.'}
           columns={<>
-            <th className={`${TH_CLS} w-[14%] pl-10`}>Mã KCN</th>
-            <th className={`${TH_CLS} w-[26%]`}>Tên khu công nghiệp</th>
-            <th className={`${TH_CLS} w-[42%]`}>Địa chỉ</th>
-            <th className={`${TH_CLS} w-[10%]`}>Số trạm</th>
+            <th className={`${TH_CLS} w-[12%] pl-10`}>Mã KCN</th>
+            <th className={`${TH_CLS} w-[22%]`}>Tên khu công nghiệp</th>
+            <th className={`${TH_CLS} w-[26%]`}>Địa chỉ</th>
+            <th className={`${TH_CLS} w-[24%]`}>Email BCC (trực VH · công ty mẹ)</th>
+            <th className={`${TH_CLS} w-[8%]`}>Số trạm</th>
             <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
           </>}>
           {zoneRowsShown.map(z => (
@@ -2198,6 +2210,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
               </td>
               <td className="truncate px-6 py-4 font-bold text-ink" title={z.name}>{z.name}</td>
               <td className="truncate px-6 py-4 text-sm text-soft" title={z.address || ''}>{z.address || '—'}</td>
+              <td className="px-6 py-4 text-xs text-soft">
+                <div className="truncate" title={z.email_ops || ''}>{z.email_ops || <span className="italic text-faint">trực VH: chưa khai</span>}</div>
+                <div className="truncate" title={z.email_parent || ''}>{z.email_parent || <span className="italic text-faint">công ty mẹ: chưa khai</span>}</div>
+              </td>
               <td className="px-6 py-4 text-sm font-semibold text-dim">{stationsOfZone(z.id)}</td>
               <td className="px-6 py-4 pr-10 text-right">
                 <RowActions onEdit={() => editZone(z)}
@@ -2448,6 +2464,17 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
               <Field label="Địa chỉ">
                 <TextInput value={zForm.address} placeholder="Xã…, tỉnh…"
                   onChange={v => setZForm(f => ({ ...f, address: v }))} />
+              </Field>
+            </div>
+            {/* BCC thư gửi hóa đơn của khách thuộc KCN này (trang Hóa đơn điện tử). */}
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label="Email trực vận hành" hint={`BCC thư gửi hóa đơn. ${EMAIL_HINT}`}>
+                <TextInput value={zForm.email_ops} placeholder="trucvanhanh@congty.vn"
+                  onChange={v => setZForm(f => ({ ...f, email_ops: v }))} />
+              </Field>
+              <Field label="Email công ty mẹ" hint="BCC thư gửi hóa đơn. Nhiều địa chỉ ngăn bằng dấu ;">
+                <TextInput value={zForm.email_parent} placeholder="ketoan@congtyme.vn"
+                  onChange={v => setZForm(f => ({ ...f, email_parent: v }))} />
               </Field>
             </div>
           </>
