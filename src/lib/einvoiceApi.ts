@@ -24,12 +24,6 @@ export async function requestBillval(einvoiceId: string): Promise<{ departmentId
   return res.json();
 }
 
-/** Gửi thư hóa đơn (2 PDF + XML). Người nhận do SERVER lấy từ danh mục, không truyền từ đây. */
-export async function sendEinvoiceMail(einvoiceId: string): Promise<{ to: string[]; bcc: number; sentAt: string }> {
-  const res = await call(`${einvoiceId}/send`, { method: 'POST' });
-  return res.json();
-}
-
 /**
  * Mở PDF giấy báo / hóa đơn ở tab mới. Mở tab TRƯỚC khi chờ mạng — mở sau `await`
  * thì trình duyệt coi là popup tự bật và chặn.

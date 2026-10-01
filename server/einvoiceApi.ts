@@ -10,17 +10,6 @@
  */
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { CcisError, fetchCcisPdf, resolveBillval, type PdfViewType } from './ccis';
-import { sendInvoiceMail, type EinvoiceForMail } from './mail';
-
-/*
-  Tách ô email (một hoặc nhiều địa chỉ ngăn bằng ; , xuống dòng) — cùng luật `src/lib/dm/email.ts`.
-  Chép lại ở đây vì image Docker chỉ copy `server/`, không có `src/`.
-*/
-const EMAIL_RE = /^[^\s@;,]+@[^\s@;,]+\.[^\s@;,]{2,}$/;
-const emailsOf = (...cells: unknown[]) => [...new Set(cells
-  .flatMap(c => String(c ?? '').split(/[;,\n]/))
-  .map(e => e.trim().toLowerCase())
-  .filter(e => EMAIL_RE.test(e)))];
 
 /*
   PocketBase để kiểm token và đọc/ghi einvoice phải là PB MÀ GIAO DIỆN ĐANG ĐĂNG NHẬP (`VITE_PB_URL`),
@@ -105,68 +94,6 @@ export function einvoiceRouter() {
       res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${name}"`, 'Cache-Control': 'no-store' });
       res.send(pdf);
     } catch (err) { fail(res, err); }
-  });
-
-  /*
-    Gửi thư hóa đơn: To = email khách trong danh mục (SERVER tự đọc — trình duyệt không truyền
-    địa chỉ, nên API không thành công cụ gửi thư tùy ý); BCC = email trực vận hành + công ty mẹ
-    của KCN. Đính kèm: giấy báo + hóa đơn (tải CCIS lúc gửi, không lưu) + XML đã nạp.
-    Thiếu file nào thì KHÔNG gửi. Kết quả ghi vào einvoice.mail_*.
-  */
-  r.post('/:id/send', async (req: Authed, res) => {
-    const token = req.pbToken!;
-    let recId = '';
-    try {
-      const inv = await readEinvoice(req.params.id, token,
-        'id,BillId,LoaiHD,Month,Year,Term,StartDate,EndDate,KHMSHDon,KHHDon,SHDon,NLap,MaTraCuu,MSTNBan,NBan,MKHang,NMua,TgTTTBSo,xml,xml_name,billval');
-      recId = inv.id;
-      if (!inv.xml) throw new CcisError('Hóa đơn chưa có XML.', 422);
-
-      const cus = await pb(`/api/collections/dm_customer/records?perPage=1&filter=${encodeURIComponent(`mkh = "${String(inv.MKHang).replace(/"/g, '')}"`)}&fields=id,email,zone`, token);
-      const customer = cus.body?.items?.[0];
-      const to = emailsOf(customer?.email);
-      if (!to.length) throw new CcisError(`Khách ${inv.MKHang} chưa có email trong danh mục.`, 422);
-
-      let zoneName = '';
-      let bcc: string[] = [];
-      let contact: string[] = [];
-      if (customer?.zone) {
-        const z = await pb(`/api/collections/dm_zone/records/${customer.zone}?fields=name,email_ops,email_parent`, token);
-        if (z.ok) {
-          zoneName = z.body.name || '';
-          bcc = emailsOf(z.body.email_ops, z.body.email_parent).filter(e => !to.includes(e));
-          contact = emailsOf(z.body.email_parent);
-        }
-      }
-
-      let billval = String(inv.billval || '');
-      if (!billval) {
-        const r2 = await resolveBillval(String(inv.BillId), String(inv.xml));
-        billval = r2.billval;
-        await pb(`/api/collections/einvoice/records/${inv.id}?fields=id`, token, {
-          method: 'PATCH',
-          body: JSON.stringify({ billval, ccis_department: r2.fields.departmentId, ccis_figure_book: r2.fields.figureBookId }),
-        });
-      }
-      const [noticePdf, invoicePdf] = await Promise.all([fetchCcisPdf(billval, 'NOTI'), fetchCcisPdf(billval, 'BILLPDF')]);
-
-      const sent = await sendInvoiceMail({ inv: inv as EinvoiceForMail, to, bcc, zoneName, contact, noticePdf, invoicePdf });
-      const sentAt = new Date().toISOString();
-      await pb(`/api/collections/einvoice/records/${inv.id}?fields=id`, token, {
-        method: 'PATCH',
-        body: JSON.stringify({ mail_status: 'da_gui', mail_sent_at: sentAt, mail_to: to.join('; '), mail_error: '' }),
-      });
-      res.json({ ok: true, to, bcc: bcc.length, sentAt, accepted: sent.accepted.length });
-    } catch (err: any) {
-      // Ghi lý do lỗi vào hóa đơn (nếu đã đọc được) để trang hiện "Gửi lỗi" kèm lý do.
-      if (recId) {
-        await pb(`/api/collections/einvoice/records/${recId}?fields=id`, token, {
-          method: 'PATCH',
-          body: JSON.stringify({ mail_status: 'loi', mail_error: String(err?.message || err).slice(0, 900) }),
-        }).catch(() => {});
-      }
-      fail(res, err);
-    }
   });
 
   return r;
