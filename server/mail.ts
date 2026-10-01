@@ -61,7 +61,9 @@ export function buildInvoiceMail({ inv, to, bcc, zoneName, contact: contactList,
   const soHD = `${inv.KHHDon}/${Number(inv.SHDon) || inv.SHDon}`;
   const subject = `Thông báo ${loai} ${thang} – ${inv.MKHang} – HĐ ${soHD}`;
   const sellerAddr = xmlIn(inv.xml, 'NBan', 'DChi');
-  const base = (inv.xml_name || `${inv.KHMSHDon}${inv.KHHDon}_${inv.SHDon}`).replace(/\.xml$/i, '');
+  /* Tên đính kèm (user chốt 01/10/2026): "Thông báo tiền điện kỳ 1 tháng 09 năm 2026.pdf",
+     "Hóa đơn tiền điện kỳ … .pdf/.xml"; hóa đơn VC: "Thông báo phản kháng …", "Hóa đơn phản kháng …". */
+  const tenFile = `${isVC ? 'phản kháng' : 'tiền điện'} kỳ ${inv.Term || 1} ${thang}`;
 
   const td = 'border:1px solid #9ca3af;padding:6px 10px;font-family:Arial,sans-serif;font-size:13px;';
   const th = `${td}color:#4b5563;width:42%;`;
@@ -100,9 +102,9 @@ ${sellerAddr ? `<p style="margin:0;font-style:italic;font-size:14px">${esc(selle
     ...(contactList.length ? { replyTo: contactList } : {}),
     to, bcc, subject, html, text,
     attachments: [
-      { filename: `${base} - Giay bao ${isVC ? 'CSPK' : 'tien dien'}.pdf`, content: noticePdf, contentType: 'application/pdf' },
-      { filename: `${base} - Hoa don.pdf`, content: invoicePdf, contentType: 'application/pdf' },
-      { filename: `${base}.xml`, content: Buffer.from(inv.xml, 'utf8'), contentType: 'application/xml' },
+      { filename: `Thông báo ${tenFile}.pdf`, content: noticePdf, contentType: 'application/pdf' },
+      { filename: `Hóa đơn ${tenFile}.pdf`, content: invoicePdf, contentType: 'application/pdf' },
+      { filename: `Hóa đơn ${tenFile}.xml`, content: Buffer.from(inv.xml, 'utf8'), contentType: 'application/xml' },
     ],
   };
 }

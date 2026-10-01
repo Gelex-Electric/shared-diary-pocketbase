@@ -39,7 +39,10 @@ for (const name of files) {
   if (!mail.subject.includes(p.nmua.mkhang) || !mail.subject.includes(`${h.khhdon}/`)) fail.push(`${name}: tiêu đề thiếu MKH/số HĐ`);
   if (mail.from.name !== p.nban.ten) fail.push(`${name}: tên người gửi ≠ công ty bán`);
   for (const must of [h.maTraCuu, h.mstNBan, money, p.nmua.mkhang, 'mailto:ctyme@example.com']) if (!mail.html.includes(must)) fail.push(`${name}: HTML thiếu "${must}"`);
-  if (mail.attachments.length !== 3 || mail.attachments[2].filename !== name) fail.push(`${name}: đính kèm sai`);
+  const ten = `${p.loaiHD === 'VC' ? 'phản kháng' : 'tiền điện'} kỳ ${h.term || 1} tháng ${String(h.month).padStart(2, '0')} năm ${h.year}`;
+  const wantNames = [`Thông báo ${ten}.pdf`, `Hóa đơn ${ten}.pdf`, `Hóa đơn ${ten}.xml`];
+  const gotNames = mail.attachments.map(a => a.filename);
+  if (gotNames.join('|') !== wantNames.join('|')) fail.push(`${name}: tên đính kèm ${gotNames.join(' | ')}`);
   if (p.loaiHD === 'VC' && !mail.subject.includes('phản kháng')) fail.push(`${name}: hóa đơn VC nhưng tiêu đề không ghi phản kháng`);
   const raw = (await nodemailer.createTransport({ streamTransport: true, buffer: true }).sendMail(mail)).message as Buffer;
   if (!raw.length) fail.push(`${name}: không dựng được MIME`);
