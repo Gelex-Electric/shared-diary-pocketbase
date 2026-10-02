@@ -73,7 +73,7 @@ import {
  * "Vòng đời vật tư" vào cuối dãy tab (user chốt 25/08/2026) thay vì đứng riêng
  * ngoài menu — người dùng khai điểm đo xong là đối chiếu ngay tại chỗ.
  */
-type CatTab = 'zone' | 'line' | 'station' | 'customer' | 'point' | 'stock' | 'lifecycle';
+export type CatTab = 'zone' | 'line' | 'station' | 'customer' | 'point' | 'stock' | 'lifecycle';
 
 const TABS: TabItem<CatTab>[] = [
   { id: 'zone', label: 'Khu công nghiệp', icon: Building2, sub: 'dm_zone' },
@@ -237,8 +237,17 @@ const toNum = (s: string): number | undefined => {
 };
 const str = (n?: number) => (n == null ? '' : String(n));
 
-export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: Scope }) {
-  const [tab, setTab] = useState<CatTab>('zone');
+export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
+  scope?: Scope;
+  /**
+   * Chỉ hiện các tab này (mặc định: tất cả). Tab Khách hàng nằm ở Hồ sơ kinh doanh
+   * (user chốt 01/10/2026) nên màn Danh mục truyền danh sách KHÔNG có `customer`,
+   * còn mục Khách hàng truyền `['customer']`. Một tab thì ẩn thanh tab.
+   */
+  tabs?: CatTab[];
+}) {
+  const shownTabs = tabs ? TABS.filter(t => tabs.includes(t.id)) : TABS;
+  const [tab, setTab] = useState<CatTab>(shownTabs[0]?.id ?? 'zone');
   /** Ô tìm kiếm dùng chung 4 tab danh mục. Đổi tab thì xóa — xem `setTab` dưới. */
   const [search, setSearch] = useState('');
   /** Bộ lọc KCN của 3 bảng Trạm / Khách hàng / Điểm đo. `''` = tất cả. */
@@ -2152,7 +2161,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
       </div>
       )}
 
-      <Tabs tabs={TABS} value={tab} onChange={t => { setTab(t); setSearch(''); }} />
+      {shownTabs.length > 1 && (
+        <Tabs tabs={shownTabs} value={tab} onChange={t => { setTab(t); setSearch(''); }} />
+      )}
 
       {/* ======================= Vòng đời vật tư ======================= */}
       {tab === 'lifecycle' && <AssetLifecycle scope={_scope} />}
@@ -2506,7 +2517,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong' }: { scope?: S
 
             {customerLacksShortName && (
               <div className="vl-alert vl-alert-light-warning text-[13px]">
-                Khách hàng "{sCustomer?.name}" chưa có tên tắt. Sang tab Khách hàng bổ sung tên tắt
+                Khách hàng "{sCustomer?.name}" chưa có tên tắt. Vào Hồ sơ kinh doanh → Khách hàng bổ sung tên tắt
                 thì mới ghép được mã trạm.
               </div>
             )}

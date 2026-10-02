@@ -17,7 +17,7 @@ import TransformerLossManager from '../TransformerLossManager';
 import { LOSS_DISABLED } from '../../lib/transformerLoss';
 import OfficeSldPage from './OfficeSldPage';
 import GeneralManagement from '../dm/GeneralManagement';
-import CatalogEntry from '../dm/CatalogEntry';
+import CatalogEntry, { type CatTab } from '../dm/CatalogEntry';
 import QlvhPage from '../qlvh/QlvhPage';
 import NotificationBell from '../ui/NotificationBell';
 import AlertCenter from '../alerts/AlertCenter';
@@ -26,7 +26,7 @@ import { ALERT_KINDS } from '../../lib/alerts';
 import ThemeToggle from '../ui/ThemeToggle';
 
 type Tab =
-  | 'summary' | 'alerts' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'invoice-export'
+  | 'summary' | 'alerts' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'customers' | 'invoice-export'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
   | 'dm-general' | 'dm-catalog'
   | 'qlvh';
@@ -35,8 +35,9 @@ const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
   alerts:          'Cảnh báo',
   'bill-confirm':  'Biên bản xác nhận chỉ số',
-  'quick-import':  'Nạp dữ liệu nhanh',
+  'quick-import':  'Nạp dữ liệu',
   'customer-debt': 'Công nợ khách hàng',
+  customers:       'Khách hàng',
   'invoice-export': 'Xuất dữ liệu',
   operating:       'Thông số vận hành',
   hes:             'Lấy chỉ số HES',
@@ -49,7 +50,13 @@ const TAB_LABEL: Record<Tab, string> = {
 };
 
 /** Các tab con thuộc nhóm "Hồ sơ kinh doanh". */
-const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt', 'invoice-export'];
+const BUSINESS_TABS: Tab[] = ['bill-confirm', 'quick-import', 'customer-debt', 'customers', 'invoice-export'];
+/**
+ * Tab Khách hàng (`dm_customer`) chuyển từ Danh mục sang Hồ sơ kinh doanh (user chốt
+ * 01/10/2026) — vẫn là MỘT màn `CatalogEntry`, mỗi nơi chỉ hiện phần tab của mình.
+ */
+const CATALOG_TABS: CatTab[] = ['zone', 'line', 'station', 'point', 'stock', 'lifecycle'];
+const CUSTOMER_TABS: CatTab[] = ['customer'];
 /** Các tab con thuộc nhóm "Thông số vận hành". */
 const OPERATING_TABS: Tab[] = (['operating', 'hes', 'opchart', 'loss', 'sld'] as Tab[])
   .filter(t => !(LOSS_DISABLED && t === 'loss'));
@@ -174,6 +181,18 @@ export default function BusinessDashboard() {
                   </li>
                   <li>
                     <button
+                      id="nav-customers-sub"
+                      onClick={() => { setTopTab('customers'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'customers' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Khách hàng</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
                       id="nav-quick-import-sub"
                       onClick={() => { setTopTab('quick-import'); onNavigate?.(); }}
                       className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
@@ -181,7 +200,7 @@ export default function BusinessDashboard() {
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
-                      <span className="flex-1">Nạp dữ liệu nhanh</span>
+                      <span className="flex-1">Nạp dữ liệu</span>
                     </button>
                   </li>
                   <li>
@@ -570,7 +589,9 @@ export default function BusinessDashboard() {
             ) : topTab === 'dm-general' ? (
               <GeneralManagement scope="vanphong" />
             ) : topTab === 'dm-catalog' ? (
-              <CatalogEntry scope="vanphong" />
+              <CatalogEntry key="dm-catalog" scope="vanphong" tabs={CATALOG_TABS} />
+            ) : topTab === 'customers' ? (
+              <CatalogEntry key="customers" scope="vanphong" tabs={CUSTOMER_TABS} />
             ) : topTab === 'loss' ? (
               LOSS_DISABLED ? null : <TransformerLossManager />
             ) : topTab === 'qlvh' ? (

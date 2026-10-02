@@ -3,6 +3,7 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
+import { einvoiceRouter } from './server/einvoiceApi';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,6 +62,10 @@ async function startServer() {
     }
   }));
 
+  // ==================== API HÓA ĐƠN ĐIỆN TỬ (BILLVAL + PDF CCIS) ====================
+  // Đứng TRƯỚC static + SPA fallback. Khóa CCIS_BILLVAL_KEY chỉ dùng ở đây (server/ccis.ts).
+  app.use('/api/einvoice', einvoiceRouter());
+
   // Redirect /_/ → /pb/_/ cho tiện vào Admin UI
   app.get('/_', (req, res) => res.redirect('/pb/_/'));
 
@@ -85,7 +90,7 @@ async function startServer() {
 
     // SPA fallback
     app.get('*', (req, res) => {
-      if (req.path.startsWith('/pb') || req.path === '/_' || req.path.startsWith('/hes') || req.path.startsWith('/ccis')) {
+      if (req.path.startsWith('/pb') || req.path === '/_' || req.path.startsWith('/hes') || req.path.startsWith('/ccis') || req.path.startsWith('/api')) {
         res.status(404).end();
         return;
       }

@@ -44,13 +44,31 @@ export interface MeterPeriodRow {
   ThTienVAT: number;
 }
 
+/**
+ * Thông tin ĐẦU MỤC của hóa đơn điện tử — lưu vào collection `einvoice` (01/10/2026).
+ * Chỉ XML tải về từ cổng hóa đơn mới đủ: XML lấy qua CCIS `GetXML` KHÔNG có `MCCQT`.
+ */
+export interface InvoiceHeader {
+  khmshdon: string;  // TTChung/KHMSHDon — "1"
+  khhdon: string;    // TTChung/KHHDon — "C26TTD"
+  shdon: string;     // TTChung/SHDon — "268". KHÔNG duy nhất: 2 công ty bán chung dãy số
+  nlap: string;      // TTChung/NLap — YYYY-MM-DD
+  mccqt: string;     // HDon/MCCQT — mã của cơ quan thuế; rỗng = chưa cấp mã
+  maTraCuu: string;  // TTKhac/Fkey — "Mã nhận HĐ" ở cổng tra cứu (= BillId + 5 ký tự)
+  mstNBan: string;   // NBan/MST — công ty bán; cần cho link tra cứu
+  emailNMua: string; // NMua/DCTDTu — email khách in trên hóa đơn (có thể rỗng)
+  year: number; month: number; term: number;
+  startDate: string; endDate: string; // kỳ hóa đơn (TTKhac mức hóa đơn)
+}
+
 export interface ParsedInvoice {
-  billId: string; // mã hóa đơn duy nhất (từ SOAP GetBill); XML không chứa nên truyền vào
+  billId: string; // mã hóa đơn duy nhất — đọc từ XML (DLHDon > TTKhac > BillId)
   loaiHD: 'HC' | 'VC';
   nban: { ten: string; dchi: string };
   nmua: { ten: string; mst: string; dchi: string; mkhang: string };
   rows: MeterPeriodRow[];
   tgTTTBSo: number; // tổng tiền thanh toán SAU thuế (quyết toán chính xác từ XML)
+  header: InvoiceHeader;
 }
 
 const toNum = (v: string | null | undefined): number => {
@@ -240,5 +258,26 @@ export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
     }
   }
 
-  return { billId: finalBillId, loaiHD, nban, nmua, rows, tgTTTBSo };
+  /* Đầu mục: TTKhac MỨC HÓA ĐƠN là con TRỰC TIẾP của DLHDon. Đừng dùng `ttinValue(dl, …)`
+     cho StartDate/EndDate: các dòng HHDVu cũng có TTin cùng tên (kỳ của từng công tơ). */
+  const invTTKhac = (Array.from(dl.childNodes)
+    .find(c => c.nodeType === 1 && (c as Element).tagName === 'TTKhac') as Element | undefined) ?? null;
+  const ttChung = dl.getElementsByTagName('TTChung')[0] || null;
+  const header: InvoiceHeader = {
+    khmshdon: childText(ttChung, 'KHMSHDon'),
+    khhdon: childText(ttChung, 'KHHDon'),
+    shdon: childText(ttChung, 'SHDon'),
+    nlap: toDate(childText(ttChung, 'NLap')),
+    mccqt: (doc.getElementsByTagName('MCCQT')[0]?.textContent || '').trim(),
+    maTraCuu: ttinValue(invTTKhac, 'Fkey'),
+    mstNBan: childText(nbanEl, 'MST'),
+    emailNMua: childText(nmuaEl, 'DCTDTu'),
+    year: toNum(ttinValue(invTTKhac, 'Year')),
+    month: toNum(ttinValue(invTTKhac, 'Month')),
+    term: toNum(ttinValue(invTTKhac, 'Term')),
+    startDate: toDate(ttinValue(invTTKhac, 'StartDate')),
+    endDate: toDate(ttinValue(invTTKhac, 'EndDate')),
+  };
+
+  return { billId: finalBillId, loaiHD, nban, nmua, rows, tgTTTBSo, header };
 }
