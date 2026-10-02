@@ -63,7 +63,6 @@ import { TransferOwner } from './TransferOwner';
 import LineAssign from './LineAssign';
 import { ZoneTables } from './ZoneTables';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
-import { EMAIL_HINT, joinEmails, parseEmails } from '../../lib/dm/email';
 import {
   SHORT_NAME_HINT, SUB_PURPOSES, buildPointCode, buildStationCode, isValidShortName,
   missingPointCodeParts, missingStationCodeParts, normalizeShortName,
@@ -142,7 +141,7 @@ const EMPTY_S = {
      ước lượng được suy lại mỗi lần tính chứ không ghi vào `p0_w`/`pk_w`. */
   auto_loss_param: false, mv_metering: false,
 };
-const EMPTY_C = { mkh: '', name: '', low_name: '', short_name: '', address: '', email: '', zone: '' };
+const EMPTY_C = { mkh: '', name: '', low_name: '', short_name: '', address: '', zone: '' };
 /** `code` cũng do hệ thống sinh; `customer` chỉ dùng khi là điểm đo phụ. */
 const EMPTY_P = {
   station: '', role: 'chinh' as PointRole,
@@ -381,7 +380,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
     setCForm({
       mkh: c.mkh, name: c.name, low_name: c.low_name ?? '',
       short_name: c.short_name ?? '',
-      address: c.address ?? '', email: c.email ?? '', zone: c.zone ?? '',
+      address: c.address ?? '', zone: c.zone ?? '',
     });
     setModal('customer');
   };
@@ -1359,18 +1358,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
       if (shortName && !isValidShortName(shortName)) {
         return toast.warning('Tên tắt không hợp lệ', SHORT_NAME_HINT);
       }
-      const mails = parseEmails(cForm.email);
-      if (mails.invalid.length) {
-        return toast.warning('Email không hợp lệ', `${mails.invalid.join(', ')} — ${EMAIL_HINT}`);
-      }
       const name = cForm.name.trim();
       const body = {
         mkh: cForm.mkh.trim(), name, short_name: shortName,
         // Bỏ trống ô viết thường thì suy ra từ tên, không lưu rỗng để bộ soát
         // khỏi báo `missing` ngay sau khi vừa khai xong.
         low_name: cForm.low_name.trim() || toLowName(name),
-        address: cForm.address.trim(), email: joinEmails(mails.valid),
-        zone: cForm.zone || undefined, active: true,
+        address: cForm.address.trim(), zone: cForm.zone || undefined, active: true,
       };
       return void persist(
         () => (editingId ? customers.update(editingId, body) : customers.create(body)),
@@ -2065,7 +2059,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
 
   const customerGroupsShown = useMemo(
     () => bySearch(byFilterZone(customerGroups), c => [
-      c.mkh, c.name, c.short_name, c.address, c.email, zoneName(c.zone),
+      c.mkh, c.name, c.short_name, c.address, zoneName(c.zone),
     ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [customerGroups, filterZone, terms, d]);
@@ -2331,13 +2325,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
           empty={emptyText('khách hàng', 'Chưa có khách hàng nào được khai.')}
           rowKey={c => c.id}
           columns={<>
-            <th className={`${TH_CLS} w-[10%] pl-10`}>Mã KH</th>
-            <th className={`${TH_CLS} w-[23%]`}>Tên khách hàng</th>
-            <th className={`${TH_CLS} w-[10%]`}>Tên tắt</th>
-            <th className={`${TH_CLS} w-[12%]`}>Khu công nghiệp</th>
-            <th className={`${TH_CLS} w-[16%]`}>Địa chỉ</th>
-            <th className={`${TH_CLS} w-[15%]`}>Email</th>
-            <th className={`${TH_CLS} w-[6%]`}>Điểm đo</th>
+            <th className={`${TH_CLS} w-[12%] pl-10`}>Mã KH</th>
+            <th className={`${TH_CLS} w-[27%]`}>Tên khách hàng</th>
+            <th className={`${TH_CLS} w-[11%]`}>Tên tắt</th>
+            <th className={`${TH_CLS} w-[14%]`}>Khu công nghiệp</th>
+            <th className={`${TH_CLS} w-[20%]`}>Địa chỉ</th>
+            <th className={`${TH_CLS} w-[8%]`}>Điểm đo</th>
             <th className={`${TH_CLS} w-[8%] pr-10 text-right`}>Thao tác</th>
           </>}
           renderRow={c => (
@@ -2353,9 +2346,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
               </td>
               <td className="px-6 py-4 text-sm text-soft">{c.zone ? zoneName(c.zone) : '—'}</td>
               <td className="truncate px-6 py-4 text-sm text-soft" title={c.address || ''}>{c.address || '—'}</td>
-              <td className="truncate px-6 py-4 text-sm text-soft" title={c.email || ''}>
-                {c.email || <span className="text-[11px] italic text-faint">chưa khai</span>}
-              </td>
               <td className="px-6 py-4 text-sm font-semibold text-dim">{pointsOfCustomer(c.id)}</td>
               <td className="px-6 py-4 pr-10 text-right">
                 <RowActions onEdit={() => editCustomer(c)}
@@ -2650,10 +2640,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
                 <TextInput value={cForm.address} onChange={v => setCForm(f => ({ ...f, address: v }))} />
               </Field>
             </div>
-            <Field label="Email nhận thư" hint={EMAIL_HINT}>
-              <TextInput value={cForm.email} placeholder="ketoan@congty.vn; kythuat@congty.vn"
-                onChange={v => setCForm(f => ({ ...f, email: v }))} />
-            </Field>
             <Field label="Tên viết thường"
               hint={lowNameCheck.issue === 'ok'
                 ? 'Cùng chữ với tên khách hàng. Viết hoa thế nào là tùy bạn — không xét hoa/thường.'

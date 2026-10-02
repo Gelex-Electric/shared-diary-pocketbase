@@ -106,8 +106,6 @@ export interface Customer extends PbRecord {
   /** Tên tắt: viết liền, không dấu, chỉ cho phép thêm dấu '-'. Dùng sinh mã trạm. */
   short_name?: string;
   address?: string;
-  /** Email nhận thư: một hoặc nhiều địa chỉ ngăn bằng `;` (xem `lib/dm/email.ts`). */
-  email?: string;
   zone?: string;
   active?: boolean;
 }

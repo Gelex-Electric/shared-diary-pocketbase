@@ -16,7 +16,7 @@ import {
    - CHỈ nhận XML tải lên (XML tải từ cổng hóa đơn). Đã BỎ "Lấy trực tiếp từ CCIS":
      XML của CCIS `GetXML` không có mã CQT (`MCCQT`) ⇒ không gửi khách được.
    - XML thiếu `MCCQT` hoặc thiếu mã tra cứu (`Fkey`) bị từ chối ngay khi đọc.
-   - Mỗi XML ghi MỘT bản ghi `einvoice` (đầu mục + toàn văn XML + trạng thái mail),
+   - Mỗi XML ghi MỘT bản ghi `einvoice` (đầu mục + toàn văn XML),
      rồi các dòng chi tiết vào `invoice` NHƯ CŨ. Hai bên nối bằng `BillId`.
 ============================================================ */
 
@@ -223,7 +223,7 @@ export default function QuickImportManager() {
     return data;
   };
 
-  // Bản ghi `einvoice` cho 1 file XML: đầu mục + toàn văn XML. KHÔNG có mail_* (xem doImport).
+  // Bản ghi `einvoice` cho 1 file XML: đầu mục + toàn văn XML.
   const buildEinvoicePayload = (f: FileEntry) => {
     const inv = f.invoice;
     const h = inv.header;
@@ -249,7 +249,7 @@ export default function QuickImportManager() {
     const ok = await confirm({
       title: 'Ghi vào hệ thống?',
       message: `Sẽ ghi ${bills.length} hóa đơn và ${rows.length} dòng chỉ số. Hóa đơn đã có (cùng BillId) `
-        + 'và dòng trùng (số công tơ + kỳ) sẽ được cập nhật; trạng thái gửi email của hóa đơn giữ nguyên.',
+        + 'và dòng trùng (số công tơ + kỳ) sẽ được cập nhật.',
       confirmLabel: 'Ghi dữ liệu',
       variant: 'info',
     });
@@ -279,8 +279,7 @@ export default function QuickImportManager() {
           const exId = eIdByBill.get(p.invoice.billId);
           if (exId) { await pb.collection(EINVOICE_COLLECTION).update(exId, body); eUpdated++; savedIds.push(exId); }
           else {
-            // Mới thì đánh dấu chưa gửi mail; cập nhật thì KHÔNG đụng mail_* (giữ lịch sử gửi).
-            const rec = await pb.collection(EINVOICE_COLLECTION).create({ ...body, mail_status: 'chua_gui' });
+            const rec = await pb.collection(EINVOICE_COLLECTION).create(body);
             eCreated++; savedIds.push(rec.id);
           }
         } catch {

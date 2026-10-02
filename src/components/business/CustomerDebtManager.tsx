@@ -10,6 +10,7 @@ import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
   RefreshCw, X, Loader2, Save, Banknote, LayoutDashboard, Table2, CalendarClock, AlertTriangle,
+  Receipt, BellRing, KeyRound,
 } from 'lucide-react';
 
 /* ============================================================
@@ -24,6 +25,8 @@ import {
 ============================================================ */
 
 import { toast as notify } from '../../lib/toast';
+import { LoadingOverlay } from '../ui/LoadingOverlay';
+import { openEinvoicePdf, requestBillval, type EinvoicePdfType } from '../../lib/einvoiceApi';
 import { zoneFromArea, fetchLatestInvoiceMonth } from '../../lib/invoices';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -70,6 +73,8 @@ interface KyGroup extends Totals {
   endDate: string;
   ids: string[];
   nTToan: string;     // '' nếu chưa thanh toán đồng nhất ở mọi công tơ trong kỳ
+  /** BillId của hóa đơn (rỗng với dữ liệu cũ) — nối `einvoice` để xem PDF giấy báo / hóa đơn. */
+  billId?: string;
 }
 
 interface CustomerGroup extends Totals {
@@ -323,6 +328,10 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
         ntByKey.set(key, []);
       }
       g.ids.push(r.id);
+      if (!g.billId) {
+        const b = (r.BillId ?? '').toString().trim();
+        if (b && b !== '0') g.billId = b;
+      }
       addTotals(g, computeRecordTotals(r));
       if (end > g.endDate) g.endDate = end; // ngày chốt = EndDate muộn nhất
       ntByKey.get(key)!.push(dateOnly(r.NTToan));
@@ -389,6 +398,53 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
   }, []);
 
   const customers = useMemo(() => buildCustomers(records), [buildCustomers, records]);
+
+  /* ── Hóa đơn gốc (`einvoice`) theo BillId — để xem PDF giấy báo / hóa đơn từ CCIS ──
+     Chuyển từ màn Biên bản sang đây (user chốt 02/10/2026). API PDF chỉ cho khối KD
+     nên khối Vận hành (readOnly) không tải, không hiện nút. */
+  const [einvByBill, setEinvByBill] = useState<Map<string, { id: string; billval?: string }>>(new Map());
+  useEffect(() => {
+    if (readOnly) return;
+    const ids = Array.from(new Set(records.map(r => (r.BillId ?? '').toString().trim()).filter(b => b && b !== '0')));
+    if (!ids.length) { setEinvByBill(new Map()); return; }
+    let alive = true;
+    (async () => {
+      const out = new Map<string, { id: string; billval?: string }>();
+      try {
+        for (let i = 0; i < ids.length; i += 50) {
+          const filter = ids.slice(i, i + 50).map(b => pb.filter('BillId = {:b}', { b })).join(' || ');
+          const items = await pb.collection('einvoice').getFullList<{ id: string; BillId: string; billval?: string }>({
+            filter, fields: 'id,BillId,billval', requestKey: null,
+          });
+          items.forEach(e => out.set(e.BillId, { id: e.id, billval: e.billval }));
+        }
+      } catch { /* chưa có quyền / lỗi mạng: chỉ không hiện nút xem PDF */ }
+      if (alive) setEinvByBill(out);
+    })();
+    return () => { alive = false; };
+  }, [records, readOnly]);
+
+  /** Lớp phủ chờ khi tải PDF / lấy BILLVAL (tải từ CCIS mất vài giây). */
+  const [ccisWait, setCcisWait] = useState<{ title: string; hint?: string } | null>(null);
+  const openPdf = async (ky: KyGroup, type: EinvoicePdfType) => {
+    const e = ky.billId ? einvByBill.get(ky.billId) : undefined;
+    if (!e) return;
+    setCcisWait({ title: type === 'NOTI' ? 'Đang tải giấy báo tiền điện từ CCIS…' : 'Đang tải hóa đơn từ CCIS…', hint: `Kỳ ${fmtDate(ky.endDate)}` });
+    try { await openEinvoicePdf(e.id, type); }
+    catch (err: any) { showToast(`Không mở được PDF: ${err?.message || ''}`, 'error'); }
+    finally { setCcisWait(null); }
+  };
+  const getBillval = async (ky: KyGroup) => {
+    const e = ky.billId ? einvByBill.get(ky.billId) : undefined;
+    if (!e) return;
+    setCcisWait({ title: 'Đang tra CCIS để lấy BILLVAL…', hint: `Kỳ ${fmtDate(ky.endDate)}` });
+    try {
+      await requestBillval(e.id);
+      setEinvByBill(prev => new Map(prev).set(ky.billId!, { ...e, billval: 'ok' })); // chỉ cần biết đã có
+      showToast('Đã lấy BILLVAL — bấm Giấy báo / Hóa đơn để xem', 'success');
+    } catch (err: any) { showToast(`Không lấy được BILLVAL: ${err?.message || ''}`, 'error'); }
+    finally { setCcisWait(null); }
+  };
 
   /* ── tra cứu kỳ theo key (ids + ngày gốc) phục vụ lưu thay đổi ── */
   const kyIndex = useMemo(() => {
@@ -689,6 +745,31 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
               </td>
               <td className="py-3 px-4 text-soft italic pl-6 whitespace-normal break-words leading-relaxed text-[11px]">
                 {ky.ids.length} công tơ
+                {/* Xem PDF giấy báo / hóa đơn — chỉ khi hóa đơn đã nạp XML (có einvoice). */}
+                {(() => {
+                  const e = !readOnly && ky.billId ? einvByBill.get(ky.billId) : undefined;
+                  if (!e) return null;
+                  const btn = 'vl-btn vl-btn-sm flex items-center gap-1 !px-2 !py-0.5 text-[11px] not-italic';
+                  return (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                      {e.billval ? (<>
+                        <button onClick={() => void openPdf(ky, 'NOTI')} disabled={!!ccisWait}
+                          title="Xem giấy báo tiền điện (PDF)" className={`${btn} vl-btn-outline-primary`}>
+                          <BellRing className="h-3 w-3" /> Giấy báo
+                        </button>
+                        <button onClick={() => void openPdf(ky, 'BILLPDF')} disabled={!!ccisWait}
+                          title="Xem hóa đơn điện tử (PDF)" className={`${btn} vl-btn-outline-primary`}>
+                          <Receipt className="h-3 w-3" /> Hóa đơn
+                        </button>
+                      </>) : (
+                        <button onClick={() => void getBillval(ky)} disabled={!!ccisWait}
+                          title="Tra CCIS để mở được PDF giấy báo / hóa đơn" className={`${btn} vl-btn-warning`}>
+                          <KeyRound className="h-3 w-3" /> Lấy BILLVAL
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </td>
               <td className="py-3 px-4 text-center font-mono text-[11px] text-soft">
                 {fmtDate(ky.endDate)}
@@ -1207,6 +1288,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       )}
       </>
       )}
+      <LoadingOverlay open={!!ccisWait} title={ccisWait?.title ?? ''} hint={ccisWait?.hint} />
     </div>
   );
 }
