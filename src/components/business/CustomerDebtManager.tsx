@@ -26,7 +26,8 @@ import {
 
 import { toast as notify } from '../../lib/toast';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
-import { openEinvoicePdf, requestBillval, type EinvoicePdfType } from '../../lib/einvoiceApi';
+import { PdfViewer } from '../ui/PdfViewer';
+import { fetchEinvoicePdf, requestBillval, type EinvoicePdfType } from '../../lib/einvoiceApi';
 import { zoneFromArea, fetchLatestInvoiceMonth } from '../../lib/invoices';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -426,11 +427,18 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
 
   /** Lớp phủ chờ khi tải PDF / lấy BILLVAL (tải từ CCIS mất vài giây). */
   const [ccisWait, setCcisWait] = useState<{ title: string; hint?: string } | null>(null);
+  /** PDF đang xem trong app (`ui/PdfViewer`) — không mở tab mới / `about:blank` (user chốt 02/10/2026). */
+  const [pdfView, setPdfView] = useState<{ blob: Blob; fileName: string; title: string } | null>(null);
+  const closePdf = useCallback(() => setPdfView(null), []);
   const openPdf = async (ky: KyGroup, type: EinvoicePdfType) => {
     const e = ky.billId ? einvByBill.get(ky.billId) : undefined;
     if (!e) return;
-    setCcisWait({ title: type === 'NOTI' ? 'Đang tải giấy báo tiền điện từ CCIS…' : 'Đang tải hóa đơn từ CCIS…', hint: `Kỳ ${fmtDate(ky.endDate)}` });
-    try { await openEinvoicePdf(e.id, type); }
+    const label = type === 'NOTI' ? 'Giấy báo tiền điện' : 'Hóa đơn điện tử';
+    setCcisWait({ title: `Đang tải ${label.toLowerCase()} từ CCIS…`, hint: `Kỳ ${fmtDate(ky.endDate)}` });
+    try {
+      const file = await fetchEinvoicePdf(e.id, type);
+      setPdfView({ ...file, title: `${label} — kỳ ${fmtDate(ky.endDate)}` });
+    }
     catch (err: any) { showToast(`Không mở được PDF: ${err?.message || ''}`, 'error'); }
     finally { setCcisWait(null); }
   };
@@ -1289,6 +1297,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       </>
       )}
       <LoadingOverlay open={!!ccisWait} title={ccisWait?.title ?? ''} hint={ccisWait?.hint} />
+      <PdfViewer file={pdfView} title={pdfView?.title ?? ''} onClose={closePdf} />
     </div>
   );
 }

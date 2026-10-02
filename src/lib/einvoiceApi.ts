@@ -25,18 +25,13 @@ export async function requestBillval(einvoiceId: string): Promise<{ departmentId
 }
 
 /**
- * Mở PDF giấy báo / hóa đơn ở tab mới. Mở tab TRƯỚC khi chờ mạng — mở sau `await`
- * thì trình duyệt coi là popup tự bật và chặn.
+ * Tải PDF giấy báo / hóa đơn (server lấy từ CCIS, không lưu). Trả file để xem NGAY TRONG APP
+ * (`ui/PdfViewer`) — trước đây mở tab mới từ lúc bấm nên hiện `about:blank` trong lúc chờ
+ * (user không muốn, 02/10/2026). Tên file lấy từ `Content-Disposition` của server.
  */
-export async function openEinvoicePdf(einvoiceId: string, type: EinvoicePdfType): Promise<void> {
-  const tab = window.open('', '_blank');
-  try {
-    const blob = await (await call(`${einvoiceId}/pdf/${type}`)).blob();
-    const url = URL.createObjectURL(blob);
-    if (tab) tab.location.href = url; else window.location.href = url;
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (err) {
-    tab?.close();
-    throw err;
-  }
+export async function fetchEinvoicePdf(einvoiceId: string, type: EinvoicePdfType): Promise<{ blob: Blob; fileName: string }> {
+  const res = await call(`${einvoiceId}/pdf/${type}`);
+  const cd = res.headers.get('content-disposition') || '';
+  const fileName = (cd.match(/filename="?([^";]+)"?/) || [])[1] || `${type === 'NOTI' ? 'GiayBao' : 'HoaDon'}.pdf`;
+  return { blob: await res.blob(), fileName };
 }
