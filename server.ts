@@ -31,7 +31,8 @@ async function startServer() {
 
   // ==================== PROXY HES API (mới thêm) ====================
   app.use('/hes', createProxyMiddleware({
-    target: 'http://14.225.244.63:8899',
+    // HES_BASE_URL (Railway Variables) dạng http://host:port/api — proxy cần bỏ /api.
+    target: (process.env.HES_BASE_URL || 'http://14.225.175.172:8899/api').replace(/\/api\/?$/, ''),
     changeOrigin: true,
     pathRewrite: { '^/hes': '' },
     timeout: 30000,
@@ -71,7 +72,7 @@ async function startServer() {
 
   // ==================== STATIC: public/ (CSV, PDF, assets tĩnh) ====================
   // Phục vụ thư mục public/ trực tiếp cho cả dev & prod
-  // (đảm bảo /datahdKH.csv, /document.pdf luôn tìm thấy)
+  // (đảm bảo /document.pdf luôn tìm thấy)
   app.use(express.static(path.join(__dirname, 'public')));
 
   // ==================== DEV MODE (Vite middleware) ====================

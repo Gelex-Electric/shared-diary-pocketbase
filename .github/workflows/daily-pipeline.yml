@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      HES_BASE_URL: ${{ vars.HES_BASE_URL }}   # GitHub Variables; trong -> script dung IP mac dinh trong code
       TZ: Asia/Ho_Chi_Minh
       API_USER: ${{ secrets.API_USER }}
       API_PASS: ${{ secrets.API_PASS }}
@@ -64,20 +65,14 @@ jobs:
           PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
         run: python scripts/fetch_meter_info.py
 
-      # 2) Du lieu do xa 30 phut (full ngay hom qua, ×HSN, them I pha + KVAR)
-      - name: Fetch meter data (full day)
-        env:
-          FETCH_HOURS: "25"   # chay 1 lan/ngay -> cua so phu tron 48 moc cua hom qua
-        run: python scripts/fetch_meter_data.py
-
       # 2b) Thong so tuc thoi 30 phut -> public/ThongSo_30min/YYYY-MM-DD.csv, giu
       #     40 ngay (script tu xoa file qua han). Ban thay the cua datametter.csv:
       #       · MOT FILE MOI NGAY thay vi mot file cuon 7 ngay;
       #       · luu RAW, KHONG nhan HSN — noi doc nhan theo diem do ma cong to gan
       #         vao TAI THOI DIEM cua moc (`buildHsnResolver` trong lib/thongso.mjs).
       #         Nhan cung luc ghi thi doi TI la sai het lich su, nhu da dinh 22/09.
-      #     Hai nguon van chay song song cho toi khi app doc xong ThongSo_30min;
-      #     buoc 2 (datametter.csv) chua duoc bo.
+      #     Buoc 2 cu (fetch_meter_data.py -> datametter.csv) BO 05/10/2026: doi
+      #     chieu 01/10 trung 100% (datametter = ThongSo x HSN, ThongSo du hon).
       - name: Fetch thong so 30 phut (raw, khong nhan HSN)
         env:
           PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
@@ -170,7 +165,7 @@ jobs:
           # Cung ly do voi ChiSo_30min: ThongSo_30min chi giu 40 ngay, file qua
           # han bi XOA nen phai `-A` moi ghi nhan viec xoa.
           git add -A public/ThongSo_30min
-          git add public/metterinfo.csv public/datametter.csv public/pmax_daily.csv public/pmax_line_daily.csv public/head_balance_daily.csv
+          git add public/metterinfo.csv public/pmax_daily.csv public/pmax_line_daily.csv public/head_balance_daily.csv
           # Ba file ton that: BO khoi day 16/09 luc tam dung, THEM LAI 24/09.
           # Quen dong nay thi buoc 5+6 van chay, van sinh file, roi bi vut di ma
           # khong ai biet — pipeline van xanh.

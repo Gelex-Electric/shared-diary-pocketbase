@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const PB = (process.env.PB_URL || 'https://getc.up.railway.app/pb').replace(/\/$/, '');
-const MBA_PATH = process.env.MBA_PATH || 'public/mba_info.csv';
+const MBA_PATH = process.env.MBA_PATH || 'data/legacy/mba_info.csv';
 const METTER_PATH = process.env.METTERINFO_PATH || 'public/metterinfo.csv';
 
 const email = process.env.PB_EMAIL || process.env.PB_ADMIN_EMAIL;

@@ -9,7 +9,7 @@
  * khi hàm khác lỗi không trả kết quả), không có thì mới đăng nhập bằng
  * `API_USER`/`API_PASS`.
  */
-export const BASE_URL = process.env.HES_BASE_URL || 'http://14.225.244.63:8899/api';
+export const BASE_URL = process.env.HES_BASE_URL || 'http://14.225.175.172:8899/api';
 
 const pad = (n) => String(n).padStart(2, '0');
 

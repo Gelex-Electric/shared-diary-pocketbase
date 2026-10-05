@@ -39,7 +39,8 @@ def get_retry(url, *, attempts=4, **kwargs):
             time.sleep(10 * (i + 1))
     raise RuntimeError(last)
 
-BASE_URL = "http://14.225.244.63:8899/api"
+# HES_BASE_URL (GitHub vars) ghi de; doi IP 05/10/2026 (14.225.244.63 -> 14.225.175.172)
+BASE_URL = (os.environ.get("HES_BASE_URL") or "http://14.225.175.172:8899/api").rstrip("/")
 # DATAMETTER_PATH: cung ten bien voi daily_transformer_loss.py (doc file nay) — cho
 # phep backfill tro toi file tam, khong dung public/datametter.csv (rolling 7 ngay
 # cho dashboard Dien ap).
