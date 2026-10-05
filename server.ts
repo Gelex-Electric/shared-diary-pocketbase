@@ -71,7 +71,7 @@ async function startServer() {
 
   // ==================== STATIC: public/ (CSV, PDF, assets tĩnh) ====================
   // Phục vụ thư mục public/ trực tiếp cho cả dev & prod
-  // (đảm bảo /datahdKH.csv, /document.pdf luôn tìm thấy)
+  // (đảm bảo /document.pdf luôn tìm thấy)
   app.use(express.static(path.join(__dirname, 'public')));
 
   // ==================== DEV MODE (Vite middleware) ====================

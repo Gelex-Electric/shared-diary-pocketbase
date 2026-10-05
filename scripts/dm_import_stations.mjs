@@ -29,7 +29,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const CSV = join(ROOT, 'public/mba_info.csv');
+const CSV = join(ROOT, 'data/legacy/mba_info.csv');
 const PB_URL = (process.env.PB_URL || 'https://getc.up.railway.app/pb').replace(/\/$/, '');
 const EMAIL = process.env.PB_ADMIN_EMAIL || '';
 const PASSWORD = process.env.PB_ADMIN_PASSWORD || '';
