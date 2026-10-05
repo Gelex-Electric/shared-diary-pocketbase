@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 
 import requests
 
-BASE_URL = "http://14.225.244.63:8899/api"
+BASE_URL = (os.environ.get("HES_BASE_URL") or "http://14.225.175.172:8899/api").rstrip("/")
 DAILY_OUT_PATH = "public/transformer_loss_daily.csv"
 STAGING_PATH = "public/_backfill_datametter.csv"
 LOG_PATH = os.environ.get("BF_LOG", "logs/_backfill_progress.log")
