@@ -13,7 +13,7 @@ import { Select } from './ui/Select';
 import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
 import { toast as notify } from '../lib/toast';
-import { suggestPower, addDays } from '../lib/powerRotation';
+import { dutyFor } from '../lib/dutyRotation';
 import pdfMake from 'pdfmake/build/pdfmake';
 
 const timesUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Regular.ttf';
@@ -370,58 +370,9 @@ export default function HandoverManager() {
       return;
     }
     
-    const date = new Date(formData.startDate);
-    if (isNaN(date.getTime())) return;
-
-    const epoch = new Date(2026, 0, 1);
-    const diffTime = date.getTime() - epoch.getTime();
-    const dayIndex = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
-    // Hệ số 1 (không phải 2): đầu tháng vòng xoay nhảy 2 vị trí. Hệ số 2 làm nhảy 3 →
-    // người Ca 3 đêm cuối tháng lại trực Ca 1 sáng mùng 1 (2 ca liên tiếp).
-    const monthOffset = date.getMonth();
-
-    // Sắp xếp trước để lấy độ dài thực tế làm modulo
-    // → 6 người: % 6 (giữ nguyên hành vi cũ), 7+ người: tự thích nghi
-    const rotatedStaff = [...staffList].sort((a, b) => a.IDnum - b.IDnum);
-    const rotation = Math.abs(dayIndex + monthOffset) % rotatedStaff.length;
-
-    for (let i = 0; i < rotation; i++) {
-      rotatedStaff.push(rotatedStaff.shift()!);
-    }
-
-    let main = '';
-    let sub = '';
-
-    if (formData.shift === 'Ca 1') {
-      main = rotatedStaff[0].Name;
-      sub = rotatedStaff[1].Name;
-    } else if (formData.shift === 'Ca 2') {
-      main = rotatedStaff[2].Name;
-      sub = rotatedStaff[3].Name;
-    } else if (formData.shift === 'Ca 3') {
-      main = rotatedStaff[4].Name;
-      sub = rotatedStaff[5].Name;
-    }
-
-    setFormData(prev => ({ ...prev, main_duty: main, sub_duty: sub }));
-
-    // Điều độ điện lực: suy từ chu kỳ xoay trong lịch sử 60 ngày quanh ngày trực
-    try {
-      const history = await pb.collection('handovers').getFullList<Handover>({
-        filter: pb.filter('area = {:area} && startdate >= {:from} && startdate < {:to}', {
-          area: formData.area,
-          from: `${addDays(formData.startDate, -60)} 00:00:00.000Z`,
-          to: `${addDays(formData.startDate, 30)} 00:00:00.000Z`,
-        }),
-        requestKey: null,
-      });
-      const power = suggestPower(history.filter(r => r.id !== editingLogId), formData.startDate, formData.shift);
-      if (power) setFormData(prev => ({ ...prev, main_power: power.main, sub_power: power.sub }));
-      else notify.warning('Lưu ý', 'Chưa đủ lịch sử để tự phân trực điều độ điện lực, vui lòng nhập tay.');
-    } catch (err) {
-      console.error('Auto assign power error:', err);
-    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(formData.startDate)) return;
+    const duty = dutyFor(staffList, formData.startDate, formData.shift);
+    setFormData(prev => ({ ...prev, ...duty }));
   };
 
   const formatTime = (dateStr: string) => {

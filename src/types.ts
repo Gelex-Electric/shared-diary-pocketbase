@@ -31,6 +31,27 @@ export interface ElectricShift {
   updated: string;
 }
 
+/** Điều độ điện lực (collection `power_staff`) — cùng khuôn `ElectricShift`. */
+export type PowerStaff = ElectricShift;
+
+/** Một ca trong lịch trực tháng. `date` là chuỗi `YYYY-MM-DD` (không qua Date để khỏi lệch múi giờ). */
+export interface RosterSlot {
+  date: string;
+  shift: string;
+  main_duty: string;
+  sub_duty: string;
+  main_power: string;
+  sub_power: string;
+}
+
+/** Bản ghi collection `shift_roster` — 1 bản ghi = 1 ca (khu vực + ngày + ca, index unique). */
+export interface ShiftRoster extends RosterSlot {
+  id: string;
+  area: string;
+  created: string;
+  updated: string;
+}
+
 export interface Customer {
   id: string;
   Name: string;
