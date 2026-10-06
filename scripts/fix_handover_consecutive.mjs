@@ -74,21 +74,35 @@ const rotated = (area, dateStr) => {
 const byArea = {};
 for (const r of logs) (byArea[r.area] ??= []).push(r);
 
+/* Hai ca kề nhau khi: giờ khớp (enddate trước = startdate sau) HOẶC nhãn ngày+ca nối tiếp
+   (Ca 1→Ca 2→Ca 3→Ca 1 hôm sau) — bắt cả bản ghi giờ nhập sai/thiếu và ca nhập trùng 2 lần. */
+const label = r => `${r.startdate.slice(0, 10)}|${r.shift}`;
+const nextLabel = r => {
+  const d = r.startdate.slice(0, 10);
+  if (r.shift === 'Ca 1') return `${d}|Ca 2`;
+  if (r.shift === 'Ca 2') return `${d}|Ca 3`;
+  const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + 1);
+  return `${x.toISOString().slice(0, 10)}|Ca 1`;
+};
+const isAdj = (a, b) => a !== b && ((a.enddate && a.enddate === b.startdate) || nextLabel(a) === label(b));
+
 const changes = new Map(); // id -> { before, patch }
 const rows = [];
 for (const [area, rs] of Object.entries(byArea)) {
-  rs.sort((a, b) => a.startdate.localeCompare(b.startdate));
-  for (let i = 1; i < rs.length; i++) {
-    const a = rs[i - 1], b = rs[i];
-    if (a.enddate !== b.startdate) continue;
-    const c = rs[i + 1]?.startdate === b.enddate ? rs[i + 1] : null;
+  rs.sort((a, b) => a.startdate.localeCompare(b.startdate) || a.created.localeCompare(b.created));
+  const pairs = [];
+  for (const a of rs) for (const b of rs) if (isAdj(a, b)) pairs.push([a, b]);
+  pairs.sort((p, q) => p[1].startdate.localeCompare(q[1].startdate));
+  for (const [a, b] of pairs) {
+    const nexts = rs.filter(c => isAdj(b, c));
+    const prevs = rs.filter(c => isAdj(c, b));
     const prev = new Set(ROLES.map(r => norm(a[r])).filter(Boolean));
     for (const role of ROLES) {
       const cur = b[role];
       if (!norm(cur) || !prev.has(norm(cur))) continue;
       let next = '';
       if (DUTY.includes(role)) {
-        const busy = new Set([...prev, ...(c ? ROLES.map(r => norm(c[r])) : []),
+        const busy = new Set([...[...prevs, ...nexts].flatMap(c => ROLES.map(r => norm(c[r]))),
           ...ROLES.filter(r => r !== role).map(r => norm(b[r]))].filter(Boolean));
         const order = rotated(area, b.startdate.slice(0, 10));
         const k = (SLOT[b.shift] ?? 0) + DUTY.indexOf(role);
