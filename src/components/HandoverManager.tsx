@@ -13,6 +13,7 @@ import { Select } from './ui/Select';
 import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
 import { toast as notify } from '../lib/toast';
+import { suggestPower, addDays } from '../lib/powerRotation';
 import pdfMake from 'pdfmake/build/pdfmake';
 
 const timesUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Regular.ttf';
@@ -363,7 +364,7 @@ export default function HandoverManager() {
     }
   };
 
-  const handleAutoAssign = () => {
+  const handleAutoAssign = async () => {
     if (staffList.length < 6) {
       notify.warning('Lưu ý', 'Cần ít nhất 6 nhân sự trực để tự động xoay ca!');
       return;
@@ -404,6 +405,23 @@ export default function HandoverManager() {
     }
 
     setFormData(prev => ({ ...prev, main_duty: main, sub_duty: sub }));
+
+    // Điều độ điện lực: suy từ chu kỳ xoay trong lịch sử 60 ngày quanh ngày trực
+    try {
+      const history = await pb.collection('handovers').getFullList<Handover>({
+        filter: pb.filter('area = {:area} && startdate >= {:from} && startdate < {:to}', {
+          area: formData.area,
+          from: `${addDays(formData.startDate, -60)} 00:00:00.000Z`,
+          to: `${addDays(formData.startDate, 30)} 00:00:00.000Z`,
+        }),
+        requestKey: null,
+      });
+      const power = suggestPower(history.filter(r => r.id !== editingLogId), formData.startDate, formData.shift);
+      if (power) setFormData(prev => ({ ...prev, main_power: power.main, sub_power: power.sub }));
+      else notify.warning('Lưu ý', 'Chưa đủ lịch sử để tự phân trực điều độ điện lực, vui lòng nhập tay.');
+    } catch (err) {
+      console.error('Auto assign power error:', err);
+    }
   };
 
   const formatTime = (dateStr: string) => {
