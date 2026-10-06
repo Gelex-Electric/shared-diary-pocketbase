@@ -48,7 +48,7 @@ for (let page = 1; ; page++) {
 }
 
 /* Cần có "trung thế" hoặc "đi" — câu đã đúng chuẩn ("Kiểm tra đường dây KCN X") không khớp. */
-const RE = /Kiểm tra (?:đường dây|ĐZ)((?: trung thế)?(?: 22kV)?(?: đi)?) (KCN [^,.;\n\t]+?)(?:\s*,\s*hoạt động bình thường)?(?=\s*[.,;\n]|\s*$|\s+-)/giu;
+const RE = /Kiểm tra (?:đường dây|ĐZ|DZ)((?: trung thế)?(?: 22kV)?(?: đi)?) (KCN [^,.;\n\t]+?)(?:\s*,\s*hoạt động bình thường)?(?=\s*[.,;\n]|\s*$|\s+-)/giu;
 const fix = s => typeof s !== 'string' ? s
   : s.normalize('NFC').replace(RE, (m, mid, kcn) => mid.trim() ? `Kiểm tra đường dây ${kcn.trim()}` : m);
 
