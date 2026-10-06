@@ -3,12 +3,18 @@
  *
  * Module THUẦN (không import PocketBase) để chạy được bằng `tsx` trong `scripts/test_roster.ts`.
  *
- * Vòng xoay giữ nguyên thuật toán cũ của `HandoverManager.handleAutoAssign` (đã dùng từ đầu
- * năm 2026, nhân viên đã quen): xếp nhân sự theo `IDnum`, mỗi ngày xoay thêm 1 vị trí;
- * Ca 1 = vị trí 0,1 · Ca 2 = 2,3 · Ca 3 = 4,5 (chính, phụ).
- * Xoay tháng: cộng thêm `tháng` (0..11) → đầu tháng vòng xoay nhảy 2 vị trí thay vì 1.
- * Hệ số tháng PHẢI là 1: hệ số 2 (bản cũ) làm nhảy 3 → người Ca 3 đêm cuối tháng trực luôn
- * Ca 1 sáng mùng 1 (sự cố 06/10/2026).
+ * MÔ HÌNH KÍP (theo file Excel "Nhat_ky_truc_van_hanh.xlsm" — user chốt 06/10/2026):
+ *  - Xếp nhân sự theo `IDnum`: STT 1,3,5,… là TRỰC CHÍNH của kíp A,B,C,…; STT 2,4,6,… là TRỰC PHỤ.
+ *    Số kíp K = ⌊số người / 2⌋ (8 người = 4 kíp, 6 người = 3 kíp).
+ *  - Các kíp nối nhau theo TỪNG CA, liên tục qua ngày/tháng/năm: ca thứ g (đếm từ Ca 1 ngày
+ *    01/01/2026) do kíp (g + pha) mod K trực → một kíp không bao giờ trực 2 ca liền nhau
+ *    (8 giờ làm / 24 giờ nghỉ với 4 kíp).
+ *  - XOAY THÁNG = ĐỔI CẶP: trực chính giữ kíp; trực phụ dịch 1 kíp mỗi tháng (kíp j tháng m
+ *    lấy phụ thứ (j + m) mod K) → mỗi tháng đi cùng đồng nghiệp khác. Chiều dịch +1 bảo đảm
+ *    người phụ mới của kíp trực Ca 1 mùng 1 không phải người vừa trực Ca 3 đêm cuối tháng.
+ *  - Nối tiếp tháng trước: pha được chọn để kíp Ca 1 mùng 1 là kíp ngay sau kíp Ca 3 đêm cuối
+ *    tháng trước (nhận ra kíp qua tên trực chính). Tháng trước nhập tay không khớp → thử các
+ *    pha khác, lấy pha đầu tiên không trùng ca giáp tháng.
  */
 import type { RosterSlot } from '../types';
 
@@ -54,30 +60,70 @@ export const prevShift = (date: string, shift: string): [string, string] =>
 
 export const MIN_DUTY_STAFF = 6;
 
-/** Thứ tự nhân sự trực đội của một ngày (đã xoay). Tính hoàn toàn theo UTC — không phụ thuộc múi giờ máy. */
-export function rotatedDutyStaff<T extends { IDnum: number }>(staff: T[], date: string): T[] {
+const mod = (a: number, n: number) => ((a % n) + n) % n;
+
+/** Chia kíp theo `IDnum`: STT lẻ = trực chính (kíp A, B, …), STT chẵn = trực phụ. Lẻ người → người cuối không vào kíp. */
+export function crewsOf<T extends { IDnum: number }>(staff: T[]) {
   const sorted = [...staff].sort((a, b) => a.IDnum - b.IDnum);
+  const K = Math.floor(sorted.length / 2);
+  return {
+    K,
+    mains: sorted.filter((_, i) => i % 2 === 0).slice(0, K),
+    subs: sorted.filter((_, i) => i % 2 === 1).slice(0, K),
+    unused: sorted.slice(2 * K),
+  };
+}
+export const crewLetter = (j: number) => String.fromCharCode(65 + j);
+
+/** Số thứ tự ca g (Ca 1 ngày 01/01/2026 = 0) và chỉ số tháng liên tục (2026-01 = 0). Tính theo UTC. */
+const shiftIndex = (date: string, shift: string) => {
   const [y, m, d] = date.split('-').map(Number);
-  const dayIndex = Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(2026, 0, 1)) / 864e5);
-  // Chỉ số tháng LIÊN TỤC qua các năm (2026-01 = 0, 2027-01 = 12…). Dùng tháng trong năm (0..11)
-  // thì đầu năm bước nhảy = 1 − 11 = −10 → với 7 người trùng ca 31/12 → 01/01. Năm 2026 kết quả
-  // y hệt bản cũ; trước 2026 giữ tháng trong năm cho khớp dữ liệu đã có.
-  const monthIndex = y >= 2026 ? (y - 2026) * 12 + (m - 1) : m - 1;
-  const rot = Math.abs(dayIndex + monthIndex) % sorted.length;
-  return [...sorted.slice(rot), ...sorted.slice(0, rot)];
+  const day = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(2026, 0, 1)) / 864e5);
+  return day * 3 + SHIFTS.indexOf(shift as typeof SHIFTS[number]);
+};
+const monthIndex = (date: string) => {
+  const [y, m] = date.split('-').map(Number);
+  return (y - 2026) * 12 + (m - 1);
+};
+
+/** Kíp trực (0-based) của (ngày, ca) với pha `phase`. */
+export const crewFor = (K: number, date: string, shift: string, phase = 0) => mod(shiftIndex(date, shift) + phase, K);
+
+/** Trực chính/phụ phía công ty cho (ngày, ca) theo mô hình kíp. */
+export function dutyFor<T extends { IDnum: number; Name: string }>(staff: T[], date: string, shift: string, phase = 0) {
+  const { K, mains, subs } = crewsOf(staff);
+  if (K === 0) return { main_duty: '', sub_duty: '' };
+  const j = crewFor(K, date, shift, phase);
+  return { main_duty: mains[j].Name, sub_duty: subs[mod(j + monthIndex(date), K)].Name };
 }
 
-/** Trực chính/phụ phía công ty cho (ngày, ca). */
-export function dutyFor<T extends { IDnum: number; Name: string }>(staff: T[], date: string, shift: string) {
-  const r = rotatedDutyStaff(staff, date);
-  const k = SHIFTS.indexOf(shift as typeof SHIFTS[number]) * 2;
-  return { main_duty: r[k]?.Name ?? '', sub_duty: r[k + 1]?.Name ?? '' };
-}
-
-/** Phân ca cả tháng phía công ty. Ít hơn `MIN_DUTY_STAFF` người → null. */
-export function buildMonthDuty<T extends { IDnum: number; Name: string }>(staff: T[], month: string): RosterSlot[] | null {
+/**
+ * Phân ca cả tháng phía công ty (mô hình kíp). Ít hơn `MIN_DUTY_STAFF` người → null.
+ * `before` = các ca đã lưu ngay trước tháng: dùng để nối tiếp thứ tự kíp và kiểm tra giáp tháng.
+ * Trả `continued` = true nếu nối tiếp được đúng kíp tháng trước.
+ */
+export function buildMonthDuty<T extends { IDnum: number; Name: string }>(
+  staff: T[], month: string, before: RosterSlot[] = [],
+): { slots: RosterSlot[]; phase: number; continued: boolean; unused: T[] } | null {
   if (staff.length < MIN_DUTY_STAFF) return null;
-  return daysOfMonth(month).flatMap(date => SHIFTS.map(shift => ({ ...emptySlot(date, shift), ...dutyFor(staff, date, shift) })));
+  const { K, mains, unused } = crewsOf(staff);
+  const days = daysOfMonth(month);
+  const build = (phase: number) => days.flatMap(date =>
+    SHIFTS.map(shift => ({ ...emptySlot(date, shift), ...dutyFor(staff, date, shift, phase) })));
+  const dutyClash = (slots: RosterSlot[]) => validateRoster(slots, before)
+    .some(i => i.kind === 'consecutive' && (DUTY_ROLES as readonly string[]).includes(i.role));
+
+  // Pha nối tiếp: kíp Ca 1 mùng 1 = kíp sau kíp Ca 3 đêm cuối tháng trước (nhận qua trực chính)
+  const tail = before.find(s => s.date === addDays(days[0], -1) && s.shift === 'Ca 3');
+  const j = tail ? mains.findIndex(s => normName(s.Name) === normName(tail.main_duty)) : -1;
+  const contPhase = j >= 0 ? mod(j + 1 - shiftIndex(days[0], 'Ca 1'), K) : null;
+  const candidates = [...new Set([...(contPhase !== null ? [contPhase] : []), ...Array.from({ length: K }, (_, p) => p)])];
+  for (const phase of candidates) {
+    const slots = build(phase);
+    if (!dutyClash(slots)) return { slots, phase, continued: phase === contPhase, unused };
+  }
+  const phase = contPhase ?? 0;
+  return { slots: build(phase), phase, continued: contPhase !== null, unused };
 }
 
 export type RosterIssueKind = 'consecutive' | 'same_in_shift' | 'empty';

@@ -7,7 +7,15 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
 import { useConfirm } from './ui/ConfirmDialog';
 
-export default function ElectricShiftManager() {
+/** `duty` = trực đội QLVH (`Electric_shift`), `power` = điều độ điện lực (`power_staff`) — cùng khuôn dữ liệu. */
+export type StaffKind = 'duty' | 'power';
+const KIND = {
+  duty: { collection: 'Electric_shift', title: 'Trực đội QLVH', desc: 'Kíp trực ghép theo số thứ tự: 1–2 = kíp A, 3–4 = kíp B, … (số lẻ = trực chính, số chẵn = trực phụ; trực phụ tự đổi kíp mỗi tháng)', add: 'Thêm nhân sự', empty: 'Chưa có nhân sự trực nào được ghi nhận.' },
+  power: { collection: 'power_staff', title: 'Điều độ điện lực', desc: 'Danh sách điều độ viên Điện lực theo khu vực — thứ tự theo các cặp trực', add: 'Thêm điều độ', empty: 'Chưa có điều độ nào được ghi nhận.' },
+} as const;
+
+export default function ElectricShiftManager({ kind = 'duty' }: { kind?: StaffKind }) {
+  const cfg = KIND[kind];
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [shifts, setShifts] = useState<ElectricShift[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,7 +52,7 @@ export default function ElectricShiftManager() {
         filterParts.push(`(${areaFilters})`);
       }
 
-      const result = await pb.collection('Electric_shift').getFullList<ElectricShift>({
+      const result = await pb.collection(cfg.collection).getFullList<ElectricShift>({
         filter: filterParts.join(' && '),
         sort: 'IDnum',
         requestKey: null
@@ -56,7 +64,7 @@ export default function ElectricShiftManager() {
     } finally {
       setIsLoading(false);
     }
-  }, [filterArea, userAreas]);
+  }, [filterArea, userAreas, cfg.collection]);
 
   useEffect(() => {
     loadShifts();
@@ -91,9 +99,9 @@ export default function ElectricShiftManager() {
 
     try {
       if (editingId) {
-        await pb.collection('Electric_shift').update(editingId, formData);
+        await pb.collection(cfg.collection).update(editingId, formData);
       } else {
-        await pb.collection('Electric_shift').create(formData);
+        await pb.collection(cfg.collection).create(formData);
       }
       setIsModalOpen(false);
       loadShifts();
@@ -107,7 +115,7 @@ export default function ElectricShiftManager() {
     const ok = await confirm({ title: 'Xóa nhân sự?', message: 'Nhân sự này sẽ bị xóa vĩnh viễn.', confirmLabel: 'Xóa', variant: 'danger' });
     if (!ok) return;
     try {
-      await pb.collection('Electric_shift').delete(id);
+      await pb.collection(cfg.collection).delete(id);
       loadShifts();
     } catch (err) {
       console.error('Error deleting shift personnel:', err);
@@ -121,8 +129,8 @@ export default function ElectricShiftManager() {
       {/* Header and top filters */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-ink">Quản lý nhân sự trực</h2>
-          <p className="text-soft text-sm mt-1">Danh sách nhân sự phân bổ theo tổ vận hành</p>
+          <h2 className="text-2xl font-bold text-ink">{cfg.title}</h2>
+          <p className="text-soft text-sm mt-1">{cfg.desc}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <Select
@@ -136,7 +144,7 @@ export default function ElectricShiftManager() {
             className="vl-btn vl-btn-primary flex-1 md:flex-none flex items-center justify-center gap-2"
           >
             <Plus className="w-5 h-5" />
-            Thêm nhân sự
+            {cfg.add}
           </button>
         </div>
       </div>
@@ -166,7 +174,7 @@ export default function ElectricShiftManager() {
               ) : shifts.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-6 py-12 text-center text-faint italic">
-                    Chưa có nhân sự trực nào được ghi nhận.
+                    {cfg.empty}
                   </td>
                 </tr>
               ) : (

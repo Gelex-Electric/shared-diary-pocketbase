@@ -33,21 +33,35 @@ export function detectPowerPeriod(history: PowerSlot[], maxP = 14): number | nul
 }
 
 /**
- * Phân điều độ cả tháng, nối tiếp chu kỳ từ `history` (nên là ~60 ngày ngay trước tháng).
- * Ca (d, ca) = cặp của (d − P, ca); thiếu thì lùi tiếp d − 2P … d − 6P. Không dò được chu kỳ
- * → trả mọi ô trống (người lập tự chọn) và `period = null`.
+ * Phân điều độ cả tháng, nối tiếp chu kỳ từ `history` (các ca đã có gần nhất trước tháng —
+ * có thể cách tháng một quãng, vd lịch sử dừng từ tháng 8).
+ * Ca (d, ca) = cặp được NHIỀU PHIẾU nhất trong 3 ca cùng loại gần nhất cách d một bội số của P
+ * (lùi tối đa tới hết lịch sử); hoà thì lấy ca gần nhất. Bỏ phiếu để một ca ghi nhầm trong lịch
+ * sử không bị chép lặp lại mỗi P ngày (sự cố mô phỏng Tiền Hải 11/2026).
+ * Không dò được chu kỳ → mọi ô trống (người lập tự chọn) và `period = null`.
  */
 export function buildMonthPower(history: PowerSlot[], month: string): { slots: PowerSlot[]; period: number | null } {
   const P = detectPowerPeriod(history);
   const days = daysOfMonth(month);
   if (!P) return { slots: days.flatMap(d => SHIFTS.map(s => emptySlot(d, s))), period: null };
   const m = new Map<string, PowerSlot>(history.filter(r => normName(r.main_power)).map(r => [key(r.date, r.shift), r]));
+  const earliest = history.reduce((min, r) => (r.date < min ? r.date : min), days[0]);
   const slots: PowerSlot[] = [];
   for (const date of days) {
     for (const shift of SHIFTS) {
-      let src: PowerSlot | undefined;
-      for (let k = 1; k <= 6 && !src; k++) src = m.get(key(addDays(date, -k * P), shift));
-      const slot = { date, shift, main_power: src?.main_power.trim() ?? '', sub_power: src?.sub_power.trim() ?? '' };
+      const votes = new Map<string, { src: PowerSlot; n: number; near: number }>();
+      let found = 0;
+      for (let k = 1; found < 3 && addDays(date, -k * P) >= earliest; k++) {
+        const src = m.get(key(addDays(date, -k * P), shift));
+        if (!src) continue;
+        found++;
+        const id = `${normName(src.main_power)}|${normName(src.sub_power)}`;
+        const v = votes.get(id) ?? { src, n: 0, near: k };
+        v.n++;
+        votes.set(id, v);
+      }
+      const best = [...votes.values()].sort((a, b) => b.n - a.n || a.near - b.near)[0]?.src;
+      const slot = { date, shift, main_power: best?.main_power.trim() ?? '', sub_power: best?.sub_power.trim() ?? '' };
       slots.push(slot);
       if (slot.main_power) m.set(key(date, shift), slot);
     }

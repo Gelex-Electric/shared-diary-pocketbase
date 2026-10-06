@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, ID_TO_AREA } from '../lib/pocketbase';
-import { Handover, Situation, ElectricShift } from '../types';
+import { Handover, Situation, ShiftRoster } from '../types';
 import {
   Plus, Trash2, Edit2, X,
   Calendar, Clock, Users, Zap, Download, ChevronDown,
@@ -13,34 +13,7 @@ import { Select } from './ui/Select';
 import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
 import { toast as notify } from '../lib/toast';
-import { dutyFor } from '../lib/dutyRotation';
-import pdfMake from 'pdfmake/build/pdfmake';
-
-const timesUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Regular.ttf';
-const timesBdUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Bold.ttf';
-const timesBiUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-BoldItalic.ttf';
-const timesIUrl = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tinos/Tinos-Italic.ttf';
-
-let fontsLoaded = false;
-
-const loadFontsToVfs = async () => {
-  if (fontsLoaded) return;
-  const entries: [string, string][] = [
-    ['times.ttf', timesUrl],
-    ['timesbd.ttf', timesBdUrl],
-    ['timesbi.ttf', timesBiUrl],
-    ['timesi.ttf', timesIUrl],
-  ];
-  await Promise.all(entries.map(async ([name, url]) => {
-    const res = await fetch(url);
-    const buf = await res.arrayBuffer();
-    (pdfMake as any).virtualfs.writeFileSync(name, new Uint8Array(buf));
-  }));
-  pdfMake.fonts = {
-    Times: { normal: 'times.ttf', bold: 'timesbd.ttf', italics: 'timesi.ttf', bolditalics: 'timesbi.ttf' }
-  };
-  fontsLoaded = true;
-};
+import { pdfMake, loadFontsToVfs } from '../lib/pdfFonts';
 
 const TYPE_SHIFT_CONFIG: Record<string, {
   icon: React.ElementType;
@@ -105,7 +78,9 @@ export default function HandoverManager() {
     };
   });
   const [situationRows, setSituationRows] = useState<Situation[]>([]);
-  const [staffList, setStaffList] = useState<ElectricShift[]>([]);
+  // Ca trong lịch trực tháng (`shift_roster`) ứng với khu vực/ngày/ca đang nhập:
+  // undefined = đang tra, null = chưa có lịch → chặn lưu.
+  const [rosterSlot, setRosterSlot] = useState<ShiftRoster | null | undefined>(undefined);
 
   // User areas handling - stabilize with JSON stringification for dependency tracking
   // Supports both singular 'area' (string/array) and plural 'areas' (relation array)
@@ -120,18 +95,6 @@ export default function HandoverManager() {
   
   const effectiveAreas = React.useMemo(() => userAreas.length > 0 ? userAreas : AREAS, [userAreas]);
 
-  const loadStaff = useCallback(async (area: string) => {
-    try {
-      const result = await pb.collection('Electric_shift').getFullList<ElectricShift>({
-        filter: `area = '${area.replace(/'/g, "\\'")}'`,
-        sort: 'IDnum',
-        requestKey: null
-      });
-      setStaffList(result);
-    } catch (err: any) {
-      console.error('Error loading staff:', err);
-    }
-  }, []);
 
   const loadLogs = useCallback(async () => {
     setIsLoading(true);
@@ -171,11 +134,27 @@ export default function HandoverManager() {
     loadLogs();
   }, [loadLogs]);
 
+  // Nhân sự trực KHÔNG nhập ở đây: tra lịch trực tháng theo khu vực/ngày/ca rồi điền + khoá
+  // 4 ô (user chốt 06/10/2026). Muốn đổi người → sửa ở tab "Tạo ca trực tháng".
   useEffect(() => {
-    if (formData.area) {
-      loadStaff(formData.area);
-    }
-  }, [formData.area, loadStaff]);
+    if (!isModalOpen || !formData.area || !/^\d{4}-\d{2}-\d{2}$/.test(formData.startDate) || !formData.shift) return;
+    let cancelled = false;
+    setRosterSlot(undefined);
+    pb.collection('shift_roster').getList<ShiftRoster>(1, 1, {
+      filter: pb.filter('area = {:a} && date = {:d} && shift = {:s}', { a: formData.area, d: formData.startDate, s: formData.shift }),
+      requestKey: null,
+    }).then(res => {
+      if (cancelled) return;
+      const r = res.items[0] ?? null;
+      setRosterSlot(r);
+      if (r) setFormData(prev => ({ ...prev, main_duty: r.main_duty, sub_duty: r.sub_duty, main_power: r.main_power, sub_power: r.sub_power }));
+    }).catch(err => {
+      if (cancelled) return;
+      console.error('Lookup roster error:', err);
+      setRosterSlot(null);
+    });
+    return () => { cancelled = true; };
+  }, [isModalOpen, formData.area, formData.startDate, formData.shift]);
 
   const groupedLogs = React.useMemo(() => {
     return logs.reduce((acc: { id: string, date: string, area: string, records: Handover[] }[], log) => {
@@ -289,49 +268,27 @@ export default function HandoverManager() {
 
   const saveLog = async () => {
     if (isSaving) return;
+    if (!rosterSlot) {
+      notify.warning('Chưa có lịch trực tháng', 'Ca này chưa có trong lịch trực tháng — tạo ở tab "Tạo ca trực tháng" trước.');
+      return;
+    }
     setIsSaving(true);
     try {
       // Save as "wall clock" time strings to avoid timezone shifts in filtering
       const startdate = `${formData.startDate} ${formData.startTime}:00`;
       const enddate = `${formData.endDate} ${formData.endTime}:00`;
 
-      // Cảnh báo khi có người trực ca liền trước/liền sau trong cùng khu vực
-      const ROLES = ['main_duty', 'sub_duty', 'main_power', 'sub_power'] as const;
-      const norm = (s?: string) => (s || '').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
-      const neighbors = await pb.collection('handovers').getFullList<Handover>({
-        filter: pb.filter('area = {:area} && (enddate = {:start} || startdate = {:end})',
-          // PB lưu dạng "YYYY-MM-DD HH:MM:SS.000Z" → so khớp đúng định dạng đó
-          { area: formData.area, start: `${startdate}.000Z`, end: `${enddate}.000Z` }),
-        requestKey: null,
-      });
-      const clashes = new Set<string>();
-      for (const nb of neighbors) {
-        if (nb.id === editingLogId) continue;
-        const names = ROLES.map(r => norm(nb[r]));
-        for (const r of ROLES) {
-          const name = formData[r]?.trim();
-          if (name && names.includes(norm(name))) clashes.add(`${name} (${nb.shift})`);
-        }
-      }
-      if (clashes.size > 0) {
-        const ok = await confirm({
-          title: 'Trực 2 ca liên tiếp?',
-          message: `Đã có ở ca liền kề: ${[...clashes].join(', ')}. Vẫn lưu?`,
-          confirmLabel: 'Vẫn lưu',
-        });
-        if (!ok) return;
-      }
-
+      // Trùng ca / 2 ca liên tiếp được kiểm ở lịch trực tháng; nhân sự lấy thẳng từ lịch.
       const data = {
         startdate,
         enddate,
         area: formData.area,
         shift: formData.shift,
         type_shift: formData.type_shift.length > 0 ? formData.type_shift : ['Bình thường'],
-        main_duty: formData.main_duty,
-        sub_duty: formData.sub_duty,
-        main_power: formData.main_power,
-        sub_power: formData.sub_power,
+        main_duty: rosterSlot.main_duty,
+        sub_duty: rosterSlot.sub_duty,
+        main_power: rosterSlot.main_power,
+        sub_power: rosterSlot.sub_power,
         notes: formData.notes,
         equipment: formData.equipment,
         opinions: formData.opinions,
@@ -362,17 +319,6 @@ export default function HandoverManager() {
     } catch (err) {
       console.error('Delete log error:', err);
     }
-  };
-
-  const handleAutoAssign = async () => {
-    if (staffList.length < 6) {
-      notify.warning('Lưu ý', 'Cần ít nhất 6 nhân sự trực để tự động xoay ca!');
-      return;
-    }
-    
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(formData.startDate)) return;
-    const duty = dutyFor(staffList, formData.startDate, formData.shift);
-    setFormData(prev => ({ ...prev, ...duty }));
   };
 
   const formatTime = (dateStr: string) => {
@@ -800,23 +746,25 @@ export default function HandoverManager() {
                   <div className="bg-subtle p-6 rounded-lg border border-[var(--border)] space-y-6">
                     <div className="flex items-center justify-between">
                       <h4 className="font-bold text-ink flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" /> Nhân sự trực</h4>
-                      <button onClick={handleAutoAssign} className="text-xs font-bold text-blue-600 bg-surface border border-blue-100 px-3 py-1.5 rounded-lg hover:bg-accent-soft transition-colors">Tự động phân ca</button>
+                      <span className="text-xs text-faint">Theo lịch trực tháng — sửa ở tab "Tạo ca trực tháng"</span>
                     </div>
+                    {rosterSlot === null && (
+                      <div className="vl-alert vl-alert-light-warning text-sm">
+                        Chưa có lịch trực tháng cho {formData.shift} ngày {formData.startDate.split('-').reverse().join('/')} ({formData.area}).
+                        Tạo lịch ở tab <b>"Tạo ca trực tháng"</b> trước rồi mới lưu được ca này.
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <div className="space-y-3">
-                        <div className="text-[10px] font-bold text-faint uppercase tracking-wider">Trực đội QLVH</div>
-                        <Select value={formData.main_duty} onChange={(v) => setFormData({ ...formData, main_duty: v })}
-                          placeholder="Chọn trực chính" searchable
-                          options={[{ value: '', label: 'Chọn trực chính' }, ...staffList.map(s => ({ value: s.Name, label: s.Name }))]} />
-                        <Select value={formData.sub_duty} onChange={(v) => setFormData({ ...formData, sub_duty: v })}
-                          placeholder="Chọn trực phụ" searchable
-                          options={[{ value: '', label: 'Chọn trực phụ' }, ...staffList.map(s => ({ value: s.Name, label: s.Name }))]} />
-                      </div>
-                      <div className="space-y-3">
-                        <div className="text-[10px] font-bold text-faint uppercase tracking-wider">Trực điều độ điện lực</div>
-                        <input type="text" placeholder="Trực chính điện lực" value={formData.main_power} onChange={(e) => setFormData({ ...formData, main_power: e.target.value })} className="w-full p-3 bg-surface border border-[var(--border)] rounded text-sm outline-none focus:ring-2 focus:ring-accent" />
-                        <input type="text" placeholder="Trực phụ điện lực" value={formData.sub_power} onChange={(e) => setFormData({ ...formData, sub_power: e.target.value })} className="w-full p-3 bg-surface border border-[var(--border)] rounded text-sm outline-none focus:ring-2 focus:ring-accent" />
-                      </div>
+                      {([['Trực đội QLVH', 'main_duty', 'sub_duty'], ['Trực điều độ điện lực', 'main_power', 'sub_power']] as const).map(([title, main, sub]) => (
+                        <div key={title} className="space-y-3">
+                          <div className="text-[10px] font-bold text-faint uppercase tracking-wider">{title}</div>
+                          {[main, sub].map((role, i) => (
+                            <Select key={role} value={formData[role]} onChange={() => {}} disabled
+                              placeholder={rosterSlot === undefined ? 'Đang tra lịch…' : i === 0 ? 'Trực chính' : 'Trực phụ'}
+                              options={formData[role] ? [{ value: formData[role], label: formData[role] }] : []} />
+                          ))}
+                        </div>
+                      ))}
                     </div>
                   </div>
 
