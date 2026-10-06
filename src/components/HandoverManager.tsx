@@ -294,6 +294,33 @@ export default function HandoverManager() {
       const startdate = `${formData.startDate} ${formData.startTime}:00`;
       const enddate = `${formData.endDate} ${formData.endTime}:00`;
 
+      // Cảnh báo khi có người trực ca liền trước/liền sau trong cùng khu vực
+      const ROLES = ['main_duty', 'sub_duty', 'main_power', 'sub_power'] as const;
+      const norm = (s?: string) => (s || '').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+      const neighbors = await pb.collection('handovers').getFullList<Handover>({
+        filter: pb.filter('area = {:area} && (enddate = {:start} || startdate = {:end})',
+          // PB lưu dạng "YYYY-MM-DD HH:MM:SS.000Z" → so khớp đúng định dạng đó
+          { area: formData.area, start: `${startdate}.000Z`, end: `${enddate}.000Z` }),
+        requestKey: null,
+      });
+      const clashes = new Set<string>();
+      for (const nb of neighbors) {
+        if (nb.id === editingLogId) continue;
+        const names = ROLES.map(r => norm(nb[r]));
+        for (const r of ROLES) {
+          const name = formData[r]?.trim();
+          if (name && names.includes(norm(name))) clashes.add(`${name} (${nb.shift})`);
+        }
+      }
+      if (clashes.size > 0) {
+        const ok = await confirm({
+          title: 'Trực 2 ca liên tiếp?',
+          message: `Đã có ở ca liền kề: ${[...clashes].join(', ')}. Vẫn lưu?`,
+          confirmLabel: 'Vẫn lưu',
+        });
+        if (!ok) return;
+      }
+
       const data = {
         startdate,
         enddate,
@@ -349,7 +376,9 @@ export default function HandoverManager() {
     const diffTime = date.getTime() - epoch.getTime();
     const dayIndex = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
-    const monthOffset = date.getMonth() * 2;
+    // Hệ số 1 (không phải 2): đầu tháng vòng xoay nhảy 2 vị trí. Hệ số 2 làm nhảy 3 →
+    // người Ca 3 đêm cuối tháng lại trực Ca 1 sáng mùng 1 (2 ca liên tiếp).
+    const monthOffset = date.getMonth();
 
     // Sắp xếp trước để lấy độ dài thực tế làm modulo
     // → 6 người: % 6 (giữ nguyên hành vi cũ), 7+ người: tự thích nghi
