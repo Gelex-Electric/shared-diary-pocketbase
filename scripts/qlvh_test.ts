@@ -8,7 +8,7 @@
 import {
   addYears, buildSchedule, computeVat, durationMonths,
   isLocked, overdueDays, paymentStatus, remainingOf, scheduleWarning, summarize,
-  withVat, withoutVat,
+  withVat, withoutVat, contractValidity, validityText, RENEW_DAYS,
   type PaymentLike,
 } from '../src/lib/qlvhRules';
 
@@ -149,6 +149,31 @@ eq(withVat(108_000_000, 0), 108_000_000, 'withVat: chế xuất 0% giữ nguyên
 eq(withoutVat(116_640_000, 8), 108_000_000, 'withoutVat: quay ngược đúng số gốc');
 eq(withoutVat(withVat(28_928_573, 8), 8), 28_928_573, 'withVat rồi withoutVat về đúng số cũ');
 eq(withVat(0, 8), 0, 'withVat: 0 vẫn là 0');
+/* ------------------------------ hiệu lực hợp đồng (KHÁC quá hạn thanh toán) */
+
+/* Ranh giới này từng sai thật (08/10/2026): điều kiện cũ `left >= 0` làm hợp
+   đồng BIẾN MẤT khỏi bảng nhắc tái ký đúng vào ngày nó hết hạn — 5 hợp đồng quá
+   hạn 3..178 ngày nằm vô hình. Khoá chặt bằng test. */
+const T = '2026-10-08';
+
+eq(contractValidity('2026-12-31', T), 'con_hieu_luc', 'hiệu lực: còn 84 ngày ⇒ còn hiệu lực');
+eq(contractValidity('2026-11-07', T), 'sap_het_hieu_luc', 'hiệu lực: đúng 30 ngày ⇒ SẮP hết (biên trong)');
+eq(contractValidity('2026-11-08', T), 'con_hieu_luc', 'hiệu lực: 31 ngày ⇒ chưa nhắc (biên ngoài)');
+eq(contractValidity(T, T), 'sap_het_hieu_luc', 'hiệu lực: hết hạn ĐÚNG HÔM NAY ⇒ vẫn còn hiệu lực hết ngày');
+eq(contractValidity('2026-10-07', T), 'het_hieu_luc', 'hiệu lực: qua 1 ngày ⇒ HẾT hiệu lực, KHÔNG được biến mất');
+eq(contractValidity('2026-10-05', T), 'het_hieu_luc', 'hiệu lực: ca JOHNSON1 quá 3 ngày');
+eq(contractValidity('2026-04-13', T), 'het_hieu_luc', 'hiệu lực: ca FANTASY quá 178 ngày vẫn phải hiện');
+eq(contractValidity('', T), 'con_hieu_luc', 'hiệu lực: chưa ghi hạn thì không kết luận');
+
+eq(validityText('2026-10-05', T), 'Hết hiệu lực 3 ngày', 'validityText: nói rõ bằng chữ, không để số âm');
+eq(validityText('2026-10-20', T).startsWith('Sắp hết hiệu lực'), true, 'validityText: sắp hết ghi rõ chữ hiệu lực');
+eq(RENEW_DAYS, 30, 'RENEW_DAYS = 30');
+
+/* Hai trục ĐỘC LẬP: thu đủ tiền vẫn có thể hết hiệu lực (đúng ca JOHNSON1). */
+eq(paymentStatus({ seq: 1, due_date: '2025-10-12', amount_due: 1, paid_date: '2025-10-17' }, T), 'da_thu',
+   'độc lập: đợt đã thu xong...');
+eq(contractValidity('2026-10-05', T), 'het_hieu_luc', '...mà hợp đồng vẫn hết hiệu lực');
+
 /* ------------------------------------------------------------------ báo */
 
 console.log(`\nQLVH rules: ${pass} ca xanh, ${fails.length} ca đỏ`);

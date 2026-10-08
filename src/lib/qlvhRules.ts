@@ -57,6 +57,77 @@ export const STATUS_BADGE: Record<PaymentStatus, string> = {
 /** Số ngày trước hạn thì coi là "sắp đến hạn" (user chốt 21/08/2026). */
 export const SOON_DAYS = 15;
 
+/* ------------------------------------------- Hiệu lực hợp đồng (thời hạn) */
+
+/**
+ * HAI TRỤC KHÁC NHAU, KHÔNG ĐƯỢC TRỘN (user yêu cầu tách bạch 08/10/2026):
+ *
+ *   | | Hiệu lực hợp đồng | Thu tiền |
+ *   |---|---|---|
+ *   | Mốc    | `effective_to`        | `due_date` / `paid_date` |
+ *   | Hỏi gì | hợp đồng còn giá trị? | khách trả tiền chưa?     |
+ *   | Xử lý  | tái ký / thanh lý     | đòi nợ                   |
+ *
+ * Hai trục ĐỘC LẬP: hợp đồng có thể **thu đủ tiền mà vẫn hết hiệu lực** (JOHNSON1
+ * — thu từ 10/2025, hết hiệu lực 05/10/2026), và ngược lại còn hiệu lực mà đang
+ * nợ. Trước 08/10/2026 cả hai dùng chung nhãn "Quá hạn" nên không phân biệt được
+ * trên thẻ hợp đồng.
+ *
+ * Quy ước hiển thị để không bao giờ lẫn nữa:
+ *   - chữ có **"hiệu lực"** + biểu tượng LỊCH  → chuyện thời hạn
+ *   - chữ có **"thanh toán"** + biểu tượng VÍ  → chuyện tiền
+ */
+export type ContractValidity = 'con_hieu_luc' | 'sap_het_hieu_luc' | 'het_hieu_luc';
+
+/** Hết hiệu lực trong ngần này ngày thì nhắc chuẩn bị tái ký. */
+export const RENEW_DAYS = 30;
+
+export const VALIDITY_LABEL: Record<ContractValidity, string> = {
+  con_hieu_luc:     'Còn hiệu lực',
+  sap_het_hieu_luc: 'Sắp hết hiệu lực',
+  het_hieu_luc:     'Hết hiệu lực',
+};
+
+/**
+ * Màu chỉ nói MỨC ĐỘ GẤP (dùng chung thang với thu tiền); phân biệt LOẠI việc là
+ * nhờ chữ và biểu tượng. Tô hợp đồng hết hiệu lực bằng màu dịu hơn chỉ để khác
+ * màu nợ quá hạn sẽ là nói dối về mức độ nghiêm trọng.
+ */
+export const VALIDITY_BADGE: Record<ContractValidity, string> = {
+  con_hieu_luc:     `${BADGE_BASE} vl-badge-success`,
+  sap_het_hieu_luc: `${BADGE_BASE} vl-badge-warning`,
+  het_hieu_luc:     `${BADGE_BASE} vl-badge-danger`,
+};
+
+export function contractValidity(
+  effectiveTo: string | undefined,
+  today: string = todayStr(),
+  renewDays: number = RENEW_DAYS,
+): ContractValidity {
+  const to = dayOf(effectiveTo);
+  if (!to) return 'con_hieu_luc';           // chưa ghi hạn thì không kết luận
+  const left = daysBetween(today, to);
+  if (left < 0) return 'het_hieu_luc';
+  if (left <= renewDays) return 'sap_het_hieu_luc';
+  return 'con_hieu_luc';
+}
+
+/**
+ * Nhãn đầy đủ kèm số ngày: "Hết hiệu lực 3 ngày" / "Sắp hết hiệu lực · còn 12 ngày".
+ * Luôn ghi rõ chữ "hiệu lực" — số âm trần ("−3 ngày") đọc lướt không ai nhận ra.
+ */
+export function validityText(
+  effectiveTo: string | undefined,
+  today: string = todayStr(),
+): string {
+  const v = contractValidity(effectiveTo, today);
+  const left = daysBetween(today, dayOf(effectiveTo));
+  if (!dayOf(effectiveTo)) return VALIDITY_LABEL.con_hieu_luc;
+  if (v === 'het_hieu_luc') return `Hết hiệu lực ${-left} ngày`;
+  if (v === 'sap_het_hieu_luc') return `Sắp hết hiệu lực · còn ${left} ngày`;
+  return `Còn hiệu lực · ${left} ngày`;
+}
+
 /* ------------------------------------------------------------- Ngày tháng */
 
 /**

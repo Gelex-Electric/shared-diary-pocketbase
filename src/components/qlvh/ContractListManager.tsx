@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Building2, CalendarClock, ChevronRight, FileText, Pencil, Plus,
+  AlertTriangle, Building2, CalendarClock, CalendarX2, ChevronRight, FileText, Pencil, Plus,
   RefreshCw, Save, Search, Trash2, Wallet,
 } from 'lucide-react';
 import { Select } from '../ui/Select';
@@ -26,7 +26,7 @@ import ContractDialog from './ContractDialog';
 import {
   CONTRACT_STATUS_BADGE, CONTRACT_STATUS_LABEL, CONTRACT_STATUS_OPTIONS, STATUS_BADGE, STATUS_LABEL,
   deleteContract, fetchContracts, isDraft, paymentStatus, savePaymentEdits, summarize,
-  updateContractStatus, withVat,
+  updateContractStatus, withVat, contractValidity, validityText, VALIDITY_BADGE,
   type ContractStatus, type ContractWithSchedule, type PaymentStatus,
 } from '../../lib/qlvh';
 
@@ -418,7 +418,13 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                     </span>
                   </span>
 
-                  {st && <span className={`${STATUS_BADGE[st]} shrink-0`}>{STATUS_LABEL[st]}</span>}
+                  {/* Nhãn THANH TOÁN (ví) — ở cấp khách hàng rất dễ bị đọc nhầm
+                      thành hợp đồng hết hạn, nên bắt buộc có biểu tượng. */}
+                  {st && (
+                    <span className={`${STATUS_BADGE[st]} shrink-0`}>
+                      <Wallet className="w-3 h-3" />{STATUS_LABEL[st]}
+                    </span>
+                  )}
                   <ChevronRight className="w-4 h-4 vl-accordion-chevron" />
                 </button>
 
@@ -461,7 +467,19 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                                 <span className="text-faint font-normal"> · còn {money(withVat(row.totals.remaining, c.vat_rate || 0))}đ</span>
                               )}
                             </span>
-                            {rowSt && <span className={STATUS_BADGE[rowSt]}>{STATUS_LABEL[rowSt]}</span>}
+                            {/* HAI nhãn, hai chuyện khác nhau — xem qlvhRules:
+                                ví = thu tiền, lịch = hiệu lực hợp đồng. */}
+                            {rowSt && (
+                              <span className={STATUS_BADGE[rowSt]}>
+                                <Wallet className="w-3 h-3" />{STATUS_LABEL[rowSt]}
+                              </span>
+                            )}
+                            {c.status_manual === 'dang_hieu_luc'
+                              && contractValidity(c.effective_to) !== 'con_hieu_luc' && (
+                              <span className={VALIDITY_BADGE[contractValidity(c.effective_to)]}>
+                                <CalendarX2 className="w-3 h-3" />{validityText(c.effective_to)}
+                              </span>
+                            )}
                           </div>
 
                           <PaymentScheduleTable

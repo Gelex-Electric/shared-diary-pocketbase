@@ -19,8 +19,9 @@ import { toast as notify } from '../../lib/toast';
 import { useScopeAreas, type Scope } from '../../lib/scope';
 import { zoneHexOf } from '../../lib/kcnColors';
 import {
-  STATUS_BADGE, STATUS_LABEL, daysBetween, dayOf, fetchContracts, overdueDays,
-  isDraft, paymentStatus, remainingOf, summarize, todayStr, withVat,
+  RENEW_DAYS, STATUS_BADGE, STATUS_LABEL, VALIDITY_BADGE, contractValidity,
+  daysBetween, dayOf, fetchContracts, overdueDays, isDraft, paymentStatus,
+  remainingOf, summarize, todayStr, validityText, withVat,
   type ContractWithSchedule, type Payment,
 } from '../../lib/qlvh';
 
@@ -34,8 +35,8 @@ const dateVN = (v?: string) => {
 
 /** Cửa sổ nhìn tới của bảng "sắp đến hạn" — rộng hơn ngưỡng badge 15 ngày. */
 const HORIZON_DAYS = 30;
-/** Hợp đồng hết hiệu lực trong ngần này ngày thì nhắc tái ký. */
-const RENEW_DAYS = 30;
+/* RENEW_DAYS nay ở qlvhRules cùng với luật hiệu lực — ngưỡng và luật phải nằm
+   một chỗ, tách ra là sớm muộn cũng lệch nhau. */
 
 interface DueRow {
   payment: Payment;
@@ -149,16 +150,35 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
     [dueRows, today],
   );
 
+  /**
+   * Hợp đồng ĐÃ hết hiệu lực hoặc SẮP hết, mà vẫn đang mang trạng thái
+   * "đang hiệu lực".
+   *
+   * ⚠️ KHÔNG chặn ở `left >= 0` (sửa 08/10/2026). Điều kiện cũ làm hợp đồng
+   * BIẾN MẤT khỏi bảng đúng vào ngày nó hết hạn — tức là ca cần xử lý gấp nhất
+   * lại là ca không còn nhìn thấy. Lúc phát hiện có 5 hợp đồng quá hạn (3 đến
+   * 178 ngày) đang vô hình, bảng hiện 0 dòng trông như mọi thứ đều ổn.
+   *
+   * Hợp đồng quá hạn ở lại cho tới khi người dùng xử lý: tái ký (đổi
+   * `effective_to`) hoặc đóng lại (đổi trạng thái sang "Đã thanh lý"). Không tự
+   * ẩn theo thời gian — còn mang trạng thái "đang hiệu lực" mà ngày đã qua thì
+   * đó là việc chưa xong, không phải chuyện cũ nên quên.
+   */
   const renewing = useMemo(
     () => visible
       .filter(r => {
-        const to = dayOf(r.contract.effective_to);
-        if (!to || r.contract.status_manual !== 'dang_hieu_luc') return false;
-        const left = daysBetween(today, to);
-        return left >= 0 && left <= RENEW_DAYS;
+        if (!dayOf(r.contract.effective_to) || r.contract.status_manual !== 'dang_hieu_luc') return false;
+        return contractValidity(r.contract.effective_to, today) !== 'con_hieu_luc';
       })
+      /* Hết hạn lâu nhất lên đầu — càng để lâu càng gấp. */
       .sort((a, b) => dayOf(a.contract.effective_to).localeCompare(dayOf(b.contract.effective_to))),
     [visible, today],
+  );
+
+  /** Đã quá hạn (ngày hết hiệu lực đã trôi qua) — tách ra để đếm và tô màu. */
+  const expired = useMemo(
+    () => renewing.filter(r => contractValidity(r.contract.effective_to, today) === 'het_hieu_luc'),
+    [renewing, today],
   );
 
   const areaOptions = useMemo(
@@ -203,7 +223,9 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
                   {money(withVat(remainingOf(d.payment), d.vatRate))}đ
                 </td>
                 <td className="py-3 px-4 text-center">
+                  {/* Nhãn THANH TOÁN: biểu tượng ví — khác nhãn hiệu lực (lịch). */}
                   <span className={STATUS_BADGE[st]}>
+                    <Wallet className="w-3 h-3" />
                     {STATUS_LABEL[st]}
                     {showLate && late > 0 && ` ${late} ngày`}
                     {!showLate && left >= 0 && ` · còn ${left} ngày`}
@@ -277,10 +299,15 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
           : renderDueTable(upcoming, false)}
       </Panel>
 
-      <Panel title={`Hợp đồng sắp hết hiệu lực (${RENEW_DAYS} ngày)`} icon={CalendarX2}
-        sub={renewing.length > 0 ? `${renewing.length} hợp đồng cần chuẩn bị tái ký` : undefined}>
+      <Panel title={`Hợp đồng đã và sắp hết hiệu lực (${RENEW_DAYS} ngày)`} icon={CalendarX2}
+        sub={renewing.length > 0
+          ? [
+              expired.length > 0 ? `${expired.length} đã hết hạn` : '',
+              renewing.length - expired.length > 0 ? `${renewing.length - expired.length} sắp hết hạn` : '',
+            ].filter(Boolean).join(' · ')
+          : undefined}>
         {renewing.length === 0
-          ? <EmptyState icon={CalendarX2} title="Chưa có hợp đồng nào sắp hết hạn" hint={`Không hợp đồng nào hết hiệu lực trong ${RENEW_DAYS} ngày tới.`} />
+          ? <EmptyState icon={CalendarX2} title="Chưa có hợp đồng nào sắp hết hạn" hint={`Không hợp đồng nào đã hết hiệu lực hoặc sẽ hết trong ${RENEW_DAYS} ngày tới.`} />
           : (
             <div className="overflow-x-auto">
               <table className="vl-table w-full text-left border-collapse min-w-[640px]">
@@ -289,7 +316,7 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
                     <th className="py-3 px-4 w-[150px]">Số hợp đồng</th>
                     <th className="py-3 px-4">Khách hàng</th>
                     <th className="py-3 px-4 w-[130px] text-center">Hết hiệu lực</th>
-                    <th className="py-3 px-4 w-[120px] text-center">Còn lại</th>
+                    <th className="py-3 px-4 w-[150px] text-center">Tình trạng hiệu lực</th>
                     <th className="py-3 px-4 w-[150px] text-right">Giá trị</th>
                   </tr>
                 </thead>
@@ -306,8 +333,13 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center tabular-nums text-soft">{dateVN(r.contract.effective_to)}</td>
-                      <td className="py-3 px-4 text-center tabular-nums font-semibold text-ink">
-                        {daysBetween(today, dayOf(r.contract.effective_to))} ngày
+                      {/* Nhãn HIỆU LỰC: luôn có chữ "hiệu lực" + biểu tượng lịch,
+                          để không lẫn với nhãn QUÁ HẠN THANH TOÁN (biểu tượng ví). */}
+                      <td className="py-3 px-4 text-center">
+                        <span className={VALIDITY_BADGE[contractValidity(r.contract.effective_to, today)]}>
+                          <CalendarX2 className="w-3 h-3" />
+                          {validityText(r.contract.effective_to, today)}
+                        </span>
                       </td>
                       <td className="py-3 px-4 text-right tabular-nums font-semibold text-ink">
                         {money(r.contract.value_total)}đ
