@@ -2162,7 +2162,14 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
       )}
 
       {shownTabs.length > 1 && (
-        <Tabs tabs={shownTabs} value={tab} onChange={t => { setTab(t); setSearch(''); }} />
+        <Tabs tabs={shownTabs} value={tab} onChange={t => {
+          // Rời tab Kho vật tư ⇒ NẠP LẠI danh mục: `StockEntry` nạp/ghi dữ liệu
+          // riêng, nên thiết bị vừa khai ở Kho không có trong `d.devices` của
+          // màn này — ô chọn Số No ở form điểm đo không thấy (sự cố SIM
+          // 8984048000962310906, 12/10/2026).
+          if (tab === 'stock' && t !== 'stock') void load();
+          setTab(t); setSearch('');
+        }} />
       )}
 
       {/* ======================= Vòng đời vật tư ======================= */}
