@@ -979,15 +979,25 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
    * một bên đã lắp thật thì chặn như cũ, vì số No lúc đó chỉ một thiết bị có
    * thật ngoài lưới.
    */
+  /*
+    NỚI 13/10/2026 (user chốt): chỉ cần DÒNG VẬT TƯ bên kia còn DỰ KIẾN (chưa
+    ngày treo) là CHUYỂN được về đây — bên kia gỡ dòng đó khi lưu — dù điểm đo
+    bên kia hay điểm đo này đã vận hành. Vật tư dự kiến chỉ là dự định phân bổ,
+    bắt người dùng sang điểm đo kia xoá trước là thừa một vòng.
+    ĐỔI CHỖ vẫn giữ điều kiện NGẶT cũ (cả hai điểm đo cùng dự kiến): đưa số cũ
+    của một điểm đo đang chạy sang bên kia là đẩy một thiết bị có thật đi.
+    Bên kia đã TREO THẬT (có ngày treo) thì vẫn chặn như cũ.
+  */
   const reclaim = serialConflicts
-    .filter(b => thisPlanned && isPlannedPoint(b.asset.point))
+    .filter(b => !(b.asset.date_on ?? '').trim())
     .map(b => {
       // Dòng trên form đang mang số No này, và số No nó giữ TRƯỚC khi sửa.
       const row = pForm.assetRows.find(r => r.serial.trim() === b.serial);
       const saved = row?.id ? (d?.assets ?? []).find(a => a.id === row.id) : undefined;
       const swapTo = (saved?.serial ?? '').trim();
       // Chỉ đổi chỗ khi số cũ thật sự khác và không đang nằm ở đâu khác.
-      const canSwap = !!swapTo && swapTo !== b.serial
+      const canSwap = thisPlanned && isPlannedPoint(b.asset.point)
+        && !!swapTo && swapTo !== b.serial
         && !(d?.assets ?? []).some(a => a.serial.trim() === swapTo && a.id !== saved?.id && a.point);
       return { ...b, swapTo: canSwap ? swapTo : '' };
     });
