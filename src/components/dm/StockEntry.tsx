@@ -34,6 +34,7 @@ import {
   ASSET_LABEL, DEVICE_STATUS_LABEL, type AssetType, type Device, type DeviceStatus,
 } from '../../lib/dm/types';
 import { pointZoneId } from '../../lib/dm/pointScope';
+import { setMatchesHsn } from '../../lib/dm/tutiPick';
 import {
   buildStock, findExisting, guessType, idleDays, parsePaste, SERIAL_RE,
   IDLE_WARN_DAYS, REUSE_MIN, type StockRow,
@@ -303,11 +304,72 @@ export default function StockEntry() {
   const [attachDate, setAttachDate] = useState(today());
 
   const pickedRows = rows.filter(r => picked.has(r.device.id));
+
+  /*
+    LUẬT GẮN HÀNG LOẠT (13/10/2026) — trước đây nút này ghi thẳng, bỏ qua mọi
+    luật của form điểm đo: gắn được thiết bị đang treo nơi khác (một thiết bị
+    treo hai chỗ), không kiểm HSN, không gỡ dòng dự kiến ở điểm đo cũ.
+    Nay cùng luật với form:
+      - CHẶN: đã thanh lý · đang treo (ở nơi khác hoặc chính điểm đo này) ·
+        đã có dòng ở điểm đo này · TI chọn khác tỷ số nhau · TI×TU ≠ HSN điểm đo.
+      - CHUYỂN: thiết bị đang DỰ KIẾN ở điểm đo khác ⇒ gỡ dòng bên đó khi ghi
+        (giống luật nới ngày 13/10 ở form điểm đo).
+  */
+  const assetsOf = (devId: string) => (d?.assets ?? []).filter(a => a.device === devId);
+  const isPlan = (a: { date_on?: string; date_off?: string }) =>
+    !(a.date_on ?? '').slice(0, 10) && !(a.date_off ?? '').slice(0, 10);
+  const codeOfPoint = (id?: string) => d?.points.find(p => p.id === id)?.code ?? '(không rõ)';
+  const attachTarget = d?.points.find(p => p.id === attachPoint);
+
+  const attachBlocks: string[] = [];
+  const attachMoves: { serial: string; assetId: string; from: string }[] = [];
+  if (attachPoint) {
+    for (const r of pickedRows) {
+      const sn = r.device.serial;
+      const mine = assetsOf(r.device.id);
+      if (r.device.liquidated_at) { attachBlocks.push(`${sn} đã thanh lý`); continue; }
+      if (r.status === 'dang_treo') {
+        attachBlocks.push(r.atPoint?.id === attachPoint
+          ? `${sn} đã treo ở chính điểm đo này`
+          : `${sn} đang treo ở ${r.atPoint?.code ?? '(không rõ)'} — khai ngày tháo ở đó trước`);
+        continue;
+      }
+      if (mine.some(a => a.point === attachPoint && isPlan(a))) {
+        attachBlocks.push(`${sn} đã có dòng dự kiến ở điểm đo này — mở điểm đo để khai ngày treo`);
+        continue;
+      }
+      for (const a of mine.filter(a => a.point && a.point !== attachPoint && isPlan(a))) {
+        attachMoves.push({ serial: sn, assetId: a.id, from: codeOfPoint(a.point) });
+      }
+    }
+
+    // HSN: bộ TI (× TU) gắn vào phải khớp HSN điểm đo — cùng luật form điểm đo.
+    const ratioOf2 = (x?: number, y?: number) => (x && y ? { primary: x, secondary: y } : null);
+    const tis = pickedRows.filter(r => r.device.type === 'TI');
+    if (tis.length) {
+      const kinds = new Set(tis.map(r => `${r.device.ratio_primary ?? ''}/${r.device.ratio_secondary ?? ''}`));
+      const hsn = attachTarget?.hsn;
+      const tuDev = pickedRows.find(r => r.device.type === 'TU')?.device
+        ?? (d?.assets ?? []).find(a => a.point === attachPoint && a.type === 'TU' && !(a.date_off ?? '').slice(0, 10));
+      if (kinds.size > 1) attachBlocks.push(`các TI chọn không cùng tỷ số (${[...kinds].join(' ≠ ')})`);
+      else if (!hsn) attachBlocks.push(`điểm đo ${attachTarget?.code ?? ''} chưa khai HSN — khai HSN ở form điểm đo trước`);
+      else if (!setMatchesHsn(hsn, ratioOf2(tis[0].device.ratio_primary, tis[0].device.ratio_secondary),
+        tuDev ? ratioOf2(tuDev.ratio_primary, tuDev.ratio_secondary) : null)) {
+        attachBlocks.push(`TI ${[...kinds][0]}${tuDev ? ` × TU ${tuDev.ratio_primary}/${tuDev.ratio_secondary}` : ''} `
+          + `không khớp HSN ${hsn} của điểm đo`);
+      }
+    }
+  }
+
   const attach = async () => {
     if (!attachPoint) return toast.warning('Chưa chọn điểm đo', 'Phải chọn điểm đo để gắn.');
+    if (attachBlocks.length) return toast.error('Chưa gắn được', `${attachBlocks.join('. ')}.`);
     setSaving(true);
     let n = 0;
     try {
+      // Thiết bị đang dự kiến ở điểm đo khác: gỡ dòng bên đó trước, rồi mới tạo
+      // dòng ở đây — ngược lại thì giữa chừng có lúc một thiết bị nằm hai nơi.
+      for (const m of attachMoves) await assetRepo.remove(m.assetId);
       for (const r of pickedRows) {
         /*
           Tạo LẦN LẮP mới, không sửa lần lắp cũ: cùng một thiết bị có thể lắp
@@ -319,8 +381,10 @@ export default function StockEntry() {
           ratio_primary: r.device.ratio_primary, ratio_secondary: r.device.ratio_secondary,
           date_on: attachDate || '', active: true, status: attachDate ? 'dang_treo' : 'kho',
         });
-        // Đã có chỗ thật thì bỏ giữ chỗ, kẻo hai thông tin đá nhau.
-        if (r.device.hold_point) await deviceRepo.update(r.device.id, { hold_point: '' });
+        // Giữ chỗ đồng bộ như form điểm đo: có ngày treo ⇒ bỏ giữ chỗ; chưa có
+        // (gắn dạng dự kiến) ⇒ giữ chỗ cho chính điểm đo này.
+        const hold = attachDate ? '' : attachPoint;
+        if ((r.device.hold_point ?? '') !== hold) await deviceRepo.update(r.device.id, { hold_point: hold });
         n++;
       }
       toast.success('Đã gắn vào điểm đo', `${n} thiết bị.`);
@@ -352,6 +416,22 @@ export default function StockEntry() {
   };
 
   const liquidate = async (r: StockRow) => {
+    /*
+      Không thanh lý thiết bị CÒN Ở ĐIỂM ĐO (13/10/2026): đang treo thì nó vẫn
+      đang đo — "đã thanh lý mà đang treo" là hai sự thật đá nhau; đang dự kiến
+      thì dòng ở điểm đo kia sẽ trỏ vào một thiết bị đã bỏ. Tháo / gỡ trước.
+    */
+    if (!r.device.liquidated_at) {
+      if (r.status === 'dang_treo') {
+        return toast.error('Chưa thanh lý được',
+          `${r.device.serial} đang treo ở ${r.atPoint?.code ?? '(không rõ)'} — khai ngày tháo ở điểm đo đó trước.`);
+      }
+      const plan = assetsOf(r.device.id).find(isPlan);
+      if (plan) {
+        return toast.error('Chưa thanh lý được',
+          `${r.device.serial} đang dự kiến cho ${codeOfPoint(plan.point)} — bỏ dòng đó ở điểm đo trước.`);
+      }
+    }
     const ok = await confirm({
       title: r.device.liquidated_at ? 'Bỏ thanh lý' : 'Thanh lý thiết bị',
       message: r.device.liquidated_at
@@ -735,9 +815,19 @@ export default function StockEntry() {
         </Field>
         <Field label="Ngày treo"
           hint="Bỏ trống nếu chưa lắp thật — khi đó chỉ là giữ chỗ, vật tư vẫn tính là trong kho">
-          <input type="date" value={attachDate} onChange={e => setAttachDate(e.target.value)}
-            className={INPUT_CLS} />
+          <DatePicker value={attachDate} onChange={setAttachDate} usePortal />
         </Field>
+        {attachMoves.length > 0 && (
+          <div className="vl-alert vl-alert-light-warning text-[12px]">
+            Khi gắn sẽ <b>CHUYỂN</b> về đây và gỡ khỏi điểm đo cũ:{' '}
+            {attachMoves.map(m => `${m.serial} (đang dự kiến ở ${m.from})`).join('; ')}.
+          </div>
+        )}
+        {attachBlocks.length > 0 && (
+          <div className="vl-alert vl-alert-light-danger text-[12px]">
+            <b>Không gắn được:</b> {attachBlocks.join('; ')}.
+          </div>
+        )}
       </FormModal>
     </div>
   );
