@@ -386,6 +386,8 @@ export function ProgressBar({
   height = 'h-5',
   showPercent = true,
   title,
+  soft = false,
+  restTone,
 }: {
   /** Phần đã đạt. */
   value: number;
@@ -397,6 +399,10 @@ export function ProgressBar({
   /** Hiện số % trong thanh khi đủ rộng. */
   showPercent?: boolean;
   title?: string;
+  /** Phần đã đạt tô NHẠT (dùng khi cả trang có nhiều thanh, tránh rối mắt). */
+  soft?: boolean;
+  /** Tô phần CÒN THIẾU theo tone này (vd mức trễ hạn); bỏ trống = nền subtle. */
+  restTone?: Tone;
 }) {
   const pct = total > 0 ? Math.min(100, Math.max(0, (value / total) * 100)) : 0;
   const rounded = Math.round(pct);
@@ -411,13 +417,14 @@ export function ProgressBar({
     >
       <motion.div
         className="flex items-center justify-center text-[10px] font-bold leading-none text-white tabular-nums"
-        style={{ background: RAIL[tone] }}
+        style={{ background: soft ? `color-mix(in srgb, ${RAIL[tone]} 45%, transparent)` : RAIL[tone] }}
         initial={false}
         animate={{ width: `${pct}%` }}
         transition={{ duration: 0.35, ease: 'easeOut' }}
       >
         {showPercent && pct >= 14 ? `${rounded}%` : ''}
       </motion.div>
+      {restTone && pct < 100 && <div className="flex-1" style={{ background: RAIL[restTone] }} />}
     </div>
   );
 }

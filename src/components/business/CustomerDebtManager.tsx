@@ -6,10 +6,11 @@ import { createNotification } from '../ui/NotificationBell';
 import { Tabs, type TabItem } from '../ui/Tabs';
 import { Select } from '../ui/Select';
 import { ProgressBar } from '../ui/dashboard';
+import PaymentBehaviorReport from './PaymentBehaviorReport';
 import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
-  RefreshCw, X, Loader2, Save, Banknote, LayoutDashboard, Table2, CalendarClock, AlertTriangle,
+  RefreshCw, X, Loader2, Save, Banknote, LayoutDashboard, Table2, CalendarClock, AlertTriangle, ClipboardList,
   Receipt, BellRing, KeyRound,
 } from 'lucide-react';
 
@@ -32,11 +33,12 @@ import { zoneFromArea, fetchLatestInvoiceMonth } from '../../lib/invoices';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 type PaymentFilter = 'all' | 'paid' | 'unpaid';
-type DebtTab = 'summary' | 'detail';
+type DebtTab = 'summary' | 'detail' | 'report';
 
 const DEBT_TABS: TabItem<DebtTab>[] = [
   { id: 'summary', label: 'Tổng hợp', icon: LayoutDashboard, sub: 'Chỉ tiêu chung & tiến trình thanh toán' },
   { id: 'detail', label: 'Chi tiết', icon: Table2, sub: 'Bảng công nợ theo từng khu công nghiệp' },
+  { id: 'report', label: 'Thói quen thanh toán', icon: ClipboardList, sub: 'Khách hàng nào luôn trả đúng hạn, khách nào hay chậm' },
 ];
 
 const TOAST_TITLE: Record<ToastType, string> = {
@@ -217,6 +219,8 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // Bảng KCN bị thu gọn (mặc định mở); key = mã KCN
   const [collapsedZones, setCollapsedZones] = useState<Record<string, boolean>>({});
+  // Bảng tiến trình theo tháng: ghi đè đóng/mở của người dùng (mặc định tháng còn nợ mở, tháng đủ thu gọn)
+  const [openMonths, setOpenMonths] = useState<Record<string, boolean>>({});
   // Thay đổi ngày thanh toán đang soạn (chưa lưu): key kỳ → ngày ('' = chưa thanh toán)
   const [pending, setPending] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -864,7 +868,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
         {/* Bộ chọn tháng + tìm kiếm (bên phải) */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:shrink-0">
           {/* Tổng hợp: chọn NĂM (tiến trình cả năm). Chi tiết: chọn THÁNG (bảng KCN). */}
-          {tab === 'summary' ? (
+          {tab !== 'detail' ? (
             <Select
               value={year}
               onChange={v => { setPending({}); setYear(v); }}
@@ -988,134 +992,164 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       ) : (
         monthProgress.map(mp => {
           const [my, mm] = mp.ym.split('-');
+          const monthDone = mp.paid >= mp.total;
+          // Mặc định: tháng còn nợ mở, tháng đã thu đủ thu gọn; người dùng bấm thì ghi đè.
+          const isOpen = mp.ym in openMonths ? openMonths[mp.ym] : !monthDone;
+          const monthTone = dueTone(mp.paid, mp.total, mp.worstElapsed);
           return (
             <div key={mp.ym} className="vl-card overflow-hidden">
-              {/* Header tháng — cùng kiểu thanh gradient với bảng KCN */}
-              <div className={`bg-gradient-to-r ${ZONE_HEADER_GRADIENT} px-5 md:px-7 py-4 flex items-center justify-between gap-3`}>
-                <div className="flex items-center gap-3 text-white min-w-0">
-                  <div className="p-2 bg-surface/20 rounded-xl shrink-0">
-                    <CalendarClock className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-base font-black tracking-tight leading-tight">Tháng {mm}/{my}</h3>
-                    <p className="text-[11px] font-semibold text-white/80">
-                      {mp.rows.length} đợt chốt · {mp.paid}/{mp.total} khách hàng đã thanh toán
-                    </p>
-                  </div>
+              {/* Header tháng — nền nhẹ (không gradient) để 12 tháng không thành 12 khối màu */}
+              <div
+                onClick={() => setOpenMonths(prev => ({ ...prev, [mp.ym]: !isOpen }))}
+                className={`px-5 md:px-6 py-3.5 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-subtle transition-colors ${
+                  isOpen ? 'border-b border-[var(--border)]' : ''
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <ChevronRight className={`w-4 h-4 text-faint shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
+                  <h3 className="text-sm font-black text-ink tracking-tight">Tháng {mm}/{my}</h3>
+                  <span className="text-[11px] font-semibold text-soft truncate">
+                    {mp.rows.length} đợt chốt · {mp.paid}/{mp.total} khách hàng
+                  </span>
                 </div>
-                {mp.unpaidVAT > 0 && (
-                  <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-black shadow-sm shrink-0 font-mono">
+                {monthDone ? (
+                  <span className="vl-badge-success inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Đã thu đủ
+                  </span>
+                ) : (
+                  <span className={`${monthTone === 'bad' ? 'vl-badge-danger' : monthTone === 'warn' ? 'vl-badge-warning' : 'vl-badge-primary'} px-2 py-0.5 rounded-md text-[11px] font-bold font-mono shrink-0`}>
                     Còn {fmtVND(mp.unpaidVAT)} đ
                   </span>
                 )}
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="vl-table w-full text-left border-collapse table-fixed min-w-[640px]">
-                  <thead>
-                    <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider bg-subtle/50">
-                      <th className="py-3 px-4 w-[170px]">Ngày chốt chỉ số</th>
-                      <th className="py-3 px-4 w-[100px] text-center">Khách hàng</th>
-                      <th className="py-3 px-4">Tiến trình thanh toán</th>
-                      <th className="py-3 px-4 w-[110px] text-center">Đã / Tổng</th>
-                      <th className="py-3 px-4 w-[150px] text-right">Còn phải thu</th>
-                      <th className="py-3 px-4 w-[100px] text-center">Chi tiết</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border)]">
-                    {mp.rows.map(g => {
-                      const done = g.paid >= g.total;
-                      const tone = dueTone(g.paid, g.total, g.elapsed);
-                      const overdue = !done && g.elapsed > DUE_NOTE_DAYS;
-                      return (
-                        <tr key={g.date} className="text-sm">
-                          <td className="py-3 px-4 font-mono font-bold text-ink">
-                            <div>{fmtDate(g.date)}</div>
-                            {overdue && (
-                              <div
-                                className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black ${
-                                  tone === 'bad' ? 'bg-rose-100 text-rose-700' : 'bg-[var(--warning-soft)] text-warn'
-                                }`}
-                                title={`Hạn cảnh báo ${DUE_WARN_DAYS} ngày, trễ hạn ${DUE_LATE_DAYS} ngày kể từ ngày chốt`}
-                              >
-                                <AlertTriangle className="w-3 h-3 shrink-0" />
-                                Quá hạn {g.elapsed} ngày
+              <AnimatePresence initial={false}>
+                {isOpen && (
+                  <motion.div
+                    key="month-body"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.22, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    <div className="overflow-x-auto">
+                      <table className="vl-table w-full text-left border-collapse table-fixed min-w-[680px]">
+                        <thead>
+                          <tr className="border-b border-[var(--border)] text-[11px] font-bold text-faint uppercase tracking-wider">
+                            <th className="py-2.5 px-4 w-[20%]">Ngày chốt chỉ số</th>
+                            <th className="py-2.5 px-4 w-[12%] text-center">Khách hàng</th>
+                            <th className="py-2.5 px-4 w-[36%]">Tiến trình thanh toán</th>
+                            <th className="py-2.5 px-4 w-[18%] text-right">Còn phải thu</th>
+                            <th className="py-2.5 px-4 w-[14%] text-center">Chi tiết</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border)]">
+                          {mp.rows.map(g => {
+                            const done = g.paid >= g.total;
+                            const tone = dueTone(g.paid, g.total, g.elapsed);
+                            const overdue = !done && g.elapsed > DUE_NOTE_DAYS;
+                            return (
+                              // Đợt đã thu đủ: chữ mờ — mắt chỉ dừng ở đợt còn nợ
+                              <tr key={g.date} className={`text-sm ${done ? 'text-faint' : ''}`}>
+                                <td className="py-2.5 px-4 font-mono">
+                                  <span className={done ? '' : 'font-bold text-ink'}>{fmtDate(g.date)}</span>
+                                  {overdue && (
+                                    <span
+                                      className={`ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black align-middle ${
+                                        tone === 'bad' ? 'vl-badge-danger' : 'vl-badge-warning'
+                                      }`}
+                                      title={`Hạn cảnh báo ${DUE_WARN_DAYS} ngày, trễ hạn ${DUE_LATE_DAYS} ngày kể từ ngày chốt`}
+                                    >
+                                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                                      {g.elapsed} ngày
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-4 text-center font-mono text-xs">{g.total}</td>
+                                <td className="py-2.5 px-4">
+                                  {/* Thanh mảnh, ngắn cố định: phần đã trả xanh nhạt, chỉ phần CÒN THIẾU mang màu cảnh báo */}
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <ProgressBar
+                                        value={g.paid}
+                                        total={g.total}
+                                        tone="ok"
+                                        soft
+                                        restTone={done ? undefined : tone}
+                                        height="h-2"
+                                        showPercent={false}
+                                        title={`${g.paid}/${g.total} khách hàng đã thanh toán${overdue ? ` · quá hạn ${g.elapsed} ngày` : ''}`}
+                                      />
+                                    </div>
+                                    <span className="w-[64px] shrink-0 text-right font-mono text-xs tabular-nums">
+                                      <span className={done ? '' : 'font-bold text-ink'}>{g.paid}</span>/{g.total}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-4 text-right font-mono text-xs">
+                                  {done ? '—' : <span className="font-bold text-rose-600">{fmtVND(g.unpaidVAT)}</span>}
+                                </td>
+                                {/* Đợt chưa thu đủ → mở thẳng danh sách khách còn nợ của đúng đợt này */}
+                                <td className="py-2.5 px-4 text-center">
+                                  {!done && (
+                                    <button
+                                      onClick={() => openUnpaidDetail(g.date)}
+                                      className="inline-flex items-center gap-1 text-xs font-bold text-accent hover:underline"
+                                      title={`Xem ${g.total - g.paid} khách hàng chưa thanh toán của đợt ${fmtDate(g.date)}`}
+                                    >
+                                      Chi tiết <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          {/* Dòng tổng — nền subtle + viền trên đậm, chữ in hoa: khác biệt mà không thêm khối màu */}
+                          <tr className="bg-subtle border-t-2 border-t-[var(--border-strong)] text-sm font-black text-ink">
+                            <td colSpan={2} className="py-3 px-4 text-right uppercase text-[11px] tracking-widest text-dim">
+                              Tổng tháng {mm}/{my}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <ProgressBar
+                                    value={mp.paid}
+                                    total={mp.total}
+                                    tone="ok"
+                                    soft
+                                    restTone={monthDone ? undefined : monthTone}
+                                    height="h-2"
+                                    showPercent={false}
+                                    title={`${mp.paid}/${mp.total} khách hàng đã thanh toán trong tháng`}
+                                  />
+                                </div>
+                                <span className="w-[64px] shrink-0 text-right font-mono text-xs tabular-nums">{mp.paid}/{mp.total}</span>
                               </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-center font-mono text-xs text-soft">{g.total}</td>
-                          <td className="py-3 px-4">
-                            <ProgressBar
-                              value={g.paid}
-                              total={g.total}
-                              tone={tone}
-                              title={`${g.paid}/${g.total} khách hàng đã thanh toán${overdue ? ` · quá hạn ${g.elapsed} ngày` : ''}`}
-                            />
-                          </td>
-                          <td className="py-3 px-4 text-center font-mono text-xs font-bold">
-                            <span className={done ? 'text-ok' : 'text-accent'}>{g.paid}</span>
-                            <span className="text-faint">/{g.total}</span>
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono text-xs font-bold">
-                            {g.unpaidVAT > 0 ? (
-                              <span className="text-rose-600">{fmtVND(g.unpaidVAT)}</span>
-                            ) : (
-                              <span className="text-ok">Đã thu đủ</span>
-                            )}
-                          </td>
-                          {/* Đợt chưa thu đủ → mở thẳng danh sách khách còn nợ của đúng đợt này */}
-                          <td className="py-3 px-4 text-center">
-                            {done ? (
-                              <span className="text-faint text-xs">—</span>
-                            ) : (
-                              <button
-                                onClick={() => openUnpaidDetail(g.date)}
-                                className="inline-flex items-center gap-1 text-xs font-bold text-accent hover:underline"
-                                title={`Xem ${g.total - g.paid} khách hàng chưa thanh toán của đợt ${fmtDate(g.date)}`}
-                              >
-                                Chi tiết <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    {/* Dòng tổng — tô nền accent + viền trên dày để tách hẳn khỏi các dòng ngày chốt */}
-                    <tr className="bg-accent-soft border-t-2 border-t-[var(--accent)] text-sm font-black text-ink">
-                      <td colSpan={2} className="py-3.5 px-4 text-right uppercase text-[11px] tracking-widest text-accent">
-                        Tổng tháng {mm}/{my}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <ProgressBar
-                          value={mp.paid}
-                          total={mp.total}
-                          tone={dueTone(mp.paid, mp.total, mp.worstElapsed)}
-                          title={`${mp.paid}/${mp.total} khách hàng đã thanh toán trong tháng`}
-                        />
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-mono text-sm font-black">
-                        <span className={mp.paid === mp.total ? 'text-ok' : 'text-accent'}>{mp.paid}</span>
-                        <span className="text-faint">/{mp.total}</span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono text-sm font-black">
-                        {mp.unpaidVAT > 0 ? (
-                          <span className="text-rose-600">{fmtVND(mp.unpaidVAT)}</span>
-                        ) : (
-                          <span className="text-ok">Đã thu đủ</span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4" />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-xs">
+                              {monthDone ? <span className="text-ok">Đã thu đủ</span> : <span className="text-rose-600">{fmtVND(mp.unpaidVAT)}</span>}
+                            </td>
+                            <td className="py-3 px-4" />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           );
         })
       )}
       </>
+      )}
+
+      {/* Tab Thói quen thanh toán: thanh toán theo khách — dùng chung dữ liệu cả năm của tab Tổng hợp */}
+      {tab === 'report' && (
+        <PaymentBehaviorReport customers={effectiveYearCustomers} year={year} loading={yearLoading} />
       )}
 
       {tab === 'detail' && (
