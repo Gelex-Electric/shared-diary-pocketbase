@@ -20,9 +20,10 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { toast as notify } from '../../lib/toast';
 import {
   CONTRACT_STATUS_LABEL, buildSchedule, computeVat, durationMonths, fetchContract,
-  fetchCustomers, fetchItems, fetchStations, fetchZones, isLocked, saveContract, scheduleWarning,
+  fetchContractsOfCustomer, fetchCustomers, fetchItems, fetchStations, fetchZones, findSuperseded,
+  isLocked, saveContract, scheduleWarning, updateContractStatus,
   withVat, withoutVat,
-  type ContractStatus, type DmCustomer, type DmStation, type DmZone, type ItemInput,
+  type ContractStatus, type ContractWithSchedule, type DmCustomer, type DmStation, type DmZone, type ItemInput,
   type PaymentInput,
 } from '../../lib/qlvh';
 
@@ -131,6 +132,10 @@ export default function ContractDialog({
   const [customers, setCustomers] = useState<DmCustomer[]>([]);
   const [zones, setZones] = useState<DmZone[]>([]);
   const [allStations, setAllStations] = useState<DmStation[]>([]);
+  /** Hợp đồng sẵn có của khách đang chọn — để dò bản cũ chưa thanh lý. */
+  const [customerContracts, setCustomerContracts] = useState<ContractWithSchedule[]>([]);
+  /** Id hợp đồng cũ người dùng đã tích "đồng thời thanh lý". */
+  const [toLiquidate, setToLiquidate] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -191,6 +196,17 @@ export default function ContractDialog({
       .then(setAllStations)
       .catch(() => setAllStations([]));
   }, [open]);
+
+  /* Hợp đồng sẵn có của khách — CHỈ khi thêm mới. Lúc sửa thì không nhắc thanh
+     lý: người dùng đang chỉnh bản ghi cũ, không phải tái ký. */
+  useEffect(() => {
+    if (!open || contractId || !customer) { setCustomerContracts([]); setToLiquidate([]); return; }
+    let alive = true;
+    fetchContractsOfCustomer(customer)
+      .then(list => { if (alive) setCustomerContracts(list); })
+      .catch(() => { if (alive) setCustomerContracts([]); });
+    return () => { alive = false; };
+  }, [open, contractId, customer]);
 
   /* Nạp hợp đồng đang sửa, hoặc dọn sạch form khi thêm mới. */
   useEffect(() => {
@@ -309,6 +325,24 @@ export default function ContractDialog({
         items,
       );
       notify.success(contractId ? 'Đã cập nhật hợp đồng.' : 'Đã thêm hợp đồng.');
+
+      /* Thanh lý bản cũ SAU khi hợp đồng mới đã lưu xong. Làm ngược lại mà bước
+         tạo hỏng thì hợp đồng cũ bị đóng oan trong khi bản mới chưa tồn tại.
+         Lỗi ở bước này KHÔNG được làm hỏng kết quả lưu — chỉ báo riêng. */
+      const liquidated: string[] = [];
+      for (const id of toLiquidate) {
+        try {
+          await updateContractStatus(id, 'da_thanh_ly');
+          liquidated.push(id);
+        } catch {
+          const no = superseded.find(s => s.row.contract.id === id)?.row.contract.contract_no || id;
+          notify.error(`Hợp đồng mới đã lưu, nhưng KHÔNG thanh lý được ${no}. Sửa trạng thái thủ công.`);
+        }
+      }
+      if (liquidated.length > 0) {
+        notify.success(`Đã thanh lý ${liquidated.length} hợp đồng cũ.`);
+      }
+
       onSaved();
       onClose();
     } catch (err: unknown) {
@@ -356,6 +390,41 @@ export default function ContractDialog({
 
   const addStation = (id: string) => { if (id) setStations(prev => [...prev, id]); };
   const removeStation = (id: string) => setStations(prev => prev.filter(x => x !== id));
+
+  /* ------ Hợp đồng cũ của khách có thể đang bị hợp đồng này thay thế ------ */
+
+  const superseded = useMemo(() => {
+    const found = findSuperseded(
+      customerContracts.map(r => r.contract),
+      from,
+      stations,
+    );
+    return found.map(({ contract, match }) => {
+      const row = customerContracts.find(r => r.contract.id === contract.id)!;
+      /* "Thu đủ" phải có ÍT NHẤT một đợt: hợp đồng chưa nhập đợt nào cũng cho
+         remaining = 0, coi là đã thu xong thì sẽ thanh lý nhầm. */
+      const hasSchedule = row.payments.length > 0;
+      const debt = row.totals.remaining;
+      return {
+        row, match,
+        canLiquidate: match === 'thay_the' && hasSchedule && debt <= 0,
+        /* Lý do KHÔNG cho tích — hiện ra chứ không khoá ô im lặng. */
+        blockReason: match !== 'thay_the'
+          ? 'chưa đối chiếu được trạm'
+          : !hasSchedule ? 'hợp đồng chưa có đợt thanh toán nào'
+            : debt > 0 ? `còn ${money(withVat(debt, row.contract.vat_rate || 0))}đ chưa thu`
+              : '',
+      };
+    });
+  }, [customerContracts, from, stations]);
+
+  /* Mặc định BẬT cho hợp đồng đủ điều kiện (user chốt 21/10) — đúng việc đang
+     phải làm tay hiện giờ; vẫn bỏ tích được.
+     Đặt lại mỗi khi kết quả dò đổi cũng chính là chốt chặn: sửa ngày/trạm sau
+     khi đã tích thì id không còn đủ điều kiện sẽ bị loại, không thanh lý nhầm. */
+  useEffect(() => {
+    setToLiquidate(superseded.filter(s => s.canLiquidate).map(s => s.row.contract.id));
+  }, [superseded]);
 
   /** Vì sao ô trạm không dùng được — mỗi tình huống một câu, không im lặng. */
   const stationBlocker = !customer
@@ -445,6 +514,41 @@ export default function ContractDialog({
                         searchable />
                       {stationBlocker && <p className="text-[11px] text-faint mt-1">{stationBlocker}</p>}
                     </Field>
+
+                    {/* Hợp đồng cũ của khách có thể đang bị bản này thay thế.
+                        Chỉ NHẮC, không bao giờ chặn lưu — 6/8 khách có nhiều
+                        hợp đồng là chạy song song hợp lệ (xem findSuperseded). */}
+                    {superseded.length > 0 && (
+                      <div className="vl-alert vl-alert-light-warning text-sm">
+                        <p className="font-semibold mb-2">
+                          Khách hàng này còn hợp đồng chưa thanh lý, kết thúc trước ngày hợp đồng mới bắt đầu:
+                        </p>
+                        <div className="space-y-1.5">
+                          {superseded.map(s => (
+                            <label key={s.row.contract.id}
+                              className={`flex items-start gap-2 ${s.canLiquidate ? 'cursor-pointer' : ''}`}>
+                              <input type="checkbox" disabled={!s.canLiquidate}
+                                checked={toLiquidate.includes(s.row.contract.id)}
+                                onChange={e => setToLiquidate(prev => e.target.checked
+                                  ? [...prev, s.row.contract.id]
+                                  : prev.filter(x => x !== s.row.contract.id))}
+                                className="w-4 h-4 mt-0.5 accent-[var(--accent)] disabled:opacity-40" />
+                              <span className="min-w-0">
+                                <span className="font-mono text-xs font-bold">{s.row.contract.contract_no}</span>
+                                <span className="text-xs opacity-80">
+                                  {' · '}{dateVN(s.row.contract.effective_from)}–{dateVN(s.row.contract.effective_to)}
+                                </span>
+                                <span className="block text-xs">
+                                  {s.canLiquidate
+                                    ? 'Đã thu đủ — đồng thời thanh lý khi lưu'
+                                    : `Không thanh lý tự động được: ${s.blockReason}`}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Ô tích để riêng một dòng: nằm trong ô Trạng thái thì nó đội
                         chiều cao cột và làm lệch hàng các ô tiền phía dưới. */}

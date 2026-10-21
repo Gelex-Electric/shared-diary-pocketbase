@@ -315,6 +315,46 @@ export async function fetchContracts(zoneName?: string): Promise<ContractWithSch
   });
 }
 
+/**
+ * Hợp đồng của MỘT khách, kèm lịch đợt — dùng khi thêm hợp đồng mới để dò xem
+ * khách còn bản cũ nào chưa thanh lý.
+ *
+ * Lọc ở server theo `customer` thay vì nạp cả 78 hợp đồng rồi lọc ở máy: hộp
+ * thoại chạy lại mỗi lần đổi khách hàng.
+ */
+export async function fetchContractsOfCustomer(customerId: string): Promise<ContractWithSchedule[]> {
+  if (!customerId) return [];
+  const contracts = await pb.collection(C_CONTRACT).getFullList<Contract>({
+    filter: `customer = "${customerId}"`,
+    sort: '-effective_from',
+  });
+  if (contracts.length === 0) return [];
+
+  const ids = new Set(contracts.map(c => c.id));
+  const allPayments = await pb.collection(C_PAYMENT).getFullList<Payment>({ sort: 'seq' });
+  const byContract = new Map<string, Payment[]>();
+  for (const p of allPayments) {
+    if (!ids.has(p.contract)) continue;
+    (byContract.get(p.contract) || byContract.set(p.contract, []).get(p.contract)!).push(p);
+  }
+
+  const stationCodeById = await stationCodeMap();
+  return contracts.map(raw => {
+    const contract = { ...raw, stations: asIds(raw.stations) };
+    const payments = (byContract.get(contract.id) || []).sort((a, b) => a.seq - b.seq);
+    return {
+      contract,
+      payments,
+      totals: summarize(payments),
+      customerName: contract.customer_name || '—',
+      customerCode: '',
+      zoneName: '—',
+      zoneCode: '',
+      stationCodes: contract.stations.map(id => stationCodeById.get(id) || '').filter(Boolean),
+    };
+  });
+}
+
 /** Bảng khối lượng & đơn giá của một hợp đồng. */
 export async function fetchItems(contractId: string): Promise<ContractItem[]> {
   return pb.collection(C_ITEM).getFullList<ContractItem>({

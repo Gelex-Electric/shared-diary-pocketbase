@@ -8,7 +8,7 @@
 import {
   addYears, buildSchedule, computeVat, durationMonths,
   isLocked, overdueDays, paymentStatus, remainingOf, scheduleWarning, summarize,
-  withVat, withoutVat, contractValidity, validityText, RENEW_DAYS,
+  withVat, withoutVat, contractValidity, validityText, RENEW_DAYS, findSuperseded,
   type PaymentLike,
 } from '../src/lib/qlvhRules';
 
@@ -168,6 +168,45 @@ eq(contractValidity('', T), 'con_hieu_luc', 'hiệu lực: chưa ghi hạn thì 
 eq(validityText('2026-10-05', T), 'Hết hiệu lực 3 ngày', 'validityText: nói rõ bằng chữ, không để số âm');
 eq(validityText('2026-10-20', T).startsWith('Sắp hết hiệu lực'), true, 'validityText: sắp hết ghi rõ chữ hiệu lực');
 eq(RENEW_DAYS, 30, 'RENEW_DAYS = 30');
+
+/* ------------------- hợp đồng cũ bị thay thế khi tái ký (findSuperseded) */
+
+/* Luật này dễ BÁO NHẦM nhất: 6/8 khách có nhiều hợp đồng là chạy SONG SONG
+   ở các cơ sở khác nhau (đếm 21/10/2026). Khoá chặt bằng test. */
+const C = (o: Partial<Parameters<typeof findSuperseded>[0][0]>) => ({
+  id: "x", contract_no: "HĐ", effective_from: "2025-01-01", effective_to: "2026-01-01",
+  status_manual: "dang_hieu_luc", ...o,
+});
+
+eq(findSuperseded([C({ effective_to: "2026-04-27", stations: ["s1"] })], "2026-04-27", ["s1"])[0]?.match,
+   "thay_the", "superseded: nối tiếp đúng ngày + trùng trạm ⇒ là tái ký (ca LOGOS)");
+
+eq(findSuperseded([C({ effective_to: "2026-04-27", stations: ["s1"] })], "2026-06-01", ["s1"]).length, 1,
+   "superseded: kết thúc TRƯỚC ngày mới bắt đầu vẫn tính (ca FANTASY quá hạn lâu)");
+
+eq(findSuperseded([C({ effective_to: "2026-12-31", stations: ["s1"] })], "2026-06-01", ["s1"]).length, 0,
+   "superseded: bản cũ CHƯA kết thúc ⇒ song song, KHÔNG báo");
+
+eq(findSuperseded([C({ effective_to: "2026-04-27", stations: ["s2"] })], "2026-04-27", ["s1"]).length, 0,
+   "superseded: khác trạm hoàn toàn ⇒ cơ sở khác, KHÔNG báo (ca JOHNSON1/JOHNSON2)");
+
+eq(findSuperseded([C({ effective_to: "2026-04-27", stations: ["s1", "s2"] })], "2026-04-27", ["s2", "s3"])[0]?.match,
+   "thay_the", "superseded: trùng MỘT trạm là đủ");
+
+eq(findSuperseded([C({ effective_to: "2026-04-27", stations: [] })], "2026-04-27", ["s1"])[0]?.match,
+   "can_kiem_tra", "superseded: bản cũ chưa gắn trạm ⇒ cần kiểm tra, không tự thanh lý");
+
+eq(findSuperseded([C({ effective_to: "2026-04-27", stations: ["s1"] })], "2026-04-27", [])[0]?.match,
+   "can_kiem_tra", "superseded: bản MỚI chưa chọn trạm ⇒ cần kiểm tra");
+
+eq(findSuperseded([C({ effective_to: "2026-04-27", stations: ["s1"], status_manual: "da_thanh_ly" })], "2026-04-27", ["s1"]).length, 0,
+   "superseded: đã thanh lý rồi ⇒ bỏ qua");
+
+eq(findSuperseded([C({ id: "me", effective_to: "2026-04-27", stations: ["s1"] })], "2026-04-27", ["s1"], "me").length, 0,
+   "superseded: đang sửa chính nó ⇒ không tự báo mình");
+
+eq(findSuperseded([C({ effective_to: "2026-04-27", stations: ["s1"] })], "", ["s1"]).length, 0,
+   "superseded: chưa nhập ngày hiệu lực ⇒ chưa kết luận");
 
 /* Hai trục ĐỘC LẬP: thu đủ tiền vẫn có thể hết hiệu lực (đúng ca JOHNSON1). */
 eq(paymentStatus({ seq: 1, due_date: '2025-10-12', amount_due: 1, paid_date: '2025-10-17' }, T), 'da_thu',

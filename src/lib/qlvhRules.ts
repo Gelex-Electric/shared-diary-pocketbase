@@ -128,6 +128,71 @@ export function validityText(
   return `Còn hiệu lực · ${left} ngày`;
 }
 
+/* ------------------------------------ Hợp đồng cũ bị thay thế khi tái ký */
+
+/** Hợp đồng cũ ở dạng tối giản mà luật nhận diện cần biết. */
+export interface SupersedeCandidate {
+  id: string;
+  contract_no: string;
+  effective_from: string;
+  effective_to: string;
+  status_manual: string;
+  stations?: string[];
+}
+
+/**
+ * `thay_the`      — chắc chắn là bản bị tái ký (nối tiếp ngày + trùng trạm).
+ * `can_kiem_tra`  — nối tiếp ngày nhưng KHÔNG đối chiếu được trạm vì một trong
+ *                   hai bên chưa gắn trạm. Không tự đề nghị thanh lý, chỉ báo.
+ */
+export type SupersedeMatch = 'thay_the' | 'can_kiem_tra';
+
+/**
+ * Tìm hợp đồng cũ có khả năng bị hợp đồng mới thay thế.
+ *
+ * ⚠️ VÌ SAO KHÔNG CHỈ DỰA VÀO "KHÁCH CÒN HỢP ĐỒNG CHƯA THANH LÝ":
+ * đếm trên dữ liệu thật 21/10/2026, **6/8 khách có nhiều hợp đồng là chạy SONG
+ * SONG** — mỗi hợp đồng một trạm/cơ sở khác nhau (JOHNSON có 2 nhà máy, LOGOS 4
+ * trạm, IP 3 trạm). Coi mọi hợp đồng chưa thanh lý là "bản cũ" sẽ báo nhầm ở
+ * phần lớn trường hợp, và nếu chặn lưu thì chặn nhầm luôn.
+ *
+ * Hai điều kiện BẮT BUỘC (user chốt 21/10/2026):
+ *   1. bản cũ kết thúc VÀO hoặc TRƯỚC ngày bản mới bắt đầu — dấu hiệu tái ký
+ *      (LOGOS/SINHER/LIHUA đều nối tiếp không hở một ngày);
+ *   2. trùng ít nhất MỘT trạm — chặn nhầm với khách nhiều cơ sở.
+ *
+ * Trạm rỗng ở một trong hai bên thì KHÔNG kết luận được: trả `can_kiem_tra` để
+ * giao diện vẫn liệt kê ra. Im lặng bỏ qua sẽ giấu mất 19 hợp đồng chưa gắn trạm.
+ */
+export function findSuperseded(
+  olds: SupersedeCandidate[],
+  newFrom: string,
+  newStations: string[] = [],
+  newId?: string,
+): { contract: SupersedeCandidate; match: SupersedeMatch }[] {
+  const from = dayOf(newFrom);
+  if (!from) return [];
+
+  const out: { contract: SupersedeCandidate; match: SupersedeMatch }[] = [];
+  for (const c of olds) {
+    if (newId && c.id === newId) continue;                 // đang sửa chính nó
+    if (c.status_manual !== 'dang_hieu_luc') continue;      // đã thanh lý/dự thảo
+    const to = dayOf(c.effective_to);
+    if (!to || to > from) continue;                         // chưa kết thúc ⇒ song song
+
+    const oldSt = c.stations || [];
+    if (oldSt.length === 0 || newStations.length === 0) {
+      out.push({ contract: c, match: 'can_kiem_tra' });
+      continue;
+    }
+    if (oldSt.some(s => newStations.includes(s))) {
+      out.push({ contract: c, match: 'thay_the' });
+    }
+    /* Có trạm cả hai bên mà không trùng cái nào ⇒ cơ sở khác, KHÔNG phải tái ký. */
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------- Ngày tháng */
 
 /**
