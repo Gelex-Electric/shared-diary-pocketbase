@@ -10,12 +10,34 @@
  */
 
 import { pb } from './pocketbase';
+import { zoneRank } from './kcnColors';
 import {
   dayOf, summarize,
   type ContractTotals, type PaymentLike,
 } from './qlvhRules';
 
 export * from './qlvhRules';
+
+/**
+ * Thứ tự chuẩn của MỌI bảng trong module: **KCN → MKH** (user chốt 08/10/2026).
+ *
+ * Dùng chung một hàm cho cả màn Tổng hợp lẫn Danh sách, để đọc song song hai màn
+ * không phải dò lại thứ tự. Khách chưa có mã xuống cuối nhóm KCN của mình (xếp
+ * theo tên) thay vì lẫn vào giữa.
+ *
+ * Hàm này CHỈ so hai khoá đó; nơi gọi tự thêm khoá phụ (ngày đến hạn, ngày hết
+ * hiệu lực…) khi hai dòng cùng khách.
+ */
+export function byZoneThenCustomer(
+  a: { zoneCode: string; customerCode: string; customerName: string },
+  b: { zoneCode: string; customerCode: string; customerName: string },
+): number {
+  const z = zoneRank(a.zoneCode) - zoneRank(b.zoneCode);
+  if (z !== 0) return z;
+  if (!a.customerCode !== !b.customerCode) return a.customerCode ? -1 : 1;
+  return a.customerCode.localeCompare(b.customerCode, 'vi', { numeric: true })
+    || a.customerName.localeCompare(b.customerName, 'vi');
+}
 
 export const C_CONTRACT = 'qlvh_contract';
 export const C_PAYMENT = 'qlvh_payment';

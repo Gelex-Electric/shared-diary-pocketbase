@@ -88,3 +88,20 @@ export const ZONE_HEX: Record<string, string> = {
 export function zoneHexOf(code?: string): string {
   return (code && ZONE_HEX[code]) || '#94a3b8';
 }
+
+/**
+ * Thứ tự KCN dùng để SẮP XẾP bảng — lấy thẳng thứ tự khai báo của `ZONE_HEX`
+ * (trùng `AREAS` trong lib/pocketbase.ts): Tiền Hải · Phong Điền · Thuận Thành I
+ * · Yên Mỹ · Số 3.
+ *
+ * Suy từ `ZONE_HEX` thay vì khai một mảng riêng: hai danh sách song song thì
+ * sớm muộn cũng lệch nhau khi thêm KCN mới. Xếp theo mã A→Z cũng không được,
+ * "KCN03" sẽ nhảy lên đầu trong khi mọi màn khác để Tiền Hải trước.
+ */
+export const ZONE_ORDER = Object.keys(ZONE_HEX);
+
+/** Hạng của một mã KCN; mã lạ hoặc rỗng xuống cuối thay vì lên đầu. */
+export function zoneRank(code?: string): number {
+  const i = code ? ZONE_ORDER.indexOf(code) : -1;
+  return i < 0 ? ZONE_ORDER.length : i;
+}

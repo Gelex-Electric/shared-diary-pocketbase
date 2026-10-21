@@ -19,7 +19,7 @@ import { toast as notify } from '../../lib/toast';
 import { useScopeAreas, type Scope } from '../../lib/scope';
 import { zoneHexOf } from '../../lib/kcnColors';
 import {
-  RENEW_DAYS, STATUS_BADGE, STATUS_LABEL, VALIDITY_BADGE, contractValidity,
+  RENEW_DAYS, STATUS_BADGE, STATUS_LABEL, VALIDITY_BADGE, byZoneThenCustomer, contractValidity,
   daysBetween, dayOf, fetchContracts, overdueDays, isDraft, paymentStatus,
   remainingOf, summarize, todayStr, validityText, withVat,
   type ContractWithSchedule, type Payment,
@@ -133,10 +133,14 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
     [active],
   );
 
+  /* NGOẠI LỆ CỐ Ý (user chốt 21/10/2026): bảng này xếp theo NGÀY ĐẾN HẠN, không
+     theo KCN như các bảng khác. Đây là danh sách đi đòi nợ — nợ lâu nhất phải
+     nằm trên cùng; gom theo KCN sẽ đẩy khoản quá hạn nặng xuống giữa bảng. */
   const overdue = useMemo(
     () => dueRows
       .filter(d => paymentStatus(d.payment, today) === 'qua_han')
-      .sort((a, b) => dayOf(a.payment.due_date).localeCompare(dayOf(b.payment.due_date))),
+      .sort((a, b) => dayOf(a.payment.due_date).localeCompare(dayOf(b.payment.due_date))
+        || byZoneThenCustomer(a, b)),
     [dueRows, today],
   );
 
@@ -146,7 +150,8 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
         const left = daysBetween(today, dayOf(d.payment.due_date));
         return left >= 0 && left <= HORIZON_DAYS;
       })
-      .sort((a, b) => dayOf(a.payment.due_date).localeCompare(dayOf(b.payment.due_date))),
+      .sort((a, b) => byZoneThenCustomer(a, b)
+        || dayOf(a.payment.due_date).localeCompare(dayOf(b.payment.due_date))),
     [dueRows, today],
   );
 
@@ -170,8 +175,11 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
         if (!dayOf(r.contract.effective_to) || r.contract.status_manual !== 'dang_hieu_luc') return false;
         return contractValidity(r.contract.effective_to, today) !== 'con_hieu_luc';
       })
-      /* Hết hạn lâu nhất lên đầu — càng để lâu càng gấp. */
-      .sort((a, b) => dayOf(a.contract.effective_to).localeCompare(dayOf(b.contract.effective_to))),
+      /* KCN → MKH (user chốt 08/10/2026); cùng khách thì hết hạn lâu nhất lên
+         đầu. Mức độ gấp nay đọc ở NHÃN đỏ "Hết hiệu lực N ngày", không phải ở
+         thứ tự dòng — nên xếp theo KCN không làm mất thông tin ưu tiên. */
+      .sort((a, b) => byZoneThenCustomer(a, b)
+        || dayOf(a.contract.effective_to).localeCompare(dayOf(b.contract.effective_to))),
     [visible, today],
   );
 

@@ -26,7 +26,7 @@ import ContractDialog from './ContractDialog';
 import {
   CONTRACT_STATUS_BADGE, CONTRACT_STATUS_LABEL, CONTRACT_STATUS_OPTIONS, STATUS_BADGE, STATUS_LABEL,
   deleteContract, fetchContracts, isDraft, paymentStatus, savePaymentEdits, summarize,
-  updateContractStatus, withVat, contractValidity, validityText, VALIDITY_BADGE,
+  updateContractStatus, withVat, byZoneThenCustomer, contractValidity, validityText, VALIDITY_BADGE,
   type ContractStatus, type ContractWithSchedule, type PaymentStatus,
 } from '../../lib/qlvh';
 
@@ -172,14 +172,10 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       return true;
     });
 
-    /* Sắp theo MÃ KHÁCH HÀNG — cùng cách màn "Biên bản xác nhận chỉ số" đang
-       xếp, để hai màn đọc song song không phải dò lại. `numeric` để KCNTH-2
-       đứng trước KCNTH-10. Khách chưa có mã xuống cuối. */
-    return list.sort((a, b) => {
-      if (!a.customerCode !== !b.customerCode) return a.customerCode ? -1 : 1;
-      return a.customerCode.localeCompare(b.customerCode, 'vi', { numeric: true })
-        || a.customerName.localeCompare(b.customerName, 'vi');
-    });
+    /* KCN → MKH (user chốt 08/10/2026), dùng chung hàm với màn Tổng hợp để hai
+       màn đọc song song không phải dò lại thứ tự. `numeric` trong hàm đó lo việc
+       KCNTH-2 đứng trước KCNTH-10; khách chưa có mã xuống cuối nhóm KCN. */
+    return list.sort(byZoneThenCustomer);
   }, [scoped, area, filter, query]);
 
   /* KPI tính trên phần đang hiện, để con số luôn khớp cái mắt đang nhìn.
@@ -265,11 +261,8 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
       g.statuses = ORDER.filter(s => count.has(s)).map(s => [s, count.get(s)!] as [ContractStatus, number]);
     }
 
-    return [...map.values()].sort((a, b) => {
-      if (!a.customerCode !== !b.customerCode) return a.customerCode ? -1 : 1;
-      return a.customerCode.localeCompare(b.customerCode, 'vi', { numeric: true })
-        || a.customerName.localeCompare(b.customerName, 'vi');
-    });
+    /* Thẻ khách hàng cũng theo KCN → MKH, khớp thứ tự dòng bên trong. */
+    return [...map.values()].sort(byZoneThenCustomer);
   }, [visible]);
 
   const areaOptions = useMemo(
