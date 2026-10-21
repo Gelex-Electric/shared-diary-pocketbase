@@ -40,6 +40,54 @@ const dateVN = (v?: string) => {
 /** Ô tiền: gõ gì cũng chỉ giữ chữ số, hiện lại có dấu phân cách. */
 const parseMoney = (s: string) => Number(String(s).replace(/[^\d]/g, '')) || 0;
 
+/**
+ * Tên trường theo ngôn ngữ người dùng — PocketBase trả khoá kỹ thuật
+ * (`contract_no`), hiện trần ra thì người nhập phải tự đoán đó là ô nào.
+ */
+const FIELD_LABEL: Record<string, string> = {
+  contract_no:      'Số hợp đồng',
+  customer:         'Khách hàng',
+  zone:             'Khu công nghiệp',
+  stations:         'Trạm quản lý vận hành',
+  sign_date:        'Ngày ký',
+  effective_from:   'Ngày hiệu lực',
+  effective_to:     'Ngày hết hiệu lực',
+  value_before_vat: 'Giá trị trước thuế',
+  vat_rate:         'Thuế suất',
+};
+
+/**
+ * Dịch lỗi lưu thành câu người nhập hiểu và biết phải làm gì.
+ *
+ * PocketBase để chi tiết ở `response.data` còn `message` ngoài cùng chỉ là
+ * "Failed to create record." — app vốn hiện mỗi `message` đó nên người dùng
+ * không biết sai ở đâu (gặp thật 21/10/2026: gõ trùng số hợp đồng LOGOS, màn
+ * hình chỉ báo "Failed to create record.").
+ *
+ * Ca trùng số hợp đồng được viết riêng vì nó không phải lỗi gõ sai mà là **nhầm
+ * thao tác**: hợp đồng đã có rồi, cần mở ra SỬA chứ không phải thêm mới.
+ */
+function saveErrorMessage(err: unknown, contractNo: string): string {
+  const e = err as {
+    response?: { data?: Record<string, { code?: string; message?: string }>; message?: string };
+    message?: string;
+  };
+  const fields = e?.response?.data;
+
+  if (fields?.contract_no?.code === 'validation_not_unique') {
+    return `Số hợp đồng "${contractNo}" đã có trong hệ thống. `
+      + `Mở hợp đồng đó ra sửa, thay vì thêm mới.`;
+  }
+
+  const parts = Object.entries(fields || {})
+    .map(([k, v]) => (v?.message ? `${FIELD_LABEL[k] || k}: ${v.message}` : ''))
+    .filter(Boolean);
+  if (parts.length) return parts.join(' · ');
+
+  /* Lỗi do chính saveContract ném ra (vd xoá đợt đã thu tiền) nằm ở đây. */
+  return e?.response?.message || e?.message || 'Lưu hợp đồng thất bại.';
+}
+
 const VAT_OPTIONS = [
   { value: '0', label: 'Không chịu thuế (0%)' },
   { value: '5', label: '5%' },
@@ -263,8 +311,8 @@ export default function ContractDialog({
       notify.success(contractId ? 'Đã cập nhật hợp đồng.' : 'Đã thêm hợp đồng.');
       onSaved();
       onClose();
-    } catch (err: any) {
-      notify.error(err?.message || 'Lưu hợp đồng thất bại.');
+    } catch (err: unknown) {
+      notify.error(saveErrorMessage(err, contractNo.trim()));
     } finally {
       setSaving(false);
     }
