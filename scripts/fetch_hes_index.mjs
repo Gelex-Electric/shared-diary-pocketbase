@@ -22,7 +22,7 @@
  * PocketBase giữ dữ liệu nghiệp vụ; CSV giữ số liệu thô của pipeline.
  *
  * Thay cho `fetch_hes_index.py`. Khác bản Python ở hai chỗ:
- *   1. Danh sách công tơ lấy từ DANH MỤC PocketBase (công tơ ĐANG TREO), không
+ *   1. Danh sách công tơ lấy từ DANH MỤC PocketBase (đang treo + dự kiến — xem main()), không
  *      phải `metterinfo.csv` — bản kết xuất HES trễ một ngày và không biết gì
  *      về những gì vừa khai trong Danh mục.
  *   2. HSN lấy từ `dm_point.hsn` (suy theo bộ TI/TU đang treo), không phải
@@ -59,6 +59,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
+import { metersForRange, buildHsnResolver } from './lib/thongso.mjs';
 import { raiseAlert, zoneOf } from './lib/pb_alert.mjs';
 import { detectReverse, peakNote, buildReverseAlert } from './lib/exportCheck.mjs';
 
@@ -405,8 +406,33 @@ const endBoundary = new Date(day.getTime() + 86400000);
 console.log(`Kỳ ngày ${ymd(day)}: đầu=${ymd(startBoundary)} 00:00, cuối=${ymd(endBoundary)} 00:00`);
 
 const pbToken = await pbLogin();
-const { meters, customers } = await liveMeters(pbToken);
+const { meters, customers, assets, points } = await liveMeters(pbToken);
 console.log(`Danh mục: ${meters.length} công tơ ĐANG TREO (nguồn PocketBase).`);
+
+/*
+  HAI DANH SÁCH (sửa 21/10/2026, user duyệt):
+    · TẢI SỐ = `fetchList`: công tơ đang treo ∪ mọi lần treo giao với ngày
+      (`metersForRange`, cùng luật `fetch_thongso_30min.mjs`) — gồm công tơ còn
+      DỰ KIẾN (chưa ngày treo) và công tơ THÁO trong ngày. Trước đây chỉ tải công
+      tơ đang treo nên công tơ đã có điện mà chưa khai ngày treo mất trắng
+      ChiSo_30min (2610159558, 2610323014: mất 29/09 → 20/10).
+    · SOI CẢNH BÁO = `meters` (`liveMeters`) như cũ — công tơ chưa treo mà báo
+      lùi / phát ngược là nhiễu.
+  HSN cột file: công tơ đang treo giữ `dm_point.hsn` như cũ; công tơ khác tra
+  theo ĐÚNG NGÀY (`buildHsnResolver`), không tra được ⇒ để trống (số RAW vẫn ghi,
+  khai ngày treo xong nơi đọc tự nhân).
+*/
+const liveBySerial = new Map(meters.map(m => [m.serial, m]));
+const hsnAt = buildHsnResolver(assets, points);
+const extraSerials = metersForRange(assets, ymd(day), ymd(day)).filter(sn => !liveBySerial.has(sn));
+const fetchList = [
+  ...meters,
+  ...extraSerials.map(sn => {
+    const h = hsnAt(sn, `${ymd(day)} 00:00:00`);
+    return { serial: sn, hsn: h.hsn ?? null, code: h.point?.code ?? '(chưa có ngày treo)', reason: h.reason ?? '' };
+  }),
+];
+console.log(`Tải số: ${fetchList.length} công tơ (${meters.length} đang treo + ${extraSerials.length} dự kiến/tháo trong ngày).`);
 
 /*
   Tên tắt khách hàng cho bảng chi tiết trên màn Cảnh báo.
@@ -434,7 +460,7 @@ const hesToken = await getToken();
   hai thứ: chi tiết 30 phút, và hai biên của ngày. Vì hai biên lấy từ chính mẻ
   này nên không thể lệch mốc như cách gọi hai lần trước đây.
 */
-const results = await mapLimit(meters, CONCURRENCY, async (m) => {
+const allResults = await mapLimit(fetchList, CONCURRENCY, async (m) => {
   const recs = await fetchDay(hesToken, m.serial, day);
   const [s, e] = boundariesOf(recs, day);
   const hsn = m.hsn == null ? '' : String(m.hsn);
@@ -448,8 +474,23 @@ const results = await mapLimit(meters, CONCURRENCY, async (m) => {
     reverse: detectReverse(recs, m.hsn) };
 });
 
+/* File 30 phút lấy TẤT CẢ; mọi phần sau (cảnh báo, nối ngày, log thiếu số) chỉ
+   xét công tơ ĐANG TREO — `results[i]` khớp `meters[i]` như trước khi tách. */
+const rows30 = allResults.flatMap(r => r?.detail ?? []);
+const results = allResults.slice(0, meters.length);
 const rows = results.filter(r => r?.daily?.METER_NO).map(r => r.daily);
-const rows30 = results.flatMap(r => r?.detail ?? []);
+
+/* Chỉ IN LOG (user chốt 21/10/2026 — không đẩy lên màn Cảnh báo). */
+const extraWithData = fetchList.slice(meters.length)
+  .map((m, i) => ({ m, n: allResults[meters.length + i]?.detail?.length ?? 0 }))
+  .filter(x => x.n > 0);
+if (extraWithData.length) {
+  console.log(`[NHẮC] ${extraWithData.length} công tơ CÓ SỐ nhưng Danh mục chưa khai đang treo — `
+    + 'khai ngày treo để HSN được nhân và được tính vào cảnh báo/tổn thất:');
+  for (const { m, n } of extraWithData) {
+    console.log(`   ${m.serial.padEnd(12)} ${m.code}  ${n} mốc${m.reason ? `  (${m.reason})` : ''}`);
+  }
+}
 
 /**
  * Chi tiết từng CA lùi để dựng bảng trên màn Cảnh báo.
