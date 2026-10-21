@@ -392,7 +392,9 @@ export default function ContractListManager({ scope }: { scope: Scope }) {
                       </span>
                       <span>{g.rows.length} hợp đồng</span>
 
-                      <StationTags codes={g.stationCodes} max={3} />
+                      {/* Thẻ khách: chỉ SỐ LƯỢNG trạm. Mã cụ thể nằm ở từng hợp
+                          đồng bên trong — một khách có thể có cả chục trạm. */}
+                      <StationTags codes={g.stationCodes} countOnly />
 
                       {/* Tag trạng thái pháp lý — thu gọn thẻ vẫn thấy ngay khách
                           này còn hợp đồng hiệu lực hay đã thanh lý hết. */}
