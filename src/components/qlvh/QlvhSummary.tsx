@@ -293,17 +293,17 @@ export default function QlvhSummary({ scope }: { scope: Scope }) {
           subTone={overdue.length > 0 ? 'bad' : 'ok'} />
       </div>
 
-      <Panel title="Đợt quá hạn" icon={AlertTriangle}
+      <Panel title="Đợt quá hạn thanh toán" icon={AlertTriangle}
         sub={overdue.length > 0 ? `${overdue.length} đợt · ${money(kpi.overdueAmount)}đ` : undefined}>
         {overdue.length === 0
-          ? <EmptyState icon={AlertTriangle} title="Không có đợt nào quá hạn" hint="Tất cả các đợt đến hạn đều đã được thu." />
+          ? <EmptyState icon={AlertTriangle} title="Không có đợt nào quá hạn thanh toán" hint="Tất cả các đợt đến hạn đều đã được thu." />
           : renderDueTable(overdue, true)}
       </Panel>
 
-      <Panel title={`Sắp đến hạn trong ${HORIZON_DAYS} ngày`} icon={CalendarClock}
+      <Panel title={`Sắp đến hạn thanh toán trong ${HORIZON_DAYS} ngày`} icon={CalendarClock}
         sub={upcoming.length > 0 ? `${upcoming.length} đợt · ${money(upcoming.reduce((s, d) => s + withVat(remainingOf(d.payment), d.vatRate), 0))}đ` : undefined}>
         {upcoming.length === 0
-          ? <EmptyState icon={CalendarClock} title="Chưa có đợt nào đến hạn" hint={`Không có đợt thanh toán nào trong ${HORIZON_DAYS} ngày tới.`} />
+          ? <EmptyState icon={CalendarClock} title="Chưa có đợt nào đến hạn thanh toán" hint={`Không có đợt thanh toán nào trong ${HORIZON_DAYS} ngày tới.`} />
           : renderDueTable(upcoming, false)}
       </Panel>
 
