@@ -152,10 +152,12 @@ const total = (u: Usage): number => u.bt + u.cd + u.td;
 /**
  * Sai lệch cho phép, tính bằng kWh trên từng khung giá.
  *
- * Bằng 0: hai con số này lấy từ cùng một bộ chỉ số công tơ nên phải khớp tuyệt
- * đối. Đặt biên độ chỉ để lọt lỗi thật.
+ * ±1 kWh (user chốt 21/10/2026): hai con số lấy từ cùng một bộ chỉ số nhưng
+ * hóa đơn làm tròn từng khung giá riêng, nên lệch đúng 1 kWh là chuyện làm tròn,
+ * không phải lỗi — ca `TTI.BQL.T1.630kVA(XLNT+VP)` 09/2026: phụ trừ TĐ 275,
+ * điểm phụ ECOBA ghi 276. Lệch từ 2 kWh trở lên vẫn báo.
  */
-export const TOLERANCE = 0;
+export const TOLERANCE = 1;
 
 /**
  * So phụ trừ với tổng sản lượng điểm đo phụ, theo TỪNG THÁNG CHỐT của điểm đo
