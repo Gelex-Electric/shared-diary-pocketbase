@@ -796,9 +796,9 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
             <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
             {tab === 'chart' ? (
               <span>
-                Thông số vận hành sẽ lấy dữ liệu chậm hơn so với HES khoảng{' '}
-                <strong>1 đến 2 giờ</strong> và chỉ lưu trong vòng{' '}
-                <strong>7 ngày gần nhất</strong>.
+                Thông số vận hành được cập nhật <strong>mỗi đêm cho ngày hôm trước</strong>{' '}
+                (thường có trước 4 giờ sáng) và lưu trong vòng{' '}
+                <strong>40 ngày gần nhất</strong>.
               </span>
             ) : (
               <span>
