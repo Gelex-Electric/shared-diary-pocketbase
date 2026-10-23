@@ -53,20 +53,6 @@ interface AddRow { key: string; serial: string; type: AssetType | ''; ratio: str
 let addSeq = 0;
 const newAddRow = (): AddRow => ({ key: `a${++addSeq}`, serial: '', type: '', ratio: '', model: '' });
 
-/** Chip lọc bấm một phát — nhanh hơn mở select rồi chọn rồi đóng. */
-function Chip({ on, onClick, children }: {
-  on: boolean; onClick: () => void; children: React.ReactNode;
-}) {
-  return (
-    <button type="button" onClick={onClick}
-      className={`rounded-full px-3 py-1 text-[12px] font-bold transition-colors ${on
-        ? 'bg-accent text-white'
-        : 'bg-subtle text-soft hover:text-dim'}`}>
-      {children}
-    </button>
-  );
-}
-
 const STATUS_CLS: Record<Exclude<DeviceStatus, ''>, string> = {
   kho: 'bg-subtle text-soft',
   dang_treo: 'bg-[var(--success-soft)] text-emerald-600',
@@ -138,12 +124,12 @@ export default function StockEntry() {
     () => groupByZone(sortByCode(shown, r => r.device.serial), r => r.zoneId, d?.zones ?? []),
     [shown, d]);
 
-  /** Đếm chéo: số của chip trạng thái theo loại đang lọc, số của chip loại theo trạng thái đang lọc. */
+  /** Đếm chéo: số ở ô Trạng thái theo loại đang lọc, số ở ô Loại theo trạng thái đang lọc. */
   const ofType = typeFilter ? rows.filter(r => r.device.type === typeFilter) : rows;
   const ofStatus = status ? rows.filter(r => r.status === status) : rows;
   const count = (s: DeviceStatus) => ofType.filter(r => r.status === s).length;
   const countType = (t: AssetType) => ofStatus.filter(r => r.device.type === t).length;
-  /** Chỉ hiện loại có trong kho — chip 0 thiết bị chỉ làm rối. */
+  /** Chỉ liệt kê loại có trong kho — mục 0 thiết bị chỉ làm rối. */
   const typesInStock = TYPES.filter(t => rows.some(r => r.device.type === t));
   const idleLong = rows.filter(r => r.status === 'kho' && idleDays(r, today()) > IDLE_WARN_DAYS).length;
 
@@ -491,28 +477,26 @@ export default function StockEntry() {
         </div>
       </div>
 
-      {/* ---------------------- Bộ lọc chip ---------------------- */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="w-16 text-[11px] font-bold uppercase tracking-wider text-faint">Trạng thái</span>
-        <Chip on={!status} onClick={() => { setStatus(''); }}>
-          Tất cả {ofType.length}
-        </Chip>
-        {(['kho', 'dang_treo', 'thanh_ly'] as const).map(s => (
-          <Chip key={s} on={status === s} onClick={() => { setStatus(status === s ? '' : s); }}>
-            {DEVICE_STATUS_LABEL[s]} {count(s)}
-          </Chip>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="w-16 text-[11px] font-bold uppercase tracking-wider text-faint">Loại</span>
-        <Chip on={!typeFilter} onClick={() => { setTypeFilter(''); }}>
-          Tất cả {ofStatus.length}
-        </Chip>
-        {typesInStock.map(t => (
-          <Chip key={t} on={typeFilter === t} onClick={() => { setTypeFilter(typeFilter === t ? '' : t); }}>
-            {ASSET_LABEL[t]} {countType(t)}
-          </Chip>
-        ))}
+      {/* ---- Bộ lọc: Trạng thái + Loại, hai ô chọn chung một dòng (user chốt 23/10/2026) ---- */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-full sm:w-[220px]">
+          <Select label="Trạng thái" value={status}
+            onChange={v => setStatus(v as DeviceStatus | '')}
+            options={[
+              { value: '', label: `Tất cả trạng thái (${ofType.length})` },
+              ...(['kho', 'dang_treo', 'thanh_ly'] as const).map(st => ({
+                value: st, label: `${DEVICE_STATUS_LABEL[st]} (${count(st)})`,
+              })),
+            ]} />
+        </div>
+        <div className="w-full sm:w-[220px]">
+          <Select label="Loại vật tư" value={typeFilter}
+            onChange={v => setTypeFilter(v as AssetType | '')}
+            options={[
+              { value: '', label: `Tất cả loại (${ofStatus.length})` },
+              ...typesInStock.map(t => ({ value: t, label: `${ASSET_LABEL[t]} (${countType(t)})` })),
+            ]} />
+        </div>
       </div>
 
       {idleLong > 0 && (
