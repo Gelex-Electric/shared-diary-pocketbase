@@ -137,6 +137,7 @@ export default function Login() {
               value={mode}
               onChange={(m) => { setMode(m); setError(''); }}
               fluid
+              iconOnlyOnMobile
               className="mb-6"
             />
 
