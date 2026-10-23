@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { User, Lock, Eye, EyeOff, AlertCircle, Zap, Activity, Briefcase, Package, ArrowRight } from 'lucide-react';
 import { Tabs, type TabItem } from './ui/Tabs';
 import ThemeToggle from './ui/ThemeToggle';
-import { GROUP_LABEL, userGroupOf, type UserGroup } from '../lib/userGroup';
+import { GROUP_LABEL, GROUP_SHORT, userGroupOf, type UserGroup } from '../lib/userGroup';
 
 /** Tab đăng nhập = nhóm tài khoản (lib/userGroup.ts). */
 type LoginMode = UserGroup;
@@ -28,9 +28,9 @@ const MODE_CONFIG: Record<LoginMode, { subtitle: string; footer: string }> = {
 };
 
 const MODE_TABS: TabItem<LoginMode>[] = [
-  { id: 'van_hanh',   label: GROUP_LABEL.van_hanh,   icon: Activity },
-  { id: 'kinh_doanh', label: GROUP_LABEL.kinh_doanh, icon: Briefcase },
-  { id: 'vat_tu',     label: GROUP_LABEL.vat_tu,     icon: Package },
+  { id: 'van_hanh',   label: GROUP_SHORT.van_hanh,   icon: Activity },
+  { id: 'kinh_doanh', label: GROUP_SHORT.kinh_doanh, icon: Briefcase },
+  { id: 'vat_tu',     label: GROUP_SHORT.vat_tu,     icon: Package },
 ];
 
 export default function Login() {
@@ -58,8 +58,7 @@ export default function Login() {
       const accountMode = userGroupOf(pb.authStore.model);
       if (accountMode !== mode) {
         pb.authStore.clear();
-        const label = GROUP_LABEL[accountMode];
-        setError(`Tài khoản này thuộc ${label}. Vui lòng đăng nhập ở tab "${label}".`);
+        setError(`Tài khoản này thuộc ${GROUP_LABEL[accountMode]}. Vui lòng đăng nhập ở tab "${GROUP_SHORT[accountMode]}".`);
         return;
       }
 
@@ -132,7 +131,7 @@ export default function Login() {
               <p className="mt-1 text-sm text-soft">{cfg.subtitle}</p>
             </div>
 
-            {/* Tabs: Nhóm Vận Hành / Nhóm Kinh Doanh / Nhóm Vật tư */}
+            {/* Tabs: Vận Hành / Kinh Doanh / Vật Tư */}
             <Tabs
               tabs={MODE_TABS}
               value={mode}

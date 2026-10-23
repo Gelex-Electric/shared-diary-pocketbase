@@ -13,7 +13,14 @@ export type UserGroup = 'van_hanh' | 'kinh_doanh' | 'vat_tu';
 export const GROUP_LABEL: Record<UserGroup, string> = {
   van_hanh:   'Nhóm Vận Hành',
   kinh_doanh: 'Nhóm Kinh Doanh',
-  vat_tu:     'Nhóm Vật tư',
+  vat_tu:     'Nhóm Vật Tư',
+};
+
+/** Nhãn ngắn cho tab đăng nhập (user chốt 23/10/2026). */
+export const GROUP_SHORT: Record<UserGroup, string> = {
+  van_hanh:   'Vận Hành',
+  kinh_doanh: 'Kinh Doanh',
+  vat_tu:     'Vật Tư',
 };
 
 const GROUPS: UserGroup[] = ['van_hanh', 'kinh_doanh', 'vat_tu'];

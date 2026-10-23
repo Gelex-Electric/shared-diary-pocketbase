@@ -44,9 +44,8 @@ export function Tabs<T extends string>({ tabs, value, onChange, className = '', 
             aria-selected={active}
             title={t.sub}
             onClick={() => onChange(t.id)}
-            className={`group relative flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
-              // fluid (trang đăng nhập, 3 tab): đệm hẹp + không xuống dòng từ sm để nhãn nằm một dòng.
-              fluid ? 'flex-1 px-2 sm:whitespace-nowrap' : 'px-4'
+            className={`group relative flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
+              fluid ? 'flex-1' : ''
             }`}
           >
             {/* Viên nền trượt cho tab đang chọn */}
