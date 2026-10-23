@@ -5,7 +5,7 @@
  *   GET  /api/einvoice/:id/pdf/:type      PDF giấy báo (NOTI) / hóa đơn (BILLPDF), không lưu
  *
  * Xác thực: header `Authorization` = token PocketBase của người dùng (pb.authStore.token).
- * Chỉ khối Kinh doanh (`users.area` trống — cùng luật với App.tsx). Đọc/ghi `einvoice`
+ * Chỉ khối Kinh doanh (`users.nhom = kinh_doanh`, hoặc `nhom` trống + `area` trống — cùng luật `src/lib/userGroup.ts`). Đọc/ghi `einvoice`
  * bằng CHÍNH token đó ⇒ rule của PocketBase vẫn áp; server không dùng tài khoản quản trị.
  */
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -39,8 +39,11 @@ async function requireBusiness(req: Authed, res: Response, next: NextFunction) {
   try {
     const r = await pb('/api/collections/users/auth-refresh', token, { method: 'POST' });
     if (!r.ok) { res.status(401).json({ message: 'Phiên đăng nhập hết hạn — đăng nhập lại.' }); return; }
+    // Cùng luật `src/lib/userGroup.ts`: `nhom` có giá trị thì theo nó, trống thì theo `area`.
+    const nhom = String(r.body?.record?.nhom ?? '').trim();
     const area = String(r.body?.record?.area ?? '').trim();
-    if (area) { res.status(403).json({ message: 'Chỉ khối Kinh doanh dùng được chức năng này.' }); return; }
+    const isBusiness = nhom ? nhom === 'kinh_doanh' : !area;
+    if (!isBusiness) { res.status(403).json({ message: 'Chỉ khối Kinh doanh dùng được chức năng này.' }); return; }
     req.pbToken = token;
     next();
   } catch (err: any) {

@@ -2,34 +2,39 @@ import React, { useState } from 'react';
 import { pb } from '../lib/pocketbase';
 import { toast } from '../lib/toast';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Lock, Eye, EyeOff, AlertCircle, Zap, Activity, Briefcase, ArrowRight } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, AlertCircle, Zap, Activity, Briefcase, Package, ArrowRight } from 'lucide-react';
 import { Tabs, type TabItem } from './ui/Tabs';
 import ThemeToggle from './ui/ThemeToggle';
+import { GROUP_LABEL, userGroupOf, type UserGroup } from '../lib/userGroup';
 
-type LoginMode = 'operation' | 'business';
+/** Tab đăng nhập = nhóm tài khoản (lib/userGroup.ts). */
+type LoginMode = UserGroup;
 
 const APP_NAME = 'Phần mềm Kỹ thuật - Kinh Doanh';
 
-const MODE_CONFIG: Record<LoginMode, { label: string; subtitle: string; footer: string }> = {
-  operation: {
-    label: 'Nhóm Vận Hành',
+const MODE_CONFIG: Record<LoginMode, { subtitle: string; footer: string }> = {
+  van_hanh: {
     subtitle: 'Khu vực dành cho nhóm vận hành kỹ thuật',
     footer: 'Chỉ dành cho thành viên nhóm vận hành',
   },
-  business: {
-    label: 'Nhóm Văn Phòng',
-    subtitle: 'Khu vực dành cho nhóm văn phòng / kinh doanh',
-    footer: 'Chỉ dành cho tài khoản nhóm văn phòng',
+  kinh_doanh: {
+    subtitle: 'Khu vực dành cho nhóm kinh doanh',
+    footer: 'Chỉ dành cho tài khoản nhóm kinh doanh',
+  },
+  vat_tu: {
+    subtitle: 'Khu vực dành cho nhóm vật tư — khai vật tư vào danh mục',
+    footer: 'Chỉ dành cho tài khoản nhóm vật tư',
   },
 };
 
 const MODE_TABS: TabItem<LoginMode>[] = [
-  { id: 'operation', label: 'Nhóm Vận Hành', icon: Activity },
-  { id: 'business',  label: 'Nhóm Văn Phòng', icon: Briefcase },
+  { id: 'van_hanh',   label: GROUP_LABEL.van_hanh,   icon: Activity },
+  { id: 'kinh_doanh', label: GROUP_LABEL.kinh_doanh, icon: Briefcase },
+  { id: 'vat_tu',     label: GROUP_LABEL.vat_tu,     icon: Package },
 ];
 
 export default function Login() {
-  const [mode, setMode] = useState<LoginMode>('operation');
+  const [mode, setMode] = useState<LoginMode>('van_hanh');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -49,19 +54,12 @@ export default function Login() {
     try {
       await pb.collection('users').authWithPassword(username, password);
 
-      // Phân loại khối theo field 'area': có area = Vận hành, trống = Văn phòng.
-      const rawArea = pb.authStore.model?.area;
-      const accountIsBusiness = !rawArea || (typeof rawArea === 'string' && !rawArea.trim());
-      const accountMode: LoginMode = accountIsBusiness ? 'business' : 'operation';
-
-      // Chặn đăng nhập nếu khối tài khoản không khớp tab đang chọn.
+      // Chặn đăng nhập nếu nhóm của tài khoản không khớp tab đang chọn.
+      const accountMode = userGroupOf(pb.authStore.model);
       if (accountMode !== mode) {
         pb.authStore.clear();
-        setError(
-          mode === 'business'
-            ? 'Tài khoản này thuộc Nhóm Vận Hành. Vui lòng đăng nhập ở tab "Nhóm Vận Hành".'
-            : 'Tài khoản này thuộc Nhóm Văn Phòng. Vui lòng đăng nhập ở tab "Nhóm Văn Phòng".'
-        );
+        const label = GROUP_LABEL[accountMode];
+        setError(`Tài khoản này thuộc ${label}. Vui lòng đăng nhập ở tab "${label}".`);
         return;
       }
 
@@ -101,7 +99,7 @@ export default function Login() {
         initial={{ opacity: 0, y: 22 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-        className="w-full max-w-[440px]"
+        className="w-full max-w-[520px]"
       >
         {/* Card */}
         <div
@@ -134,7 +132,7 @@ export default function Login() {
               <p className="mt-1 text-sm text-soft">{cfg.subtitle}</p>
             </div>
 
-            {/* Tabs: Nhóm Vận Hành / Nhóm Văn Phòng */}
+            {/* Tabs: Nhóm Vận Hành / Nhóm Kinh Doanh / Nhóm Vật tư */}
             <Tabs
               tabs={MODE_TABS}
               value={mode}

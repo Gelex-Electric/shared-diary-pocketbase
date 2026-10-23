@@ -3,6 +3,8 @@ import { pb } from './lib/pocketbase';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import BusinessDashboard from './components/business/BusinessDashboard';
+import MaterialDashboard from './components/material/MaterialDashboard';
+import { userGroupOf } from './lib/userGroup';
 import { Toaster } from './lib/toast';
 import { RefreshCw } from 'lucide-react';
 
@@ -23,9 +25,8 @@ export default function App() {
     };
   }, []);
 
-  // Phân loại khối theo field 'area': có area = Vận hành, trống = Kinh doanh.
-  const rawArea = pb.authStore.model?.area;
-  const isBusinessUser = !rawArea || (typeof rawArea === 'string' && !rawArea.trim());
+  // Phân nhóm theo `users.nhom` (trống thì theo `area`) — xem lib/userGroup.ts.
+  const group = userGroupOf(pb.authStore.model);
 
   return (
     <>
@@ -35,8 +36,10 @@ export default function App() {
         </div>
       ) : !isAuth ? (
         <Login />
-      ) : isBusinessUser ? (
+      ) : group === 'kinh_doanh' ? (
         <BusinessDashboard />
+      ) : group === 'vat_tu' ? (
+        <MaterialDashboard />
       ) : (
         <Dashboard />
       )}

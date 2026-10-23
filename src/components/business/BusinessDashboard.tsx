@@ -24,6 +24,7 @@ import AlertCenter from '../alerts/AlertCenter';
 import { useUnresolvedAlerts } from '../alerts/useUnresolvedAlerts';
 import { ALERT_KINDS } from '../../lib/alerts';
 import ThemeToggle from '../ui/ThemeToggle';
+import { GROUP_LABEL } from '../../lib/userGroup';
 
 type Tab =
   | 'summary' | 'alerts' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'customers' | 'invoice-export'
@@ -108,7 +109,7 @@ export default function BusinessDashboard() {
             <Briefcase className="w-5 h-5 text-[var(--on-accent)]" />
           </div>
           <div className="leading-tight">
-            <p className="text-[0.7rem] font-semibold text-faint uppercase tracking-wider">Nhóm Văn Phòng</p>
+            <p className="text-[0.7rem] font-semibold text-faint uppercase tracking-wider">{GROUP_LABEL.kinh_doanh}</p>
             <p className="text-[0.95rem] font-bold text-accent leading-snug">Phần mềm Kỹ thuật - Kinh Doanh</p>
           </div>
         </div>
