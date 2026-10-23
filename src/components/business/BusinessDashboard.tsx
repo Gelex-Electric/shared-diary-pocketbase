@@ -110,7 +110,7 @@ export default function BusinessDashboard() {
           </div>
           <div className="leading-tight">
             <p className="text-[0.7rem] font-semibold text-faint uppercase tracking-wider">{GROUP_LABEL.kinh_doanh}</p>
-            <p className="text-[0.95rem] font-bold text-accent leading-snug">Phần mềm Kỹ thuật - Kinh Doanh</p>
+            <p className="text-[0.95rem] font-bold text-accent leading-snug">Phần mềm hệ thống GETC</p>
           </div>
         </div>
       </div>

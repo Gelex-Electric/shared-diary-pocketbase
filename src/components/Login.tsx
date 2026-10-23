@@ -10,7 +10,7 @@ import { GROUP_LABEL, GROUP_SHORT, userGroupOf, type UserGroup } from '../lib/us
 /** Tab đăng nhập = nhóm tài khoản (lib/userGroup.ts). */
 type LoginMode = UserGroup;
 
-const APP_NAME = 'Phần mềm Kỹ thuật - Kinh Doanh';
+const APP_NAME = 'Phần mềm hệ thống GETC';
 
 const MODE_CONFIG: Record<LoginMode, { subtitle: string; footer: string }> = {
   van_hanh: {
