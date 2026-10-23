@@ -86,6 +86,8 @@ export default function StockEntry() {
     bộ lọc kia chỉ là cách thứ hai để làm cùng một việc.
   */
   const [status, setStatus] = useState<DeviceStatus | ''>('');
+  /** Lọc theo loại vật tư (user yêu cầu 23/10/2026). `''` = mọi loại. */
+  const [typeFilter, setTypeFilter] = useState<AssetType | ''>('');
   const [search, setSearch] = useState('');
   /** Dòng đang mở xem lịch sử lắp đặt. */
   const [openRow, setOpenRow] = useState<string | null>(null);
@@ -120,12 +122,13 @@ export default function StockEntry() {
 
   const shown = useMemo(() => rows.filter(r => {
     if (status && r.status !== status) return false;
-    // Loại đưa vào chuỗi tìm để gõ "TI" hay "GP-03" là ra, khỏi cần chip riêng.
+    if (typeFilter && r.device.type !== typeFilter) return false;
+    // Loại vẫn đưa vào chuỗi tìm để gõ "TI" hay "GP-03" là ra.
     return matchesTerms(
       [r.device.serial, ASSET_LABEL[r.device.type], r.device.batch, holdText(r),
         r.atPoint?.code, r.device.note], terms);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [rows, status, terms, d]);
+  }), [rows, status, typeFilter, terms, d]);
 
   /**
    * Gom theo KCN rồi mỗi KCN một thẻ — cùng khuôn bảng Điểm đo (user chốt
@@ -135,7 +138,13 @@ export default function StockEntry() {
     () => groupByZone(sortByCode(shown, r => r.device.serial), r => r.zoneId, d?.zones ?? []),
     [shown, d]);
 
-  const count = (s: DeviceStatus) => rows.filter(r => r.status === s).length;
+  /** Đếm chéo: số của chip trạng thái theo loại đang lọc, số của chip loại theo trạng thái đang lọc. */
+  const ofType = typeFilter ? rows.filter(r => r.device.type === typeFilter) : rows;
+  const ofStatus = status ? rows.filter(r => r.status === status) : rows;
+  const count = (s: DeviceStatus) => ofType.filter(r => r.status === s).length;
+  const countType = (t: AssetType) => ofStatus.filter(r => r.device.type === t).length;
+  /** Chỉ hiện loại có trong kho — chip 0 thiết bị chỉ làm rối. */
+  const typesInStock = TYPES.filter(t => rows.some(r => r.device.type === t));
   const idleLong = rows.filter(r => r.status === 'kho' && idleDays(r, today()) > IDLE_WARN_DAYS).length;
 
   /* ------------------------- khai một thiết bị ------------------------- */
@@ -484,12 +493,24 @@ export default function StockEntry() {
 
       {/* ---------------------- Bộ lọc chip ---------------------- */}
       <div className="flex flex-wrap items-center gap-2">
+        <span className="w-16 text-[11px] font-bold uppercase tracking-wider text-faint">Trạng thái</span>
         <Chip on={!status} onClick={() => { setStatus(''); }}>
-          Tất cả {rows.length}
+          Tất cả {ofType.length}
         </Chip>
         {(['kho', 'dang_treo', 'thanh_ly'] as const).map(s => (
           <Chip key={s} on={status === s} onClick={() => { setStatus(status === s ? '' : s); }}>
             {DEVICE_STATUS_LABEL[s]} {count(s)}
+          </Chip>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-16 text-[11px] font-bold uppercase tracking-wider text-faint">Loại</span>
+        <Chip on={!typeFilter} onClick={() => { setTypeFilter(''); }}>
+          Tất cả {ofStatus.length}
+        </Chip>
+        {typesInStock.map(t => (
+          <Chip key={t} on={typeFilter === t} onClick={() => { setTypeFilter(typeFilter === t ? '' : t); }}>
+            {ASSET_LABEL[t]} {countType(t)}
           </Chip>
         ))}
       </div>
