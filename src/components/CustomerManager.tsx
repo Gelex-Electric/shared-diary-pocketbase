@@ -229,7 +229,7 @@ export default function CustomerManager({ scope = 'doi' }: { scope?: Scope }) {
         <div>
           <h2 className="text-2xl font-bold text-ink">Thông tin khách hàng &amp; Công tơ</h2>
           <p className="text-soft text-sm mt-1">
-            Danh sách khách hàng và thiết bị đo đếm{isOffice ? ' theo từng KCN' : ''} — lấy từ <b className="text-dim">Danh mục</b>, sửa ở đó thì ở đây đổi theo
+            Danh sách khách hàng và thiết bị đo đếm{isOffice ? ' theo từng KCN' : ''} — lấy từ <b className="text-dim">Quản lý chung</b>, sửa ở đó thì ở đây đổi theo
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">

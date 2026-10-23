@@ -45,8 +45,8 @@ const TAB_LABEL: Record<Tab, string> = {
   opchart:         'Đồ thị điện áp & công suất',
   loss:            'Tổn thất tính toán',
   sld:             'Sơ đồ một sợi',
-  'dm-general':    'Quản lý chung',
-  'dm-catalog':    'Danh mục',
+  'dm-general':    'Danh mục vật tư theo điểm đo',
+  'dm-catalog':    'Quản lý chung',
   qlvh:            'Quản lý vận hành',
 };
 
@@ -378,7 +378,7 @@ export default function BusinessDashboard() {
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
-                      <span className="flex-1">Quản lý chung</span>
+                      <span className="flex-1">Danh mục vật tư theo điểm đo</span>
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>
@@ -391,7 +391,7 @@ export default function BusinessDashboard() {
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
-                      <span className="flex-1">Danh mục</span>
+                      <span className="flex-1">Quản lý chung</span>
                       <span className="text-[10px] font-black text-red-500 shrink-0 uppercase tracking-wide">New</span>
                     </button>
                   </li>

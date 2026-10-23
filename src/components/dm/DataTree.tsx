@@ -329,7 +329,7 @@ export default function DataTree() {
           <Building2 className="mx-auto h-10 w-10 text-faint" />
           <p className="mt-3 text-[15px] font-bold text-dim">Chưa có dữ liệu để vẽ cây</p>
           <p className="mt-1 text-[13px] text-faint">
-            Vào mục <b>Danh mục</b> khai khu công nghiệp, trạm và khách hàng trước.
+            Vào mục <b>Quản lý chung</b> khai khu công nghiệp, trạm và khách hàng trước.
           </p>
         </div>
       ) : (

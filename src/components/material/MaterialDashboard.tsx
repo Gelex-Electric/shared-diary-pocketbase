@@ -26,8 +26,8 @@ import { GROUP_LABEL } from '../../lib/userGroup';
 type Tab = 'dm-general' | 'dm-catalog';
 
 const TAB_LABEL: Record<Tab, string> = {
-  'dm-general': 'Quản lý chung',
-  'dm-catalog': 'Danh mục',
+  'dm-general': 'Danh mục vật tư theo điểm đo',
+  'dm-catalog': 'Quản lý chung',
 };
 const NAV: { id: Tab; label: string }[] = [
   { id: 'dm-general', label: TAB_LABEL['dm-general'] },
