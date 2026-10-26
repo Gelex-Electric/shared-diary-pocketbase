@@ -26,3 +26,13 @@ export function pointZoneId(
   if (p.line) return lines.find(l => l.id === p.line)?.zone;
   return undefined;
 }
+
+/**
+ * Tên KCN của điểm đo có nằm trong danh sách KCN của tài khoản không (`users.area`
+ * chứa TÊN đầy đủ, vd "KCN Tiền Hải"). So không phân biệt hoa thường / khoảng trắng
+ * để lệch một dấu cách không làm Vận Hành mất việc.
+ */
+export function inAreas(zoneName: string, areas: string[]): boolean {
+  const n = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  return !!zoneName && areas.some(a => n(a) === n(zoneName));
+}

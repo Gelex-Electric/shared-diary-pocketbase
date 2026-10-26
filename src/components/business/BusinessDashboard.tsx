@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { pb } from '../../lib/pocketbase';
 import {
   LogOut, X, Menu, ChevronDown,
-  FileText, LayoutDashboard, Briefcase, Activity, Package, FileSignature, Bell,
+  FileText, LayoutDashboard, Briefcase, Activity, Package, FileSignature, Bell, ListTodo,
 } from 'lucide-react';
+import SupplyTasks from '../dm/SupplyTasks';
+import { useSupplyTasks } from '../dm/useSupplyTasks';
 import { motion, AnimatePresence } from 'motion/react';
 import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
@@ -27,13 +29,14 @@ import ThemeToggle from '../ui/ThemeToggle';
 import { GROUP_LABEL } from '../../lib/userGroup';
 
 type Tab =
-  | 'summary' | 'alerts' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'customers' | 'invoice-export'
+  | 'summary' | 'tasks' | 'alerts' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'customers' | 'invoice-export'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
   | 'dm-general' | 'dm-catalog'
   | 'qlvh';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
+  tasks:           'Việc cần làm',
   alerts:          'Cảnh báo',
   'bill-confirm':  'Biên bản xác nhận chỉ số',
   'quick-import':  'Nạp dữ liệu',
@@ -68,6 +71,12 @@ const QLVH_TABS: Tab[] = ['qlvh'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
+  /** Việc của Kinh Doanh trong luồng cấp vật tư = điểm đo mới chưa khai nhu cầu. */
+  const supply = useSupplyTasks('kinh_doanh');
+  const taskBadge = supply.count;
+  // Đổi màn là dịp tính lại badge — vừa khai nhu cầu ở form điểm đo xong thì số giảm ngay.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void supply.reload(); }, [topTab]);
   /** Cảnh báo CHƯA XỬ LÝ — badge sidebar và số trên từng sub-side. */
   const { total: openAlerts, byKind: alertCounts } = useUnresolvedAlerts();
   /** Nhóm cảnh báo đang xem; các nhóm là sub-side nên nằm ở state chứ không ở Tab. */
@@ -131,6 +140,25 @@ export default function BusinessDashboard() {
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
               <span>Tổng hợp</span>
+            </button>
+          </li>
+
+          {/* Việc cần làm — luồng cấp vật tư điểm đo mới (26/10/2026); badge tự tính. */}
+          <li className="relative mt-1">
+            <button
+              id="nav-tasks"
+              onClick={() => { setTopTab('tasks'); onNavigate?.(); }}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'tasks' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <ListTodo className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Việc cần làm</span>
+              {taskBadge > 0 && (
+                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {taskBadge > 99 ? '99+' : taskBadge}
+                </span>
+              )}
             </button>
           </li>
 
@@ -573,6 +601,9 @@ export default function BusinessDashboard() {
           <section>
             {topTab === 'summary' ? (
               <BusinessSummaryDashboard />
+            ) : topTab === 'tasks' ? (
+              <SupplyTasks group="kinh_doanh" tasks={supply.tasks} data={supply.data}
+                onNavigate={tab => { setTopTab(tab as Tab); if (tab === 'dm-catalog' && !isAssetExpanded) toggleSection('asset'); }} />
             ) : topTab === 'alerts' ? (
               <AlertCenter kind={alertKind} />
             ) : topTab === 'quick-import' ? (

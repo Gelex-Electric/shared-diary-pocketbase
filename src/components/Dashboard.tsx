@@ -2,8 +2,10 @@
 import { pb } from '../lib/pocketbase';
 import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity, FileText, LayoutDashboard, Bell,
+  Activity, FileText, LayoutDashboard, Bell, ListTodo,
 } from 'lucide-react';
+import SupplyTasks from './dm/SupplyTasks';
+import { useSupplyTasks } from './dm/useSupplyTasks';
 import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import SummaryDashboard from './SummaryDashboard';
@@ -24,10 +26,11 @@ import { useUnresolvedAlerts } from './alerts/useUnresolvedAlerts';
 import { ALERT_KINDS } from '../lib/alerts';
 import ThemeToggle from './ui/ThemeToggle';
 
-type Tab = 'summary' | 'alerts' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
+type Tab = 'summary' | 'tasks' | 'alerts' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
+  tasks:     'Điểm đo chờ treo',
   alerts: 'Cảnh báo',
   journal:   'Hồ sơ vận hành',
   outage:            'Thông báo ngừng cấp điện',
@@ -75,6 +78,9 @@ const subItemV = {
 
 export default function Dashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
+  /** Việc của Vận Hành trong luồng cấp vật tư = điểm đo đủ vật tư chờ treo ở KCN mình. */
+  const supply = useSupplyTasks('van_hanh');
+  const taskBadge = supply.count;
   /** Cảnh báo CHƯA XỬ LÝ — badge sidebar và số trên từng sub-side. */
   const { total: openAlerts, byKind: alertCounts } = useUnresolvedAlerts();
   /** Nhóm cảnh báo đang xem; các nhóm là sub-side nên nằm ở state chứ không ở Tab. */
@@ -175,6 +181,25 @@ export default function Dashboard() {
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
               <span>Tổng hợp</span>
+            </button>
+          </li>
+
+          {/* Việc cần làm — luồng cấp vật tư điểm đo mới (26/10/2026); badge tự tính. */}
+          <li className="relative mt-1">
+            <button
+              id="nav-tasks"
+              onClick={() => { setTopTab('tasks'); onNavigate?.(); }}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'tasks' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <ListTodo className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Điểm đo chờ treo</span>
+              {taskBadge > 0 && (
+                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {taskBadge > 99 ? '99+' : taskBadge}
+                </span>
+              )}
             </button>
           </li>
 
@@ -559,6 +584,8 @@ export default function Dashboard() {
           <section>
             {topTab === 'summary' ? (
               <SummaryDashboard />
+            ) : topTab === 'tasks' ? (
+              <SupplyTasks group="van_hanh" tasks={supply.tasks} data={supply.data} onChanged={() => void supply.reload(true)} />
             ) : topTab === 'operating' ? (
               <CustomerManager />
             ) : topTab === 'hes' ? (

@@ -187,7 +187,9 @@ export function openPurchaseLines(
  *   thieu       ② còn thiếu, đơn mua chưa phủ                  → việc Vật Tư
  *   cho_hang    ③ phần thiếu đã nằm trong đơn mua chưa về      → Vật Tư theo dõi
  *   du_cho_treo ④ đủ vật tư, công tơ chưa có ngày treo         → việc Vận Hành
- *   da_treo     ⑤ công tơ đã có ngày treo — thoát luồng
+ *   da_treo     ⑤ công tơ đã có ngày treo — thoát luồng. Kể cả điểm đo TỪNG treo
+ *               rồi tháo hết (đã tháo gỡ): đó không phải điểm đo mới, không được
+ *               đẩy vào việc "chưa khai nhu cầu" của Kinh Doanh.
  */
 export type SupplyState = 'chua_khai' | 'thieu' | 'cho_hang' | 'du_cho_treo' | 'da_treo';
 
@@ -215,6 +217,11 @@ export function isHung(assets: Asset[]): boolean {
   return assets.some(a => a.type === 'CONGTO' && ymd(a.date_on) && !ymd(a.date_off) && a.active !== false);
 }
 
+/** Điểm đo đã TỪNG có công tơ treo (kể cả đã tháo) — không còn là điểm đo mới. */
+export function everHung(assets: Asset[], pointId: string): boolean {
+  return assets.some(a => a.point === pointId && a.type === 'CONGTO' && ymd(a.date_on));
+}
+
 export interface SupplyContext {
   assets: Asset[];
   devices: Device[];
@@ -230,7 +237,7 @@ export function pointSupply(p: Point, ctx: SupplyContext): PointSupply {
   const unsureShape = lines.reduce((s, l) => s + l.unsureShape, 0);
   const base = { lines, missing, unsureShape };
 
-  if (isHung(mine)) return { state: 'da_treo', ...base };
+  if (isHung(mine) || everHung(ctx.assets, p.id)) return { state: 'da_treo', ...base };
   if (!need.length) return { state: 'chua_khai', ...base };
   if (missing === 0) return { state: 'du_cho_treo', ...base };
 
@@ -462,4 +469,56 @@ export function nextPurchaseCode(purchases: Purchase[], year = new Date().getFul
     .filter(Number.isFinite)
     .reduce((a, b) => Math.max(a, b), 0);
   return `${prefix}${String(max + 1).padStart(3, '0')}`;
+}
+
+/* -------------------------- việc cần làm (đợt 4) -------------------------- */
+
+export interface SupplyTasks {
+  /** ① Kinh Doanh: điểm đo mới chưa khai nhu cầu. */
+  chuaKhai: Point[];
+  /** ② Vật Tư: điểm đo còn thiếu, đơn mua chưa phủ. */
+  thieu: Point[];
+  /** ③ Vật Tư theo dõi: điểm đo chờ hàng về. */
+  choHang: Point[];
+  /** ④ Vận Hành: điểm đo đủ vật tư, chờ treo. */
+  choTreo: Point[];
+  /** Đơn mua quá ngày dự kiến về mà chưa về đủ. */
+  lateOrders: Purchase[];
+  /** TI còn dùng được chưa khai hình dạng — chỉ để nhắc, KHÔNG đếm vào badge (quá nhiều TI cũ). */
+  tiNoShape: number;
+}
+
+/**
+ * Việc của cả ba nhóm, tính một lượt từ dữ liệu — không ai giao tay (user chốt
+ * 26/10/2026). `inScope` lọc điểm đo theo KCN của người xem (Vận Hành).
+ */
+export function supplyTasks(
+  points: Point[], ctx: SupplyContext, today: string, inScope: (p: Point) => boolean = () => true,
+): SupplyTasks {
+  const t: SupplyTasks = { chuaKhai: [], thieu: [], choHang: [], choTreo: [], lateOrders: [], tiNoShape: 0 };
+  for (const p of points) {
+    if (!inScope(p)) continue;
+    const st = pointSupply(p, ctx).state;
+    if (st === 'chua_khai') t.chuaKhai.push(p);
+    else if (st === 'thieu') t.thieu.push(p);
+    else if (st === 'cho_hang') t.choHang.push(p);
+    else if (st === 'du_cho_treo') t.choTreo.push(p);
+  }
+  const urgentFirst = (a: Point, b: Point) =>
+    Number(!!b.urgent) - Number(!!a.urgent) || (a.code ?? '').localeCompare(b.code ?? '');
+  for (const k of ['chuaKhai', 'thieu', 'choHang', 'choTreo'] as const) t[k].sort(urgentFirst);
+  t.lateOrders = ctx.purchases.filter(po => {
+    if (!po.expected_at || ymd(po.expected_at) >= today) return false;
+    const s = purchaseState(po, ctx.purchaseLines, ctx.devices).state;
+    return s === 'da_dat' || s === 've_mot_phan';
+  });
+  t.tiNoShape = ctx.devices.filter(d => d.type === 'TI' && !d.shape && !ymd(d.liquidated_at)).length;
+  return t;
+}
+
+/** Số trên badge "Việc cần làm" của từng nhóm. */
+export function taskCount(t: SupplyTasks, group: 'van_hanh' | 'kinh_doanh' | 'vat_tu'): number {
+  if (group === 'kinh_doanh') return t.chuaKhai.length;
+  if (group === 'van_hanh') return t.choTreo.length;
+  return t.thieu.length + t.lateOrders.length;
 }

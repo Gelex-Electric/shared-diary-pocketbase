@@ -7,7 +7,7 @@
 import {
   allocCandidates, borrowCandidates, borrowsToSettle, cleanNeed, defaultNeed, matchDevice,
   nextPurchaseCode, openBorrowsByPoint, pointSupply, purchaseNeeds, purchaseState, specKey,
-  suggestTiRatio, supplyOfPoint,
+  suggestTiRatio, supplyOfPoint, supplyTasks, taskCount,
 } from '../src/lib/dm/supply';
 import { planAttach } from '../src/lib/dm/attach';
 import type { Asset, AssetType, Borrow, Device, NeedLine, Point, Purchase, PurchaseLine } from '../src/lib/dm/types';
@@ -209,6 +209,32 @@ const empty = { purchases: [] as Purchase[], purchaseLines: [] as PurchaseLine[]
   eq(purchaseState({ ...po, cancelled: true }, lines, []).state, 'huy', 'purchaseState: hủy');
   eq(nextPurchaseCode([po, { id: 'x', code: 'DM-2025-099' } as Purchase], 2026), 'DM-2026-008', 'nextPurchaseCode: theo năm');
   eq(nextPurchaseCode([], 2027), 'DM-2027-001', 'nextPurchaseCode: năm mới');
+}
+
+/* ---------------------------------------------------------- supplyTasks */
+
+{
+  const m1 = dev('CONGTO'), m2 = dev('CONGTO'), m3 = dev('CONGTO');
+  const pts = [
+    point(undefined, { id: 'A', code: 'A' }),                                       // ① chưa khai
+    point([{ type: 'CONGTO', qty: 1 }], { id: 'B', code: 'B' }),                    // ② thiếu
+    point([{ type: 'CONGTO', qty: 1 }], { id: 'C', code: 'C', urgent: true }),      // ④ đủ chờ treo
+    point(undefined, { id: 'D', code: 'D' }),                                       // từng treo rồi tháo ⇒ thoát luồng
+    point([{ type: 'CONGTO', qty: 1 }], { id: 'E', code: 'E' }),                    // đang treo
+  ];
+  const assets = [asset(m1, 'C'), asset(m2, 'D', '2025-01-01', '2026-01-01'), asset(m3, 'E', '2026-10-01')];
+  const late = { id: 'PO', code: 'PO', expected_at: '2026-10-01' } as Purchase;
+  const ctx = {
+    assets, devices: [m1, m2, m3, ti(''), ti('vuong')],
+    purchases: [late, { id: 'PO2', code: 'PO2', expected_at: '2026-12-01' } as Purchase],
+    purchaseLines: [{ id: 'L', purchase: 'PO', type: 'SIM', qty: 1 }, { id: 'L2', purchase: 'PO2', type: 'SIM', qty: 1 }] as PurchaseLine[],
+  };
+  const t = supplyTasks(pts, ctx, '2026-10-26');
+  eq([t.chuaKhai, t.thieu, t.choTreo].map(l => l.map(p => p.code)), [['A'], ['B'], ['C']],
+     'supplyTasks: chia đúng nhóm; điểm đo từng treo rồi tháo không vào "chưa khai"');
+  eq([t.lateOrders.map(o => o.code), t.tiNoShape], [['PO'], 1], 'supplyTasks: đơn trễ + TI chưa rõ hình dạng');
+  eq([taskCount(t, 'kinh_doanh'), taskCount(t, 'vat_tu'), taskCount(t, 'van_hanh')], [1, 2, 1], 'taskCount: theo nhóm');
+  eq(supplyTasks(pts, ctx, '2026-10-26', p => p.id !== 'C').choTreo.length, 0, 'supplyTasks: lọc theo KCN của người xem');
 }
 
 /* ---------------------------------------------------------------- kết quả */

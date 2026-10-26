@@ -16,9 +16,11 @@
  * Lưu ý: chỉ giới hạn ở GIAO DIỆN — rule PocketBase của `dm_*` vẫn cho mọi
  * tài khoản đăng nhập ghi.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { pb } from '../../lib/pocketbase';
-import { LogOut, X, Menu, ChevronDown, FileText, Package } from 'lucide-react';
+import { LogOut, X, Menu, ChevronDown, FileText, Package, ListTodo } from 'lucide-react';
+import SupplyTasks from '../dm/SupplyTasks';
+import { useSupplyTasks } from '../dm/useSupplyTasks';
 import { motion, AnimatePresence } from 'motion/react';
 import GeneralManagement from '../dm/GeneralManagement';
 import CatalogEntry, { type CatTab } from '../dm/CatalogEntry';
@@ -27,9 +29,10 @@ import PurchaseManager from '../dm/PurchaseManager';
 import ThemeToggle from '../ui/ThemeToggle';
 import { GROUP_LABEL } from '../../lib/userGroup';
 
-type Tab = 'supply-alloc' | 'purchase' | 'dm-general' | 'dm-catalog';
+type Tab = 'tasks' | 'supply-alloc' | 'purchase' | 'dm-general' | 'dm-catalog';
 
 const TAB_LABEL: Record<Tab, string> = {
+  tasks: 'Việc cần làm',
   'supply-alloc': 'Phân bổ vật tư',
   purchase: 'Đặt mua vật tư',
   'dm-general': 'Danh mục vật tư theo điểm đo',
@@ -48,6 +51,12 @@ export default function MaterialDashboard() {
   const [topTab, setTopTab] = useState<Tab>('dm-catalog');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAssetExpanded, setIsAssetExpanded] = useState(true);
+  /** Việc của Vật Tư: điểm đo thiếu vật tư + đơn mua trễ. */
+  const supply = useSupplyTasks('vat_tu');
+  const taskBadge = supply.count;
+  // Đổi màn là dịp tính lại badge — phân bổ / nhận hàng xong quay lại thì số đã đúng.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void supply.reload(); }, [topTab]);
 
   const handleLogout = () => { pb.authStore.clear(); window.location.reload(); };
 
@@ -74,11 +83,32 @@ export default function MaterialDashboard() {
       <nav className="flex-1 mt-4">
         <p className="vl-section-title">Menu chính</p>
         <ul className="list-none px-0 mt-2">
+          {/* Việc cần làm — luồng cấp vật tư điểm đo mới (26/10/2026); badge tự tính. */}
+          <li className="relative mt-1">
+            <button
+              id="nav-tasks"
+              onClick={() => { setTopTab('tasks'); onNavigate?.(); }}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'tasks' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <ListTodo className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Việc cần làm</span>
+              {taskBadge > 0 && (
+                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {taskBadge > 99 ? '99+' : taskBadge}
+                </span>
+              )}
+            </button>
+          </li>
+
           <li className="relative mt-1">
             <button
               id="nav-asset"
               onClick={() => setIsAssetExpanded(v => !v)}
-              className="vl-sidebar-link vl-sidebar-active text-accent relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all"
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab !== 'tasks' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
             >
               <Package className="w-5 h-5 shrink-0" />
               <span className="flex-1 text-left">Quản lý vật tư thiết bị điện</span>
@@ -216,7 +246,10 @@ export default function MaterialDashboard() {
 
         <div className="flex-1 px-4 py-6 md:px-6 md:py-8">
           <section>
-            {topTab === 'supply-alloc' ? (
+            {topTab === 'tasks' ? (
+              <SupplyTasks group="vat_tu" tasks={supply.tasks} data={supply.data}
+                onNavigate={tab => setTopTab(tab as Tab)} />
+            ) : topTab === 'supply-alloc' ? (
               <SupplyAllocate />
             ) : topTab === 'purchase' ? (
               <PurchaseManager />
