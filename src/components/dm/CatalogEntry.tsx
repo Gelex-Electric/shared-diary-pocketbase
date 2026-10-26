@@ -29,7 +29,7 @@ import { Switch } from '../ui/Switch';
    Actions không `npm ci` nên không có tsx) và app dùng CHUNG một bản. */
 import { estimateLossParams } from '@/scripts/lib/lossParams.mjs';
 import { DatePicker } from '../ui/DateTimePickers';
-import { assets, customers, devices, isAbortError, lines, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
+import { assets, borrows, customers, devices, isAbortError, lines, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
 import { isHeadPoint, pointZoneId } from '../../lib/dm/pointScope';
@@ -1011,6 +1011,23 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
       return { ...b, swapTo: canSwap ? swapTo : '' };
     });
   const busyElsewhere = serialConflicts.filter(b => !reclaim.some(r => r.serial === b.serial));
+  /**
+   * Ghi SỔ MƯỢN cho các dòng CHUYỂN về đây (luồng cấp vật tư đợt 2, 26/10/2026):
+   * điểm đo kia mất vật tư dự kiến nên phải được bù sau. Đổi chỗ thì hai bên
+   * đều nhận lại một thiết bị — không ai mất — nên không ghi.
+   */
+  const recordBorrows = async (toPoint: string) => {
+    for (const b of reclaim) {
+      if (b.swapTo || !b.asset.point || b.asset.point === toPoint) continue;
+      const dev = b.asset.device
+        || (d?.devices ?? []).find(x => x.serial.trim() === b.serial)?.id;
+      if (!dev) continue;
+      await borrows.create({
+        device: dev, from_point: b.asset.point, to_point: toPoint,
+        borrowed_at: new Date().toISOString().slice(0, 10), reason: 'Chuyển ở form điểm đo',
+      });
+    }
+  };
 
   /**
    * Mã điểm đo trùng một điểm đo khác. `dm_point.code` là UNIQUE nên PocketBase
@@ -1428,6 +1445,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
           if (dev) await devices.update(dev.id, { hold_point: b.asset.point ?? '' });
         }
         const rec = editingId ? await points.update(editingId, body) : await points.create(body);
+        await recordBorrows((rec as { id: string }).id);
         await syncAssets((rec as { id: string }).id);
       }, `Điểm đo đầu nguồn ${code}`);
     }
@@ -1503,6 +1521,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
         const rec = editingId
           ? await points.update(editingId, body)
           : await points.create(body);
+        // CHUYỂN (không phải đổi chỗ) = điểm đo kia mất vật tư ⇒ ghi sổ mượn.
+        await recordBorrows((rec as { id: string }).id);
         // Vật tư lưu sau vì cần id điểm đo; lỗi ở đây sẽ báo nguyên văn từ PB
         // (thường là trùng số No với vật tư đang gắn ở điểm đo khác).
         await syncAssets((rec as { id: string }).id);

@@ -27,7 +27,7 @@ import {
 import { ZoneTables } from './ZoneTables';
 import { groupByZone, sortByCode } from './groupByZone';
 import {
-  devices as deviceRepo, assets as assetRepo, loadCatalog, pbErrorMessage, isAbortError,
+  devices as deviceRepo, loadCatalog, pbErrorMessage, isAbortError,
   type CatalogData,
 } from '../../lib/dm/repo';
 import {
@@ -35,7 +35,8 @@ import {
   type TiShape,
 } from '../../lib/dm/types';
 import { pointZoneId } from '../../lib/dm/pointScope';
-import { setMatchesHsn } from '../../lib/dm/tutiPick';
+import { planAttach } from '../../lib/dm/attach';
+import { runAttach } from '../../lib/dm/attachRun';
 import {
   buildStock, findExisting, guessType, idleDays, parsePaste, SERIAL_RE,
   IDLE_WARN_DAYS, REUSE_MIN, type StockRow,
@@ -327,47 +328,11 @@ export default function StockEntry() {
   const isPlan = (a: { date_on?: string; date_off?: string }) =>
     !(a.date_on ?? '').slice(0, 10) && !(a.date_off ?? '').slice(0, 10);
   const codeOfPoint = (id?: string) => d?.points.find(p => p.id === id)?.code ?? '(không rõ)';
-  const attachTarget = d?.points.find(p => p.id === attachPoint);
-
-  const attachBlocks: string[] = [];
-  const attachMoves: { serial: string; assetId: string; from: string }[] = [];
-  if (attachPoint) {
-    for (const r of pickedRows) {
-      const sn = r.device.serial;
-      const mine = assetsOf(r.device.id);
-      if (r.device.liquidated_at) { attachBlocks.push(`${sn} đã thanh lý`); continue; }
-      if (r.status === 'dang_treo') {
-        attachBlocks.push(r.atPoint?.id === attachPoint
-          ? `${sn} đã treo ở chính điểm đo này`
-          : `${sn} đang treo ở ${r.atPoint?.code ?? '(không rõ)'} — khai ngày tháo ở đó trước`);
-        continue;
-      }
-      if (mine.some(a => a.point === attachPoint && isPlan(a))) {
-        attachBlocks.push(`${sn} đã có dòng dự kiến ở điểm đo này — mở điểm đo để khai ngày treo`);
-        continue;
-      }
-      for (const a of mine.filter(a => a.point && a.point !== attachPoint && isPlan(a))) {
-        attachMoves.push({ serial: sn, assetId: a.id, from: codeOfPoint(a.point) });
-      }
-    }
-
-    // HSN: bộ TI (× TU) gắn vào phải khớp HSN điểm đo — cùng luật form điểm đo.
-    const ratioOf2 = (x?: number, y?: number) => (x && y ? { primary: x, secondary: y } : null);
-    const tis = pickedRows.filter(r => r.device.type === 'TI');
-    if (tis.length) {
-      const kinds = new Set(tis.map(r => `${r.device.ratio_primary ?? ''}/${r.device.ratio_secondary ?? ''}`));
-      const hsn = attachTarget?.hsn;
-      const tuDev = pickedRows.find(r => r.device.type === 'TU')?.device
-        ?? (d?.assets ?? []).find(a => a.point === attachPoint && a.type === 'TU' && !(a.date_off ?? '').slice(0, 10));
-      if (kinds.size > 1) attachBlocks.push(`các TI chọn không cùng tỷ số (${[...kinds].join(' ≠ ')})`);
-      else if (!hsn) attachBlocks.push(`điểm đo ${attachTarget?.code ?? ''} chưa khai HSN — khai HSN ở form điểm đo trước`);
-      else if (!setMatchesHsn(hsn, ratioOf2(tis[0].device.ratio_primary, tis[0].device.ratio_secondary),
-        tuDev ? ratioOf2(tuDev.ratio_primary, tuDev.ratio_secondary) : null)) {
-        attachBlocks.push(`TI ${[...kinds][0]}${tuDev ? ` × TU ${tuDev.ratio_primary}/${tuDev.ratio_secondary}` : ''} `
-          + `không khớp HSN ${hsn} của điểm đo`);
-      }
-    }
-  }
+  const { blocks: attachBlocks, moves: attachMoves } = useMemo(
+    () => planAttach(pickedRows.map(r => r.device), attachPoint,
+      { assets: d?.assets ?? [], points: d?.points ?? [] }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [picked, attachPoint, d]);
 
   const attach = async () => {
     if (!attachPoint) return toast.warning('Chưa chọn điểm đo', 'Phải chọn điểm đo để gắn.');
@@ -375,26 +340,8 @@ export default function StockEntry() {
     setSaving(true);
     let n = 0;
     try {
-      // Thiết bị đang dự kiến ở điểm đo khác: gỡ dòng bên đó trước, rồi mới tạo
-      // dòng ở đây — ngược lại thì giữa chừng có lúc một thiết bị nằm hai nơi.
-      for (const m of attachMoves) await assetRepo.remove(m.assetId);
-      for (const r of pickedRows) {
-        /*
-          Tạo LẦN LẮP mới, không sửa lần lắp cũ: cùng một thiết bị có thể lắp
-          rồi tháo rồi lắp lại nơi khác, mỗi lần là một dòng lịch sử riêng.
-        */
-        await assetRepo.create({
-          serial: r.device.serial, type: r.device.type, device: r.device.id,
-          point: attachPoint,
-          ratio_primary: r.device.ratio_primary, ratio_secondary: r.device.ratio_secondary,
-          date_on: attachDate || '', active: true, status: attachDate ? 'dang_treo' : 'kho',
-        });
-        // Giữ chỗ đồng bộ như form điểm đo: có ngày treo ⇒ bỏ giữ chỗ; chưa có
-        // (gắn dạng dự kiến) ⇒ giữ chỗ cho chính điểm đo này.
-        const hold = attachDate ? '' : attachPoint;
-        if ((r.device.hold_point ?? '') !== hold) await deviceRepo.update(r.device.id, { hold_point: hold });
-        n++;
-      }
+      await runAttach(pickedRows.map(r => r.device), attachPoint, attachDate, attachMoves,
+        'Gắn từ Kho vật tư', k => { n = k; });
       toast.success('Đã gắn vào điểm đo', `${n} thiết bị.`);
       setModal(null); setPicked(new Set());
       await load();
@@ -860,8 +807,8 @@ export default function StockEntry() {
         </Field>
         {attachMoves.length > 0 && (
           <div className="vl-alert vl-alert-light-warning text-[12px]">
-            Khi gắn sẽ <b>CHUYỂN</b> về đây và gỡ khỏi điểm đo cũ:{' '}
-            {attachMoves.map(m => `${m.serial} (đang dự kiến ở ${m.from})`).join('; ')}.
+            Khi gắn sẽ <b>CHUYỂN</b> về đây, gỡ khỏi điểm đo cũ và ghi sổ mượn:{' '}
+            {attachMoves.map(m => `${m.serial} (đang dự kiến ở ${m.fromCode})`).join('; ')}.
           </div>
         )}
         {attachBlocks.length > 0 && (

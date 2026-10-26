@@ -17,7 +17,7 @@
 import { formatRatio } from './hsn';
 import { TI_PER_SET } from './pointStatus';
 import type {
-  Asset, AssetType, Connection, Device, NeedLine, Point, PurchaseLine, Purchase, TiShape,
+  Asset, AssetType, Borrow, Connection, Device, NeedLine, Point, PurchaseLine, Purchase, TiShape,
 } from './types';
 
 const ymd = (v?: string | null): string => (v ?? '').slice(0, 10);
@@ -245,4 +245,108 @@ export function pointSupply(p: Point, ctx: SupplyContext): PointSupply {
     return onOrder >= l.missing;
   });
   return { state: covered ? 'cho_hang' : 'thieu', ...base };
+}
+
+/* ---------------------- phân bổ + mượn (đợt 2) ---------------------- */
+
+const isPlanRow = (a: Asset) => !ymd(a.date_on) && !ymd(a.date_off);
+
+export interface Candidate {
+  device: Device;
+  match: Exclude<MatchResult, 'no'>;
+}
+
+/**
+ * Thiết bị TRONG KHO phân bổ được cho một dòng nhu cầu: chưa thanh lý, không
+ * đang treo, không có dòng dự kiến ở điểm đo nào, không giữ chỗ cho điểm đo
+ * KHÁC. Khớp chắc chắn xếp trước khớp tạm (TI chưa rõ hình dạng).
+ * Lấy vật tư đang dự kiến ở điểm đo khác là MƯỢN — xem `borrowCandidates`.
+ */
+export function allocCandidates(pointId: string, line: NeedLine, ctx: Pick<SupplyContext, 'assets' | 'devices'>): Candidate[] {
+  const taken = new Set<string>();
+  const takenSerial = new Set<string>();
+  for (const a of ctx.assets) {
+    if (ymd(a.date_off)) continue;
+    if (ymd(a.date_on) || a.point) {
+      if (a.device) taken.add(a.device);
+      if (a.serial?.trim()) takenSerial.add(a.serial.trim());
+    }
+  }
+  const out: Candidate[] = [];
+  for (const d of ctx.devices) {
+    if (ymd(d.liquidated_at) || taken.has(d.id) || takenSerial.has(d.serial.trim())) continue;
+    if (d.hold_point && d.hold_point !== pointId) continue;
+    const m = matchDevice(d, line);
+    if (m !== 'no') out.push({ device: d, match: m });
+  }
+  return out.sort((a, b) => (a.match === b.match ? a.device.serial.localeCompare(b.device.serial) : a.match === 'yes' ? -1 : 1));
+}
+
+export interface BorrowCandidate extends Candidate {
+  /** Lần lắp dự kiến ở điểm đo cho mượn — sẽ bị gỡ. */
+  asset: Asset;
+  from: Point;
+  /** Điểm đo cho mượn đang ĐỦ, chờ treo — mượn của nó là làm nó lỡ đợt treo. */
+  fromReady: boolean;
+}
+
+/**
+ * Vật tư MƯỢN ĐƯỢC cho điểm đo cần gấp (user chốt 26/10/2026): chỉ vật tư DỰ
+ * KIẾN (chưa ngày treo) ở điểm đo CHƯA TREO và KHÔNG GẤP. Không bao giờ lấy
+ * vật tư đã treo.
+ * Thứ tự gợi ý: điểm đo cho mượn còn thiếu trước (đằng nào cũng chưa treo được),
+ * điểm đo đã đủ chờ treo sau; trong đó khớp chắc chắn trước, rồi theo mã.
+ */
+export function borrowCandidates(
+  pointId: string, line: NeedLine, points: Point[], ctx: SupplyContext,
+): BorrowCandidate[] {
+  const devById = new Map(ctx.devices.map(d => [d.id, d]));
+  const devBySerial = new Map(ctx.devices.map(d => [d.serial.trim(), d]));
+  const out: BorrowCandidate[] = [];
+  for (const q of points) {
+    if (q.id === pointId || q.urgent) continue;
+    const mine = allocatedAssets(ctx.assets, q.id);
+    if (isHung(mine)) continue;
+    let fromReady: boolean | undefined;
+    for (const a of mine) {
+      if (!isPlanRow(a)) continue;
+      const d = (a.device && devById.get(a.device)) || devBySerial.get((a.serial ?? '').trim());
+      if (!d || ymd(d.liquidated_at)) continue;
+      const m = matchDevice(d, line);
+      if (m === 'no') continue;
+      fromReady ??= pointSupply(q, ctx).state === 'du_cho_treo';
+      out.push({ device: d, match: m, asset: a, from: q, fromReady });
+    }
+  }
+  return out.sort((a, b) =>
+    Number(a.fromReady) - Number(b.fromReady)
+    || (a.match === b.match ? 0 : a.match === 'yes' ? -1 : 1)
+    || (a.from.code ?? '').localeCompare(b.from.code ?? '')
+    || a.device.serial.localeCompare(b.device.serial));
+}
+
+/**
+ * Dòng sổ mượn ĐÓNG ĐƯỢC: điểm đo bị mượn nay đã đủ vật tư lại (hoặc đã treo).
+ * Không cần thao tác "trả" — bù đủ là xong nợ.
+ */
+export function borrowsToSettle(borrows: Borrow[], points: Point[], ctx: SupplyContext): Borrow[] {
+  const byId = new Map(points.map(p => [p.id, p]));
+  const done = new Map<string, boolean>();
+  return borrows.filter(b => {
+    if (ymd(b.settled_at)) return false;
+    const p = byId.get(b.from_point);
+    if (!p) return false;
+    if (!done.has(p.id)) {
+      const s = pointSupply(p, ctx);
+      done.set(p.id, s.state === 'da_treo' || s.state === 'du_cho_treo');
+    }
+    return done.get(p.id)!;
+  });
+}
+
+/** Điểm đo đang BỊ MƯỢN (còn dòng sổ mượn chưa đóng) → số thiết bị đang nợ. */
+export function openBorrowsByPoint(borrows: Borrow[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const b of borrows) if (!ymd(b.settled_at)) m.set(b.from_point, (m.get(b.from_point) ?? 0) + 1);
+  return m;
 }

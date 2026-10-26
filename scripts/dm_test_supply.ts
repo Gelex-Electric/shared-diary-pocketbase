@@ -5,9 +5,11 @@
  */
 
 import {
-  cleanNeed, defaultNeed, matchDevice, pointSupply, specKey, suggestTiRatio, supplyOfPoint,
+  allocCandidates, borrowCandidates, borrowsToSettle, cleanNeed, defaultNeed, matchDevice,
+  openBorrowsByPoint, pointSupply, specKey, suggestTiRatio, supplyOfPoint,
 } from '../src/lib/dm/supply';
-import type { Asset, AssetType, Device, NeedLine, Point, Purchase, PurchaseLine } from '../src/lib/dm/types';
+import { planAttach } from '../src/lib/dm/attach';
+import type { Asset, AssetType, Borrow, Device, NeedLine, Point, Purchase, PurchaseLine } from '../src/lib/dm/types';
 
 let pass = 0;
 const fails: string[] = [];
@@ -116,6 +118,58 @@ const empty = { purchases: [] as Purchase[], purchaseLines: [] as PurchaseLine[]
      'thieu', 'pointSupply: đơn hủy không phủ');
   eq(pointSupply(point(need), { ...ctx, purchaseLines: [{ ...purchaseLines[0], for_point: 'X' }] }).state,
      'thieu', 'pointSupply: đơn cho điểm đo khác không phủ');
+}
+
+/* ------------------------------------------------------ allocCandidates */
+
+{
+  const free = ti('vuong'), unsure = ti(''), wrong = ti('tron'), hung = ti('vuong'), planned = ti('vuong');
+  const heldElse = ti('vuong', [1000, 5]); heldElse.hold_point = 'Q';
+  const heldMe = ti('vuong', [1000, 5]); heldMe.hold_point = 'P';
+  const dead = ti('vuong'); dead.liquidated_at = '2026-01-01';
+  const assets = [asset(hung, 'Q', '2026-10-01'), asset(planned, 'Q')];
+  const c = allocCandidates('P', needVuong, {
+    assets, devices: [unsure, free, wrong, hung, planned, heldElse, heldMe, dead] });
+  eq(c.map(x => [x.device.serial, x.match]),
+     [[free.serial, 'yes'], [heldMe.serial, 'yes'], [unsure.serial, 'unsure_shape']],
+     'allocCandidates: chỉ hàng rảnh, giữ chỗ cho chính nó được, khớp chắc trước');
+}
+
+/* ------------------------------------------------------ borrowCandidates */
+
+{
+  const a1 = ti('vuong'), a2 = ti('vuong'), b1 = ti('vuong'), u1 = ti('vuong'), h1 = ti('vuong'), m1 = dev('CONGTO');
+  const points = [
+    point([{ ...needVuong, qty: 1 }], { id: 'P', code: 'P', urgent: true }),
+    point([{ ...needVuong, qty: 1 }], { id: 'A', code: 'A' }),                        // đủ, chờ treo
+    point([{ ...needVuong, qty: 3 }], { id: 'B', code: 'B' }),                        // còn thiếu
+    point([{ ...needVuong, qty: 1 }], { id: 'U', code: 'U', urgent: true }),          // cũng gấp
+    point([{ ...needVuong, qty: 1 }, { type: 'CONGTO', qty: 1 }], { id: 'H', code: 'H' }), // đã treo
+  ];
+  const assets = [asset(a1, 'A'), asset(a2, 'A', '2026-10-01'), asset(b1, 'B'), asset(u1, 'U'),
+    asset(h1, 'H'), asset(m1, 'H', '2026-10-01')];
+  const ctx = { assets, devices: [a1, a2, b1, u1, h1, m1], ...empty };
+  const c = borrowCandidates('P', needVuong, points, ctx);
+  eq(c.map(x => [x.device.serial, x.from.code, x.fromReady]), [[b1.serial, 'B', false], [a1.serial, 'A', true]],
+     'borrowCandidates: bỏ điểm gấp, điểm đã treo, vật tư đã treo; điểm còn thiếu xếp trước');
+
+  // planAttach coi thiết bị dự kiến ở điểm đo khác là CHUYỂN (= mượn).
+  const plan = planAttach([b1], 'P', { assets, points: points.map(p => ({ ...p, hsn: 200 })) });
+  eq([plan.blocks, plan.moves.map(m => [m.serial, m.fromPoint])], [[], [[b1.serial, 'B']]],
+     'planAttach: dự kiến ở điểm khác ⇒ chuyển, không chặn');
+  eq(planAttach([a2], 'P', { assets, points }).blocks.some(b => b.includes('đang treo ở A')), true, 'planAttach: đang treo ⇒ chặn');
+  eq(planAttach([ti('vuong', [800, 5])], 'P', { assets, points: points.map(p => ({ ...p, hsn: 200 })) }).blocks.length, 1,
+     'planAttach: TI lệch HSN ⇒ chặn');
+
+  // Sổ mượn: B bị mượn 1 cái. Chưa đủ ⇒ chưa đóng; bù đủ 3 ⇒ đóng.
+  const borrows = [{ id: 'X', device: b1.id, from_point: 'B', to_point: 'P' }] as Borrow[];
+  eq(borrowsToSettle(borrows, points, ctx).length, 0, 'borrowsToSettle: còn thiếu ⇒ chưa đóng');
+  const fill = [ti('vuong'), ti('vuong'), ti('vuong')];
+  const ctx2 = { ...ctx, assets: [...assets, ...fill.map(d => asset(d, 'B'))], devices: [...ctx.devices, ...fill] };
+  eq(borrowsToSettle(borrows, points, ctx2).map(b => b.id), ['X'], 'borrowsToSettle: bù đủ ⇒ đóng');
+  eq(borrowsToSettle([{ ...borrows[0], settled_at: '2026-10-26' }], points, ctx2).length, 0, 'borrowsToSettle: đã đóng bỏ qua');
+  eq([...openBorrowsByPoint([...borrows, { ...borrows[0], id: 'Y' }, { ...borrows[0], id: 'Z', settled_at: '2026-10-01' }])],
+     [['B', 2]], 'openBorrowsByPoint: đếm dòng chưa đóng');
 }
 
 /* ---------------------------------------------------------------- kết quả */
