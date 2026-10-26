@@ -55,7 +55,7 @@ eq(suggestTiRatio(1), null, 'suggestTiRatio: HSN 1 không gợi ý');
 eq(suggestTiRatio(undefined), null, 'suggestTiRatio: chưa có HSN');
 eq(defaultNeed('truc_tiep').map(n => `${n.type}×${n.qty}`), ['CONGTO×1', 'GP03×1', 'SIM×1'], 'defaultNeed: trực tiếp');
 eq(defaultNeed('gian_tiep', 300).map(n => specKey(n) + '×' + n.qty),
-   ['TI|1500/5|×3', 'CONGTO||×1', 'GP03||×1', 'SIM||×1'], 'defaultNeed: gián tiếp hạ áp, tỷ số từ HSN');
+   ['TI|1500/5|tron×3', 'CONGTO||×1', 'GP03||×1', 'SIM||×1'], 'defaultNeed: gián tiếp hạ áp, tỷ số từ HSN, TI mặc định tròn');
 eq(defaultNeed('gian_tiep', 8800, true)[0].ratio_primary, undefined, 'defaultNeed: trung áp không đoán tỷ số TI');
 
 /* --------------------------------------------------------------- cleanNeed */

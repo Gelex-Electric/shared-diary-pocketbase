@@ -176,6 +176,12 @@ export interface Point extends PbRecord {
 /** Hình dạng TI — chỉ hai loại (user chốt 26/10/2026). Trống = chưa rõ. */
 export type TiShape = 'tron' | 'vuong';
 export const SHAPE_LABEL: Record<TiShape, string> = { tron: 'Tròn', vuong: 'Vuông' };
+/**
+ * Hình dạng TI MẶC ĐỊNH khi khai mới (user chốt 26/10/2026): đa số là TRÒN,
+ * VUÔNG chỉ là trường hợp đặc biệt. Chỉ điền sẵn ô nhập — dữ liệu cũ để trống
+ * vẫn là "chưa rõ", không tự coi là tròn.
+ */
+export const DEFAULT_TI_SHAPE: TiShape = 'tron';
 
 /**
  * Một DÒNG NHU CẦU của điểm đo: "3 TI vuông 1000/5", "1 công tơ".

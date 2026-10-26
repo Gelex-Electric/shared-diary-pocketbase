@@ -36,7 +36,7 @@ import { runAttach } from '../../lib/dm/attachRun';
 import { formatRatio, parseRatio } from '../../lib/dm/hsn';
 import { dmy } from '../../lib/dm/lifecycle';
 import {
-  ASSET_LABEL, type AssetType, type Device, type Purchase, type PurchaseLine, type TiShape,
+  ASSET_LABEL, DEFAULT_TI_SHAPE, type AssetType, type Device, type Purchase, type PurchaseLine, type TiShape,
 } from '../../lib/dm/types';
 
 type View = 'need' | 'orders';
@@ -54,7 +54,7 @@ const TYPE_OPTS = (Object.keys(ASSET_LABEL) as AssetType[]).map(t => ({ value: t
 interface DraftLine { key: string; type: AssetType | ''; ratio: string; shape: TiShape | ''; qty: string; forPoint: string }
 let seq = 0;
 const draft = (x: Partial<DraftLine> = {}): DraftLine =>
-  ({ key: `l${++seq}`, type: '', ratio: '', shape: '', qty: '1', forPoint: '', ...x });
+  ({ key: `l${++seq}`, type: '', ratio: '', shape: DEFAULT_TI_SHAPE, qty: '1', forPoint: '', ...x });
 
 export default function PurchaseManager() {
   const { confirm, dialog } = useConfirm();

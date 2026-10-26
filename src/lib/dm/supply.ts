@@ -19,6 +19,7 @@ import { TI_PER_SET } from './pointStatus';
 import type {
   Asset, AssetType, Borrow, Connection, Device, NeedLine, Point, PurchaseLine, Purchase, TiShape,
 } from './types';
+import { DEFAULT_TI_SHAPE } from './types';
 
 const ymd = (v?: string | null): string => (v ?? '').slice(0, 10);
 
@@ -76,6 +77,7 @@ export function suggestTiRatio(hsn?: number | null): { ratio_primary: number; ra
 /**
  * Bộ nhu cầu điền sẵn theo kiểu đấu nối (user chốt 26/10/2026):
  * gián tiếp = 3 TI + công tơ + GP-03 + SIM; trực tiếp = công tơ + GP-03 + SIM.
+ * TI điền sẵn hình dạng mặc định (tròn — vuông là trường hợp đặc biệt, sửa tay).
  * Trung áp KHÔNG tự thêm TU — số TU (2 hay 3) tuỳ sơ đồ, người khai tự thêm.
  */
 export function defaultNeed(connection: Connection, hsn?: number | null, mv = false): NeedLine[] {
@@ -86,7 +88,7 @@ export function defaultNeed(connection: Connection, hsn?: number | null, mv = fa
   ];
   if (connection !== 'gian_tiep') return base;
   const ratio = mv ? null : suggestTiRatio(hsn);
-  return [{ type: 'TI', qty: TI_PER_SET, shape: '', ...(ratio ?? {}) }, ...base];
+  return [{ type: 'TI', qty: TI_PER_SET, shape: DEFAULT_TI_SHAPE, ...(ratio ?? {}) }, ...base];
 }
 
 /** Bỏ dòng hỏng (số lượng ≤ 0) và tỷ số/hình dạng thừa ở loại không dùng tới — gọi trước khi lưu. */

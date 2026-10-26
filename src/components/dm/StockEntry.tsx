@@ -32,7 +32,7 @@ import {
   type CatalogData,
 } from '../../lib/dm/repo';
 import {
-  ASSET_LABEL, DEVICE_STATUS_LABEL, SHAPE_LABEL, type AssetType, type Device, type DeviceStatus,
+  ASSET_LABEL, DEFAULT_TI_SHAPE, DEVICE_STATUS_LABEL, SHAPE_LABEL, type AssetType, type Device, type DeviceStatus,
   type TiShape,
 } from '../../lib/dm/types';
 import { pointZoneId } from '../../lib/dm/pointScope';
@@ -137,7 +137,7 @@ export default function StockEntry() {
 
   /* ------------------------- khai một thiết bị ------------------------- */
   const EMPTY = {
-    serial: '', type: '' as AssetType | '', ratio: '', shape: '' as TiShape | '', model_desc: '',
+    serial: '', type: '' as AssetType | '', ratio: '', shape: DEFAULT_TI_SHAPE as TiShape | '', model_desc: '',
     hold_for_note: '', date_in: today(), batch: '', note: '',
   };
   const [form, setForm] = useState(EMPTY);

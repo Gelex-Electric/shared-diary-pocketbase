@@ -17,7 +17,7 @@ import { formatRatio, parseRatio } from '../../lib/dm/hsn';
 import { useMemo } from 'react';
 import { HAS_RATIO, cleanNeed, defaultNeed, supplyOfPoint, type LineSupply } from '../../lib/dm/supply';
 import {
-  ASSET_LABEL, SHAPE_LABEL, type Asset, type AssetType, type Connection, type Device, type NeedLine, type TiShape,
+  ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type Asset, type AssetType, type Connection, type Device, type NeedLine, type TiShape,
 } from '../../lib/dm/types';
 
 /** Một dòng trên form — tỷ số và số lượng giữ dạng CHUỖI cho ô nhập. */
@@ -34,7 +34,8 @@ const newRow = (n?: Partial<NeedLine>): NeedRow => ({
   key: `n${++seq}`,
   type: n?.type ?? '',
   ratio: formatRatio(n?.ratio_primary, n?.ratio_secondary),
-  shape: (n?.shape as TiShape) || '',
+  // Dòng MỚI điền sẵn hình dạng mặc định (tròn); dòng đã lưu giữ nguyên, kể cả "chưa chọn".
+  shape: n ? ((n.shape as TiShape) || '') : DEFAULT_TI_SHAPE,
   qty: n?.qty != null ? String(n.qty) : '1',
 });
 

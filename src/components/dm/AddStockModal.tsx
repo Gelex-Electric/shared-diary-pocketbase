@@ -17,7 +17,7 @@ import { devices as deviceRepo, pbErrorMessage } from '../../lib/dm/repo';
 import { formatRatio, parseRatio } from '../../lib/dm/hsn';
 import { findExisting, guessType, parsePaste, SERIAL_RE } from '../../lib/dm/stock';
 import {
-  ASSET_LABEL, SHAPE_LABEL, type AssetType, type Device, type TiShape,
+  ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type AssetType, type Device, type TiShape,
 } from '../../lib/dm/types';
 
 const TYPES: AssetType[] = ['CONGTO', 'TI', 'TU', 'GP03', 'SIM', 'KHAC'];
@@ -81,7 +81,8 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
     setAddRows([newAddRow(), newAddRow(), newAddRow()]);
     setAddType(preset?.type ?? '');
     setAddRatio(preset ? formatRatio(preset.ratio_primary, preset.ratio_secondary) : '');
-    setAddShape(preset?.shape ?? '');
+    // Nhận hàng theo đơn: theo dòng đơn; nhập thường: mặc định tròn (vuông là ngoại lệ).
+    setAddShape(preset ? (preset.shape ?? '') : DEFAULT_TI_SHAPE);
     setAddBatch(preset?.batch ?? '');
     setAddDate(today());
     setAddHold(preset?.holdNote ?? '');
