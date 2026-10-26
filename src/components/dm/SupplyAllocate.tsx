@@ -171,14 +171,14 @@ export default function SupplyAllocate() {
       </div>
 
       {!loading && shown.length === 0 && (
-        <div className="vl-card">
+        <div className="vl-card p-5">
           <EmptyState icon={PackageCheck} title="Không có điểm đo nào thiếu vật tư"
             hint="Điểm đo chưa khai nhu cầu không hiện ở đây — Kinh Doanh khai ở form điểm đo." />
         </div>
       )}
 
       {shown.map(({ p, s, borrowed: nBorrowed }) => (
-        <div key={p.id} className="vl-card space-y-3">
+        <div key={p.id} className="vl-card space-y-3 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[15px] font-bold text-ink">{p.code}</span>
             <span className={s.state === 'cho_hang' ? 'vl-badge-info' : 'vl-badge-warning'}>

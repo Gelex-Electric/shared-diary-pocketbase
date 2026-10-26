@@ -240,7 +240,7 @@ export default function PurchaseManager() {
       <Tabs tabs={VIEWS} value={view} onChange={v => setView(v as View)} />
 
       {view === 'need' && (
-        <div className="vl-card space-y-3">
+        <div className="vl-card space-y-3 p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-soft">
               Cần mua tổng <b className="text-ink">{toBuyTotal}</b> thiết bị · {needs.length} quy cách đang thiếu
@@ -307,11 +307,11 @@ export default function PurchaseManager() {
 
       {view === 'orders' && (
         !loading && orders.length === 0 ? (
-          <div className="vl-card">
+          <div className="vl-card p-5">
             <EmptyState icon={ClipboardList} title="Chưa có đơn mua nào" hint="Tạo đơn ở tab Cần mua." />
           </div>
         ) : (
-          <div className="vl-card overflow-x-auto">
+          <div className="vl-card overflow-hidden"><div className="overflow-x-auto">
             <table className="vl-table w-full text-sm">
               <thead>
                 <tr>
@@ -397,7 +397,7 @@ export default function PurchaseManager() {
                 })}
               </tbody>
             </table>
-          </div>
+          </div></div>
         )
       )}
 

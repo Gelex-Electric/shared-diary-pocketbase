@@ -114,7 +114,7 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
       </div>
 
       {!loading && rows.length === 0 && (
-        <div className="vl-card">
+        <div className="vl-card p-5">
           <EmptyState icon={CheckCircle2} title="Không có điểm đo nào chờ treo"
             hint="Điểm đo hiện ở đây khi Nhóm Vật Tư đã phân bổ đủ vật tư." />
         </div>
@@ -123,7 +123,7 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
       {rows.map(p => {
         const plan = allocatedAssets(d!.assets, p.id).filter(isPlan);
         return (
-          <div key={p.id} className="vl-card space-y-3">
+          <div key={p.id} className="vl-card space-y-3 p-5">
             <div className="flex flex-wrap items-center gap-2">
               <Wrench className="h-4 w-4 text-faint" />
               <span className="font-mono text-[15px] font-bold text-ink">{p.code}</span>

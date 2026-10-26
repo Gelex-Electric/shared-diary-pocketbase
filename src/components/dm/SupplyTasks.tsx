@@ -65,7 +65,7 @@ export default function SupplyTasks({ group, tasks, data, onNavigate, onChanged 
           hint="Phân bổ từ kho, điểm đo cần gấp có thể mượn; kho không còn thì đặt mua."
           action={go('supply-alloc', 'Phân bổ vật tư')} empty="Không có điểm đo nào thiếu vật tư." />
         {t.lateOrders.length > 0 && (
-          <div className="vl-card space-y-2">
+          <div className="vl-card space-y-2 p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-bold text-ink">Đơn mua trễ hẹn ({t.lateOrders.length})</p>
               {go('purchase', 'Đặt mua vật tư')}
@@ -93,7 +93,7 @@ function PointList({ title, points, hint, action, empty, borrowed }: {
   borrowed?: Map<string, number>;
 }) {
   return (
-    <div className="vl-card space-y-3">
+    <div className="vl-card space-y-3 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="font-bold text-ink">{title}</p>
