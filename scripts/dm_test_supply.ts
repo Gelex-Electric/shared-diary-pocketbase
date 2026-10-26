@@ -6,7 +6,8 @@
 
 import {
   allocCandidates, borrowCandidates, borrowsToSettle, cleanNeed, defaultNeed, matchDevice,
-  openBorrowsByPoint, pointSupply, specKey, suggestTiRatio, supplyOfPoint,
+  nextPurchaseCode, openBorrowsByPoint, pointSupply, purchaseNeeds, purchaseState, specKey,
+  suggestTiRatio, supplyOfPoint,
 } from '../src/lib/dm/supply';
 import { planAttach } from '../src/lib/dm/attach';
 import type { Asset, AssetType, Borrow, Device, NeedLine, Point, Purchase, PurchaseLine } from '../src/lib/dm/types';
@@ -170,6 +171,44 @@ const empty = { purchases: [] as Purchase[], purchaseLines: [] as PurchaseLine[]
   eq(borrowsToSettle([{ ...borrows[0], settled_at: '2026-10-26' }], points, ctx2).length, 0, 'borrowsToSettle: đã đóng bỏ qua');
   eq([...openBorrowsByPoint([...borrows, { ...borrows[0], id: 'Y' }, { ...borrows[0], id: 'Z', settled_at: '2026-10-01' }])],
      [['B', 2]], 'openBorrowsByPoint: đếm dòng chưa đóng');
+}
+
+/* ------------------------------------------------------- purchaseNeeds */
+
+{
+  // P thiếu 3 TI vuông 1000/5; Q thiếu 2 TI bất kỳ. Đơn chờ về 2 TI vuông 1000/5; kho rảnh 1 TI vuông 1000/5 + 1 TI tròn 800/5.
+  const pts = [
+    point([needVuong], { id: 'P', code: 'P' }),
+    point([{ type: 'TI', qty: 2 }], { id: 'Q', code: 'Q' }),
+    point([{ type: 'SIM', qty: 1 }], { id: 'R', code: 'R' }),
+  ];
+  const sim = dev('SIM');
+  const spareV = ti('vuong'), spareT = ti('tron', [800, 5]);
+  const held = ti('vuong'); held.hold_point = 'Z';
+  const ctx = {
+    assets: [asset(sim, 'R')], devices: [sim, spareV, spareT, held],
+    purchases: [{ id: 'PO', code: 'PO' }] as Purchase[],
+    purchaseLines: [{ id: 'L', purchase: 'PO', type: 'TI', ratio_primary: 1000, ratio_secondary: 5, shape: 'vuong', qty: 2 }] as PurchaseLine[],
+  };
+  const r = purchaseNeeds(pts, ctx, new Set(['Q']));
+  eq(r.map(x => [x.key, x.missing, x.onOrder, x.inStock, x.toBuy]),
+     [['TI||', 2, 0, 1, 1], ['TI|1000/5|vuong', 3, 2, 1, 0]],
+     'purchaseNeeds: quy cách cụ thể trừ trước, mỗi đơn/thiết bị trừ một lần; điểm đủ không vào');
+  eq(r[0].points.map(x => [x.point.code, x.missing, x.borrowed]), [['Q', 2, true]], 'purchaseNeeds: kèm điểm đo + cờ bị mượn');
+}
+
+/* ------------------------------------------------- purchaseState / mã đơn */
+
+{
+  const po = { id: 'PO', code: 'DM-2026-007' } as Purchase;
+  const lines = [{ id: 'L1', purchase: 'PO', type: 'TI', qty: 3 }, { id: 'L2', purchase: 'PO', type: 'SIM', qty: 1 }] as PurchaseLine[];
+  const got = (n: number, line: string) => Array.from({ length: n }, () => dev('TI', undefined, { purchase_line: line }));
+  eq(purchaseState(po, lines, []).state, 'da_dat', 'purchaseState: chưa về');
+  eq(purchaseState(po, lines, got(3, 'L1')), { state: 've_mot_phan', ordered: 4, received: 3 }, 'purchaseState: về một phần');
+  eq(purchaseState(po, lines, [...got(3, 'L1'), ...got(1, 'L2')]).state, 'du', 'purchaseState: đủ');
+  eq(purchaseState({ ...po, cancelled: true }, lines, []).state, 'huy', 'purchaseState: hủy');
+  eq(nextPurchaseCode([po, { id: 'x', code: 'DM-2025-099' } as Purchase], 2026), 'DM-2026-008', 'nextPurchaseCode: theo năm');
+  eq(nextPurchaseCode([], 2027), 'DM-2027-001', 'nextPurchaseCode: năm mới');
 }
 
 /* ---------------------------------------------------------------- kết quả */

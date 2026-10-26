@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Plus, RefreshCw, Trash2, Edit2, Link2, PackageOpen, PackagePlus, Search,
+  Plus, RefreshCw, Trash2, Edit2, Link2, PackageOpen, Search,
   ChevronDown, ChevronRight, Recycle,
 } from 'lucide-react';
 import { Select } from '../ui/Select';
@@ -25,6 +25,7 @@ import {
   CellInput, Field, FormModal, INPUT_CLS, TextInput, TH_CLS,
 } from './entryUi';
 import { ZoneTables } from './ZoneTables';
+import AddStockModal, { SHAPE_OPTS } from './AddStockModal';
 import { groupByZone, sortByCode } from './groupByZone';
 import {
   devices as deviceRepo, loadCatalog, pbErrorMessage, isAbortError,
@@ -38,7 +39,7 @@ import { pointZoneId } from '../../lib/dm/pointScope';
 import { planAttach } from '../../lib/dm/attach';
 import { runAttach } from '../../lib/dm/attachRun';
 import {
-  buildStock, findExisting, guessType, idleDays, parsePaste, SERIAL_RE,
+  buildStock, guessType, idleDays, SERIAL_RE,
   IDLE_WARN_DAYS, REUSE_MIN, type StockRow,
 } from '../../lib/dm/stock';
 import type { Point } from '../../lib/dm/types';
@@ -48,16 +49,7 @@ import { dmy } from '../../lib/dm/lifecycle';
 const TYPES: AssetType[] = ['CONGTO', 'TI', 'TU', 'GP03', 'SIM', 'KHAC'];
 /** Loại có tỷ số — chỉ hai loại này mới hiện ô tỷ số, giống form điểm đo. */
 const HAS_RATIO: AssetType[] = ['TI', 'TU'];
-const SHAPE_OPTS = [
-  { value: '', label: 'Chưa rõ' },
-  ...(Object.keys(SHAPE_LABEL) as TiShape[]).map(s => ({ value: s, label: SHAPE_LABEL[s] })),
-];
 const today = () => new Date().toISOString().slice(0, 10);
-
-/** Một dòng của bảng "Thêm mới". Loại/tỷ số trống = lấy theo ô chung. */
-interface AddRow { key: string; serial: string; type: AssetType | ''; ratio: string; model: string }
-let addSeq = 0;
-const newAddRow = (): AddRow => ({ key: `a${++addSeq}`, serial: '', type: '', ratio: '', model: '' });
 
 const STATUS_CLS: Record<Exclude<DeviceStatus, ''>, string> = {
   kho: 'bg-subtle text-soft',
@@ -204,109 +196,8 @@ export default function StockEntry() {
   };
 
   /* ------------------- THÊM MỚI: bảng nhiều dòng + dán ------------------- */
-  /*
-    Gộp "Thêm một" và "Dán danh sách" thành MỘT nút "Thêm mới" (user chốt
-    28/09/2026): một bảng mở rộng được hàng, cùng khuôn bảng vật tư ở form điểm
-    đo. Thêm một cái = một dòng; nhập lô = dán cột Excel vào ô Số No, bảng tự
-    nở thêm dòng. Các ô CHUNG phía trên là mặc định cho mọi dòng để trống.
-  */
-  const [addRows, setAddRows] = useState<AddRow[]>([]);
-  const [addType, setAddType] = useState<AssetType | ''>('');
-  const [addRatio, setAddRatio] = useState('');
-  /** Hình dạng chung cho các dòng TI của lô — lô hàng về thường cùng một kiểu. */
-  const [addShape, setAddShape] = useState<TiShape | ''>('');
-  const [addBatch, setAddBatch] = useState('');
-  const [addDate, setAddDate] = useState(today());
-  const [addHold, setAddHold] = useState('');
-
-  const openAddMany = () => {
-    setAddRows([newAddRow(), newAddRow(), newAddRow()]);
-    setAddType(''); setAddRatio(''); setAddShape(''); setAddBatch(''); setAddDate(today()); setAddHold('');
-    setModal('add');
-  };
-  const setAddRow = (key: string, patch: Partial<AddRow>) =>
-    setAddRows(rs => rs.map(r => (r.key === key ? { ...r, ...patch } : r)));
-
-  /**
-   * Dán vào ô Số No: một số lẻ thì để ô dán bình thường; nhiều dòng (hoặc có
-   * tab — nhiều cột Excel) thì tách bằng `parsePaste`, đổ vào dòng hiện tại và
-   * các dòng TRỐNG phía sau, thiếu thì thêm dòng.
-   */
-  const pasteInto = (key: string, text: string): boolean => {
-    if (!/[\r\n\t]/.test(text.trim())) return false;
-    const got = parsePaste(text).filter(p => p.serial);
-    if (!got.length) return false;
-    setAddRows(rs => {
-      const at = rs.findIndex(r => r.key === key);
-      const next = [...rs];
-      let i = at;
-      for (const p of got) {
-        while (i < next.length && i !== at && next[i].serial.trim()) i++;
-        const fill = { serial: p.serial, ratio: p.ratio, type: guessType(p.serial) ?? '' as AssetType | '' };
-        if (i < next.length) next[i] = { ...next[i], ...fill, type: fill.type || next[i].type };
-        else next.push({ ...newAddRow(), ...fill });
-        i++;
-      }
-      return next;
-    });
-    return true;
-  };
-
-  const existing = useMemo(
-    () => findExisting(d?.devices ?? [], addRows.map(r => r.serial.trim())),
-    [d, addRows]);
-
-  /**
-   * Loại của từng dòng: chọn ở dòng > DẠNG SỐ khi chắc chắn (IMEI của GP-03,
-   * ICCID của SIM) > loại chung. Tỷ số: dòng > tỷ số chung.
-   */
-  const typeOfAdd = (r: AddRow): AssetType | '' => r.type || guessType(r.serial.trim()) || addType;
-  const ratioOfAdd = (r: AddRow) => (r.ratio.trim() || addRatio.trim());
-
-  /** Tình trạng từng dòng — hiện ngay trong bảng, như bản xem trước cũ. */
-  const addState = (r: AddRow, i: number): { kind: 'empty' | 'new' | 'dup' | 'bad'; text: string } => {
-    const sn = r.serial.trim();
-    if (!sn) return { kind: 'empty', text: '' };
-    if (!SERIAL_RE.test(sn)) return { kind: 'bad', text: 'số No phải là 8–20 chữ số' };
-    if (addRows.slice(0, i).some(x => x.serial.trim() === sn)) return { kind: 'bad', text: 'trùng dòng trên' };
-    const had = existing.get(sn);
-    if (had) return { kind: 'dup', text: `đã có (${ASSET_LABEL[had.type]})` };
-    const t = typeOfAdd(r);
-    if (!t) return { kind: 'bad', text: 'chưa chọn loại' };
-    if (HAS_RATIO.includes(t) && !ratioOfAdd(r)) return { kind: 'bad', text: 'thiếu tỷ số' };
-    return { kind: 'new', text: 'mới' };
-  };
-  const addStates = addRows.map((r, i) => addState(r, i));
-  const addReady = addRows.filter((_, i) => addStates[i].kind === 'new');
-  const addBad = addStates.filter(s => s.kind === 'bad').length;
-  const addDup = addStates.filter(s => s.kind === 'dup').length;
-
-  const saveAdd = async () => {
-    if (addBad) {
-      return toast.warning('Chưa ghi được', `${addBad} dòng còn lỗi — xem cột "Tình trạng".`);
-    }
-    if (!addReady.length) return toast.warning('Chưa có gì để ghi', 'Nhập hoặc dán số No vào bảng.');
-    setSaving(true);
-    let n = 0;
-    try {
-      // Tuần tự: lỗi giữa chừng thì biết chính xác đã ghi tới đâu.
-      for (const r of addReady) {
-        await deviceRepo.create({
-          serial: r.serial.trim(), type: typeOfAdd(r) as AssetType,
-          ...ratioOf(ratioOfAdd(r)), model_desc: r.model.trim(),
-          shape: typeOfAdd(r) === 'TI' ? addShape : '',
-          date_in: addDate || '', batch: addBatch.trim(), hold_for_note: addHold.trim(),
-        });
-        n++;
-      }
-      toast.success('Đã nhập kho', `${n} thiết bị.`);
-      setModal(null);
-      await load();
-    } catch (e) {
-      toast.error(`Dừng sau ${n} thiết bị`, pbErrorMessage(e));
-      await load();
-    } finally { setSaving(false); }
-  };
+  /* Hộp đã tách ra `AddStockModal` (26/10/2026) để màn Đặt mua dùng lại khi nhận hàng. */
+  const openAddMany = () => setModal('add');
 
   /* ------------------- gắn nhiều thiết bị vào điểm đo ------------------- */
   const [attachPoint, setAttachPoint] = useState('');
@@ -623,119 +514,8 @@ export default function StockEntry() {
         }} />
 
       {/* ===================== Thêm mới (lẻ + theo lô) ===================== */}
-      <FormModal open={modal === 'add'} title="Thêm vật tư vào kho" wide
-        onClose={() => setModal(null)} onSubmit={() => void saveAdd()} saving={saving}
-        submitLabel={addReady.length ? `Ghi ${addReady.length} thiết bị` : 'Chưa có gì để ghi'}>
-        {/* Ô CHUNG: mặc định cho mọi dòng để trống loại / tỷ số. */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="Loại chung" hint="Dòng nào chọn loại riêng thì theo dòng đó">
-            <Select value={addType} onChange={v => setAddType(v as AssetType)}
-              options={TYPES.map(t => ({ value: t, label: ASSET_LABEL[t] }))} placeholder="Chọn loại" />
-          </Field>
-          <Field label="Tỷ số chung" hint="Cho TI / TU — dòng có tỷ số riêng thì theo dòng">
-            <TextInput value={addRatio} onChange={setAddRatio} mono placeholder="200/5" />
-          </Field>
-          <Field label="Hình dạng TI" hint="Áp cho mọi dòng TI của lô">
-            <Select value={addShape} onChange={v => setAddShape(v as TiShape | '')} options={SHAPE_OPTS} />
-          </Field>
-          <Field label="Mã lô">
-            <TextInput value={addBatch} onChange={setAddBatch} placeholder="LO-2026-08" />
-          </Field>
-          <Field label="Ngày nhập kho">
-            <DatePicker value={addDate} onChange={setAddDate} usePortal />
-          </Field>
-          <Field label="Dành cho" hint="Khách chưa có trong danh mục thì gõ tự do">
-            <TextInput value={addHold} onChange={setAddHold} placeholder="Nhà máy X, lô B3" />
-          </Field>
-        </div>
-
-        <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-dim">
-              <PackagePlus className="h-4 w-4" /> Danh sách thiết bị
-            </p>
-            <span className="flex flex-wrap gap-3 text-[11px] font-bold">
-              <span className="text-emerald-600">Sẽ ghi: {addReady.length}</span>
-              {addDup > 0 && <span className="text-warn">Đã có trong kho (bỏ qua): {addDup}</span>}
-              {addBad > 0 && <span className="text-red-500">Lỗi: {addBad}</span>}
-            </span>
-          </div>
-
-          <div className="max-h-[45vh] overflow-y-auto rounded-lg border border-[var(--border)] bg-surface">
-            <table className="w-full table-fixed text-sm">
-              <colgroup>
-                <col style={{ width: '26%' }} />
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '6%' }} />
-              </colgroup>
-              <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-subtle">
-                <tr>
-                  <th className="px-4 py-3 text-left font-bold text-soft">Số No</th>
-                  <th className="px-4 py-3 text-left font-bold text-soft">Loại</th>
-                  <th className="px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
-                  <th className="px-4 py-3 text-left font-bold text-soft">Model / mô tả</th>
-                  <th className="px-4 py-3 text-left font-bold text-soft">Tình trạng</th>
-                  <th className="px-2 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {addRows.map((r, i) => {
-                  const st = addStates[i];
-                  const t = typeOfAdd(r);
-                  return (
-                    <tr key={r.key} className={st.kind === 'dup' ? 'opacity-60' : ''}>
-                      <td className="p-2">
-                        <CellInput value={r.serial} mono placeholder="Gõ hoặc dán từ Excel"
-                          onPasteText={text => pasteInto(r.key, text)}
-                          onChange={v => setAddRow(r.key, { serial: v })} />
-                      </td>
-                      <td className="p-2">
-                        <Select value={r.type} variant="bare"
-                          onChange={v => setAddRow(r.key, { type: v as AssetType })}
-                          options={TYPES.map(x => ({ value: x, label: ASSET_LABEL[x] }))}
-                          placeholder={t && !r.type ? `${ASSET_LABEL[t]} (chung)` : 'Chọn loại'} />
-                      </td>
-                      <td className="p-2">
-                        {HAS_RATIO.includes(t as AssetType) ? (
-                          <CellInput value={r.ratio} mono placeholder={addRatio || '200/5'}
-                            onChange={v => setAddRow(r.key, { ratio: v })} />
-                        ) : <span className="block p-2 text-faint">—</span>}
-                      </td>
-                      <td className="p-2">
-                        <CellInput value={r.model} onChange={v => setAddRow(r.key, { model: v })} />
-                      </td>
-                      <td className="px-3 py-2 text-[12px]">
-                        {st.kind === 'new' && <span className="text-emerald-600">{st.text}</span>}
-                        {st.kind === 'dup' && <span className="text-warn">{st.text}</span>}
-                        {st.kind === 'bad' && <span className="text-red-500">{st.text}</span>}
-                      </td>
-                      <td className="p-2 text-center">
-                        <button type="button" title="Bỏ dòng"
-                          onClick={() => setAddRows(rs => rs.filter(x => x.key !== r.key))}
-                          className="p-1 text-faint transition-colors hover:text-red-500">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <button type="button" onClick={() => setAddRows(rs => [...rs, newAddRow()])}
-            className="mt-3 flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline">
-            <Plus className="h-4 w-4" /> Thêm dòng
-          </button>
-          <p className="mt-2 text-[11px] text-faint">
-            Dán cả cột số No từ Excel vào một ô Số No — bảng tự thêm dòng; cột dạng 200/5 nhận làm tỷ số.
-            Dòng đã có trong kho được bỏ qua, không ghi đè.
-          </p>
-        </div>
-      </FormModal>
+      <AddStockModal open={modal === 'add'} onClose={() => setModal(null)} devices={d?.devices ?? []}
+        onSaved={async created => { if (created.length) setModal(null); await load(); }} />
 
       {/* ===================== Khai một thiết bị ===================== */}
       <FormModal open={modal === 'one'} title={editing ? 'Sửa thiết bị' : 'Thêm thiết bị vào kho'}

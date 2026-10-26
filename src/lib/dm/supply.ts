@@ -350,3 +350,116 @@ export function openBorrowsByPoint(borrows: Borrow[]): Map<string, number> {
   for (const b of borrows) if (!ymd(b.settled_at)) m.set(b.from_point, (m.get(b.from_point) ?? 0) + 1);
   return m;
 }
+
+/* ---------------------------- đặt mua (đợt 3) ---------------------------- */
+
+/** Thiết bị RẢNH thật sự: chưa thanh lý, không treo, không dự kiến ở đâu, không giữ chỗ cho ai. */
+export function spareDevices(ctx: Pick<SupplyContext, 'assets' | 'devices'>): Device[] {
+  const taken = new Set<string>();
+  const takenSerial = new Set<string>();
+  for (const a of ctx.assets) {
+    if (ymd(a.date_off)) continue;
+    if (ymd(a.date_on) || a.point) {
+      if (a.device) taken.add(a.device);
+      if (a.serial?.trim()) takenSerial.add(a.serial.trim());
+    }
+  }
+  return ctx.devices.filter(d => !ymd(d.liquidated_at) && !d.hold_point
+    && !taken.has(d.id) && !takenSerial.has(d.serial.trim()));
+}
+
+export interface NeedPoint { point: Point; missing: number; borrowed: boolean }
+
+export interface BuyRow {
+  key: string;
+  spec: Spec;
+  /** Tổng thiếu của các điểm đo (② + ③) theo quy cách này. */
+  missing: number;
+  /** Đã đặt, chưa về — trừ ra. */
+  onOrder: number;
+  /** Còn rảnh trong kho khớp quy cách — trừ ra (phân bổ là đủ, khỏi mua). */
+  inStock: number;
+  /** Số NÊN MUA = thiếu − đang đặt − tồn rảnh (≥ 0). */
+  toBuy: number;
+  points: NeedPoint[];
+}
+
+/**
+ * DANH SÁCH CẦN MUA — gom phần thiếu của mọi điểm đo theo QUY CÁCH.
+ *
+ * Trừ dần theo thứ tự: quy cách CỤ THỂ trước (có tỷ số, có hình dạng) rồi mới
+ * tới quy cách "bất kỳ", để một TI vuông 1000/5 đang về không bị đếm hai lần
+ * cho cả dòng "TI vuông 1000/5" lẫn dòng "TI bất kỳ". Mỗi dòng đơn / thiết bị
+ * rảnh chỉ trừ một lần.
+ */
+export function purchaseNeeds(points: Point[], ctx: SupplyContext, borrowedPoints: Set<string> = new Set()): BuyRow[] {
+  const rows = new Map<string, BuyRow>();
+  for (const p of points) {
+    const s = pointSupply(p, ctx);
+    if (s.state !== 'thieu' && s.state !== 'cho_hang') continue;
+    for (const l of s.lines) {
+      if (!l.missing) continue;
+      const key = specKey(l.line);
+      const row = rows.get(key) ?? {
+        key, spec: { type: l.line.type, ratio_primary: l.line.ratio_primary, ratio_secondary: l.line.ratio_secondary, shape: l.line.shape },
+        missing: 0, onOrder: 0, inStock: 0, toBuy: 0, points: [],
+      };
+      row.missing += l.missing;
+      row.points.push({ point: p, missing: l.missing, borrowed: borrowedPoints.has(p.id) });
+      rows.set(key, row);
+    }
+  }
+
+  const weight = (s: Spec) => (s.ratio_primary != null ? 2 : 0) + (s.shape ? 1 : 0);
+  const list = [...rows.values()].sort((a, b) => weight(b.spec) - weight(a.spec) || a.key.localeCompare(b.key));
+  const orders = openPurchaseLines(ctx.purchases, ctx.purchaseLines, ctx.devices).map(o => ({ ...o }));
+  const spare = spareDevices(ctx);
+  const usedSpare = new Set<string>();
+
+  for (const r of list) {
+    let need = r.missing;
+    // Đơn đang về: chỉ khớp CHẮC CHẮN (dòng đơn chưa ghi hình dạng thì không coi là vuông/tròn).
+    for (const o of orders) {
+      if (!need) break;
+      if (o.pending <= 0 || matchDevice({ ...o.line, shape: o.line.shape || '' }, r.spec) !== 'yes') continue;
+      const take = Math.min(need, o.pending);
+      o.pending -= take; r.onOrder += take; need -= take;
+    }
+    for (const d of spare) {
+      if (!need) break;
+      if (usedSpare.has(d.id) || matchDevice(d, r.spec) === 'no') continue;
+      usedSpare.add(d.id); r.inStock++; need--;
+    }
+    r.toBuy = need;
+  }
+  // Hiện theo: còn phải mua nhiều trước, rồi theo loại.
+  return list.sort((a, b) => b.toBuy - a.toBuy || a.key.localeCompare(b.key));
+}
+
+export type PurchaseState = 'huy' | 'da_dat' | 've_mot_phan' | 'du';
+export const PURCHASE_STATE_LABEL: Record<PurchaseState, string> = {
+  huy: 'Đã hủy', da_dat: 'Đã đặt', ve_mot_phan: 'Về một phần', du: 'Đã về đủ',
+};
+
+/** Trạng thái đơn — SUY RA từ số đã nhận, chỉ "hủy" là bấm tay. */
+export function purchaseState(p: Purchase, lines: PurchaseLine[], devices: Device[]): {
+  state: PurchaseState; ordered: number; received: number;
+} {
+  const mine = lines.filter(l => l.purchase === p.id);
+  const got = receivedByLine(devices);
+  const ordered = mine.reduce((s, l) => s + l.qty, 0);
+  const received = mine.reduce((s, l) => s + (got.get(l.id) ?? 0), 0);
+  if (p.cancelled) return { state: 'huy', ordered, received };
+  const short = mine.some(l => (got.get(l.id) ?? 0) < l.qty);
+  return { state: received === 0 ? 'da_dat' : short ? 've_mot_phan' : 'du', ordered, received };
+}
+
+/** Mã đơn tiếp theo trong năm: `DM-2026-001`, `DM-2026-002`… */
+export function nextPurchaseCode(purchases: Purchase[], year = new Date().getFullYear()): string {
+  const prefix = `DM-${year}-`;
+  const max = purchases
+    .map(p => (p.code.startsWith(prefix) ? parseInt(p.code.slice(prefix.length), 10) : 0))
+    .filter(Number.isFinite)
+    .reduce((a, b) => Math.max(a, b), 0);
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
+}
