@@ -9,7 +9,9 @@
  * KHÔNG áp cách này cho dữ liệu đo đếm — bulk data phải query theo filter.
  */
 import { pb } from '../pocketbase';
-import type { Asset, Customer, Device, Line, Point, Station, Zone } from './types';
+import type {
+  Asset, Borrow, Customer, Device, Line, Point, Purchase, PurchaseLine, Station, Zone,
+} from './types';
 import { toLowName } from './lowName';
 
 /**
@@ -95,6 +97,28 @@ export const devices = {
   remove: (id: string) => pb.collection('dm_device').delete(id),
 };
 
+/** Đơn mua vật tư — mới nhất trước (schema v23). */
+export const purchases = {
+  list: () => all<Purchase>('dm_purchase', '-created'),
+  create: (data: Partial<Purchase>) => pb.collection('dm_purchase').create(data),
+  update: (id: string, data: Partial<Purchase>) => pb.collection('dm_purchase').update(id, data),
+  remove: (id: string) => pb.collection('dm_purchase').delete(id),
+};
+
+export const purchaseLines = {
+  list: () => all<PurchaseLine>('dm_purchase_line', 'created'),
+  create: (data: Partial<PurchaseLine>) => pb.collection('dm_purchase_line').create(data),
+  update: (id: string, data: Partial<PurchaseLine>) => pb.collection('dm_purchase_line').update(id, data),
+  remove: (id: string) => pb.collection('dm_purchase_line').delete(id),
+};
+
+/** Sổ mượn — KHÔNG có `remove`: sổ chỉ ghi thêm và đóng, không xoá. */
+export const borrows = {
+  list: () => all<Borrow>('dm_borrow', '-created'),
+  create: (data: Partial<Borrow>) => pb.collection('dm_borrow').create(data),
+  update: (id: string, data: Partial<Borrow>) => pb.collection('dm_borrow').update(id, data),
+};
+
 export interface CatalogData {
   zones: Zone[];
   lines: Line[];
@@ -103,15 +127,22 @@ export interface CatalogData {
   points: Point[];
   assets: Asset[];
   devices: Device[];
+  purchases: Purchase[];
+  purchaseLines: PurchaseLine[];
+  borrows: Borrow[];
 }
 
-/** Nạp cả 7 bảng song song — dùng cho cả sơ đồ cây lẫn màn nhập liệu. */
+/** Nạp cả 10 bảng song song — dùng cho cả sơ đồ cây lẫn màn nhập liệu. */
 export async function loadCatalog(): Promise<CatalogData> {
-  const [z, l, s, c, p, a, d] = await Promise.all([
+  const [z, l, s, c, p, a, d, pu, pl, b] = await Promise.all([
     zones.list(), lines.list(), stations.list(), customers.list(),
     points.list(), assets.list(), devices.list(),
+    purchases.list(), purchaseLines.list(), borrows.list(),
   ]);
-  return { zones: z, lines: l, stations: s, customers: c, points: p, assets: a, devices: d };
+  return {
+    zones: z, lines: l, stations: s, customers: c, points: p, assets: a, devices: d,
+    purchases: pu, purchaseLines: pl, borrows: b,
+  };
 }
 
 /**

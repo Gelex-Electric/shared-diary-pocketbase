@@ -61,6 +61,8 @@ import AssetLifecycle from './AssetLifecycle';
 import StockEntry from './StockEntry';
 import { TransferOwner } from './TransferOwner';
 import LineAssign from './LineAssign';
+import PointNeedEditor, { needFromRows, rowsFromNeed, type NeedRow } from './PointNeedEditor';
+import { allocatedAssets } from '../../lib/dm/supply';
 import { ZoneTables } from './ZoneTables';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
 import {
@@ -153,6 +155,10 @@ const EMPTY_P = {
   note: '',
   /** Vật tư khai luôn cùng điểm đo — mỗi dòng một thiết bị (ghi vào dm_asset). */
   assetRows: [] as AssetRow[],
+  /** Nhu cầu vật tư (bước B2 luồng cấp vật tư, schema v23) — xem `PointNeedEditor`. */
+  need: [] as NeedRow[],
+  urgent: false,
+  needed_by: '',
 };
 
 /**
@@ -413,6 +419,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
       purpose: isPreset ? saved : (saved ? CUSTOM : ''),
       purpose_custom: isPreset ? '' : saved,
       note: p.note ?? '',
+      need: rowsFromNeed(p.need),
+      urgent: !!p.urgent,
+      needed_by: (p.needed_by ?? '').slice(0, 10),
     });
     setPSnap(hsnSig(str(p.hsn), rows));
     setModal('point');
@@ -1400,6 +1409,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
         hsn: effectiveHsn ?? undefined,
         status: derivedStatus || undefined,
         note: pForm.note.trim(),
+        need: needFromRows(pForm.need),
+        urgent: pForm.urgent,
+        // Bỏ cờ gấp thì xoá luôn ngày cần, kẻo ngày cũ còn nằm lại.
+        needed_by: pForm.urgent ? pForm.needed_by : '',
       };
       return void persist(async () => {
         for (const b of reclaim) {
@@ -1456,6 +1469,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
         hsn: effectiveHsn ?? undefined,
         status: derivedStatus || undefined,
         note: pForm.note.trim(),
+        need: needFromRows(pForm.need),
+        urgent: pForm.urgent,
+        // Bỏ cờ gấp thì xoá luôn ngày cần, kẻo ngày cũ còn nằm lại.
+        needed_by: pForm.urgent ? pForm.needed_by : '',
       };
       return void persist(async () => {
         /*
@@ -2866,6 +2883,15 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
                 )}
               </div>
             </Field>
+
+            {/* Nhu cầu vật tư — Kinh Doanh khai điểm đo cần gì (luồng cấp vật tư, 26/10/2026). */}
+            <PointNeedEditor
+              rows={pForm.need} onChange={need => setPForm(f => ({ ...f, need }))}
+              urgent={pForm.urgent} onUrgent={urgent => setPForm(f => ({ ...f, urgent }))}
+              neededBy={pForm.needed_by} onNeededBy={needed_by => setPForm(f => ({ ...f, needed_by }))}
+              hsn={manualHsn} connection={connectionOfHsn(manualHsn)}
+              allocated={editingId ? allocatedAssets(d?.assets ?? [], editingId) : undefined}
+              devices={d?.devices ?? []} />
 
             {/* Gợi ý bộ TI/TU trong kho khớp HSN — chỉ khi đo gián tiếp (HSN > 1). */}
             {manualHsn != null && manualHsn > 1 && (hsnMismatch || !hasTi) && (

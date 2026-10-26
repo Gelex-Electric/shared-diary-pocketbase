@@ -31,7 +31,8 @@ import {
   type CatalogData,
 } from '../../lib/dm/repo';
 import {
-  ASSET_LABEL, DEVICE_STATUS_LABEL, type AssetType, type Device, type DeviceStatus,
+  ASSET_LABEL, DEVICE_STATUS_LABEL, SHAPE_LABEL, type AssetType, type Device, type DeviceStatus,
+  type TiShape,
 } from '../../lib/dm/types';
 import { pointZoneId } from '../../lib/dm/pointScope';
 import { setMatchesHsn } from '../../lib/dm/tutiPick';
@@ -46,6 +47,10 @@ import { dmy } from '../../lib/dm/lifecycle';
 const TYPES: AssetType[] = ['CONGTO', 'TI', 'TU', 'GP03', 'SIM', 'KHAC'];
 /** Loại có tỷ số — chỉ hai loại này mới hiện ô tỷ số, giống form điểm đo. */
 const HAS_RATIO: AssetType[] = ['TI', 'TU'];
+const SHAPE_OPTS = [
+  { value: '', label: 'Chưa rõ' },
+  ...(Object.keys(SHAPE_LABEL) as TiShape[]).map(s => ({ value: s, label: SHAPE_LABEL[s] })),
+];
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** Một dòng của bảng "Thêm mới". Loại/tỷ số trống = lấy theo ô chung. */
@@ -74,6 +79,8 @@ export default function StockEntry() {
   const [status, setStatus] = useState<DeviceStatus | ''>('');
   /** Lọc theo loại vật tư (user yêu cầu 23/10/2026). `''` = mọi loại. */
   const [typeFilter, setTypeFilter] = useState<AssetType | ''>('');
+  /** Lọc hình dạng — chỉ hiện khi đang lọc TI. `none` = TI chưa khai hình dạng. */
+  const [shapeFilter, setShapeFilter] = useState<TiShape | 'none' | ''>('');
   const [search, setSearch] = useState('');
   /** Dòng đang mở xem lịch sử lắp đặt. */
   const [openRow, setOpenRow] = useState<string | null>(null);
@@ -109,12 +116,14 @@ export default function StockEntry() {
   const shown = useMemo(() => rows.filter(r => {
     if (status && r.status !== status) return false;
     if (typeFilter && r.device.type !== typeFilter) return false;
+    if (typeFilter === 'TI' && shapeFilter
+      && (shapeFilter === 'none' ? !!r.device.shape : r.device.shape !== shapeFilter)) return false;
     // Loại vẫn đưa vào chuỗi tìm để gõ "TI" hay "GP-03" là ra.
     return matchesTerms(
       [r.device.serial, ASSET_LABEL[r.device.type], r.device.batch, holdText(r),
         r.atPoint?.code, r.device.note], terms);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [rows, status, typeFilter, terms, d]);
+  }), [rows, status, typeFilter, shapeFilter, terms, d]);
 
   /**
    * Gom theo KCN rồi mỗi KCN một thẻ — cùng khuôn bảng Điểm đo (user chốt
@@ -135,7 +144,7 @@ export default function StockEntry() {
 
   /* ------------------------- khai một thiết bị ------------------------- */
   const EMPTY = {
-    serial: '', type: '' as AssetType | '', ratio: '', model_desc: '',
+    serial: '', type: '' as AssetType | '', ratio: '', shape: '' as TiShape | '', model_desc: '',
     hold_for_note: '', date_in: today(), batch: '', note: '',
   };
   const [form, setForm] = useState(EMPTY);
@@ -143,7 +152,7 @@ export default function StockEntry() {
   const openEdit = (dev: Device) => {
     setEditing(dev);
     setForm({
-      serial: dev.serial, type: dev.type, model_desc: dev.model_desc ?? '',
+      serial: dev.serial, type: dev.type, model_desc: dev.model_desc ?? '', shape: dev.shape ?? '',
       ratio: dev.ratio_primary != null ? `${dev.ratio_primary}/${dev.ratio_secondary ?? ''}` : '',
       hold_for_note: dev.hold_for_note ?? '', date_in: (dev.date_in ?? '').slice(0, 10),
       batch: dev.batch ?? '', note: dev.note ?? '',
@@ -179,6 +188,7 @@ export default function StockEntry() {
     const body: Partial<Device> = {
       serial, type: form.type, model_desc: form.model_desc.trim(),
       ...ratioOf(form.ratio),
+      shape: form.type === 'TI' ? form.shape : '',
       hold_for_note: form.hold_for_note.trim(),
       date_in: form.date_in || '', batch: form.batch.trim(), note: form.note.trim(),
     };
@@ -202,13 +212,15 @@ export default function StockEntry() {
   const [addRows, setAddRows] = useState<AddRow[]>([]);
   const [addType, setAddType] = useState<AssetType | ''>('');
   const [addRatio, setAddRatio] = useState('');
+  /** Hình dạng chung cho các dòng TI của lô — lô hàng về thường cùng một kiểu. */
+  const [addShape, setAddShape] = useState<TiShape | ''>('');
   const [addBatch, setAddBatch] = useState('');
   const [addDate, setAddDate] = useState(today());
   const [addHold, setAddHold] = useState('');
 
   const openAddMany = () => {
     setAddRows([newAddRow(), newAddRow(), newAddRow()]);
-    setAddType(''); setAddRatio(''); setAddBatch(''); setAddDate(today()); setAddHold('');
+    setAddType(''); setAddRatio(''); setAddShape(''); setAddBatch(''); setAddDate(today()); setAddHold('');
     setModal('add');
   };
   const setAddRow = (key: string, patch: Partial<AddRow>) =>
@@ -281,6 +293,7 @@ export default function StockEntry() {
         await deviceRepo.create({
           serial: r.serial.trim(), type: typeOfAdd(r) as AssetType,
           ...ratioOf(ratioOfAdd(r)), model_desc: r.model.trim(),
+          shape: typeOfAdd(r) === 'TI' ? addShape : '',
           date_in: addDate || '', batch: addBatch.trim(), hold_for_note: addHold.trim(),
         });
         n++;
@@ -491,12 +504,23 @@ export default function StockEntry() {
         </div>
         <div className="w-full sm:w-[220px]">
           <Select label="Loại vật tư" value={typeFilter}
-            onChange={v => setTypeFilter(v as AssetType | '')}
+            onChange={v => { setTypeFilter(v as AssetType | ''); setShapeFilter(''); }}
             options={[
               { value: '', label: `Tất cả loại (${ofStatus.length})` },
               ...typesInStock.map(t => ({ value: t, label: `${ASSET_LABEL[t]} (${countType(t)})` })),
             ]} />
         </div>
+        {typeFilter === 'TI' && (
+          <div className="w-full sm:w-[220px]">
+            <Select label="Hình dạng TI" value={shapeFilter}
+              onChange={v => setShapeFilter(v as TiShape | 'none' | '')}
+              options={[
+                { value: '', label: 'Mọi hình dạng' },
+                ...(Object.keys(SHAPE_LABEL) as TiShape[]).map(sh => ({ value: sh, label: SHAPE_LABEL[sh] })),
+                { value: 'none', label: 'Chưa rõ hình dạng' },
+              ]} />
+          </div>
+        )}
       </div>
 
       {idleLong > 0 && (
@@ -556,7 +580,10 @@ export default function StockEntry() {
               <td className="truncate px-6 py-4 font-mono text-sm font-bold text-ink" title={r.device.serial}>
                 {r.device.serial}
               </td>
-              <td className="px-6 py-4 text-sm text-soft">{ASSET_LABEL[r.device.type]}</td>
+              <td className="px-6 py-4 text-sm text-soft">
+                {ASSET_LABEL[r.device.type]}
+                {r.device.type === 'TI' && r.device.shape && ` · ${SHAPE_LABEL[r.device.shape]}`}
+              </td>
               <td className="px-6 py-4 font-mono text-xs text-soft">
                 {r.device.ratio_primary != null ? `${r.device.ratio_primary}/${r.device.ratio_secondary ?? ''}` : '—'}
               </td>
@@ -660,6 +687,9 @@ export default function StockEntry() {
           </Field>
           <Field label="Tỷ số chung" hint="Cho TI / TU — dòng có tỷ số riêng thì theo dòng">
             <TextInput value={addRatio} onChange={setAddRatio} mono placeholder="200/5" />
+          </Field>
+          <Field label="Hình dạng TI" hint="Áp cho mọi dòng TI của lô">
+            <Select value={addShape} onChange={v => setAddShape(v as TiShape | '')} options={SHAPE_OPTS} />
           </Field>
           <Field label="Mã lô">
             <TextInput value={addBatch} onChange={setAddBatch} placeholder="LO-2026-08" />
@@ -779,6 +809,12 @@ export default function StockEntry() {
             <Field label="Tỷ số" required hint="Không có tỷ số thì không suy được HSN">
               <TextInput value={form.ratio} onChange={v => setForm(f => ({ ...f, ratio: v }))}
                 mono placeholder="200/5" />
+            </Field>
+          )}
+          {form.type === 'TI' && (
+            <Field label="Hình dạng" hint="Kinh Doanh khai nhu cầu theo tròn / vuông">
+              <Select value={form.shape} onChange={v => setForm(f => ({ ...f, shape: v as TiShape | '' }))}
+                options={SHAPE_OPTS} />
             </Field>
           )}
           <Field label="Model / mô tả">

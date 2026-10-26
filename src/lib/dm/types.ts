@@ -161,6 +161,33 @@ export interface Point extends PbRecord {
    * theo, mà mã điểm đo chính là `LINE_NAME` bên HES.
    */
   owner_history?: OwnerTransfer[];
+  /**
+   * NHU CẦU vật tư — Kinh Doanh khai lúc tạo điểm đo (schema v23, 26/10/2026,
+   * plan `2026-10-26-luong-cap-vat-tu-diem-do-moi.md`). Rỗng = chưa khai.
+   * Đủ hay thiếu tính ở `lib/dm/supply.ts`, không lưu.
+   */
+  need?: NeedLine[] | null;
+  /** Cần gấp — đẩy lên đầu danh sách của Vật Tư và cho phép MƯỢN vật tư điểm đo khác. */
+  urgent?: boolean;
+  /** Ngày cần có vật tư (đi kèm `urgent`, không bắt buộc). */
+  needed_by?: string;
+}
+
+/** Hình dạng TI — chỉ hai loại (user chốt 26/10/2026). Trống = chưa rõ. */
+export type TiShape = 'tron' | 'vuong';
+export const SHAPE_LABEL: Record<TiShape, string> = { tron: 'Tròn', vuong: 'Vuông' };
+
+/**
+ * Một DÒNG NHU CẦU của điểm đo: "3 TI vuông 1000/5", "1 công tơ".
+ * Tỷ số chỉ có nghĩa với TI/TU; hình dạng chỉ với TI.
+ */
+export interface NeedLine {
+  type: AssetType;
+  ratio_primary?: number | null;
+  ratio_secondary?: number | null;
+  shape?: TiShape | '';
+  qty: number;
+  note?: string;
 }
 
 /** Loại vật tư gắn ở điểm đo. */
@@ -210,7 +237,47 @@ export interface Device extends PbRecord {
   date_in?: string;
   /** Mã lô nhập — nhập một lần vài chục cái thì lọc lại theo lô. */
   batch?: string;
+  /** Hình dạng TI (tròn/vuông). Trống = chưa rõ — 501 TI có từ trước 26/10/2026. */
+  shape?: TiShape | '';
+  /** Dòng đơn mua mà thiết bị này về theo (`dm_purchase_line`). */
+  purchase_line?: string;
   note?: string;
+}
+
+/** ĐƠN MUA vật tư (`dm_purchase`). Trạng thái SUY RA từ số đã nhận, không lưu. */
+export interface Purchase extends PbRecord {
+  code: string;
+  ordered_at?: string;
+  supplier?: string;
+  expected_at?: string;
+  cancelled?: boolean;
+  note?: string;
+}
+
+/** Một dòng của đơn mua. Đã nhận = số `dm_device` có `purchase_line` trỏ về dòng này. */
+export interface PurchaseLine extends PbRecord {
+  purchase: string;
+  type: AssetType;
+  ratio_primary?: number | null;
+  ratio_secondary?: number | null;
+  shape?: TiShape | '';
+  qty: number;
+  /** Mua cho điểm đo nào; trống = mua dự phòng. */
+  for_point?: string;
+  note?: string;
+}
+
+/**
+ * SỔ MƯỢN (`dm_borrow`): điểm đo cần gấp lấy vật tư DỰ KIẾN của điểm đo khác.
+ * Không xoá; `settled_at` ghi khi điểm đo bị mượn đã được phân bổ đủ lại.
+ */
+export interface Borrow extends PbRecord {
+  device: string;
+  from_point: string;
+  to_point: string;
+  borrowed_at?: string;
+  reason?: string;
+  settled_at?: string;
 }
 
 export const DEVICE_STATUS_LABEL: Record<Exclude<DeviceStatus, ''>, string> = {
