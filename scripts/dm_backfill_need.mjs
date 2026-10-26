@@ -15,6 +15,8 @@
  *
  * Mặc định DRY-RUN. `--commit` mới ghi. Ghi tuần tự, lỗi thì dừng và báo đã ghi tới đâu.
  *   railway run -- node scripts/dm_backfill_need.mjs [--commit]
+ * PC có proxy SSL: đọc tự chuyển sang curl nhưng lệnh PATCH dùng `fetch` ⇒ thêm
+ * `NODE_EXTRA_CA_CERTS=%TEMP%\corp-ca.pem` (đã chạy thật 26/10/2026: 34/34 điểm đo).
  */
 import { pbLogin, allOf, PB_URL, ymd } from './lib/pb_meters.mjs';
 
