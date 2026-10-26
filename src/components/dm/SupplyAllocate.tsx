@@ -27,15 +27,16 @@ import { formatRatio } from '../../lib/dm/hsn';
 import { pointZoneId } from '../../lib/dm/pointScope';
 import { dmy } from '../../lib/dm/lifecycle';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
-import { ASSET_LABEL, SHAPE_LABEL, type Device, type NeedLine, type Point } from '../../lib/dm/types';
+import { ASSET_LABEL, CONNECTION_LABEL, SHAPE_LABEL, type Device, type NeedLine, type Point } from '../../lib/dm/types';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** "3 × TI (biến dòng) 1000/5 · Vuông" */
+/** "3 × TI (biến dòng) 1000/5 · Vuông", "1 × Công tơ · Trực tiếp" */
 export function needText(n: NeedLine, withQty = true): string {
   const ratio = formatRatio(n.ratio_primary, n.ratio_secondary);
   return `${withQty ? `${n.qty} × ` : ''}${ASSET_LABEL[n.type]}${ratio ? ` ${ratio}` : ''}`
-    + `${n.type === 'TI' && n.shape ? ` · ${SHAPE_LABEL[n.shape]}` : ''}`;
+    + `${n.type === 'TI' && n.shape ? ` · ${SHAPE_LABEL[n.shape]}` : ''}`
+    + `${n.type === 'CONGTO' && n.meter_kind ? ` · ${CONNECTION_LABEL[n.meter_kind]}` : ''}`;
 }
 
 interface Row { p: Point; s: PointSupply; zone?: string; borrowed: number }
@@ -205,7 +206,7 @@ export default function SupplyAllocate() {
                     <td>
                       {needText(l.line, false)}
                       {l.unsureShape > 0 && (
-                        <span className="ml-2 text-[11px] text-faint">({l.unsureShape} TI chưa rõ hình dạng)</span>
+                        <span className="ml-2 text-[11px] text-faint">({l.unsureShape} chưa rõ kiểu)</span>
                       )}
                     </td>
                     <td className="text-center">{l.line.qty}</td>
@@ -301,7 +302,7 @@ function PickTable({ title, rows, picked, onToggle, empty, icon: Icon = PackageC
                   <td className="text-[12px] text-soft">
                     {r.match === 'unsure_shape' && (
                       <span className="mr-2 inline-flex items-center gap-1 text-[11px] text-faint">
-                        <AlertTriangle className="h-3.5 w-3.5" /> chưa rõ hình dạng
+                        <AlertTriangle className="h-3.5 w-3.5" /> {r.device.type === 'CONGTO' ? 'chưa rõ loại công tơ' : 'chưa rõ hình dạng'}
                       </span>
                     )}
                     {r.note && <span className={r.warn ? 'text-bad' : ''}>{r.note}</span>}

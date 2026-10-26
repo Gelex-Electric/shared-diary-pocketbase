@@ -28,13 +28,20 @@ export const HAS_RATIO: AssetType[] = ['TI', 'TU'];
 
 /* ------------------------------ quy cách ------------------------------ */
 
-type Spec = Pick<NeedLine, 'type' | 'ratio_primary' | 'ratio_secondary' | 'shape'>;
+type Spec = Pick<NeedLine, 'type' | 'ratio_primary' | 'ratio_secondary' | 'shape' | 'meter_kind'>;
+type DeviceSpec = Pick<Device, 'type' | 'ratio_primary' | 'ratio_secondary' | 'shape' | 'meter_kind'>;
 
-/** Khoá gom theo QUY CÁCH: loại + tỷ số (TI/TU) + hình dạng (TI). */
+/**
+ * "KIỂU" của quy cách: hình dạng với TI, loại trực tiếp/gián tiếp với công tơ,
+ * loại khác không có. Trống = không đòi / chưa rõ.
+ */
+export const variantOf = (s: Pick<Spec, 'type' | 'shape' | 'meter_kind'>): string =>
+  s.type === 'TI' ? (s.shape || '') : s.type === 'CONGTO' ? (s.meter_kind || '') : '';
+
+/** Khoá gom theo QUY CÁCH: loại + tỷ số (TI/TU) + kiểu (hình dạng TI / loại công tơ). */
 export function specKey(s: Spec): string {
   const ratio = HAS_RATIO.includes(s.type) ? formatRatio(s.ratio_primary, s.ratio_secondary) : '';
-  const shape = s.type === 'TI' ? (s.shape || '') : '';
-  return `${s.type}|${ratio}|${shape}`;
+  return `${s.type}|${ratio}|${variantOf(s)}`;
 }
 
 export type MatchResult = 'yes' | 'unsure_shape' | 'no';
@@ -43,21 +50,21 @@ export type MatchResult = 'yes' | 'unsure_shape' | 'no';
  * Thiết bị có khớp dòng nhu cầu không.
  * - Khác loại / khác tỷ số ⇒ không.
  * - Nhu cầu chưa ghi tỷ số ⇒ tỷ số nào cũng được.
- * - TI: nhu cầu có hình dạng mà thiết bị CHƯA RÕ hình dạng ⇒ `unsure_shape` —
- *   VẪN tính là khớp (501 TI cũ chưa khai hình dạng; chặn thì không phân bổ
- *   được gì), nhưng phải hiện cảnh báo. Khác hình dạng rõ ràng ⇒ không.
+ * - KIỂU (hình dạng TI / loại công tơ): nhu cầu có ghi mà thiết bị CHƯA RÕ ⇒
+ *   `unsure_shape` — VẪN tính là khớp (dữ liệu cũ chưa khai; chặn thì không
+ *   phân bổ được gì), nhưng hiện cảnh báo. Khác kiểu rõ ràng ⇒ không.
  */
-export function matchDevice(
-  d: Pick<Device, 'type' | 'ratio_primary' | 'ratio_secondary' | 'shape'>, n: Spec,
-): MatchResult {
+export function matchDevice(d: DeviceSpec, n: Spec): MatchResult {
   if (d.type !== n.type) return 'no';
   if (HAS_RATIO.includes(n.type) && n.ratio_primary != null) {
     if (d.ratio_primary !== n.ratio_primary) return 'no';
     if (n.ratio_secondary != null && d.ratio_secondary !== n.ratio_secondary) return 'no';
   }
-  if (n.type === 'TI' && n.shape) {
-    if (!d.shape) return 'unsure_shape';
-    if (d.shape !== n.shape) return 'no';
+  const want = variantOf(n);
+  if (want) {
+    const have = variantOf({ ...d, shape: d.shape ?? '', meter_kind: d.meter_kind ?? '' });
+    if (!have) return 'unsure_shape';
+    if (have !== want) return 'no';
   }
   return 'yes';
 }
@@ -82,7 +89,8 @@ export function suggestTiRatio(hsn?: number | null): { ratio_primary: number; ra
  */
 export function defaultNeed(connection: Connection, hsn?: number | null, mv = false): NeedLine[] {
   const base: NeedLine[] = [
-    { type: 'CONGTO', qty: 1 },
+    // Công tơ theo kiểu đấu nối: điểm đo không TI dùng công tơ TRỰC TIẾP.
+    { type: 'CONGTO', meter_kind: connection, qty: 1 },
     { type: 'GP03', qty: 1 },
     { type: 'SIM', qty: 1 },
   ];
@@ -102,6 +110,7 @@ export function cleanNeed(need: NeedLine[] | null | undefined): NeedLine[] {
         if (n.ratio_secondary != null) out.ratio_secondary = n.ratio_secondary;
       }
       if (n.type === 'TI' && n.shape) out.shape = n.shape as TiShape;
+      if (n.type === 'CONGTO' && n.meter_kind) out.meter_kind = n.meter_kind;
       if (n.note?.trim()) out.note = n.note.trim();
       return out;
     });
@@ -115,7 +124,7 @@ export interface LineSupply {
   have: Asset[];
   /** Còn thiếu bao nhiêu (≥ 0). */
   missing: number;
-  /** Trong `have`, bao nhiêu TI chưa rõ hình dạng (khớp tạm). */
+  /** Trong `have`, bao nhiêu thiết bị chưa rõ kiểu — TI chưa rõ hình dạng / công tơ chưa rõ loại (khớp tạm). */
   unsureShape: number;
 }
 
@@ -127,10 +136,10 @@ export const allocatedAssets = (assets: Asset[], pointId: string): Asset[] =>
 function deviceIndex(devices: Device[]) {
   const byId = new Map(devices.map(d => [d.id, d]));
   const bySerial = new Map(devices.map(d => [d.serial.trim(), d]));
-  return (a: Asset): Pick<Device, 'type' | 'ratio_primary' | 'ratio_secondary' | 'shape'> =>
+  return (a: Asset): DeviceSpec =>
     (a.device && byId.get(a.device)) || bySerial.get((a.serial ?? '').trim())
       // Lần lắp chưa nối thiết bị: dùng chính thông tin chép trên dòng.
-      || { type: a.type, ratio_primary: a.ratio_primary, ratio_secondary: a.ratio_secondary, shape: '' };
+      || { type: a.type, ratio_primary: a.ratio_primary, ratio_secondary: a.ratio_secondary, shape: '', meter_kind: '' };
 }
 
 /**
@@ -142,7 +151,7 @@ function deviceIndex(devices: Device[]) {
 export function supplyOfPoint(need: NeedLine[], assets: Asset[], devices: Device[]): LineSupply[] {
   const devOf = deviceIndex(devices);
   const pool = [...assets];
-  const weight = (n: NeedLine) => (n.ratio_primary != null ? 2 : 0) + (n.shape ? 1 : 0);
+  const weight = (n: NeedLine) => (n.ratio_primary != null ? 2 : 0) + (variantOf(n) ? 1 : 0);
   const order = need.map((n, i) => ({ n, i })).sort((a, b) => weight(b.n) - weight(a.n) || a.i - b.i);
   const out: LineSupply[] = need.map(line => ({ line, have: [], missing: line.qty, unsureShape: 0 }));
 
@@ -249,7 +258,7 @@ export function pointSupply(p: Point, ctx: SupplyContext): PointSupply {
   const covered = lines.every(l => {
     if (l.missing === 0) return true;
     const onOrder = open
-      .filter(o => matchDevice({ ...o.line, shape: o.line.shape || '' }, l.line) !== 'no')
+      .filter(o => matchDevice({ ...o.line, shape: o.line.shape || '', meter_kind: o.line.meter_kind || '' }, l.line) !== 'no')
       .reduce((s, o) => s + o.pending, 0);
     return onOrder >= l.missing;
   });
@@ -410,7 +419,10 @@ export function purchaseNeeds(points: Point[], ctx: SupplyContext, borrowedPoint
       if (!l.missing) continue;
       const key = specKey(l.line);
       const row = rows.get(key) ?? {
-        key, spec: { type: l.line.type, ratio_primary: l.line.ratio_primary, ratio_secondary: l.line.ratio_secondary, shape: l.line.shape },
+        key, spec: {
+          type: l.line.type, ratio_primary: l.line.ratio_primary, ratio_secondary: l.line.ratio_secondary,
+          shape: l.line.shape, meter_kind: l.line.meter_kind,
+        },
         missing: 0, onOrder: 0, inStock: 0, toBuy: 0, points: [],
       };
       row.missing += l.missing;
@@ -419,7 +431,7 @@ export function purchaseNeeds(points: Point[], ctx: SupplyContext, borrowedPoint
     }
   }
 
-  const weight = (s: Spec) => (s.ratio_primary != null ? 2 : 0) + (s.shape ? 1 : 0);
+  const weight = (s: Spec) => (s.ratio_primary != null ? 2 : 0) + (variantOf(s) ? 1 : 0);
   const list = [...rows.values()].sort((a, b) => weight(b.spec) - weight(a.spec) || a.key.localeCompare(b.key));
   const orders = openPurchaseLines(ctx.purchases, ctx.purchaseLines, ctx.devices).map(o => ({ ...o }));
   const spare = spareDevices(ctx);
@@ -430,7 +442,7 @@ export function purchaseNeeds(points: Point[], ctx: SupplyContext, borrowedPoint
     // Đơn đang về: chỉ khớp CHẮC CHẮN (dòng đơn chưa ghi hình dạng thì không coi là vuông/tròn).
     for (const o of orders) {
       if (!need) break;
-      if (o.pending <= 0 || matchDevice({ ...o.line, shape: o.line.shape || '' }, r.spec) !== 'yes') continue;
+      if (o.pending <= 0 || matchDevice({ ...o.line, shape: o.line.shape || '', meter_kind: o.line.meter_kind || '' }, r.spec) !== 'yes') continue;
       const take = Math.min(need, o.pending);
       o.pending -= take; r.onOrder += take; need -= take;
     }

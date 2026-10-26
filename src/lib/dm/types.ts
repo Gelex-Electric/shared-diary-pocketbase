@@ -192,6 +192,8 @@ export interface NeedLine {
   ratio_primary?: number | null;
   ratio_secondary?: number | null;
   shape?: TiShape | '';
+  /** Loại công tơ — chỉ có nghĩa với CONGTO (schema v24, 26/10/2026). */
+  meter_kind?: Connection | '';
   qty: number;
   note?: string;
 }
@@ -247,6 +249,11 @@ export interface Device extends PbRecord {
   shape?: TiShape | '';
   /** Dòng đơn mua mà thiết bị này về theo (`dm_purchase_line`). */
   purchase_line?: string;
+  /**
+   * Loại CÔNG TƠ (schema v24, user chốt 26/10/2026): `truc_tiep` cho điểm đo
+   * KHÔNG có TI, `gian_tiep` cho điểm đo qua TI. Trống = chưa rõ. Chỉ CONGTO.
+   */
+  meter_kind?: Connection | '';
   note?: string;
 }
 
@@ -267,6 +274,7 @@ export interface PurchaseLine extends PbRecord {
   ratio_primary?: number | null;
   ratio_secondary?: number | null;
   shape?: TiShape | '';
+  meter_kind?: Connection | '';
   qty: number;
   /** Mua cho điểm đo nào; trống = mua dự phòng. */
   for_point?: string;

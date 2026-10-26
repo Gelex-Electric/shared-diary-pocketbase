@@ -48,6 +48,18 @@ eq(matchDevice(ti('vuong', [800, 5]), needVuong), 'no', 'match: sai tỷ số');
 eq(matchDevice(ti('tron', [800, 5]), { type: 'TI' }), 'yes', 'match: nhu cầu không ghi tỷ số/hình dạng');
 eq(matchDevice(dev('CONGTO'), needVuong), 'no', 'match: sai loại');
 
+/* ------------------------------------------------------ loại công tơ */
+
+const needCtTT: NeedLine = { type: 'CONGTO', meter_kind: 'truc_tiep', qty: 1 };
+eq(specKey(needCtTT), 'CONGTO||truc_tiep', 'specKey: công tơ mang loại');
+eq(matchDevice(dev('CONGTO', undefined, { meter_kind: 'truc_tiep' }), needCtTT), 'yes', 'match: công tơ đúng loại');
+eq(matchDevice(dev('CONGTO', undefined, { meter_kind: 'gian_tiep' }), needCtTT), 'no', 'match: công tơ gián tiếp không thay được trực tiếp');
+eq(matchDevice(dev('CONGTO'), needCtTT), 'unsure_shape', 'match: công tơ chưa rõ loại khớp tạm');
+eq(matchDevice(dev('CONGTO', undefined, { meter_kind: 'gian_tiep' }), { type: 'CONGTO' }), 'yes', 'match: nhu cầu không ghi loại');
+eq(defaultNeed('truc_tiep')[0], { type: 'CONGTO', meter_kind: 'truc_tiep', qty: 1 }, 'defaultNeed: trực tiếp ⇒ công tơ trực tiếp');
+eq(cleanNeed([{ type: 'CONGTO', meter_kind: 'gian_tiep', shape: 'tron', qty: 1 }, { type: 'SIM', meter_kind: 'truc_tiep', qty: 1 }]),
+   [{ type: 'CONGTO', qty: 1, meter_kind: 'gian_tiep' }, { type: 'SIM', qty: 1 }], 'cleanNeed: loại công tơ chỉ giữ ở CONGTO');
+
 /* ------------------------------------------------- defaultNeed / tỷ số */
 
 eq(suggestTiRatio(200), { ratio_primary: 1000, ratio_secondary: 5 }, 'suggestTiRatio: 200 ⇒ 1000/5');
@@ -55,7 +67,7 @@ eq(suggestTiRatio(1), null, 'suggestTiRatio: HSN 1 không gợi ý');
 eq(suggestTiRatio(undefined), null, 'suggestTiRatio: chưa có HSN');
 eq(defaultNeed('truc_tiep').map(n => `${n.type}×${n.qty}`), ['CONGTO×1', 'GP03×1', 'SIM×1'], 'defaultNeed: trực tiếp');
 eq(defaultNeed('gian_tiep', 300).map(n => specKey(n) + '×' + n.qty),
-   ['TI|1500/5|tron×3', 'CONGTO||×1', 'GP03||×1', 'SIM||×1'], 'defaultNeed: gián tiếp hạ áp, tỷ số từ HSN, TI mặc định tròn');
+   ['TI|1500/5|tron×3', 'CONGTO||gian_tiep×1', 'GP03||×1', 'SIM||×1'], 'defaultNeed: gián tiếp hạ áp, tỷ số từ HSN, TI mặc định tròn');
 eq(defaultNeed('gian_tiep', 8800, true)[0].ratio_primary, undefined, 'defaultNeed: trung áp không đoán tỷ số TI');
 
 /* --------------------------------------------------------------- cleanNeed */

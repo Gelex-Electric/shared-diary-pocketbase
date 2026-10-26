@@ -26,13 +26,14 @@ import {
 } from './entryUi';
 import { ZoneTables } from './ZoneTables';
 import AddStockModal, { SHAPE_OPTS } from './AddStockModal';
+import { METER_KIND_PICK } from './VariantCell';
 import { groupByZone, sortByCode } from './groupByZone';
 import {
   devices as deviceRepo, loadCatalog, pbErrorMessage, isAbortError,
   type CatalogData,
 } from '../../lib/dm/repo';
 import {
-  ASSET_LABEL, DEFAULT_TI_SHAPE, DEVICE_STATUS_LABEL, SHAPE_LABEL, type AssetType, type Device, type DeviceStatus,
+  ASSET_LABEL, CONNECTION_LABEL, DEFAULT_TI_SHAPE, DEVICE_STATUS_LABEL, SHAPE_LABEL, type Connection, type AssetType, type Device, type DeviceStatus,
   type TiShape,
 } from '../../lib/dm/types';
 import { pointZoneId } from '../../lib/dm/pointScope';
@@ -74,6 +75,8 @@ export default function StockEntry() {
   const [typeFilter, setTypeFilter] = useState<AssetType | ''>('');
   /** Lọc hình dạng — chỉ hiện khi đang lọc TI. `none` = TI chưa khai hình dạng. */
   const [shapeFilter, setShapeFilter] = useState<TiShape | 'none' | ''>('');
+  /** Lọc loại công tơ — chỉ hiện khi đang lọc Công tơ. `none` = chưa khai loại. */
+  const [kindFilter, setKindFilter] = useState<Connection | 'none' | ''>('');
   const [search, setSearch] = useState('');
   /** Dòng đang mở xem lịch sử lắp đặt. */
   const [openRow, setOpenRow] = useState<string | null>(null);
@@ -111,12 +114,14 @@ export default function StockEntry() {
     if (typeFilter && r.device.type !== typeFilter) return false;
     if (typeFilter === 'TI' && shapeFilter
       && (shapeFilter === 'none' ? !!r.device.shape : r.device.shape !== shapeFilter)) return false;
+    if (typeFilter === 'CONGTO' && kindFilter
+      && (kindFilter === 'none' ? !!r.device.meter_kind : r.device.meter_kind !== kindFilter)) return false;
     // Loại vẫn đưa vào chuỗi tìm để gõ "TI" hay "GP-03" là ra.
     return matchesTerms(
       [r.device.serial, ASSET_LABEL[r.device.type], r.device.batch, holdText(r),
         r.atPoint?.code, r.device.note], terms);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [rows, status, typeFilter, shapeFilter, terms, d]);
+  }), [rows, status, typeFilter, shapeFilter, kindFilter, terms, d]);
 
   /**
    * Gom theo KCN rồi mỗi KCN một thẻ — cùng khuôn bảng Điểm đo (user chốt
@@ -137,7 +142,7 @@ export default function StockEntry() {
 
   /* ------------------------- khai một thiết bị ------------------------- */
   const EMPTY = {
-    serial: '', type: '' as AssetType | '', ratio: '', shape: DEFAULT_TI_SHAPE as TiShape | '', model_desc: '',
+    serial: '', type: '' as AssetType | '', ratio: '', shape: DEFAULT_TI_SHAPE as TiShape | '', meter_kind: '' as Connection | '', model_desc: '',
     hold_for_note: '', date_in: today(), batch: '', note: '',
   };
   const [form, setForm] = useState(EMPTY);
@@ -145,7 +150,7 @@ export default function StockEntry() {
   const openEdit = (dev: Device) => {
     setEditing(dev);
     setForm({
-      serial: dev.serial, type: dev.type, model_desc: dev.model_desc ?? '', shape: dev.shape ?? '',
+      serial: dev.serial, type: dev.type, model_desc: dev.model_desc ?? '', shape: dev.shape ?? '', meter_kind: dev.meter_kind ?? '',
       ratio: dev.ratio_primary != null ? `${dev.ratio_primary}/${dev.ratio_secondary ?? ''}` : '',
       hold_for_note: dev.hold_for_note ?? '', date_in: (dev.date_in ?? '').slice(0, 10),
       batch: dev.batch ?? '', note: dev.note ?? '',
@@ -182,6 +187,7 @@ export default function StockEntry() {
       serial, type: form.type, model_desc: form.model_desc.trim(),
       ...ratioOf(form.ratio),
       shape: form.type === 'TI' ? form.shape : '',
+      meter_kind: form.type === 'CONGTO' ? form.meter_kind : '',
       hold_for_note: form.hold_for_note.trim(),
       date_in: form.date_in || '', batch: form.batch.trim(), note: form.note.trim(),
     };
@@ -342,7 +348,7 @@ export default function StockEntry() {
         </div>
         <div className="w-full sm:w-[220px]">
           <Select label="Loại vật tư" value={typeFilter}
-            onChange={v => { setTypeFilter(v as AssetType | ''); setShapeFilter(''); }}
+            onChange={v => { setTypeFilter(v as AssetType | ''); setShapeFilter(''); setKindFilter(''); }}
             options={[
               { value: '', label: `Tất cả loại (${ofStatus.length})` },
               ...typesInStock.map(t => ({ value: t, label: `${ASSET_LABEL[t]} (${countType(t)})` })),
@@ -356,6 +362,17 @@ export default function StockEntry() {
                 { value: '', label: 'Mọi hình dạng' },
                 ...(Object.keys(SHAPE_LABEL) as TiShape[]).map(sh => ({ value: sh, label: SHAPE_LABEL[sh] })),
                 { value: 'none', label: 'Chưa rõ hình dạng' },
+              ]} />
+          </div>
+        )}
+        {typeFilter === 'CONGTO' && (
+          <div className="w-full sm:w-[220px]">
+            <Select label="Loại công tơ" value={kindFilter}
+              onChange={v => setKindFilter(v as Connection | 'none' | '')}
+              options={[
+                { value: '', label: 'Mọi loại' },
+                ...(Object.keys(CONNECTION_LABEL) as Connection[]).map(k => ({ value: k, label: CONNECTION_LABEL[k] })),
+                { value: 'none', label: 'Chưa rõ loại' },
               ]} />
           </div>
         )}
@@ -421,6 +438,7 @@ export default function StockEntry() {
               <td className="px-6 py-4 text-sm text-soft">
                 {ASSET_LABEL[r.device.type]}
                 {r.device.type === 'TI' && r.device.shape && ` · ${SHAPE_LABEL[r.device.shape]}`}
+                {r.device.type === 'CONGTO' && r.device.meter_kind && ` · ${CONNECTION_LABEL[r.device.meter_kind]}`}
               </td>
               <td className="px-6 py-4 font-mono text-xs text-soft">
                 {r.device.ratio_primary != null ? `${r.device.ratio_primary}/${r.device.ratio_secondary ?? ''}` : '—'}
@@ -542,6 +560,12 @@ export default function StockEntry() {
             <Field label="Hình dạng" hint="Kinh Doanh khai nhu cầu theo tròn / vuông">
               <Select value={form.shape} onChange={v => setForm(f => ({ ...f, shape: v as TiShape | '' }))}
                 options={SHAPE_OPTS} />
+            </Field>
+          )}
+          {form.type === 'CONGTO' && (
+            <Field label="Loại công tơ" hint="Trực tiếp: điểm đo không TI · Gián tiếp: qua TI">
+              <Select value={form.meter_kind} options={METER_KIND_PICK}
+                onChange={v => setForm(f => ({ ...f, meter_kind: v as Connection | '' }))} />
             </Field>
           )}
           <Field label="Model / mô tả">

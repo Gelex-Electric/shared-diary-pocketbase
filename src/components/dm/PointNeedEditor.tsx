@@ -13,11 +13,12 @@ import { Select } from '../ui/Select';
 import { Switch } from '../ui/Switch';
 import { DatePicker } from '../ui/DateTimePickers';
 import { CellInput } from './entryUi';
+import VariantCell from './VariantCell';
 import { formatRatio, parseRatio } from '../../lib/dm/hsn';
 import { useMemo } from 'react';
 import { HAS_RATIO, cleanNeed, defaultNeed, supplyOfPoint, type LineSupply } from '../../lib/dm/supply';
 import {
-  ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type Asset, type AssetType, type Connection, type Device, type NeedLine, type TiShape,
+  ASSET_LABEL, DEFAULT_TI_SHAPE, type Asset, type AssetType, type Connection, type Device, type NeedLine, type TiShape,
 } from '../../lib/dm/types';
 
 /** Một dòng trên form — tỷ số và số lượng giữ dạng CHUỖI cho ô nhập. */
@@ -26,6 +27,7 @@ export interface NeedRow {
   type: AssetType | '';
   ratio: string;
   shape: TiShape | '';
+  meter_kind: Connection | '';
   qty: string;
 }
 
@@ -36,6 +38,7 @@ const newRow = (n?: Partial<NeedLine>): NeedRow => ({
   ratio: formatRatio(n?.ratio_primary, n?.ratio_secondary),
   // Dòng MỚI điền sẵn hình dạng mặc định (tròn); dòng đã lưu giữ nguyên, kể cả "chưa chọn".
   shape: n ? ((n.shape as TiShape) || '') : DEFAULT_TI_SHAPE,
+  meter_kind: (n?.meter_kind as Connection) || '',
   qty: n?.qty != null ? String(n.qty) : '1',
 });
 
@@ -48,16 +51,12 @@ export function needFromRows(rows: NeedRow[]): NeedLine[] {
     return {
       type: r.type as AssetType,
       ratio_primary: primary, ratio_secondary: secondary,
-      shape: r.shape, qty: parseInt(r.qty, 10),
+      shape: r.shape, meter_kind: r.meter_kind, qty: parseInt(r.qty, 10),
     };
   }));
 }
 
 const TYPE_OPTS = (Object.keys(ASSET_LABEL) as AssetType[]).map(t => ({ value: t, label: ASSET_LABEL[t] }));
-const SHAPE_OPTS = [
-  { value: '', label: 'Chưa chọn' },
-  ...(Object.keys(SHAPE_LABEL) as TiShape[]).map(s => ({ value: s, label: SHAPE_LABEL[s] })),
-];
 
 export default function PointNeedEditor({
   rows, onChange, urgent, onUrgent, neededBy, onNeededBy, hsn, connection, allocated, devices,
@@ -79,7 +78,13 @@ export default function PointNeedEditor({
   devices: Device[];
 }) {
   const set = (key: string, patch: Partial<NeedRow>) =>
-    onChange(rows.map(r => (r.key === key ? { ...r, ...patch } : r)));
+    onChange(rows.map(r => {
+      if (r.key !== key) return r;
+      const next = { ...r, ...patch };
+      // Chọn "Công tơ" lần đầu ⇒ điền sẵn loại theo kiểu đấu nối của điểm đo.
+      if (patch.type === 'CONGTO' && !next.meter_kind) next.meter_kind = connection;
+      return next;
+    }));
   const fillDefault = () => onChange(rowsFromNeed(defaultNeed(connection, hsn)));
   /** Đủ/thiếu theo từng dòng hợp lệ, tra theo `key` — dòng chưa chọn loại hay SL ≤ 0 không có. */
   const supply = useMemo(() => {
@@ -121,7 +126,7 @@ export default function PointNeedEditor({
             <tr>
               <th className="px-4 py-3 text-left font-bold text-soft">Loại</th>
               <th className="px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
-              <th className="px-2 py-3 text-left font-bold text-soft">Hình dạng</th>
+              <th className="px-2 py-3 text-left font-bold text-soft" title="TI: tròn / vuông · Công tơ: trực tiếp / gián tiếp">Kiểu</th>
               <th className="px-2 py-3 text-left font-bold text-soft">SL</th>
               <th className="px-2 py-3 text-left font-bold text-soft">Đã có</th>
               <th className="px-2 py-3" />
@@ -149,10 +154,8 @@ export default function PointNeedEditor({
                     ) : <span className="block p-2 text-faint">—</span>}
                   </td>
                   <td className="p-2">
-                    {r.type === 'TI' ? (
-                      <Select value={r.shape} variant="bare" options={SHAPE_OPTS}
-                        onChange={v => set(r.key, { shape: v as TiShape | '' })} />
-                    ) : <span className="block p-2 text-faint">—</span>}
+                    <VariantCell type={r.type} shape={r.shape} meterKind={r.meter_kind}
+                      onShape={shape => set(r.key, { shape })} onMeterKind={meter_kind => set(r.key, { meter_kind })} />
                   </td>
                   <td className="p-2">
                     <CellInput value={r.qty} type="number" align="center"
@@ -167,7 +170,7 @@ export default function PointNeedEditor({
                       )}
                     {s && s.unsureShape > 0 && (
                       <span className="mt-1 block text-[11px] leading-snug text-faint">
-                        {s.unsureShape} TI chưa rõ hình dạng
+                        {s.unsureShape} chưa rõ kiểu (hình dạng / loại)
                       </span>
                     )}
                   </td>

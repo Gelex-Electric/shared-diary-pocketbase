@@ -13,11 +13,12 @@ import { Select } from '../ui/Select';
 import { DatePicker } from '../ui/DateTimePickers';
 import { toast } from '../../lib/toast';
 import { CellInput, Field, FormModal, TextInput } from './entryUi';
+import { METER_KIND_PICK } from './VariantCell';
 import { devices as deviceRepo, pbErrorMessage } from '../../lib/dm/repo';
 import { formatRatio, parseRatio } from '../../lib/dm/hsn';
 import { findExisting, guessType, parsePaste, SERIAL_RE } from '../../lib/dm/stock';
 import {
-  ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type AssetType, type Device, type TiShape,
+  ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type AssetType, type Connection, type Device, type TiShape,
 } from '../../lib/dm/types';
 
 const TYPES: AssetType[] = ['CONGTO', 'TI', 'TU', 'GP03', 'SIM', 'KHAC'];
@@ -44,6 +45,8 @@ export interface StockPreset {
   ratio_primary?: number | null;
   ratio_secondary?: number | null;
   shape?: TiShape | '';
+  /** Loại công tơ của dòng đơn (chỉ CONGTO). */
+  meterKind?: Connection | '';
   /** Gắn vào mọi thiết bị tạo ra (`dm_device.purchase_line`). */
   purchaseLine?: string;
   /** Số còn chờ của dòng đơn — vượt thì nhắc, không chặn (giao thừa vẫn nhập được). */
@@ -70,6 +73,8 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
   const [addRatio, setAddRatio] = useState('');
   /** Hình dạng chung cho các dòng TI của lô — lô hàng về thường cùng một kiểu. */
   const [addShape, setAddShape] = useState<TiShape | ''>('');
+  /** Loại chung cho các dòng công tơ của lô (trực tiếp / gián tiếp — schema v24). */
+  const [addKind, setAddKind] = useState<Connection | ''>('');
   const [addBatch, setAddBatch] = useState('');
   const [addDate, setAddDate] = useState(today());
   const [addHold, setAddHold] = useState('');
@@ -83,6 +88,7 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
     setAddRatio(preset ? formatRatio(preset.ratio_primary, preset.ratio_secondary) : '');
     // Nhận hàng theo đơn: theo dòng đơn; nhập thường: mặc định tròn (vuông là ngoại lệ).
     setAddShape(preset ? (preset.shape ?? '') : DEFAULT_TI_SHAPE);
+    setAddKind(preset?.meterKind ?? '');
     setAddBatch(preset?.batch ?? '');
     setAddDate(today());
     setAddHold(preset?.holdNote ?? '');
@@ -164,6 +170,7 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
           serial: r.serial.trim(), type: typeOfAdd(r) as AssetType,
           ...ratioOf(ratioOfAdd(r)), model_desc: r.model.trim(),
           shape: typeOfAdd(r) === 'TI' ? addShape : '',
+          meter_kind: typeOfAdd(r) === 'CONGTO' ? addKind : '',
           date_in: addDate || '', batch: addBatch.trim(), hold_for_note: addHold.trim(),
           ...(preset?.purchaseLine ? { purchase_line: preset.purchaseLine } : {}),
         });
@@ -196,6 +203,10 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
         <Field label="Hình dạng TI" hint="Áp cho mọi dòng TI của lô">
           <Select value={addShape} onChange={v => setAddShape(v as TiShape | '')} options={SHAPE_OPTS}
             disabled={locked && !!preset?.shape} />
+        </Field>
+        <Field label="Loại công tơ" hint="Trực tiếp: điểm đo không TI · Gián tiếp: qua TI">
+          <Select value={addKind} onChange={v => setAddKind(v as Connection | '')} options={METER_KIND_PICK}
+            disabled={locked && !!preset?.meterKind} />
         </Field>
         <Field label="Mã lô">
           <TextInput value={addBatch} onChange={setAddBatch} placeholder="LO-2026-08" />

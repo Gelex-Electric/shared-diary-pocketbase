@@ -21,7 +21,8 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { EmptyState } from '../ui/dashboard';
 import { toast } from '../../lib/toast';
 import { CellInput, Field, FormModal, TextInput } from './entryUi';
-import AddStockModal, { SHAPE_OPTS, type StockPreset } from './AddStockModal';
+import AddStockModal, { type StockPreset } from './AddStockModal';
+import VariantCell from './VariantCell';
 import { needText } from './SupplyAllocate';
 import {
   isAbortError, loadCatalog, pbErrorMessage, purchaseLines as lineRepo, purchases as purchaseRepo,
@@ -36,7 +37,7 @@ import { runAttach } from '../../lib/dm/attachRun';
 import { formatRatio, parseRatio } from '../../lib/dm/hsn';
 import { dmy } from '../../lib/dm/lifecycle';
 import {
-  ASSET_LABEL, DEFAULT_TI_SHAPE, type AssetType, type Device, type Purchase, type PurchaseLine, type TiShape,
+  ASSET_LABEL, DEFAULT_TI_SHAPE, type AssetType, type Connection, type Device, type Purchase, type PurchaseLine, type TiShape,
 } from '../../lib/dm/types';
 
 type View = 'need' | 'orders';
@@ -51,10 +52,12 @@ const STATE_CLS: Record<PurchaseState, string> = {
 const TYPE_OPTS = (Object.keys(ASSET_LABEL) as AssetType[]).map(t => ({ value: t, label: ASSET_LABEL[t] }));
 
 /** Một dòng trên form tạo đơn — số và tỷ số giữ dạng chuỗi cho ô nhập. */
-interface DraftLine { key: string; type: AssetType | ''; ratio: string; shape: TiShape | ''; qty: string; forPoint: string }
+interface DraftLine {
+  key: string; type: AssetType | ''; ratio: string; shape: TiShape | ''; meterKind: Connection | ''; qty: string; forPoint: string;
+}
 let seq = 0;
 const draft = (x: Partial<DraftLine> = {}): DraftLine =>
-  ({ key: `l${++seq}`, type: '', ratio: '', shape: DEFAULT_TI_SHAPE, qty: '1', forPoint: '', ...x });
+  ({ key: `l${++seq}`, type: '', ratio: '', shape: DEFAULT_TI_SHAPE, meterKind: '', qty: '1', forPoint: '', ...x });
 
 export default function PurchaseManager() {
   const { confirm, dialog } = useConfirm();
@@ -95,6 +98,7 @@ export default function PurchaseManager() {
         const base = {
           type: r.spec.type, ratio: formatRatio(r.spec.ratio_primary, r.spec.ratio_secondary),
           shape: (r.spec.shape || '') as TiShape | '',
+          meterKind: (r.spec.meter_kind || '') as Connection | '',
         };
         const pts = [...r.points].sort((a, b) => Number(b.borrowed) - Number(a.borrowed) || Number(!!b.point.urgent) - Number(!!a.point.urgent));
         for (const np of pts) {
@@ -140,7 +144,7 @@ export default function PurchaseManager() {
         await lineRepo.create({
           purchase: (po as { id: string }).id, type: l.type as AssetType,
           ...(HAS_RATIO.includes(l.type as AssetType) ? { ratio_primary: primary, ratio_secondary: secondary } : {}),
-          shape: l.type === 'TI' ? l.shape : '', qty: parseInt(l.qty, 10), for_point: l.forPoint,
+          shape: l.type === 'TI' ? l.shape : '', meter_kind: l.type === 'CONGTO' ? l.meterKind : '', qty: parseInt(l.qty, 10), for_point: l.forPoint,
         });
         n++;
       }
@@ -180,7 +184,7 @@ export default function PurchaseManager() {
     po, line,
     preset: {
       type: line.type, ratio_primary: line.ratio_primary, ratio_secondary: line.ratio_secondary,
-      shape: line.shape || '', purchaseLine: line.id, batch: po.code,
+      shape: line.shape || '', meterKind: line.meter_kind || '', purchaseLine: line.id, batch: po.code,
       pending: Math.max(0, line.qty - (got.get(line.id) ?? 0)),
       holdNote: line.for_point ? '' : 'Dự phòng',
     },
@@ -438,7 +442,7 @@ export default function PurchaseManager() {
                 <tr>
                   <th className="px-4 py-3 text-left font-bold text-soft">Loại</th>
                   <th className="px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
-                  <th className="px-2 py-3 text-left font-bold text-soft">Hình dạng</th>
+                  <th className="px-2 py-3 text-left font-bold text-soft" title="TI: tròn / vuông · Công tơ: trực tiếp / gián tiếp">Kiểu</th>
                   <th className="px-2 py-3 text-left font-bold text-soft">SL</th>
                   <th className="px-2 py-3 text-left font-bold text-soft">Dành cho</th>
                   <th className="px-2 py-3" />
@@ -457,10 +461,8 @@ export default function PurchaseManager() {
                       ) : <span className="block p-2 text-faint">—</span>}
                     </td>
                     <td className="p-2">
-                      {l.type === 'TI' ? (
-                        <Select value={l.shape} variant="bare" options={SHAPE_OPTS}
-                          onChange={v => setLine(l.key, { shape: v as TiShape | '' })} />
-                      ) : <span className="block p-2 text-faint">—</span>}
+                      <VariantCell type={l.type} shape={l.shape} meterKind={l.meterKind}
+                        onShape={shape => setLine(l.key, { shape })} onMeterKind={meterKind => setLine(l.key, { meterKind })} />
                     </td>
                     <td className="p-2">
                       <CellInput value={l.qty} type="number" align="center" onChange={v => setLine(l.key, { qty: v })} />

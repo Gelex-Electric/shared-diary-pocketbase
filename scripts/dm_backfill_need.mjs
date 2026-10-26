@@ -13,6 +13,12 @@
  * dòng lắp). Tức là coi như ĐỦ — đúng hiện trạng. Điểm đo không có vật tư nào
  * thì để nguyên (đó mới thật là việc của Kinh Doanh).
  *
+ * `--empty` (user yêu cầu 26/10/2026): điểm đo dự kiến CHƯA CÓ vật tư nào ⇒ ghi
+ * BỘ NHU CẦU CHUẨN theo HSN — cùng luật nút "Điền theo HSN" (`defaultNeed` trong
+ * `src/lib/dm/supply.ts`): HSN 1 ⇒ công tơ TRỰC TIẾP + GP-03 + SIM; HSN > 1 ⇒
+ * 3 TI tròn (tỷ số HSN×5/5 nếu hạ áp) + công tơ GIÁN TIẾP + GP-03 + SIM. Chưa có
+ * HSN ⇒ để Kinh Doanh khai (không đoán). Không có cờ thì chỉ xử lý điểm đo đã có vật tư.
+ *
  * Mặc định DRY-RUN. `--commit` mới ghi. Ghi tuần tự, lỗi thì dừng và báo đã ghi tới đâu.
  *   railway run -- node scripts/dm_backfill_need.mjs [--commit]
  * PC có proxy SSL: đọc tự chuyển sang curl nhưng lệnh PATCH dùng `fetch` ⇒ thêm
@@ -21,6 +27,23 @@
 import { pbLogin, allOf, PB_URL, ymd } from './lib/pb_meters.mjs';
 
 const COMMIT = process.argv.includes('--commit');
+const EMPTY = process.argv.includes('--empty');
+
+/** Bộ nhu cầu chuẩn — CHÉP luật `defaultNeed` (supply.ts); sửa luật thì sửa cả hai. */
+function defaultNeed(p) {
+  const hsn = Number(p.hsn);
+  if (!(hsn > 0)) return null;
+  const conn = hsn === 1 ? 'truc_tiep' : 'gian_tiep';
+  const base = [
+    { type: 'CONGTO', meter_kind: conn, qty: 1 },
+    { type: 'GP03', qty: 1 },
+    { type: 'SIM', qty: 1 },
+  ];
+  if (conn === 'truc_tiep') return base;
+  const ti = { type: 'TI', shape: 'tron', qty: 3 };
+  if (p.voltage_level !== 'MV') { ti.ratio_primary = Math.round(hsn * 5 * 1000) / 1000; ti.ratio_secondary = 5; }
+  return [ti, ...base];
+}
 const token = await pbLogin();
 const [devices, assets, points] = await Promise.all(
   ['dm_device', 'dm_asset', 'dm_point'].map(c => allOf(c, token)));
@@ -30,15 +53,23 @@ const bySerial = new Map(devices.map(d => [String(d.serial).trim(), d]));
 const HAS_RATIO = ['TI', 'TU'];
 const ORDER = ['TI', 'TU', 'CONGTO', 'GP03', 'SIM', 'KHAC'];
 
+const textOf = need => need.map(n => `${n.qty}×${n.type}${n.ratio_primary ? ` ${n.ratio_primary}/${n.ratio_secondary ?? ''}` : ''}`
+  + `${n.shape ? ` ${n.shape}` : ''}${n.meter_kind ? ` ${n.meter_kind}` : ''}`).join(', ');
 const plan = [];
-let skipHung = 0, skipHasNeed = 0, skipEmpty = 0;
+let skipHung = 0, skipHasNeed = 0, skipEmpty = 0, noHsn = [];
 
 for (const p of points) {
   const mine = assets.filter(a => a.point === p.id);
   if (mine.some(a => a.type === 'CONGTO' && ymd(a.date_on))) { skipHung++; continue; }
   if (Array.isArray(p.need) && p.need.length) { skipHasNeed++; continue; }
   const live = mine.filter(a => !ymd(a.date_off));
-  if (!live.length) { skipEmpty++; continue; }
+  if (!live.length) {
+    if (!EMPTY) { skipEmpty++; continue; }
+    const need = defaultNeed(p);
+    if (!need) { noHsn.push(p.code ?? p.id); continue; }
+    plan.push([p.id, need, `${p.code ?? p.id} (HSN ${p.hsn}, chưa có vật tư): ${textOf(need)}`]);
+    continue;
+  }
 
   const groups = new Map();
   for (const a of live) {
@@ -54,13 +85,13 @@ for (const p of points) {
     groups.set(key, { ...line, qty: (groups.get(key)?.qty ?? 0) + 1 });
   }
   const need = [...groups.values()].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type));
-  const text = need.map(n => `${n.qty}×${n.type}${n.ratio_primary ? ` ${n.ratio_primary}/${n.ratio_secondary ?? ''}` : ''}${n.shape ? ` ${n.shape}` : ''}`).join(', ');
-  plan.push([p.id, need, `${p.code ?? p.id}: ${text}`]);
+  plan.push([p.id, need, `${p.code ?? p.id}: ${textOf(need)}`]);
 }
 
 console.log(`\nPB: ${PB_URL}`);
 console.log(`Điểm đo: ${points.length} · đã từng treo (bỏ qua) ${skipHung} · đã có nhu cầu ${skipHasNeed} · `
   + `chưa có vật tư nào (để Kinh Doanh khai) ${skipEmpty}`);
+if (noHsn.length) console.log(`Chưa có HSN — để Kinh Doanh khai (${noHsn.length}): ${noHsn.join(', ')}`);
 console.log(`SẼ GHI nhu cầu cho ${plan.length} điểm đo dự kiến:`);
 for (const [, , why] of plan) console.log(`  · ${why}`);
 
