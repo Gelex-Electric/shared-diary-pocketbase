@@ -216,8 +216,8 @@ export default function SupplyAllocate() {
                 <tr>
                   <th className="text-left">Quy cách</th>
                   <th className="text-center">Cần</th>
-                  <th className="text-center" title="Phần treo tháo — thật sự đang ở điểm đo">Đang treo</th>
-                  <th className="text-center" title="Phần nhu cầu — Vật Tư đã gắn, chưa treo">Đã gắn</th>
+                  <th className="text-left" title="Phần treo tháo — thật sự đang ở điểm đo">Đang treo</th>
+                  <th className="text-left" title="Phần nhu cầu — Vật Tư đã gắn dự kiến, chưa treo">Đã gắn dự kiến</th>
                   <th className="text-center">Thiếu</th>
                   <th />
                 </tr>
@@ -232,8 +232,8 @@ export default function SupplyAllocate() {
                       )}
                     </td>
                     <td className="text-center">{l.line.qty}</td>
-                    <td className="text-center">{l.have.filter(isHungRow).length || '—'}</td>
-                    <td className="text-center">{l.have.filter(a => !isHungRow(a)).length || '—'}</td>
+                    <td><SerialList rows={l.have.filter(isHungRow)} /></td>
+                    <td><SerialList rows={l.have.filter(a => !isHungRow(a))} /></td>
                     <td className={`text-center font-bold ${l.missing ? 'text-bad' : 'text-faint'}`}>{l.missing || '—'}</td>
                     <td className="text-right">
                       {l.missing > 0 && (
@@ -286,6 +286,20 @@ export default function SupplyAllocate() {
           )}
         </>)}
       </FormModal>
+    </div>
+  );
+}
+
+/** Danh sách số No của một ô (đang treo / đã gắn dự kiến) — trống thì "—". */
+function SerialList({ rows }: { rows: { id: string; serial: string }[] }) {
+  if (!rows.length) return <span className="text-faint">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {rows.map(a => (
+        <span key={a.id} className="rounded-md border border-[var(--border)] bg-subtle px-1.5 py-0.5 font-mono text-[12px] font-semibold text-ink">
+          {a.serial}
+        </span>
+      ))}
     </div>
   );
 }
