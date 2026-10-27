@@ -2,7 +2,7 @@
 import { pb } from '../lib/pocketbase';
 import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity, FileText, LayoutDashboard, Bell, ListTodo,
+  Activity, FileText, LayoutDashboard, Bell,
 } from 'lucide-react';
 import SupplyTasks from './dm/SupplyTasks';
 import { useSupplyTasks } from './dm/useSupplyTasks';
@@ -26,11 +26,10 @@ import { useUnresolvedAlerts } from './alerts/useUnresolvedAlerts';
 import { ALERT_KINDS } from '../lib/alerts';
 import ThemeToggle from './ui/ThemeToggle';
 
-type Tab = 'summary' | 'tasks' | 'alerts' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
+type Tab = 'summary' | 'alerts' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
-  tasks:     'Điểm đo chờ treo',
   alerts: 'Cảnh báo',
   journal:   'Hồ sơ vận hành',
   outage:            'Thông báo ngừng cấp điện',
@@ -78,7 +77,7 @@ const subItemV = {
 
 export default function Dashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
-  /** Việc của Vận Hành trong luồng cấp vật tư = điểm đo đủ vật tư chờ treo ở KCN mình. */
+  /** Việc của Vận Hành = điểm đo chờ treo ở KCN mình — hiện ở mục "Biên bản treo tháo". */
   const supply = useSupplyTasks('van_hanh');
   const taskBadge = supply.count;
   /** Cảnh báo CHƯA XỬ LÝ — badge sidebar và số trên từng sub-side. */
@@ -184,25 +183,6 @@ export default function Dashboard() {
             </button>
           </li>
 
-          {/* Việc cần làm — luồng cấp vật tư điểm đo mới (26/10/2026); badge tự tính. */}
-          <li className="relative mt-1">
-            <button
-              id="nav-tasks"
-              onClick={() => { setTopTab('tasks'); onNavigate?.(); }}
-              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'tasks' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
-              }`}
-            >
-              <ListTodo className="w-5 h-5 shrink-0" />
-              <span className="flex-1 text-left">Điểm đo chờ treo</span>
-              {taskBadge > 0 && (
-                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
-                  {taskBadge > 99 ? '99+' : taskBadge}
-                </span>
-              )}
-            </button>
-          </li>
-
           {/* Hồ sơ vận hành */}
           <li className="relative mt-1">
             <button
@@ -214,6 +194,12 @@ export default function Dashboard() {
             >
               <ClipboardList className="w-5 h-5 shrink-0" />
               <span className="flex-1 text-left">Hồ sơ vận hành</span>
+              {/* Số điểm đo chờ treo — hiện cả khi nhóm đang đóng. */}
+              {!isJournalExpanded && taskBadge > 0 && (
+                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {taskBadge > 99 ? '99+' : taskBadge}
+                </span>
+              )}
               <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isJournalExpanded ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence initial={false}>
@@ -256,7 +242,11 @@ export default function Dashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Biên bản treo tháo</span>
-                      <span className="text-[10px] font-black text-amber-500 shrink-0 uppercase tracking-wide">Beta</span>
+                      {taskBadge > 0 && (
+                        <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                          {taskBadge > 99 ? '99+' : taskBadge}
+                        </span>
+                      )}
                     </button>
                   </motion.li>
                   <motion.li variants={subItemV}>
@@ -584,8 +574,6 @@ export default function Dashboard() {
           <section>
             {topTab === 'summary' ? (
               <SummaryDashboard />
-            ) : topTab === 'tasks' ? (
-              <SupplyTasks group="van_hanh" tasks={supply.tasks} data={supply.data} onChanged={() => void supply.reload(true)} />
             ) : topTab === 'operating' ? (
               <CustomerManager />
             ) : topTab === 'hes' ? (
@@ -609,11 +597,9 @@ export default function Dashboard() {
             ) : topTab === 'debt' ? (
               <CustomerDebtManager readOnly />
             ) : topTab === 'handover-record' ? (
-              <div className="vl-card flex flex-col items-center justify-center py-24 gap-4 text-faint">
-                <RefreshCw className="w-14 h-14 animate-[spin_3s_linear_infinite] text-faint" />
-                <p className="text-base font-bold text-dim">Tính năng đang được phát triển</p>
-                <p className="text-sm text-soft">Biên bản treo tháo sẽ sớm được ra mắt trong phiên bản tiếp theo.</p>
-              </div>
+              // Biên bản treo tháo = phần TREO THÁO của điểm đo (user chốt 27/10/2026):
+              // điểm đo Vật Tư đã gắn vật tư dự kiến, Vận Hành ghi treo thực tế.
+              <SupplyTasks group="van_hanh" tasks={supply.tasks} data={supply.data} onChanged={() => void supply.reload(true)} />
             ) : (
               <div className="vl-card flex flex-col items-center justify-center py-20">
                 <RefreshCw className="w-14 h-14 mb-4 animate-[spin_3s_linear_infinite] text-faint" />

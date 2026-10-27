@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { pb } from '../../lib/pocketbase';
 import {
   LogOut, X, Menu, ChevronDown,
-  FileText, LayoutDashboard, Briefcase, Activity, Package, FileSignature, Bell, ListTodo,
+  FileText, LayoutDashboard, Briefcase, Activity, Package, FileSignature, Bell,
 } from 'lucide-react';
 import SupplyTasks from '../dm/SupplyTasks';
 import { useSupplyTasks } from '../dm/useSupplyTasks';
@@ -36,7 +36,7 @@ type Tab =
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
-  tasks:           'Việc cần làm',
+  tasks:           'Treo tháo',
   alerts:          'Cảnh báo',
   'bill-confirm':  'Biên bản xác nhận chỉ số',
   'quick-import':  'Nạp dữ liệu',
@@ -65,13 +65,13 @@ const CUSTOMER_TABS: CatTab[] = ['customer'];
 const OPERATING_TABS: Tab[] = (['operating', 'hes', 'opchart', 'loss', 'sld'] as Tab[])
   .filter(t => !(LOSS_DISABLED && t === 'loss'));
 /** Các tab con thuộc nhóm "Quản lý vật tư thiết bị điện". */
-const ASSET_TABS: Tab[] = ['dm-general', 'dm-catalog'];
+const ASSET_TABS: Tab[] = ['tasks', 'dm-general', 'dm-catalog'];
 /** Mục con của nhóm "Quản lý Hợp đồng" — hiện chỉ 1, giữ mảng để thêm mục sau. */
 const QLVH_TABS: Tab[] = ['qlvh'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
-  /** Việc của Kinh Doanh trong luồng cấp vật tư = điểm đo mới chưa khai nhu cầu. */
+  /** Việc của Kinh Doanh = chưa khai nhu cầu + chờ treo — mục "Treo tháo" trong Quản lý vật tư thiết bị điện. */
   const supply = useSupplyTasks('kinh_doanh');
   const taskBadge = supply.count;
   // Đổi màn là dịp tính lại badge — vừa khai nhu cầu ở form điểm đo xong thì số giảm ngay.
@@ -140,25 +140,6 @@ export default function BusinessDashboard() {
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
               <span>Tổng hợp</span>
-            </button>
-          </li>
-
-          {/* Việc cần làm — luồng cấp vật tư điểm đo mới (26/10/2026); badge tự tính. */}
-          <li className="relative mt-1">
-            <button
-              id="nav-tasks"
-              onClick={() => { setTopTab('tasks'); onNavigate?.(); }}
-              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                topTab === 'tasks' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
-              }`}
-            >
-              <ListTodo className="w-5 h-5 shrink-0" />
-              <span className="flex-1 text-left">Việc cần làm</span>
-              {taskBadge > 0 && (
-                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
-                  {taskBadge > 99 ? '99+' : taskBadge}
-                </span>
-              )}
             </button>
           </li>
 
@@ -386,6 +367,12 @@ export default function BusinessDashboard() {
             >
               <Package className="w-5 h-5 shrink-0" />
               <span className="flex-1 text-left">Quản lý vật tư thiết bị điện</span>
+              {/* Việc Treo tháo (chưa khai nhu cầu + chờ treo) — hiện cả khi nhóm đang đóng. */}
+              {!isAssetExpanded && taskBadge > 0 && (
+                <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {taskBadge > 99 ? '99+' : taskBadge}
+                </span>
+              )}
               <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isAssetExpanded ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence initial={false}>
@@ -397,6 +384,23 @@ export default function BusinessDashboard() {
                   transition={{ duration: 0.22 }}
                   className="overflow-hidden list-none px-0"
                 >
+                  <li>
+                    <button
+                      id="nav-tasks-sub"
+                      onClick={() => { setTopTab('tasks'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'tasks' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Treo tháo</span>
+                      {taskBadge > 0 && (
+                        <span className="shrink-0 rounded-full bg-[#ff5b5c] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                          {taskBadge > 99 ? '99+' : taskBadge}
+                        </span>
+                      )}
+                    </button>
+                  </li>
                   <li>
                     <button
                       id="nav-dm-general-sub"

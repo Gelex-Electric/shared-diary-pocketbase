@@ -37,7 +37,8 @@ export default function SupplyTasks({ group, tasks, data, onNavigate, onChanged 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-ink">Việc cần làm</h2>
+        {/* Kinh Doanh: mục "Treo tháo" trong Quản lý vật tư thiết bị điện (27/10/2026). */}
+        <h2 className="text-2xl font-bold text-ink">{group === 'kinh_doanh' ? 'Treo tháo' : 'Việc cần làm'}</h2>
         <p className="mt-1 text-sm text-soft">
           Kinh Doanh khai nhu cầu → Vật Tư gắn vật tư dự kiến / đặt mua → Kinh Doanh, Vận Hành ghi treo tháo
         </p>
