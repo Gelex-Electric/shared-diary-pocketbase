@@ -27,6 +27,11 @@
  * thì sửa loại theo HSN. Lý do: 34 điểm đo ghi nhu cầu = vật tư đang gắn sẵn (26/10)
  * nên quy cách chưa gắn (vd TI của 8 điểm đo SINTEC) không có trong nhu cầu.
  *
+ * `--hung-plan` (user yêu cầu 27/10/2026 — "điểm đo chưa điền ngày treo đưa hết vào
+ * nhu cầu"): điểm đo ĐÃ TREO, chưa có nhu cầu, nhưng còn vật tư gắn thêm CHƯA ngày
+ * treo (vd SIM bổ sung) ⇒ nhu cầu = vật tư ĐANG TREO + vật tư chưa treo, gom theo quy
+ * cách. Tính cả phần đang treo để phần đó không bị coi là thừa khi đối chiếu.
+ *
  * PC có proxy SSL: đọc tự chuyển sang curl nhưng lệnh PATCH dùng `fetch` ⇒ thêm
  * `NODE_EXTRA_CA_CERTS=%TEMP%\corp-ca.pem` (đã chạy thật 26/10/2026: 34/34 điểm đo).
  */
@@ -35,6 +40,7 @@ import { pbLogin, allOf, PB_URL, ymd } from './lib/pb_meters.mjs';
 const COMMIT = process.argv.includes('--commit');
 const EMPTY = process.argv.includes('--empty');
 const FILL = process.argv.includes('--fill');
+const HUNG_PLAN = process.argv.includes('--hung-plan');
 
 /** Bộ nhu cầu chuẩn — CHÉP luật `defaultNeed` (supply.ts); sửa luật thì sửa cả hai. */
 function defaultNeed(p) {
@@ -60,6 +66,24 @@ const bySerial = new Map(devices.map(d => [String(d.serial).trim(), d]));
 const HAS_RATIO = ['TI', 'TU'];
 const ORDER = ['TI', 'TU', 'CONGTO', 'GP03', 'SIM', 'KHAC'];
 
+/** Gom lần lắp thành dòng nhu cầu theo quy cách (loại + tỷ số TI/TU + hình dạng TI). */
+function groupNeed(rows) {
+  const groups = new Map();
+  for (const a of rows) {
+    const d = (a.device && byId.get(a.device)) || bySerial.get(String(a.serial ?? '').trim());
+    const type = d?.type ?? a.type;
+    const line = { type };
+    if (HAS_RATIO.includes(type)) {
+      const rp = d?.ratio_primary ?? a.ratio_primary, rs = d?.ratio_secondary ?? a.ratio_secondary;
+      if (rp > 0) { line.ratio_primary = rp; if (rs > 0) line.ratio_secondary = rs; }
+    }
+    if (type === 'TI' && d?.shape) line.shape = d.shape;
+    const key = JSON.stringify(line);
+    groups.set(key, { ...line, qty: (groups.get(key)?.qty ?? 0) + 1 });
+  }
+  return [...groups.values()].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type));
+}
+
 const textOf = need => need.map(n => `${n.qty}×${n.type}${n.ratio_primary ? ` ${n.ratio_primary}/${n.ratio_secondary ?? ''}` : ''}`
   + `${n.shape ? ` ${n.shape}` : ''}${n.meter_kind ? ` ${n.meter_kind}` : ''}`).join(', ');
 const plan = [];
@@ -67,7 +91,15 @@ let skipHung = 0, skipHasNeed = 0, skipEmpty = 0, noHsn = [];
 
 for (const p of points) {
   const mine = assets.filter(a => a.point === p.id);
-  if (mine.some(a => a.type === 'CONGTO' && ymd(a.date_on))) { skipHung++; continue; }
+  if (mine.some(a => a.type === 'CONGTO' && ymd(a.date_on))) {
+    const live = mine.filter(a => !ymd(a.date_off));
+    const hasPlan = live.some(a => !ymd(a.date_on));
+    const hasNeed = Array.isArray(p.need) && p.need.length;
+    if (!HUNG_PLAN || !hasPlan || hasNeed) { skipHung++; continue; }
+    const need = groupNeed(live);
+    plan.push([p.id, need, `${p.code ?? p.id} (đã treo, có vật tư gắn thêm chưa treo): ${textOf(need)}`]);
+    continue;
+  }
   if (Array.isArray(p.need) && p.need.length) {
     if (!FILL) { skipHasNeed++; continue; }
     const std = defaultNeed(p);
@@ -100,20 +132,7 @@ for (const p of points) {
     continue;
   }
 
-  const groups = new Map();
-  for (const a of live) {
-    const d = (a.device && byId.get(a.device)) || bySerial.get(String(a.serial ?? '').trim());
-    const type = d?.type ?? a.type;
-    const line = { type };
-    if (HAS_RATIO.includes(type)) {
-      const rp = d?.ratio_primary ?? a.ratio_primary, rs = d?.ratio_secondary ?? a.ratio_secondary;
-      if (rp > 0) { line.ratio_primary = rp; if (rs > 0) line.ratio_secondary = rs; }
-    }
-    if (type === 'TI' && d?.shape) line.shape = d.shape;
-    const key = JSON.stringify(line);
-    groups.set(key, { ...line, qty: (groups.get(key)?.qty ?? 0) + 1 });
-  }
-  const need = [...groups.values()].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type));
+  const need = groupNeed(live);
   plan.push([p.id, need, `${p.code ?? p.id}: ${textOf(need)}`]);
 }
 

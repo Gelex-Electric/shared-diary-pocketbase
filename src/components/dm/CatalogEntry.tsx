@@ -1165,11 +1165,17 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
    */
   const isNeedRow = (r: AssetRow) => !!r.id
     && !((d?.assets ?? []).find(a => a.id === r.id)?.date_on ?? '').slice(0, 10);
-  /** Dòng THÊM MỚI ở form là treo thực tế ⇒ bắt buộc ngày treo. */
+  /**
+   * Phần TREO THÁO bắt buộc ngày treo (user chốt 27/10/2026): dòng thêm mới, và dòng
+   * đã treo bị xoá ngày treo, đều chặn — dòng chưa ngày treo chỉ thuộc phần nhu cầu.
+   */
   const treoBlocks = pForm.assetRows
-    .filter(r => !r.id && r.serial.trim() && !r.dateOn.trim())
-    .map(r => `${r.serial.trim()}: thêm ở đây là TREO thực tế nên phải có ngày treo `
+    .filter(r => !isNeedRow(r) && r.serial.trim() && !r.dateOn.trim())
+    .map(r => `${r.serial.trim()}: phần treo tháo phải có ngày treo `
       + `(gắn số No dự kiến là việc của Nhóm Vật Tư ở màn Gắn vật tư dự kiến)`);
+  /** Bảng TREO THÁO chỉ hiện dòng có ngày treo / dòng mới; dòng dự kiến hiện ở phần nhu cầu. */
+  const treoRows = pForm.assetRows.filter(r => !isNeedRow(r));
+  const needRows = pForm.assetRows.filter(isNeedRow);
 
   /** Mọi thứ CHẶN lưu điểm đo: HSN + đụng độ số chế tạo + thiếu/sai tỷ số + dòng mới thiếu ngày treo. */
   const saveBlocks = [...hsnBlocks, ...serialBlocks, ...ratioBlocks, ...treoBlocks];
@@ -2934,6 +2940,23 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
               hsn={manualHsn} connection={connectionOfHsn(manualHsn)}
               allocated={editingId ? liveFirst(d?.assets ?? [], editingId) : undefined}
               devices={d?.devices ?? []} />
+            {/* Số No Vật Tư đã gắn dự kiến — thuộc phần NHU CẦU, chưa treo (treo ở màn Treo tháo). */}
+            {needRows.length > 0 && (
+              <div className="rounded-lg border border-[var(--border)] bg-subtle px-4 py-3 text-[12px]">
+                <p className="mb-2 font-bold uppercase tracking-wide text-dim">
+                  Vật tư dự kiến đã gắn ({needRows.length}) — chưa treo
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {needRows.map(r => (
+                    <span key={r.key} className="rounded-md border border-[var(--border)] bg-surface px-2 py-1">
+                      {r.type ? ASSET_LABEL[r.type as AssetType] : '—'}{' '}
+                      <b className="font-mono text-ink">{r.serial}</b>{r.ratio ? ` · ${r.ratio}` : ''}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-2 text-faint">Treo thực tế thì ghi ở màn Treo tháo — số No khác đề xuất sẽ tự trả kho.</p>
+              </div>
+            )}
 
             {/* Gợi ý bộ TI/TU trong kho khớp HSN — chỉ khi đo gián tiếp (HSN > 1). */}
             {manualHsn != null && manualHsn > 1 && (hsnMismatch || !hasTi) && (
@@ -2966,12 +2989,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
             <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-dim">
-                  <Package className="h-4 w-4" /> Vật tư gắn ở điểm đo
+                  <Package className="h-4 w-4" /> Treo tháo — vật tư thực tế ở điểm đo
                 </p>
                 <span className="text-[11px] text-faint">
-                  {pForm.assetRows.length} thiết bị
-                  {pForm.assetRows.some(r => !r.active) &&
-                    ` · ${pForm.assetRows.filter(r => r.active).length} đang hoạt động`}
+                  {treoRows.length} thiết bị · bắt buộc ngày treo
+                  {treoRows.some(r => !r.active) &&
+                    ` · ${treoRows.filter(r => r.active).length} đang hoạt động`}
                 </span>
               </div>
               {/* Chú giải icon ở ô chọn Số No. */}
@@ -3007,13 +3030,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {pForm.assetRows.length === 0 ? (
+                    {treoRows.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-4 py-8 text-center text-[13px] italic text-faint">
-                          Chưa khai thiết bị nào — bấm "Thêm dòng" bên dưới.
+                          Chưa treo thiết bị nào — treo thực tế thì bấm "Thêm dòng" và khai ngày treo.
                         </td>
                       </tr>
-                    ) : pForm.assetRows.map(r => (
+                    ) : treoRows.map(r => (
                       // Dòng đã ngưng hoạt động làm mờ đi — vẫn sửa được, chỉ
                       // để mắt nhận ra ngay đâu là thiết bị đang treo.
                       <tr key={r.key} className={r.active ? '' : 'opacity-60'}>
