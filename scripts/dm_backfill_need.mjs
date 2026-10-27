@@ -21,6 +21,12 @@
  *
  * Mặc định DRY-RUN. `--commit` mới ghi. Ghi tuần tự, lỗi thì dừng và báo đã ghi tới đâu.
  *   railway run -- node scripts/dm_backfill_need.mjs [--commit]
+ * `--fill` (user chốt 27/10/2026): điểm đo ĐÃ CÓ nhu cầu nhưng thiếu so với BỘ CHUẨN
+ * theo HSN ⇒ BÙ dòng còn thiếu (3 TI nếu HSN > 1, công tơ, GP-03, SIM), dòng đã có
+ * giữ nguyên số lượng. Dòng công tơ ghi loại ngược với HSN hiện tại (vd HSN đổi 1 → 500)
+ * thì sửa loại theo HSN. Lý do: 34 điểm đo ghi nhu cầu = vật tư đang gắn sẵn (26/10)
+ * nên quy cách chưa gắn (vd TI của 8 điểm đo SINTEC) không có trong nhu cầu.
+ *
  * PC có proxy SSL: đọc tự chuyển sang curl nhưng lệnh PATCH dùng `fetch` ⇒ thêm
  * `NODE_EXTRA_CA_CERTS=%TEMP%\corp-ca.pem` (đã chạy thật 26/10/2026: 34/34 điểm đo).
  */
@@ -28,6 +34,7 @@ import { pbLogin, allOf, PB_URL, ymd } from './lib/pb_meters.mjs';
 
 const COMMIT = process.argv.includes('--commit');
 const EMPTY = process.argv.includes('--empty');
+const FILL = process.argv.includes('--fill');
 
 /** Bộ nhu cầu chuẩn — CHÉP luật `defaultNeed` (supply.ts); sửa luật thì sửa cả hai. */
 function defaultNeed(p) {
@@ -61,7 +68,29 @@ let skipHung = 0, skipHasNeed = 0, skipEmpty = 0, noHsn = [];
 for (const p of points) {
   const mine = assets.filter(a => a.point === p.id);
   if (mine.some(a => a.type === 'CONGTO' && ymd(a.date_on))) { skipHung++; continue; }
-  if (Array.isArray(p.need) && p.need.length) { skipHasNeed++; continue; }
+  if (Array.isArray(p.need) && p.need.length) {
+    if (!FILL) { skipHasNeed++; continue; }
+    const std = defaultNeed(p);
+    if (!std) { noHsn.push(p.code ?? p.id); continue; }
+    const conn = Number(p.hsn) === 1 ? 'truc_tiep' : 'gian_tiep';
+    const next = p.need.map(n => ({ ...n }));
+    const notes = [];
+    for (const n of next) {
+      if (n.type === 'CONGTO' && n.meter_kind && n.meter_kind !== conn) {
+        notes.push(`công tơ ${n.meter_kind} → ${conn}`); n.meter_kind = conn;
+      }
+    }
+    for (const want of std) {
+      const have = next.filter(n => n.type === want.type).reduce((s, n) => s + (Number(n.qty) || 0), 0);
+      if (have >= want.qty) continue;
+      next.push({ ...want, qty: want.qty - have });
+      notes.push(`+${want.qty - have} ${want.type}`);
+    }
+    if (!notes.length) { skipHasNeed++; continue; }
+    next.sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type));
+    plan.push([p.id, next, `${p.code ?? p.id} (HSN ${p.hsn}): ${notes.join(', ')} ⇒ ${textOf(next)}`]);
+    continue;
+  }
   const live = mine.filter(a => !ymd(a.date_off));
   if (!live.length) {
     if (!EMPTY) { skipEmpty++; continue; }
