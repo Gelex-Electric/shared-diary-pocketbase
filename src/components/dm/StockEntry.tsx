@@ -202,7 +202,7 @@ export default function StockEntry() {
   };
 
   /* ------------------- THÊM MỚI: bảng nhiều dòng + dán ------------------- */
-  /* Hộp đã tách ra `AddStockModal` (26/10/2026) để màn Đặt mua dùng lại khi nhận hàng. */
+  /* Hộp `AddStockModal` — cách DUY NHẤT khai thêm vật tư ("Thêm từ danh sách", user chốt 27/10/2026). */
   const openAddMany = () => setModal('add');
 
   /* ------------------- gắn nhiều thiết bị vào điểm đo ------------------- */
@@ -329,7 +329,7 @@ export default function StockEntry() {
           {/* MỘT nút cho cả thêm lẻ lẫn nhập lô (dán Excel) — 28/09/2026. */}
           <button onClick={openAddMany}
             className="flex flex-1 items-center justify-center gap-2 vl-btn vl-btn-primary md:flex-none">
-            <Plus className="h-5 w-5" /> Thêm mới
+            <Plus className="h-5 w-5" /> Thêm từ danh sách
           </button>
         </div>
       </div>

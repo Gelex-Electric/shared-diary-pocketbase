@@ -45,12 +45,12 @@ interface Row { p: Point; s: PointSupply; zone?: string; borrowed: number }
 
 type View = 'can' | 'cho_treo' | 'all';
 const VIEW_STATES: Record<View, SupplyState[]> = {
-  can: ['thieu', 'cho_hang'],
+  can: ['thieu'],
   cho_treo: ['cho_treo'],
-  all: ['thieu', 'cho_hang', 'cho_treo', 'du'],
+  all: ['thieu', 'cho_treo', 'du'],
 };
 const STATE_CLS: Partial<Record<SupplyState, string>> = {
-  chua_khai: 'vl-badge-danger', thieu: 'vl-badge-warning', cho_hang: 'vl-badge-info',
+  chua_khai: 'vl-badge-danger', thieu: 'vl-badge-warning',
   cho_treo: 'vl-badge-primary', du: 'vl-badge-success',
 };
 const isHungRow = (a: { date_on?: string; date_off?: string }) =>
@@ -99,7 +99,7 @@ export default function SupplyAllocate() {
         || (a.p.code ?? '').localeCompare(b.p.code ?? ''));
   }, [d, borrowed, view]);
   const viewOpts = [
-    { value: 'can', label: 'Cần gắn (thiếu / chờ hàng)' },
+    { value: 'can', label: 'Cần gắn (thiếu vật tư)' },
     { value: 'cho_treo', label: 'Đã gắn đủ — chờ treo' },
     { value: 'all', label: 'Tất cả điểm đo có nhu cầu' },
   ];
@@ -261,7 +261,7 @@ export default function SupplyAllocate() {
           </p>
 
           <PickTable title={`Trong kho (${fromStock.length})`} picked={picked} onToggle={toggle}
-            empty="Kho không còn thiết bị rảnh khớp quy cách này — cần đặt mua."
+            empty="Kho không còn thiết bị rảnh khớp quy cách này — nhập thêm ở Kho vật tư."
             rows={fromStock.map(c => ({ device: c.device, match: c.match }))} />
 
           <PickTable title={`Mượn từ điểm đo khác (${fromBorrow.length})`} picked={picked} onToggle={toggle}

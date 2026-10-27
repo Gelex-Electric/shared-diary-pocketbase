@@ -6,10 +6,9 @@
  *   - van_hanh  : chính là màn Chờ treo (`HangPoints`).
  * Thanh số liệu trên cùng cho mọi nhóm thấy cả luồng đang dồn ở bước nào.
  */
-import { ClipboardList, PackageSearch, Truck, Wrench, CheckCircle2, ArrowRight } from 'lucide-react';
+import { ClipboardList, PackageSearch, Wrench, CheckCircle2, ArrowRight } from 'lucide-react';
 import { StatTile, EmptyState } from '../ui/dashboard';
 import HangPoints from './HangPoints';
-import { dmy } from '../../lib/dm/lifecycle';
 import { openBorrowsByPoint, type SupplyTasks as Tasks } from '../../lib/dm/supply';
 import type { CatalogData } from '../../lib/dm/repo';
 import type { Point } from '../../lib/dm/types';
@@ -40,18 +39,15 @@ export default function SupplyTasks({ group, tasks, data, onNavigate, onChanged 
         {/* Kinh Doanh: mục "Treo tháo" trong Quản lý vật tư thiết bị điện (27/10/2026). */}
         <h2 className="text-2xl font-bold text-ink">{group === 'kinh_doanh' ? 'Treo tháo' : 'Việc cần làm'}</h2>
         <p className="mt-1 text-sm text-soft">
-          Kinh Doanh khai nhu cầu → Vật Tư gắn vật tư dự kiến / đặt mua → Kinh Doanh, Vận Hành ghi treo tháo
+          Kinh Doanh khai nhu cầu → Vật Tư gắn vật tư dự kiến → Kinh Doanh, Vận Hành ghi treo tháo
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile label="Chưa khai nhu cầu" value={t?.chuaKhai.length ?? '…'} icon={ClipboardList}
           tone={t?.chuaKhai.length ? 'warn' : 'neutral'} loading={!t} sub="Kinh Doanh" />
         <StatTile label="Thiếu vật tư" value={t?.thieu.length ?? '…'} icon={PackageSearch}
           tone={t?.thieu.length ? 'warn' : 'neutral'} loading={!t} sub="Vật Tư (kể cả treo bổ sung)" />
-        <StatTile label="Chờ hàng về" value={t?.choHang.length ?? '…'} icon={Truck}
-          tone={t?.lateOrders.length ? 'bad' : 'neutral'} loading={!t}
-          sub={t?.lateOrders.length ? `${t.lateOrders.length} đơn trễ` : 'Vật Tư'} />
         <StatTile label="Chờ treo" value={t?.choTreo.length ?? '…'} icon={Wrench} tone="neutral"
           loading={!t} sub="Kinh Doanh + Vận Hành" />
       </div>
@@ -65,21 +61,8 @@ export default function SupplyTasks({ group, tasks, data, onNavigate, onChanged 
 
       {t && group === 'vat_tu' && (<>
         <PointList title={`Điểm đo thiếu vật tư (${t.thieu.length})`} points={t.thieu} borrowed={borrowed}
-          hint="Gắn số No dự kiến từ kho hoặc mượn của điểm đo khác; kho không còn thì đặt mua."
+          hint="Gắn số No dự kiến từ kho hoặc mượn của điểm đo khác."
           action={go('supply-alloc', 'Gắn vật tư dự kiến')} empty="Không có điểm đo nào thiếu vật tư." />
-        {t.lateOrders.length > 0 && (
-          <div className="vl-card space-y-2 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-bold text-ink">Đơn mua trễ hẹn ({t.lateOrders.length})</p>
-              {go('purchase', 'Đặt mua vật tư')}
-            </div>
-            <div className="flex flex-wrap gap-2 text-[13px]">
-              {t.lateOrders.map(o => (
-                <span key={o.id} className="vl-badge-danger">{o.code} · hẹn {dmy(o.expected_at)}</span>
-              ))}
-            </div>
-          </div>
-        )}
         {t.tiNoShape > 0 && (
           <div className="vl-alert vl-alert-light-warning flex flex-wrap items-center justify-between gap-2 text-[12px]">
             <span><b>{t.tiNoShape}</b> TI chưa khai hình dạng (tròn/vuông) — khai dần ở Kho vật tư (lọc TI → “Chưa rõ hình dạng”).</span>

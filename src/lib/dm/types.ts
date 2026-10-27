@@ -247,37 +247,13 @@ export interface Device extends PbRecord {
   batch?: string;
   /** Hình dạng TI (tròn/vuông). Trống = chưa rõ — 501 TI có từ trước 26/10/2026. */
   shape?: TiShape | '';
-  /** Dòng đơn mua mà thiết bị này về theo (`dm_purchase_line`). */
+  /** ĐÃ BỎ 27/10/2026 cùng tính năng đặt mua — trường còn trong PB, app không dùng. */
   purchase_line?: string;
   /**
    * Loại CÔNG TƠ (schema v24, user chốt 26/10/2026): `truc_tiep` cho điểm đo
    * KHÔNG có TI, `gian_tiep` cho điểm đo qua TI. Trống = chưa rõ. Chỉ CONGTO.
    */
   meter_kind?: Connection | '';
-  note?: string;
-}
-
-/** ĐƠN MUA vật tư (`dm_purchase`). Trạng thái SUY RA từ số đã nhận, không lưu. */
-export interface Purchase extends PbRecord {
-  code: string;
-  ordered_at?: string;
-  supplier?: string;
-  expected_at?: string;
-  cancelled?: boolean;
-  note?: string;
-}
-
-/** Một dòng của đơn mua. Đã nhận = số `dm_device` có `purchase_line` trỏ về dòng này. */
-export interface PurchaseLine extends PbRecord {
-  purchase: string;
-  type: AssetType;
-  ratio_primary?: number | null;
-  ratio_secondary?: number | null;
-  shape?: TiShape | '';
-  meter_kind?: Connection | '';
-  qty: number;
-  /** Mua cho điểm đo nào; trống = mua dự phòng. */
-  for_point?: string;
   note?: string;
 }
 

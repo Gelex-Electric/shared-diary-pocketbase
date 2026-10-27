@@ -5,7 +5,6 @@
  * Nhóm này chỉ lo khai vật tư vào danh mục, nên chỉ có một nhóm menu
  * "Quản lý vật tư thiết bị điện":
  *  - Gắn vật tư dự kiến (`SupplyAllocate`): gắn số No vào nhu cầu KD đã khai / mượn (điểm đo hai phần, 27/10/2026).
- *  - Đặt mua vật tư (`PurchaseManager`, 26/10/2026): cần mua theo quy cách, đơn mua, nhận hàng.
  *  - Danh mục vật tư theo điểm đo: cây KCN → Lộ → Trạm → Điểm đo (chỉ xem — `DataTree` không ghi).
  *  - Quản lý chung (`CatalogEntry`): CHỈ tab Kho vật tư (toàn quyền) + Rà soát vòng đời (chỉ tra cứu).
  *
@@ -25,22 +24,19 @@ import { motion, AnimatePresence } from 'motion/react';
 import GeneralManagement from '../dm/GeneralManagement';
 import CatalogEntry, { type CatTab } from '../dm/CatalogEntry';
 import SupplyAllocate from '../dm/SupplyAllocate';
-import PurchaseManager from '../dm/PurchaseManager';
 import ThemeToggle from '../ui/ThemeToggle';
 import { GROUP_LABEL } from '../../lib/userGroup';
 
-type Tab = 'tasks' | 'supply-alloc' | 'purchase' | 'dm-general' | 'dm-catalog';
+type Tab = 'tasks' | 'supply-alloc' | 'dm-general' | 'dm-catalog';
 
 const TAB_LABEL: Record<Tab, string> = {
   tasks: 'Việc cần làm',
   'supply-alloc': 'Gắn vật tư dự kiến',
-  purchase: 'Đặt mua vật tư',
   'dm-general': 'Danh mục vật tư theo điểm đo',
   'dm-catalog': 'Quản lý chung',
 };
 const NAV: { id: Tab; label: string }[] = [
   { id: 'supply-alloc', label: TAB_LABEL['supply-alloc'] },
-  { id: 'purchase', label: TAB_LABEL.purchase },
   { id: 'dm-general', label: TAB_LABEL['dm-general'] },
   { id: 'dm-catalog', label: TAB_LABEL['dm-catalog'] },
 ];
@@ -251,8 +247,6 @@ export default function MaterialDashboard() {
                 onNavigate={tab => setTopTab(tab as Tab)} />
             ) : topTab === 'supply-alloc' ? (
               <SupplyAllocate />
-            ) : topTab === 'purchase' ? (
-              <PurchaseManager />
             ) : topTab === 'dm-general' ? (
               <GeneralManagement scope="vanphong" />
             ) : (

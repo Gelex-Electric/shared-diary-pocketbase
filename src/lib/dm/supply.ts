@@ -17,7 +17,7 @@
 import { formatRatio } from './hsn';
 import { TI_PER_SET } from './pointStatus';
 import type {
-  Asset, AssetType, Borrow, Connection, Device, NeedLine, Point, PurchaseLine, Purchase, TiShape,
+  Asset, AssetType, Borrow, Connection, Device, NeedLine, Point, TiShape,
 } from './types';
 import { DEFAULT_TI_SHAPE } from './types';
 
@@ -170,27 +170,6 @@ export function supplyOfPoint(need: NeedLine[], assets: Asset[], devices: Device
   return out;
 }
 
-/* ------------------------------ đơn mua ------------------------------ */
-
-/** Số thiết bị đã nhận theo từng dòng đơn mua. */
-export function receivedByLine(devices: Device[]): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const d of devices) if (d.purchase_line) m.set(d.purchase_line, (m.get(d.purchase_line) ?? 0) + 1);
-  return m;
-}
-
-/** Dòng đơn còn CHỜ HÀNG (đơn chưa hủy, chưa nhận đủ) — kèm số còn chờ. */
-export function openPurchaseLines(
-  purchases: Purchase[], lines: PurchaseLine[], devices: Device[],
-): { line: PurchaseLine; pending: number }[] {
-  const live = new Set(purchases.filter(p => !p.cancelled).map(p => p.id));
-  const got = receivedByLine(devices);
-  return lines
-    .filter(l => live.has(l.purchase))
-    .map(line => ({ line, pending: line.qty - (got.get(line.id) ?? 0) }))
-    .filter(x => x.pending > 0);
-}
-
 /* ------------------------- trạng thái quy trình ------------------------- */
 
 /**
@@ -201,18 +180,16 @@ export function openPurchaseLines(
  *
  *   chua_khai   chưa khai nhu cầu, chưa từng treo             → việc Kinh Doanh
  *   thieu       còn thiếu, đơn mua chưa phủ                   → việc Vật Tư
- *   cho_hang    phần thiếu nằm trong đơn mua chưa về          → Vật Tư theo dõi
  *   cho_treo    đủ quy cách nhưng còn dòng chưa treo          → việc Kinh Doanh + Vận Hành
  *   du          đang treo đáp ứng đủ nhu cầu                  → xong
  *   ngoai_luong đã từng treo và KHÔNG có nhu cầu (điểm đo cũ) → không xét
  * Điểm đo đã treo VẪN trong luồng nếu có nhu cầu mà treo thực tế chưa đủ ⇒ treo bổ sung.
  */
-export type SupplyState = 'chua_khai' | 'thieu' | 'cho_hang' | 'cho_treo' | 'du' | 'ngoai_luong';
+export type SupplyState = 'chua_khai' | 'thieu' | 'cho_treo' | 'du' | 'ngoai_luong';
 
 export const SUPPLY_STATE_LABEL: Record<SupplyState, string> = {
   chua_khai: 'Chưa khai nhu cầu',
   thieu: 'Thiếu vật tư',
-  cho_hang: 'Chờ hàng về',
   cho_treo: 'Chờ treo',
   du: 'Đã treo đủ',
   ngoai_luong: 'Điểm đo cũ',
@@ -244,8 +221,6 @@ export function everHung(assets: Asset[], pointId: string): boolean {
 export interface SupplyContext {
   assets: Asset[];
   devices: Device[];
-  purchases: Purchase[];
-  purchaseLines: PurchaseLine[];
 }
 
 const isPlanRow = (a: Asset) => !ymd(a.date_on) && !ymd(a.date_off);
@@ -270,18 +245,8 @@ export function pointSupply(p: Point, ctx: SupplyContext): PointSupply {
   if (missing === 0) {
     return { state: lines.some(l => l.have.some(isPlanRow)) ? 'cho_treo' : 'du', ...base };
   }
-
-  // Đơn mua có phủ hết phần thiếu không — chỉ tính dòng đơn ghi "cho điểm đo này".
-  const open = openPurchaseLines(ctx.purchases, ctx.purchaseLines, ctx.devices)
-    .filter(o => o.line.for_point === p.id);
-  const covered = lines.every(l => {
-    if (l.missing === 0) return true;
-    const onOrder = open
-      .filter(o => matchDevice({ ...o.line, shape: o.line.shape || '', meter_kind: o.line.meter_kind || '' }, l.line) !== 'no')
-      .reduce((s, o) => s + o.pending, 0);
-    return onOrder >= l.missing;
-  });
-  return { state: covered ? 'cho_hang' : 'thieu', ...base };
+  // Tính năng đặt mua đã gỡ (user chốt 27/10/2026) ⇒ còn thiếu là "thiếu", không còn "chờ hàng về".
+  return { state: 'thieu', ...base };
 }
 
 /* ------------------- đối chiếu nhu cầu ↔ treo thực tế ------------------- */
@@ -422,7 +387,7 @@ export function openBorrowsByPoint(borrows: Borrow[]): Map<string, number> {
   return m;
 }
 
-/* ---------------------------- đặt mua (đợt 3) ---------------------------- */
+/* ------------------------------ thiết bị rảnh ------------------------------ */
 
 /** Thiết bị RẢNH thật sự: chưa thanh lý, không treo, không dự kiến ở đâu, không giữ chỗ cho ai. */
 export function spareDevices(ctx: Pick<SupplyContext, 'assets' | 'devices'>): Device[] {
@@ -439,118 +404,15 @@ export function spareDevices(ctx: Pick<SupplyContext, 'assets' | 'devices'>): De
     && !taken.has(d.id) && !takenSerial.has(d.serial.trim()));
 }
 
-export interface NeedPoint { point: Point; missing: number; borrowed: boolean }
-
-export interface BuyRow {
-  key: string;
-  spec: Spec;
-  /** Tổng thiếu của các điểm đo (② + ③) theo quy cách này. */
-  missing: number;
-  /** Đã đặt, chưa về — trừ ra. */
-  onOrder: number;
-  /** Còn rảnh trong kho khớp quy cách — trừ ra (phân bổ là đủ, khỏi mua). */
-  inStock: number;
-  /** Số NÊN MUA = thiếu − đang đặt − tồn rảnh (≥ 0). */
-  toBuy: number;
-  points: NeedPoint[];
-}
-
-/**
- * DANH SÁCH CẦN MUA — gom phần thiếu của mọi điểm đo theo QUY CÁCH.
- *
- * Trừ dần theo thứ tự: quy cách CỤ THỂ trước (có tỷ số, có hình dạng) rồi mới
- * tới quy cách "bất kỳ", để một TI vuông 1000/5 đang về không bị đếm hai lần
- * cho cả dòng "TI vuông 1000/5" lẫn dòng "TI bất kỳ". Mỗi dòng đơn / thiết bị
- * rảnh chỉ trừ một lần.
- */
-export function purchaseNeeds(points: Point[], ctx: SupplyContext, borrowedPoints: Set<string> = new Set()): BuyRow[] {
-  const rows = new Map<string, BuyRow>();
-  for (const p of points) {
-    const s = pointSupply(p, ctx);
-    if (s.state !== 'thieu' && s.state !== 'cho_hang') continue;
-    for (const l of s.lines) {
-      if (!l.missing) continue;
-      const key = specKey(l.line);
-      const row = rows.get(key) ?? {
-        key, spec: {
-          type: l.line.type, ratio_primary: l.line.ratio_primary, ratio_secondary: l.line.ratio_secondary,
-          shape: l.line.shape, meter_kind: l.line.meter_kind,
-        },
-        missing: 0, onOrder: 0, inStock: 0, toBuy: 0, points: [],
-      };
-      row.missing += l.missing;
-      row.points.push({ point: p, missing: l.missing, borrowed: borrowedPoints.has(p.id) });
-      rows.set(key, row);
-    }
-  }
-
-  const weight = (s: Spec) => (s.ratio_primary != null ? 2 : 0) + (variantOf(s) ? 1 : 0);
-  const list = [...rows.values()].sort((a, b) => weight(b.spec) - weight(a.spec) || a.key.localeCompare(b.key));
-  const orders = openPurchaseLines(ctx.purchases, ctx.purchaseLines, ctx.devices).map(o => ({ ...o }));
-  const spare = spareDevices(ctx);
-  const usedSpare = new Set<string>();
-
-  for (const r of list) {
-    let need = r.missing;
-    // Đơn đang về: chỉ khớp CHẮC CHẮN (dòng đơn chưa ghi hình dạng thì không coi là vuông/tròn).
-    for (const o of orders) {
-      if (!need) break;
-      if (o.pending <= 0 || matchDevice({ ...o.line, shape: o.line.shape || '', meter_kind: o.line.meter_kind || '' }, r.spec) !== 'yes') continue;
-      const take = Math.min(need, o.pending);
-      o.pending -= take; r.onOrder += take; need -= take;
-    }
-    for (const d of spare) {
-      if (!need) break;
-      if (usedSpare.has(d.id) || matchDevice(d, r.spec) === 'no') continue;
-      usedSpare.add(d.id); r.inStock++; need--;
-    }
-    r.toBuy = need;
-  }
-  // Hiện theo: còn phải mua nhiều trước, rồi theo loại.
-  return list.sort((a, b) => b.toBuy - a.toBuy || a.key.localeCompare(b.key));
-}
-
-export type PurchaseState = 'huy' | 'da_dat' | 've_mot_phan' | 'du';
-export const PURCHASE_STATE_LABEL: Record<PurchaseState, string> = {
-  huy: 'Đã hủy', da_dat: 'Đã đặt', ve_mot_phan: 'Về một phần', du: 'Đã về đủ',
-};
-
-/** Trạng thái đơn — SUY RA từ số đã nhận, chỉ "hủy" là bấm tay. */
-export function purchaseState(p: Purchase, lines: PurchaseLine[], devices: Device[]): {
-  state: PurchaseState; ordered: number; received: number;
-} {
-  const mine = lines.filter(l => l.purchase === p.id);
-  const got = receivedByLine(devices);
-  const ordered = mine.reduce((s, l) => s + l.qty, 0);
-  const received = mine.reduce((s, l) => s + (got.get(l.id) ?? 0), 0);
-  if (p.cancelled) return { state: 'huy', ordered, received };
-  const short = mine.some(l => (got.get(l.id) ?? 0) < l.qty);
-  return { state: received === 0 ? 'da_dat' : short ? 've_mot_phan' : 'du', ordered, received };
-}
-
-/** Mã đơn tiếp theo trong năm: `DM-2026-001`, `DM-2026-002`… */
-export function nextPurchaseCode(purchases: Purchase[], year = new Date().getFullYear()): string {
-  const prefix = `DM-${year}-`;
-  const max = purchases
-    .map(p => (p.code.startsWith(prefix) ? parseInt(p.code.slice(prefix.length), 10) : 0))
-    .filter(Number.isFinite)
-    .reduce((a, b) => Math.max(a, b), 0);
-  return `${prefix}${String(max + 1).padStart(3, '0')}`;
-}
-
 /* -------------------------- việc cần làm (đợt 4) -------------------------- */
 
 export interface SupplyTasks {
   /** Kinh Doanh: điểm đo mới chưa khai nhu cầu. */
   chuaKhai: Point[];
-  /** Vật Tư: điểm đo còn thiếu (kể cả đã treo cần bổ sung), đơn mua chưa phủ. */
+  /** Vật Tư: điểm đo còn thiếu (kể cả đã treo cần bổ sung) — gắn vật tư dự kiến. */
   thieu: Point[];
-  /** Vật Tư theo dõi: điểm đo chờ hàng về. */
-  choHang: Point[];
   /** Kinh Doanh + Vận Hành: điểm đo đủ quy cách, còn dòng chưa treo. */
   choTreo: Point[];
-  /** Đơn mua quá ngày dự kiến về mà chưa về đủ. */
-  lateOrders: Purchase[];
   /** TI còn dùng được chưa khai hình dạng — chỉ để nhắc, KHÔNG đếm vào badge. */
   tiNoShape: number;
 }
@@ -558,36 +420,31 @@ export interface SupplyTasks {
 /**
  * Việc của cả ba nhóm, tính một lượt từ dữ liệu — không ai giao tay (user chốt
  * 26/10/2026). `inScope` lọc điểm đo theo KCN của người xem (Vận Hành).
+ * `today` giữ lại cho chữ ký cũ (trước dùng cho đơn mua trễ — đặt mua đã gỡ 27/10/2026).
  */
 export function supplyTasks(
-  points: Point[], ctx: SupplyContext, today: string, inScope: (p: Point) => boolean = () => true,
+  points: Point[], ctx: SupplyContext, _today: string, inScope: (p: Point) => boolean = () => true,
 ): SupplyTasks {
-  const t: SupplyTasks = { chuaKhai: [], thieu: [], choHang: [], choTreo: [], lateOrders: [], tiNoShape: 0 };
+  const t: SupplyTasks = { chuaKhai: [], thieu: [], choTreo: [], tiNoShape: 0 };
   for (const p of points) {
     if (!inScope(p)) continue;
     const st = pointSupply(p, ctx).state;
     if (st === 'chua_khai') t.chuaKhai.push(p);
     else if (st === 'thieu') t.thieu.push(p);
-    else if (st === 'cho_hang') t.choHang.push(p);
     else if (st === 'cho_treo') t.choTreo.push(p);
   }
   const byCode = (a: Point, b: Point) => (a.code ?? '').localeCompare(b.code ?? '');
-  for (const k of ['chuaKhai', 'thieu', 'choHang', 'choTreo'] as const) t[k].sort(byCode);
-  t.lateOrders = ctx.purchases.filter(po => {
-    if (!po.expected_at || ymd(po.expected_at) >= today) return false;
-    const s = purchaseState(po, ctx.purchaseLines, ctx.devices).state;
-    return s === 'da_dat' || s === 've_mot_phan';
-  });
+  for (const k of ['chuaKhai', 'thieu', 'choTreo'] as const) t[k].sort(byCode);
   t.tiNoShape = ctx.devices.filter(d => d.type === 'TI' && !d.shape && !ymd(d.liquidated_at)).length;
   return t;
 }
 
 /**
  * Số trên badge "Việc cần làm" của từng nhóm (phân việc user chốt lại 27/10/2026):
- * KD = chưa khai nhu cầu + chờ treo · VT = thiếu (gắn dự kiến) + đơn trễ · VH = chờ treo.
+ * KD = chưa khai nhu cầu + chờ treo · VT = thiếu (gắn dự kiến) · VH = chờ treo.
  */
 export function taskCount(t: SupplyTasks, group: 'van_hanh' | 'kinh_doanh' | 'vat_tu'): number {
   if (group === 'kinh_doanh') return t.chuaKhai.length + t.choTreo.length;
-  if (group === 'vat_tu') return t.thieu.length + t.lateOrders.length;
+  if (group === 'vat_tu') return t.thieu.length;
   return t.choTreo.length;
 }

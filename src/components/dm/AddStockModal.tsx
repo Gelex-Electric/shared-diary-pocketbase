@@ -1,11 +1,10 @@
 /**
- * Hộp "THÊM VẬT TƯ VÀO KHO" — một bảng mở rộng được hàng, dán cột số No từ
- * Excel (user chốt 28/09/2026). Tách khỏi `StockEntry.tsx` ngày 26/10/2026 để
- * màn Đặt mua dùng lại đúng hộp này khi NHẬN HÀNG (luồng cấp vật tư đợt 3).
+ * Hộp "THÊM VẬT TƯ TỪ DANH SÁCH" — CÁCH DUY NHẤT khai thêm vật tư vào kho (user
+ * chốt 27/10/2026, cùng lúc gỡ tính năng đặt mua). Một bảng mở rộng được hàng, dán
+ * cột số No từ Excel (user chốt 28/09/2026); tách khỏi `StockEntry.tsx` 26/10/2026.
  *
- * `preset` (nhận hàng theo dòng đơn mua): khoá loại / tỷ số / hình dạng theo
- * dòng đơn, gắn `purchase_line` cho mọi thiết bị tạo ra, và báo trước khi vượt
- * số còn chờ của dòng đơn. Không có `preset` thì hành xử y như trước.
+ * Mỗi dòng chọn được KIỂU: công tơ trực tiếp / gián tiếp, TI tròn / vuông (ô
+ * "Kiểu"); dòng không chọn thì theo ô chung phía trên.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, PackagePlus, Trash2 } from 'lucide-react';
@@ -13,9 +12,9 @@ import { Select } from '../ui/Select';
 import { DatePicker } from '../ui/DateTimePickers';
 import { toast } from '../../lib/toast';
 import { CellInput, Field, FormModal, TextInput } from './entryUi';
-import { METER_KIND_PICK } from './VariantCell';
+import VariantCell, { METER_KIND_PICK } from './VariantCell';
 import { devices as deviceRepo, pbErrorMessage } from '../../lib/dm/repo';
-import { formatRatio, parseRatio } from '../../lib/dm/hsn';
+import { parseRatio } from '../../lib/dm/hsn';
 import { findExisting, guessType, parsePaste, SERIAL_RE } from '../../lib/dm/stock';
 import {
   ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type AssetType, type Connection, type Device, type TiShape,
@@ -29,10 +28,14 @@ export const SHAPE_OPTS = [
 ];
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** Một dòng của bảng "Thêm mới". Loại/tỷ số trống = lấy theo ô chung. */
-interface AddRow { key: string; serial: string; type: AssetType | ''; ratio: string; model: string }
+/** Một dòng của bảng. Loại / tỷ số / kiểu trống = lấy theo ô chung. */
+interface AddRow {
+  key: string; serial: string; type: AssetType | ''; ratio: string; model: string;
+  shape: TiShape | ''; meterKind: Connection | '';
+}
 let addSeq = 0;
-const newAddRow = (): AddRow => ({ key: `a${++addSeq}`, serial: '', type: '', ratio: '', model: '' });
+const newAddRow = (): AddRow =>
+  ({ key: `a${++addSeq}`, serial: '', type: '', ratio: '', model: '', shape: '', meterKind: '' });
 
 /** Tách `200/5` thành hai số; ô trống/sai ⇒ `undefined` (không ghi 0). */
 const ratioOf = (s: string) => {
@@ -40,59 +43,33 @@ const ratioOf = (s: string) => {
   return { ratio_primary: primary ?? undefined, ratio_secondary: secondary ?? undefined };
 };
 
-export interface StockPreset {
-  type: AssetType;
-  ratio_primary?: number | null;
-  ratio_secondary?: number | null;
-  shape?: TiShape | '';
-  /** Loại công tơ của dòng đơn (chỉ CONGTO). */
-  meterKind?: Connection | '';
-  /** Gắn vào mọi thiết bị tạo ra (`dm_device.purchase_line`). */
-  purchaseLine?: string;
-  /** Số còn chờ của dòng đơn — vượt thì nhắc, không chặn (giao thừa vẫn nhập được). */
-  pending?: number;
-  /** Mã lô điền sẵn (vd mã đơn mua). */
-  batch?: string;
-  /** "Dành cho" điền sẵn. */
-  holdNote?: string;
-}
-
-export default function AddStockModal({ open, onClose, devices, onSaved, title, preset }: {
+export default function AddStockModal({ open, onClose, devices, onSaved }: {
   open: boolean;
   onClose: () => void;
   /** Thiết bị đang có — để báo dòng nào đã có trong kho. */
   devices: Device[];
   /** Gọi sau khi ghi (kể cả dừng giữa chừng) với các thiết bị ĐÃ tạo. */
   onSaved: (created: Device[]) => void | Promise<void>;
-  title?: string;
-  preset?: StockPreset;
 }) {
   const [saving, setSaving] = useState(false);
   const [addRows, setAddRows] = useState<AddRow[]>([]);
   const [addType, setAddType] = useState<AssetType | ''>('');
   const [addRatio, setAddRatio] = useState('');
-  /** Hình dạng chung cho các dòng TI của lô — lô hàng về thường cùng một kiểu. */
-  const [addShape, setAddShape] = useState<TiShape | ''>('');
-  /** Loại chung cho các dòng công tơ của lô (trực tiếp / gián tiếp — schema v24). */
+  /** Hình dạng chung cho các dòng TI — mặc định tròn (vuông là ngoại lệ). */
+  const [addShape, setAddShape] = useState<TiShape | ''>(DEFAULT_TI_SHAPE);
+  /** Loại chung cho các dòng công tơ (trực tiếp / gián tiếp — schema v24). */
   const [addKind, setAddKind] = useState<Connection | ''>('');
   const [addBatch, setAddBatch] = useState('');
   const [addDate, setAddDate] = useState(today());
   const [addHold, setAddHold] = useState('');
-  const locked = !!preset;
 
-  // Mở hộp là làm mới toàn bộ — preset điền sẵn các ô chung.
+  // Mở hộp là làm mới toàn bộ.
   useEffect(() => {
     if (!open) return;
     setAddRows([newAddRow(), newAddRow(), newAddRow()]);
-    setAddType(preset?.type ?? '');
-    setAddRatio(preset ? formatRatio(preset.ratio_primary, preset.ratio_secondary) : '');
-    // Nhận hàng theo đơn: theo dòng đơn; nhập thường: mặc định tròn (vuông là ngoại lệ).
-    setAddShape(preset ? (preset.shape ?? '') : DEFAULT_TI_SHAPE);
-    setAddKind(preset?.meterKind ?? '');
-    setAddBatch(preset?.batch ?? '');
-    setAddDate(today());
-    setAddHold(preset?.holdNote ?? '');
-  }, [open, preset]);
+    setAddType(''); setAddRatio(''); setAddShape(DEFAULT_TI_SHAPE); setAddKind('');
+    setAddBatch(''); setAddDate(today()); setAddHold('');
+  }, [open]);
 
   const setAddRow = (key: string, patch: Partial<AddRow>) =>
     setAddRows(rs => rs.map(r => (r.key === key ? { ...r, ...patch } : r)));
@@ -112,11 +89,8 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
       let i = at;
       for (const p of got) {
         while (i < next.length && i !== at && next[i].serial.trim()) i++;
-        // Nhận hàng theo đơn: quy cách đã khoá, bỏ loại/tỷ số đoán từ cột dán.
-        const fill = locked
-          ? { serial: p.serial }
-          : { serial: p.serial, ratio: p.ratio, type: guessType(p.serial) ?? '' as AssetType | '' };
-        if (i < next.length) next[i] = { ...next[i], ...fill, type: ('type' in fill && fill.type) || next[i].type };
+        const fill = { serial: p.serial, ratio: p.ratio, type: guessType(p.serial) ?? '' as AssetType | '' };
+        if (i < next.length) next[i] = { ...next[i], ...fill, type: fill.type || next[i].type };
         else next.push({ ...newAddRow(), ...fill });
         i++;
       }
@@ -131,11 +105,12 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
 
   /**
    * Loại của từng dòng: chọn ở dòng > DẠNG SỐ khi chắc chắn (IMEI của GP-03,
-   * ICCID của SIM) > loại chung. Tỷ số: dòng > tỷ số chung. Có preset ⇒ theo preset.
+   * ICCID của SIM) > loại chung. Tỷ số, kiểu: dòng > ô chung.
    */
-  const typeOfAdd = (r: AddRow): AssetType | '' =>
-    locked ? preset!.type : (r.type || guessType(r.serial.trim()) || addType);
-  const ratioOfAdd = (r: AddRow) => (locked ? addRatio.trim() : (r.ratio.trim() || addRatio.trim()));
+  const typeOfAdd = (r: AddRow): AssetType | '' => r.type || guessType(r.serial.trim()) || addType;
+  const ratioOfAdd = (r: AddRow) => (r.ratio.trim() || addRatio.trim());
+  const shapeOfAdd = (r: AddRow): TiShape | '' => r.shape || addShape;
+  const kindOfAdd = (r: AddRow): Connection | '' => r.meterKind || addKind;
 
   /** Tình trạng từng dòng — hiện ngay trong bảng, như bản xem trước cũ. */
   const addState = (r: AddRow, i: number): { kind: 'empty' | 'new' | 'dup' | 'bad'; text: string } => {
@@ -148,13 +123,13 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
     const t = typeOfAdd(r);
     if (!t) return { kind: 'bad', text: 'chưa chọn loại' };
     if (HAS_RATIO.includes(t) && !ratioOfAdd(r)) return { kind: 'bad', text: 'thiếu tỷ số' };
+    if (t === 'CONGTO' && !kindOfAdd(r)) return { kind: 'bad', text: 'chưa chọn trực tiếp / gián tiếp' };
     return { kind: 'new', text: 'mới' };
   };
   const addStates = addRows.map((r, i) => addState(r, i));
   const addReady = addRows.filter((_, i) => addStates[i].kind === 'new');
   const addBad = addStates.filter(s => s.kind === 'bad').length;
   const addDup = addStates.filter(s => s.kind === 'dup').length;
-  const overPending = preset?.pending != null ? addReady.length - preset.pending : 0;
 
   const saveAdd = async () => {
     if (addBad) {
@@ -166,13 +141,13 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
     try {
       // Tuần tự: lỗi giữa chừng thì biết chính xác đã ghi tới đâu.
       for (const r of addReady) {
+        const t = typeOfAdd(r) as AssetType;
         const rec = await deviceRepo.create({
-          serial: r.serial.trim(), type: typeOfAdd(r) as AssetType,
+          serial: r.serial.trim(), type: t,
           ...ratioOf(ratioOfAdd(r)), model_desc: r.model.trim(),
-          shape: typeOfAdd(r) === 'TI' ? addShape : '',
-          meter_kind: typeOfAdd(r) === 'CONGTO' ? addKind : '',
+          shape: t === 'TI' ? shapeOfAdd(r) : '',
+          meter_kind: t === 'CONGTO' ? kindOfAdd(r) : '',
           date_in: addDate || '', batch: addBatch.trim(), hold_for_note: addHold.trim(),
-          ...(preset?.purchaseLine ? { purchase_line: preset.purchaseLine } : {}),
         });
         created.push(rec as unknown as Device);
       }
@@ -185,28 +160,23 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
   };
 
   return (
-    <FormModal open={open} title={title ?? 'Thêm vật tư vào kho'} wide
+    <FormModal open={open} title="Thêm vật tư từ danh sách" wide
       onClose={onClose} onSubmit={() => void saveAdd()} saving={saving}
       submitLabel={addReady.length ? `Ghi ${addReady.length} thiết bị` : 'Chưa có gì để ghi'}>
-      {/* Ô CHUNG: mặc định cho mọi dòng để trống loại / tỷ số. */}
+      {/* Ô CHUNG: mặc định cho mọi dòng để trống loại / tỷ số / kiểu. */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Field label={locked ? 'Loại (theo đơn mua)' : 'Loại chung'}
-          hint={locked ? undefined : 'Dòng nào chọn loại riêng thì theo dòng đó'}>
-          <Select value={addType} onChange={v => setAddType(v as AssetType)} disabled={locked}
+        <Field label="Loại chung" hint="Dòng nào chọn loại riêng thì theo dòng đó">
+          <Select value={addType} onChange={v => setAddType(v as AssetType)}
             options={TYPES.map(t => ({ value: t, label: ASSET_LABEL[t] }))} placeholder="Chọn loại" />
         </Field>
-        <Field label={locked ? 'Tỷ số (theo đơn mua)' : 'Tỷ số chung'}
-          hint={locked ? undefined : 'Cho TI / TU — dòng có tỷ số riêng thì theo dòng'}>
-          <TextInput value={addRatio} onChange={setAddRatio} mono placeholder="200/5"
-            disabled={locked && !!addRatio} />
+        <Field label="Tỷ số chung" hint="Cho TI / TU — dòng có tỷ số riêng thì theo dòng">
+          <TextInput value={addRatio} onChange={setAddRatio} mono placeholder="200/5" />
         </Field>
-        <Field label="Hình dạng TI" hint="Áp cho mọi dòng TI của lô">
-          <Select value={addShape} onChange={v => setAddShape(v as TiShape | '')} options={SHAPE_OPTS}
-            disabled={locked && !!preset?.shape} />
+        <Field label="Hình dạng TI chung" hint="Dòng TI nào chọn kiểu riêng thì theo dòng">
+          <Select value={addShape} onChange={v => setAddShape(v as TiShape | '')} options={SHAPE_OPTS} />
         </Field>
-        <Field label="Loại công tơ" hint="Trực tiếp: điểm đo không TI · Gián tiếp: qua TI">
-          <Select value={addKind} onChange={v => setAddKind(v as Connection | '')} options={METER_KIND_PICK}
-            disabled={locked && !!preset?.meterKind} />
+        <Field label="Loại công tơ chung" hint="Trực tiếp: điểm đo không TI · Gián tiếp: qua TI">
+          <Select value={addKind} onChange={v => setAddKind(v as Connection | '')} options={METER_KIND_PICK} />
         </Field>
         <Field label="Mã lô">
           <TextInput value={addBatch} onChange={setAddBatch} placeholder="LO-2026-08" />
@@ -218,13 +188,6 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
           <TextInput value={addHold} onChange={setAddHold} placeholder="Nhà máy X, lô B3" />
         </Field>
       </div>
-
-      {overPending > 0 && (
-        <div className="vl-alert vl-alert-light-warning text-[12px]">
-          Nhập {addReady.length} thiết bị, nhiều hơn số còn chờ của dòng đơn ({preset!.pending}) {overPending} cái —
-          vẫn ghi được nếu nhà cung cấp giao thừa.
-        </div>
-      )}
 
       <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -241,11 +204,12 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
         <div className="max-h-[45vh] overflow-y-auto rounded-lg border border-[var(--border)] bg-surface">
           <table className="w-full table-fixed text-sm">
             <colgroup>
-              <col style={{ width: '26%' }} />
-              <col style={{ width: '18%' }} />
+              <col style={{ width: '22%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
               <col style={{ width: '14%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '18%' }} />
               <col style={{ width: '6%' }} />
             </colgroup>
             <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-subtle">
@@ -253,6 +217,8 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
                 <th className="px-4 py-3 text-left font-bold text-soft">Số No</th>
                 <th className="px-4 py-3 text-left font-bold text-soft">Loại</th>
                 <th className="px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
+                <th className="px-4 py-3 text-left font-bold text-soft"
+                  title="Công tơ: trực tiếp / gián tiếp · TI: tròn / vuông">Kiểu</th>
                 <th className="px-4 py-3 text-left font-bold text-soft">Model / mô tả</th>
                 <th className="px-4 py-3 text-left font-bold text-soft">Tình trạng</th>
                 <th className="px-2 py-3" />
@@ -270,22 +236,22 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
                         onChange={v => setAddRow(r.key, { serial: v })} />
                     </td>
                     <td className="p-2">
-                      {locked ? (
-                        <span className="block p-2 text-soft">{ASSET_LABEL[preset!.type]}</span>
-                      ) : (
-                        <Select value={r.type} variant="bare"
-                          onChange={v => setAddRow(r.key, { type: v as AssetType })}
-                          options={TYPES.map(x => ({ value: x, label: ASSET_LABEL[x] }))}
-                          placeholder={t && !r.type ? `${ASSET_LABEL[t]} (chung)` : 'Chọn loại'} />
-                      )}
+                      <Select value={r.type} variant="bare"
+                        onChange={v => setAddRow(r.key, { type: v as AssetType })}
+                        options={TYPES.map(x => ({ value: x, label: ASSET_LABEL[x] }))}
+                        placeholder={t && !r.type ? `${ASSET_LABEL[t]} (chung)` : 'Chọn loại'} />
                     </td>
                     <td className="p-2">
                       {HAS_RATIO.includes(t as AssetType) ? (
-                        locked ? <span className="block p-2 font-mono">{addRatio || '—'}</span> : (
-                          <CellInput value={r.ratio} mono placeholder={addRatio || '200/5'}
-                            onChange={v => setAddRow(r.key, { ratio: v })} />
-                        )
+                        <CellInput value={r.ratio} mono placeholder={addRatio || '200/5'}
+                          onChange={v => setAddRow(r.key, { ratio: v })} />
                       ) : <span className="block p-2 text-faint">—</span>}
+                    </td>
+                    <td className="p-2">
+                      {/* Hiện giá trị đang áp (dòng hoặc ô chung); chọn ở đây là riêng cho dòng. */}
+                      <VariantCell type={t} shape={shapeOfAdd(r)} meterKind={kindOfAdd(r)}
+                        onShape={shape => setAddRow(r.key, { shape })}
+                        onMeterKind={meterKind => setAddRow(r.key, { meterKind })} />
                     </td>
                     <td className="p-2">
                       <CellInput value={r.model} onChange={v => setAddRow(r.key, { model: v })} />
@@ -314,9 +280,8 @@ export default function AddStockModal({ open, onClose, devices, onSaved, title, 
           <Plus className="h-4 w-4" /> Thêm dòng
         </button>
         <p className="mt-2 text-[11px] text-faint">
-          Dán cả cột số No từ Excel vào một ô Số No — bảng tự thêm dòng
-          {locked ? '.' : '; cột dạng 200/5 nhận làm tỷ số.'}
-          {' '}Dòng đã có trong kho được bỏ qua, không ghi đè.
+          Dán cả cột số No từ Excel vào một ô Số No — bảng tự thêm dòng; cột dạng 200/5 nhận làm tỷ số.
+          Công tơ bắt buộc chọn trực tiếp / gián tiếp. Dòng đã có trong kho được bỏ qua, không ghi đè.
         </p>
       </div>
     </FormModal>

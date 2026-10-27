@@ -8,13 +8,12 @@
  */
 import { pbLogin, allOf } from './lib/pb_meters.mjs';
 import { pointSupply, reconcile, SUPPLY_STATE_LABEL, type SupplyState } from '../src/lib/dm/supply';
-import { ASSET_LABEL, type Asset, type Device, type Point, type Purchase, type PurchaseLine } from '../src/lib/dm/types';
+import { ASSET_LABEL, type Asset, type Device, type Point } from '../src/lib/dm/types';
 
 const token = await pbLogin();
-const [devices, assets, points, purchases, purchaseLines] = await Promise.all(
-  ['dm_device', 'dm_asset', 'dm_point', 'dm_purchase', 'dm_purchase_line'].map(c => allOf(c, token))) as
-  [Device[], Asset[], Point[], Purchase[], PurchaseLine[]];
-const ctx = { assets, devices, purchases, purchaseLines };
+const [devices, assets, points] = await Promise.all(
+  ['dm_device', 'dm_asset', 'dm_point'].map(c => allOf(c, token))) as [Device[], Asset[], Point[]];
+const ctx = { assets, devices };
 
 const count: Partial<Record<SupplyState, number>> = {};
 let release = 0, short = 0;
