@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => {
             xlsx: ['xlsx'],
             docx: ['docxtemplater', 'pizzip'],
             barcode: ['zxing-wasm/reader'],
+            ocr: ['tesseract.js'],
           },
         },
       },

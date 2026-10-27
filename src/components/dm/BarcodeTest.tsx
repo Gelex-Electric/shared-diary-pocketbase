@@ -4,12 +4,14 @@
  *
  * Chỉ ĐỌC: không đăng nhập, không gọi PocketBase, không ghi gì, ảnh không lưu (chỉ giữ
  * ảnh thu nhỏ trong bộ nhớ trang để đối chiếu, tải lại trang là mất).
- * Hai cách: chụp / chọn ảnh (đọc ảnh gốc độ phân giải cao) và quét trực tiếp bằng camera.
+ * Hai cách: chụp / chọn ảnh và quét trực tiếp bằng camera. Mã vạch trước; không ra thì OCR số in trên nhãn
+ * (`plateOcr.ts`, user chốt 27/10/2026).
  */
 import { useEffect, useRef, useState } from 'react';
-import { Camera, ImagePlus, ScanLine, Square, Trash2 } from 'lucide-react';
+import { Camera, ImagePlus, ScanLine, ScanText, Square, Trash2 } from 'lucide-react';
 import { scanBarcodeFile, scanBarcodeFrame, type BarcodeHit } from '../../lib/dm/barcodeScan';
 import { typeFromSerial } from '../../lib/dm/plateParse';
+import { readSerialByOcr } from '../../lib/dm/plateOcr';
 import { ASSET_LABEL } from '../../lib/dm/types';
 
 interface Row {
@@ -47,22 +49,49 @@ export default function BarcodeTest() {
 
   const add = (r: Omit<Row, 'key'>) => setRows(rs => [{ ...r, key: ++keyRef.current }, ...rs]);
 
+  /** Mã vạch trước; không ra thì OCR số in trên nhãn (user chốt 27/10/2026). */
+  async function processImage(f: Blob, name: string, source: Row['source'], prefix: string) {
+    try {
+      const [scan, thumb] = await Promise.all([scanBarcodeFile(f), thumbOf(f)]);
+      const size = `${scan.width}×${scan.height}`;
+      if (scan.hits.length) {
+        add({ source, name, thumb, hits: scan.hits, note: `${size} · mã vạch ${scan.ms} ms · lượt: ${scan.pass}` });
+        return;
+      }
+      const ocr = await readSerialByOcr(f, s => setBusy(`${prefix} Không thấy mã vạch — ${s}`));
+      add({
+        source, name, thumb,
+        hits: ocr.serial ? [{ format: 'Số in trên nhãn', text: ocr.serial, engine: 'OCR', agreed: ocr.agreed }] : [],
+        note: `${size} · mã vạch không đọc được · OCR ${ocr.ms} ms (bước 1: ${ocr.pass1 || '—'}, bước 2: ${ocr.pass2 || '—'})`,
+      });
+    } catch (e) {
+      add({ source, name, hits: [], note: '', error: String((e as Error)?.message ?? e) });
+    }
+  }
+
   async function onFiles(files: FileList | null) {
     if (!files?.length) return;
     const list = Array.from(files);
     for (let i = 0; i < list.length; i++) {
-      const f = list[i];
-      setBusy(`Đang đọc ảnh ${i + 1}/${list.length}…`);
-      try {
-        const [scan, thumb] = await Promise.all([scanBarcodeFile(f), thumbOf(f)]);
-        add({
-          source: 'ảnh', name: f.name, thumb, hits: scan.hits,
-          note: `${scan.width}×${scan.height} · ${scan.ms} ms${scan.pass ? ` · thấy ở lượt: ${scan.pass}` : ''}`,
-        });
-      } catch (e) {
-        add({ source: 'ảnh', name: f.name, hits: [], note: '', error: String((e as Error)?.message ?? e) });
-      }
+      const prefix = `Ảnh ${i + 1}/${list.length}:`;
+      setBusy(`${prefix} đang đọc mã vạch…`);
+      await processImage(list[i], list[i].name, 'ảnh', prefix);
     }
+    setBusy('');
+  }
+
+  /** Quét trực tiếp không ra mã vạch: chụp khung hiện tại (độ phân giải camera) rồi đọc như ảnh — có OCR. */
+  async function snapFrame() {
+    const v = videoRef.current;
+    if (!v?.videoWidth) return;
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext('2d')!.drawImage(v, 0, 0);
+    const blob = await new Promise<Blob | null>(r => c.toBlob(r, 'image/jpeg', 0.95));
+    if (!blob) return;
+    setLive(false);
+    setBusy('Khung camera: đang đọc mã vạch…');
+    await processImage(blob, 'Khung camera', 'camera', 'Khung camera:');
     setBusy('');
   }
 
@@ -141,6 +170,9 @@ export default function BarcodeTest() {
               <div className="pointer-events-none absolute inset-x-[10%] top-1/2 -translate-y-1/2 h-1/3 border-2 border-accent rounded" />
             </div>
             <p className="text-sm text-dim">{liveMsg}</p>
+            <button type="button" className="vl-btn vl-btn-secondary" onClick={() => void snapFrame()}>
+              <ScanText className="w-4 h-4" /> Không ra mã vạch? Chụp khung này để đọc số in (OCR)
+            </button>
           </div>
         )}
 
@@ -158,6 +190,9 @@ export default function BarcodeTest() {
                   <span className="font-mono text-base font-semibold break-all">{h.text}</span>
                   <span className="vl-badge vl-badge-info">{h.format}</span>
                   <span className="vl-badge vl-badge-primary">{h.engine}{h.votes ? ` · ${h.votes} dòng` : ''}</span>
+                  {h.engine === 'OCR' && (h.agreed
+                    ? <span className="vl-badge vl-badge-success">2 bước OCR khớp</span>
+                    : <span className="vl-badge vl-badge-warning">Kiểm tra lại số No</span>)}
                   {guess(h.text) && <span className="vl-badge vl-badge-success">{guess(h.text)}</span>}
                 </div>
               ))}

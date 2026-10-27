@@ -32,6 +32,8 @@ export interface BarcodeHit {
   engine: string;
   /** Số dòng quét cùng ra số này (chỉ bộ tự viết) — càng nhiều càng chắc. */
   votes?: number;
+  /** OCR: hai bước cùng ra một số. */
+  agreed?: boolean;
 }
 export interface BarcodeScan {
   hits: BarcodeHit[];
