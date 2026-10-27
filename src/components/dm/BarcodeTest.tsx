@@ -73,7 +73,7 @@ export default function BarcodeTest() {
         p.ratio ? `tỷ số ${p.ratio.primary}/${p.ratio.secondary}` : '',
         p.year ? `năm ${p.year}` : '',
       ].filter(Boolean).join(' · ');
-      const check = !bar ? 'mã vạch: không đọc được' : !ocr.serial ? `số lấy từ mã vạch` : bar.text === ocr.serial ? 'mã vạch KHỚP số OCR ✓' : `mã vạch LỆCH: ${bar.text}`;
+      const check = !bar ? (ocr.serial ? 'Kiểm tra bằng mã vạch: không đọc được mã vạch (dùng số OCR)' : '') : !ocr.serial ? `số lấy từ mã vạch` : bar.text === ocr.serial ? 'mã vạch KHỚP số OCR ✓' : `mã vạch LỆCH: ${bar.text}`;
       const serial = ocr.serial || bar?.text || '';
       add({
         source, name, thumb, info, check, checkOk: !!bar && bar.text === ocr.serial,
@@ -200,7 +200,7 @@ export default function BarcodeTest() {
               {r.error ? (
                 <div className="text-sm text-bad">Lỗi: {r.error}</div>
               ) : r.hits.length === 0 ? (
-                <span className="vl-badge vl-badge-warning">Không đọc được mã vạch</span>
+                <span className="vl-badge vl-badge-warning">Không đọc ra số No (cả OCR lẫn mã vạch) — chụp lại gần hơn, rõ dòng "Số:"</span>
               ) : r.hits.map(h => (
                 <div key={h.text} className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-base font-semibold break-all">{h.text}</span>
