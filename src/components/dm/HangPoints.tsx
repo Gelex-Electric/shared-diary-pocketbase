@@ -87,18 +87,19 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
   const setRows = (p: Point, fn: (rs: HangRow[]) => HangRow[]) =>
     setEdits(e => ({ ...e, [p.id]: fn(rowsOf(p)) }));
 
+  /** Tỷ số chỉ có nghĩa với TI/TU — công tơ, GP-03 trong kho hay mang "0/0". */
+  const ratioOf = (x: Device) => ((x.type === 'TI' || x.type === 'TU') && x.ratio_primary
+    ? ` · ${formatRatio(x.ratio_primary, x.ratio_secondary)}` : '');
+
   /** Số No chọn được cho một dòng: thiết bị rảnh cùng loại + chính thiết bị nhu cầu của dòng. */
   const optsFor = (r: HangRow, all: HangRow[]) => {
     const own = r.asset ? devOfAsset(r.asset) : undefined;
     const used = new Set(all.filter(x => x.key !== r.key).map(x => x.deviceId));
     const list = [...(own ? [own] : []), ...spare.filter(x => x.type === r.type && x.id !== own?.id)]
       .filter(x => !used.has(x.id));
-    // Tỷ số chỉ có nghĩa với TI/TU — công tơ, GP-03 trong kho hay mang "0/0".
-    const ratioOf = (x: Device) => ((x.type === 'TI' || x.type === 'TU') && x.ratio_primary
-      ? ` · ${formatRatio(x.ratio_primary, x.ratio_secondary)}` : '');
     return list.map(x => ({
       value: x.id,
-      label: `${x.serial}${ratioOf(x)}${x.id === own?.id ? ' (nhu cầu)' : ''}`,
+      label: `${x.serial}${ratioOf(x)}${x.id === own?.id ? ' (đề xuất)' : ''}`,
     }));
   };
 
@@ -197,6 +198,7 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
                   <tr>
                     <th className="w-10 text-center">Treo</th>
                     <th className="text-left">Thiết bị</th>
+                    <th className="text-left" title="Số No Nhóm Vật Tư đã gắn dự kiến cho điểm đo">Số No đề xuất</th>
                     <th className="text-left">Số No treo thực tế</th>
                     <th />
                   </tr>
@@ -218,13 +220,17 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
                           )}
                           {!r.asset && <span className="ml-1 text-[11px] text-faint">ngoài nhu cầu</span>}
                         </td>
+                        {/* Số No ĐỀ XUẤT = thiết bị Vật Tư đã gắn dự kiến; dòng treo ngoài nhu cầu thì không có. */}
+                        <td className="font-mono font-semibold text-soft">
+                          {own ? `${own.serial}${ratioOf(own)}` : <span className="font-sans font-normal text-faint">—</span>}
+                        </td>
                         <td className="min-w-[240px]">
                           <Select value={r.deviceId} variant="bare" searchable options={optsFor(r, rs)}
                             placeholder="Chọn số No"
                             onChange={v => setRows(p, xs => xs.map(x => (x.key === r.key ? { ...x, deviceId: v } : x)))} />
                           {changed && (
                             <span className="text-[11px] text-warn">
-                              khác nhu cầu ({own!.serial}) — {own!.serial} sẽ về kho
+                              khác đề xuất — {own!.serial} sẽ về kho
                             </span>
                           )}
                         </td>
