@@ -21,6 +21,11 @@ interface Row {
   thumb?: string;
   hits: BarcodeHit[];
   note: string;
+  /** Loại · kiểu · trực tiếp/gián tiếp · tỷ số đọc từ chữ trên nhãn. */
+  info?: string;
+  /** Kết quả đối chiếu số No với mã vạch. */
+  check?: string;
+  checkOk?: boolean;
   error?: string;
 }
 
@@ -49,20 +54,31 @@ export default function BarcodeTest() {
 
   const add = (r: Omit<Row, 'key'>) => setRows(rs => [{ ...r, key: ++keyRef.current }, ...rs]);
 
-  /** Mã vạch trước; không ra thì OCR số in trên nhãn (user chốt 27/10/2026). */
+  /**
+   * OCR TRƯỚC (số No + loại công tơ + tỷ số TI), rồi mã vạch để KIỂM TRA LẠI số No (user chốt 27/10/2026).
+   * OCR không ra số thì lấy số từ mã vạch.
+   */
   async function processImage(f: Blob, name: string, source: Row['source'], prefix: string) {
     try {
-      const [scan, thumb] = await Promise.all([scanBarcodeFile(f), thumbOf(f)]);
-      const size = `${scan.width}×${scan.height}`;
-      if (scan.hits.length) {
-        add({ source, name, thumb, hits: scan.hits, note: `${size} · mã vạch ${scan.ms} ms · lượt: ${scan.pass}` });
-        return;
-      }
-      const ocr = await readSerialByOcr(f, s => setBusy(`${prefix} Không thấy mã vạch — ${s}`));
+      const thumb = await thumbOf(f);
+      const ocr = await readSerialByOcr(f, s => setBusy(`${prefix} ${s}`));
+      setBusy(`${prefix} kiểm tra lại số No bằng mã vạch…`);
+      const scan = await scanBarcodeFile(f);
+      const bar = scan.hits.find(h => /^d{10,15}$/.test(h.text));
+      const p = ocr.plate;
+      const info = [
+        p.type ? ASSET_LABEL[p.type] : '',
+        p.model ?? '',
+        p.meterKind ? (p.meterKind === 'gian_tiep' ? 'gián tiếp' : 'trực tiếp') : '',
+        p.ratio ? `tỷ số ${p.ratio.primary}/${p.ratio.secondary}` : '',
+        p.year ? `năm ${p.year}` : '',
+      ].filter(Boolean).join(' · ');
+      const check = !bar ? 'mã vạch: không đọc được' : !ocr.serial ? `số lấy từ mã vạch` : bar.text === ocr.serial ? 'mã vạch KHỚP số OCR ✓' : `mã vạch LỆCH: ${bar.text}`;
+      const serial = ocr.serial || bar?.text || '';
       add({
-        source, name, thumb,
-        hits: ocr.serial ? [{ format: 'Số in trên nhãn', text: ocr.serial, engine: 'OCR', agreed: ocr.agreed }] : [],
-        note: `${size} · mã vạch không đọc được · OCR ${ocr.ms} ms (bước 1: ${ocr.pass1 || '—'}, bước 2: ${ocr.pass2 || '—'})`,
+        source, name, thumb, info, check, checkOk: !!bar && bar.text === ocr.serial,
+        hits: serial ? [{ format: ocr.serial ? 'Số in trên nhãn' : bar!.format, text: serial, engine: ocr.serial ? 'OCR' : bar!.engine, agreed: ocr.agreed }] : [],
+        note: `${scan.width}×${scan.height} · OCR ${ocr.ms} ms (bước 1: ${ocr.pass1 || '—'}, bước 2: ${ocr.pass2 || '—'}) · mã vạch ${scan.ms} ms`,
       });
     } catch (e) {
       add({ source, name, hits: [], note: '', error: String((e as Error)?.message ?? e) });
@@ -196,6 +212,8 @@ export default function BarcodeTest() {
                   {guess(h.text) && <span className="vl-badge vl-badge-success">{guess(h.text)}</span>}
                 </div>
               ))}
+              {r.info && <div className="text-sm font-medium">{r.info}</div>}
+              {r.check && <span className={`vl-badge ${r.checkOk ? 'vl-badge-success' : 'vl-badge-info'}`}>{r.check}</span>}
             </div>
           </div>
         ))}

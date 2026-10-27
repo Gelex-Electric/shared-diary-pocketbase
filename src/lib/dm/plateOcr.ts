@@ -10,6 +10,7 @@
  *  Bước 1 đủ 10 số thì lấy bước 1; không thì lấy bước 2. Hai bước khớp nhau ⇒ tin cậy cao.
  */
 import type { Worker, Word } from 'tesseract.js';
+import { parsePlate, type PlateReading } from './plateParse';
 
 const OCR_PATHS = { workerPath: '/ocr/worker.min.js', corePath: '/ocr/', langPath: '/ocr/', gzip: false };
 
@@ -71,6 +72,8 @@ export interface OcrResult {
   /** Hai bước cùng ra một số. */
   agreed: boolean;
   pass1: string; pass2: string;
+  /** Loại, loại công tơ (KIỂU ME-41/42), tỷ số TI/TU, kiểu, năm — đọc từ chữ cả nhãn (`plateParse`). */
+  plate: PlateReading;
   ms: number;
 }
 
@@ -126,5 +129,24 @@ export async function readSerialByOcr(file: Blob, onStage?: (s: string) => void)
     pass2 = bestWindow(r2.data.text.replace(/\D/g, ''), pass1);
   }
   const serial = pass1.length === 10 ? pass1 : pass2.length === 10 ? pass2 : '';
-  return { serial, agreed: !!serial && pass1 === pass2, pass1, pass2, ms: Math.round(performance.now() - t0) };
+  let texts = lines.map(l => ({ text: l.text }));
+  let plate = parsePlate(texts);
+  if (!plate.type && serial) plate.type = parsePlate([{ text: `Số: ${serial}` }]).type;
+  // Bước 3: TI/TU chưa có tỷ số (đường kẻ bảng trên nhãn làm OCR cả ảnh bỏ sót dòng "Tỷ số") hoặc công tơ chưa có
+  // KIỂU ⇒ cắt riêng vùng nhãn quanh dòng số No (lên ~5 dòng, sang trái ~9 lần cao chữ), phóng x2, OCR lại.
+  const needMore = (plate.type === 'TI' || plate.type === 'TU') ? !plate.ratio : plate.type === 'CONGTO' ? !plate.meterKind : false;
+  if (c && needMore) {
+    onStage?.('OCR bước 3: đọc lại vùng nhãn (tỷ số / kiểu)…');
+    const h = c.bbox.y1 - c.bbox.y0;
+    const x = Math.max(0, c.bbox.x0 - 9 * h), y = Math.max(0, c.bbox.y0 - 6 * h);
+    const w = Math.min(BW - x, c.bbox.x1 + 3 * h - x), hh = Math.min(BH - y, c.bbox.y1 + h - y);
+    const crop = document.createElement('canvas');
+    crop.width = w * 2; crop.height = hh * 2;
+    crop.getContext('2d')!.drawImage(big, x, y, w, hh, 0, 0, w * 2, hh * 2);
+    const r3 = await wFull.recognize(crop);
+    texts = [...texts, ...r3.data.text.split('\n').map(text => ({ text }))];
+    const more = parsePlate(texts);
+    plate = { ...plate, ratio: plate.ratio ?? more.ratio, meterKind: plate.meterKind ?? more.meterKind, model: plate.model ?? more.model };
+  }
+  return { plate, serial, agreed: !!serial && pass1 === pass2, pass1, pass2, ms: Math.round(performance.now() - t0) };
 }

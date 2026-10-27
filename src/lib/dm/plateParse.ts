@@ -122,7 +122,9 @@ export function parsePlate(lines: PlateLine[]): PlateReading {
   if (!out.type && out.serial) out.type = typeFromSerial(out.serial);
 
   // 3) Tỷ số TI/TU: "Tỷ số: 2000/5A" — lấy dạng NNNN/1 hoặc NNNN/5 (TU: 22000/110).
-  const ratio = all.match(/(\d{2,6})\s*\/\s*(1|5|100|110)\s*[AV]?/);
+  // Ưu tiên số ngay sau chữ "Tỷ số"; mẫu số 5/1 hay bị đọc thành "54"/"5A" nên chỉ cần không dính chữ số khác sau 1/5.
+  const ratio = fold(all).match(/ty\s*\.?\s*so\s*[:.]?\s*(\d{2,6})\s*\/\s*(1|5)(?!\d{2})/)
+    ?? all.match(/(\d{2,6})\s*\/\s*(1|5|100|110)\s*[AV]/);
   if (ratio && (out.type === 'TI' || out.type === 'TU')) {
     out.ratio = { primary: Number(ratio[1]), secondary: Number(ratio[2]) };
   }
