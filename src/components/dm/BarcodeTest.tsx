@@ -108,7 +108,8 @@ export default function BarcodeTest() {
           <h1 className="text-lg font-semibold flex items-center gap-2"><ScanLine className="w-5 h-5 text-accent" /> Thử quét mã vạch nhãn thiết bị</h1>
           <p className="text-sm text-dim">
             Trang thử, chỉ đọc — không ghi dữ liệu, không lưu ảnh. Chụp nhãn công tơ / TI / GP-03 để xem mã vạch đọc ra số gì.
-            Nên chụp gần, đủ sáng, mã vạch nằm ngang, không loá nilon.
+            Nên chụp gần (10–15 cm, mã vạch chiếm ít nhất 1/3 bề ngang ảnh), đủ sáng, mã vạch nằm ngang, không loá nilon.
+            Dùng ảnh gốc của camera — ảnh đã gửi qua Zalo/chat bị nén thường không đọc được.
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             <label className="vl-btn vl-btn-primary cursor-pointer">
@@ -156,6 +157,7 @@ export default function BarcodeTest() {
                 <div key={h.text} className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-base font-semibold break-all">{h.text}</span>
                   <span className="vl-badge vl-badge-info">{h.format}</span>
+                  <span className="vl-badge vl-badge-primary">{h.engine}{h.votes ? ` · ${h.votes} dòng` : ''}</span>
                   {guess(h.text) && <span className="vl-badge vl-badge-success">{guess(h.text)}</span>}
                 </div>
               ))}
