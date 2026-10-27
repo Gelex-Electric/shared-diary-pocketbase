@@ -3,21 +3,22 @@
  * chốt 27/10/2026, cùng lúc gỡ tính năng đặt mua). Một bảng mở rộng được hàng, dán
  * cột số No từ Excel (user chốt 28/09/2026); tách khỏi `StockEntry.tsx` 26/10/2026.
  *
- * Mỗi dòng chọn được KIỂU: công tơ trực tiếp / gián tiếp, TI tròn / vuông (ô
- * "Kiểu"); dòng không chọn thì theo ô chung phía trên.
+ * Mỗi dòng chọn được KIỂU: TI mặc định TRÒN, công tơ mặc định GIÁN TIẾP (user chốt
+ * 27/10/2026) — đổi ở ô "Kiểu" của dòng. Phía trên chỉ còn Ngày nhập kho và KCN
+ * nhập cho (`hold_zone`); bỏ các ô chung loại / tỷ số / mã lô / dành cho.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, PackagePlus, Trash2 } from 'lucide-react';
 import { Select } from '../ui/Select';
 import { DatePicker } from '../ui/DateTimePickers';
 import { toast } from '../../lib/toast';
-import { CellInput, Field, FormModal, TextInput } from './entryUi';
-import VariantCell, { METER_KIND_PICK } from './VariantCell';
+import { CellInput, Field, FormModal } from './entryUi';
+import VariantCell from './VariantCell';
 import { devices as deviceRepo, pbErrorMessage } from '../../lib/dm/repo';
 import { parseRatio } from '../../lib/dm/hsn';
 import { findExisting, guessType, parsePaste, SERIAL_RE } from '../../lib/dm/stock';
 import {
-  ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type AssetType, type Connection, type Device, type TiShape,
+  ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type AssetType, type Connection, type Device, type TiShape, type Zone,
 } from '../../lib/dm/types';
 
 const TYPES: AssetType[] = ['CONGTO', 'TI', 'TU', 'GP03', 'SIM', 'KHAC'];
@@ -27,8 +28,10 @@ export const SHAPE_OPTS = [
   ...(Object.keys(SHAPE_LABEL) as TiShape[]).map(s => ({ value: s, label: SHAPE_LABEL[s] })),
 ];
 const today = () => new Date().toISOString().slice(0, 10);
+/** Công tơ mặc định GIÁN TIẾP khi nhập kho (user chốt 27/10/2026) — trực tiếp là trường hợp đổi tay. */
+const DEFAULT_METER_KIND: Connection = 'gian_tiep';
 
-/** Một dòng của bảng. Loại / tỷ số / kiểu trống = lấy theo ô chung. */
+/** Một dòng của bảng. Kiểu trống = mặc định (TI tròn, công tơ gián tiếp). */
 interface AddRow {
   key: string; serial: string; type: AssetType | ''; ratio: string; model: string;
   shape: TiShape | ''; meterKind: Connection | '';
@@ -43,32 +46,27 @@ const ratioOf = (s: string) => {
   return { ratio_primary: primary ?? undefined, ratio_secondary: secondary ?? undefined };
 };
 
-export default function AddStockModal({ open, onClose, devices, onSaved }: {
+export default function AddStockModal({ open, onClose, devices, zones, onSaved }: {
   open: boolean;
   onClose: () => void;
   /** Thiết bị đang có — để báo dòng nào đã có trong kho. */
   devices: Device[];
+  /** Danh sách KCN — chọn KCN nhập cho (`dm_device.hold_zone`). */
+  zones: Zone[];
   /** Gọi sau khi ghi (kể cả dừng giữa chừng) với các thiết bị ĐÃ tạo. */
   onSaved: (created: Device[]) => void | Promise<void>;
 }) {
   const [saving, setSaving] = useState(false);
   const [addRows, setAddRows] = useState<AddRow[]>([]);
-  const [addType, setAddType] = useState<AssetType | ''>('');
-  const [addRatio, setAddRatio] = useState('');
-  /** Hình dạng chung cho các dòng TI — mặc định tròn (vuông là ngoại lệ). */
-  const [addShape, setAddShape] = useState<TiShape | ''>(DEFAULT_TI_SHAPE);
-  /** Loại chung cho các dòng công tơ (trực tiếp / gián tiếp — schema v24). */
-  const [addKind, setAddKind] = useState<Connection | ''>('');
-  const [addBatch, setAddBatch] = useState('');
   const [addDate, setAddDate] = useState(today());
-  const [addHold, setAddHold] = useState('');
+  /** KCN nhập cho — ghi `hold_zone`, Kho vật tư xếp thiết bị theo KCN này. */
+  const [addZone, setAddZone] = useState('');
 
   // Mở hộp là làm mới toàn bộ.
   useEffect(() => {
     if (!open) return;
     setAddRows([newAddRow(), newAddRow(), newAddRow()]);
-    setAddType(''); setAddRatio(''); setAddShape(DEFAULT_TI_SHAPE); setAddKind('');
-    setAddBatch(''); setAddDate(today()); setAddHold('');
+    setAddDate(today()); setAddZone('');
   }, [open]);
 
   const setAddRow = (key: string, patch: Partial<AddRow>) =>
@@ -105,12 +103,12 @@ export default function AddStockModal({ open, onClose, devices, onSaved }: {
 
   /**
    * Loại của từng dòng: chọn ở dòng > DẠNG SỐ khi chắc chắn (IMEI của GP-03,
-   * ICCID của SIM) > loại chung. Tỷ số, kiểu: dòng > ô chung.
+   * ICCID của SIM). Kiểu: dòng > mặc định (TI tròn, công tơ gián tiếp).
    */
-  const typeOfAdd = (r: AddRow): AssetType | '' => r.type || guessType(r.serial.trim()) || addType;
-  const ratioOfAdd = (r: AddRow) => (r.ratio.trim() || addRatio.trim());
-  const shapeOfAdd = (r: AddRow): TiShape | '' => r.shape || addShape;
-  const kindOfAdd = (r: AddRow): Connection | '' => r.meterKind || addKind;
+  const typeOfAdd = (r: AddRow): AssetType | '' => r.type || guessType(r.serial.trim()) || '';
+  const ratioOfAdd = (r: AddRow) => r.ratio.trim();
+  const shapeOfAdd = (r: AddRow): TiShape => r.shape || DEFAULT_TI_SHAPE;
+  const kindOfAdd = (r: AddRow): Connection => r.meterKind || DEFAULT_METER_KIND;
 
   /** Tình trạng từng dòng — hiện ngay trong bảng, như bản xem trước cũ. */
   const addState = (r: AddRow, i: number): { kind: 'empty' | 'new' | 'dup' | 'bad'; text: string } => {
@@ -123,7 +121,6 @@ export default function AddStockModal({ open, onClose, devices, onSaved }: {
     const t = typeOfAdd(r);
     if (!t) return { kind: 'bad', text: 'chưa chọn loại' };
     if (HAS_RATIO.includes(t) && !ratioOfAdd(r)) return { kind: 'bad', text: 'thiếu tỷ số' };
-    if (t === 'CONGTO' && !kindOfAdd(r)) return { kind: 'bad', text: 'chưa chọn trực tiếp / gián tiếp' };
     return { kind: 'new', text: 'mới' };
   };
   const addStates = addRows.map((r, i) => addState(r, i));
@@ -147,7 +144,7 @@ export default function AddStockModal({ open, onClose, devices, onSaved }: {
           ...ratioOf(ratioOfAdd(r)), model_desc: r.model.trim(),
           shape: t === 'TI' ? shapeOfAdd(r) : '',
           meter_kind: t === 'CONGTO' ? kindOfAdd(r) : '',
-          date_in: addDate || '', batch: addBatch.trim(), hold_for_note: addHold.trim(),
+          date_in: addDate || '', ...(addZone ? { hold_zone: addZone } : {}),
         });
         created.push(rec as unknown as Device);
       }
@@ -163,29 +160,14 @@ export default function AddStockModal({ open, onClose, devices, onSaved }: {
     <FormModal open={open} title="Thêm vật tư từ danh sách" wide
       onClose={onClose} onSubmit={() => void saveAdd()} saving={saving}
       submitLabel={addReady.length ? `Ghi ${addReady.length} thiết bị` : 'Chưa có gì để ghi'}>
-      {/* Ô CHUNG: mặc định cho mọi dòng để trống loại / tỷ số / kiểu. */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Field label="Loại chung" hint="Dòng nào chọn loại riêng thì theo dòng đó">
-          <Select value={addType} onChange={v => setAddType(v as AssetType)}
-            options={TYPES.map(t => ({ value: t, label: ASSET_LABEL[t] }))} placeholder="Chọn loại" />
-        </Field>
-        <Field label="Tỷ số chung" hint="Cho TI / TU — dòng có tỷ số riêng thì theo dòng">
-          <TextInput value={addRatio} onChange={setAddRatio} mono placeholder="200/5" />
-        </Field>
-        <Field label="Hình dạng TI chung" hint="Dòng TI nào chọn kiểu riêng thì theo dòng">
-          <Select value={addShape} onChange={v => setAddShape(v as TiShape | '')} options={SHAPE_OPTS} />
-        </Field>
-        <Field label="Loại công tơ chung" hint="Trực tiếp: điểm đo không TI · Gián tiếp: qua TI">
-          <Select value={addKind} onChange={v => setAddKind(v as Connection | '')} options={METER_KIND_PICK} />
-        </Field>
-        <Field label="Mã lô">
-          <TextInput value={addBatch} onChange={setAddBatch} placeholder="LO-2026-08" />
-        </Field>
+      {/* Chỉ còn ngày nhập + KCN nhập cho (user chốt 27/10/2026). */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field label="Ngày nhập kho">
           <DatePicker value={addDate} onChange={setAddDate} usePortal />
         </Field>
-        <Field label="Dành cho" hint="Khách chưa có trong danh mục thì gõ tự do">
-          <TextInput value={addHold} onChange={setAddHold} placeholder="Nhà máy X, lô B3" />
+        <Field label="Nhập cho KCN" hint="Kho vật tư xếp thiết bị theo KCN này">
+          <Select value={addZone} onChange={setAddZone} placeholder="Chưa chọn KCN"
+            options={zones.map(z => ({ value: z.id, label: z.name }))} />
         </Field>
       </div>
 
@@ -239,16 +221,16 @@ export default function AddStockModal({ open, onClose, devices, onSaved }: {
                       <Select value={r.type} variant="bare"
                         onChange={v => setAddRow(r.key, { type: v as AssetType })}
                         options={TYPES.map(x => ({ value: x, label: ASSET_LABEL[x] }))}
-                        placeholder={t && !r.type ? `${ASSET_LABEL[t]} (chung)` : 'Chọn loại'} />
+                        placeholder={t && !r.type ? `${ASSET_LABEL[t]} (tự nhận)` : 'Chọn loại'} />
                     </td>
                     <td className="p-2">
                       {HAS_RATIO.includes(t as AssetType) ? (
-                        <CellInput value={r.ratio} mono placeholder={addRatio || '200/5'}
+                        <CellInput value={r.ratio} mono placeholder="200/5"
                           onChange={v => setAddRow(r.key, { ratio: v })} />
                       ) : <span className="block p-2 text-faint">—</span>}
                     </td>
                     <td className="p-2">
-                      {/* Hiện giá trị đang áp (dòng hoặc ô chung); chọn ở đây là riêng cho dòng. */}
+                      {/* TI mặc định tròn, công tơ mặc định gián tiếp — đổi ở đây nếu khác. */}
                       <VariantCell type={t} shape={shapeOfAdd(r)} meterKind={kindOfAdd(r)}
                         onShape={shape => setAddRow(r.key, { shape })}
                         onMeterKind={meterKind => setAddRow(r.key, { meterKind })} />
@@ -281,7 +263,7 @@ export default function AddStockModal({ open, onClose, devices, onSaved }: {
         </button>
         <p className="mt-2 text-[11px] text-faint">
           Dán cả cột số No từ Excel vào một ô Số No — bảng tự thêm dòng; cột dạng 200/5 nhận làm tỷ số.
-          Công tơ bắt buộc chọn trực tiếp / gián tiếp. Dòng đã có trong kho được bỏ qua, không ghi đè.
+          TI mặc định tròn, công tơ mặc định gián tiếp — khác thì đổi ở cột Kiểu. Dòng đã có trong kho được bỏ qua, không ghi đè.
         </p>
       </div>
     </FormModal>

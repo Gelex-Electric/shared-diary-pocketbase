@@ -532,7 +532,7 @@ export default function StockEntry() {
         }} />
 
       {/* ===================== Thêm mới (lẻ + theo lô) ===================== */}
-      <AddStockModal open={modal === 'add'} onClose={() => setModal(null)} devices={d?.devices ?? []}
+      <AddStockModal open={modal === 'add'} onClose={() => setModal(null)} devices={d?.devices ?? []} zones={d?.zones ?? []}
         onSaved={async created => { if (created.length) setModal(null); await load(); }} />
 
       {/* ===================== Khai một thiết bị ===================== */}
