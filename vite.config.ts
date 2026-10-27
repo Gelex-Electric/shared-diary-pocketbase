@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
             pdf: ['pdfmake'],
             xlsx: ['xlsx'],
             docx: ['docxtemplater', 'pizzip'],
+            barcode: ['zxing-wasm/reader'],
           },
         },
       },
