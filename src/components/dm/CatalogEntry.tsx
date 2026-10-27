@@ -61,8 +61,9 @@ import AssetLifecycle from './AssetLifecycle';
 import StockEntry from './StockEntry';
 import { TransferOwner } from './TransferOwner';
 import LineAssign from './LineAssign';
-import PointNeedEditor, { needFromRows, rowsFromNeed, type NeedRow } from './PointNeedEditor';
-import { allocatedAssets } from '../../lib/dm/supply';
+import PointNeedEditor, { rowsFromNeed, type NeedRow } from './PointNeedEditor';
+import { liveFirst } from '../../lib/dm/supply';
+import { runReconcile } from '../../lib/dm/reconcileRun';
 import { ZoneTables } from './ZoneTables';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
 import {
@@ -155,10 +156,11 @@ const EMPTY_P = {
   note: '',
   /** Vật tư khai luôn cùng điểm đo — mỗi dòng một thiết bị (ghi vào dm_asset). */
   assetRows: [] as AssetRow[],
-  /** Nhu cầu vật tư (bước B2 luồng cấp vật tư, schema v23) — xem `PointNeedEditor`. */
+  /**
+   * Nhu cầu vật tư — CHỈ ĐỂ XEM ở form này: từ 27/10/2026 Nhóm Vật Tư khai ở màn
+   * "Nhu cầu & phân bổ" (điểm đo hai phần). Form KHÔNG ghi `need` xuống PB.
+   */
   need: [] as NeedRow[],
-  urgent: false,
-  needed_by: '',
 };
 
 /**
@@ -420,8 +422,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
       purpose_custom: isPreset ? '' : saved,
       note: p.note ?? '',
       need: rowsFromNeed(p.need),
-      urgent: !!p.urgent,
-      needed_by: (p.needed_by ?? '').slice(0, 10),
     });
     setPSnap(hsnSig(str(p.hsn), rows));
     setModal('point');
@@ -1158,8 +1158,21 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
       })).filter(s => !s.tu)
     : [];
 
-  /** Mọi thứ CHẶN lưu điểm đo: HSN + đụng độ số chế tạo + thiếu/sai tỷ số. */
-  const saveBlocks = [...hsnBlocks, ...serialBlocks, ...ratioBlocks];
+  /**
+   * Dòng NHU CẦU chưa treo (đã lưu, chưa ngày treo) thuộc Nhóm Vật Tư — form này là
+   * phần TREO THÁO: không đổi loại/số No, không xoá, chỉ khai ngày treo để treo nó
+   * (điểm đo hai phần, user chốt 27/10/2026).
+   */
+  const isNeedRow = (r: AssetRow) => !!r.id
+    && !((d?.assets ?? []).find(a => a.id === r.id)?.date_on ?? '').slice(0, 10);
+  /** Dòng THÊM MỚI ở form là treo thực tế ⇒ bắt buộc ngày treo. */
+  const treoBlocks = pForm.assetRows
+    .filter(r => !r.id && r.serial.trim() && !r.dateOn.trim())
+    .map(r => `${r.serial.trim()}: thêm ở đây là TREO thực tế nên phải có ngày treo `
+      + `(gắn trước cho điểm đo là việc của Nhóm Vật Tư ở màn Nhu cầu & phân bổ)`);
+
+  /** Mọi thứ CHẶN lưu điểm đo: HSN + đụng độ số chế tạo + thiếu/sai tỷ số + dòng mới thiếu ngày treo. */
+  const saveBlocks = [...hsnBlocks, ...serialBlocks, ...ratioBlocks, ...treoBlocks];
 
   /**
    * Cảnh báo vật tư — CHỈ nhắc, không chặn lưu (user chốt 14/08). Điểm đo đang
@@ -1322,6 +1335,21 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
     return `${base} — một giá trị bạn vừa nhập đã tồn tại (mã KCN / mã khách hàng / mã trạm / mã điểm đo / số chế tạo).`;
   };
 
+  /**
+   * Sau mỗi lần ghi treo tháo: đối chiếu nhu cầu ↔ treo thực tế (TỰ ĐỘNG — user chốt
+   * 27/10/2026). Dòng nhu cầu chưa treo đã thừa thì về kho; còn thiếu thì nhắc treo bổ sung.
+   */
+  const reportReconcile = async (pointId: string) => {
+    const rc = await runReconcile(pointId);
+    const parts: string[] = [];
+    if (rc.release.length) parts.push(`trả kho ${rc.release.map(a => a.serial).join(', ')} (treo thực tế đã thay)`);
+    if (rc.shortages.length) {
+      parts.push('cần treo bổ sung ' + rc.shortages.map(l => `${l.missing} × ${ASSET_LABEL[l.line.type]}`).join(', ')
+        + ' — Nhóm Vật Tư sẽ thấy ở Nhu cầu & phân bổ');
+    }
+    if (parts.length) toast.info('Đối chiếu nhu cầu', parts.join('; ') + '.');
+  };
+
   const persist = async (fn: () => Promise<unknown>, okMsg: string) => {
     setSaving(true);
     try {
@@ -1426,10 +1454,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
         hsn: effectiveHsn ?? undefined,
         status: derivedStatus || undefined,
         note: pForm.note.trim(),
-        need: needFromRows(pForm.need),
-        urgent: pForm.urgent,
-        // Bỏ cờ gấp thì xoá luôn ngày cần, kẻo ngày cũ còn nằm lại.
-        needed_by: pForm.urgent ? pForm.needed_by : '',
       };
       return void persist(async () => {
         for (const b of reclaim) {
@@ -1447,6 +1471,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
         const rec = editingId ? await points.update(editingId, body) : await points.create(body);
         await recordBorrows((rec as { id: string }).id);
         await syncAssets((rec as { id: string }).id);
+        await reportReconcile((rec as { id: string }).id);
       }, `Điểm đo đầu nguồn ${code}`);
     }
 
@@ -1487,10 +1512,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
         hsn: effectiveHsn ?? undefined,
         status: derivedStatus || undefined,
         note: pForm.note.trim(),
-        need: needFromRows(pForm.need),
-        urgent: pForm.urgent,
-        // Bỏ cờ gấp thì xoá luôn ngày cần, kẻo ngày cũ còn nằm lại.
-        needed_by: pForm.urgent ? pForm.needed_by : '',
       };
       return void persist(async () => {
         /*
@@ -1526,6 +1547,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
         // Vật tư lưu sau vì cần id điểm đo; lỗi ở đây sẽ báo nguyên văn từ PB
         // (thường là trùng số No với vật tư đang gắn ở điểm đo khác).
         await syncAssets((rec as { id: string }).id);
+        await reportReconcile((rec as { id: string }).id);
       }, `Điểm đo ${body.code}`);
     }
   };
@@ -2904,13 +2926,11 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
               </div>
             </Field>
 
-            {/* Nhu cầu vật tư — Kinh Doanh khai điểm đo cần gì (luồng cấp vật tư, 26/10/2026). */}
-            <PointNeedEditor
-              rows={pForm.need} onChange={need => setPForm(f => ({ ...f, need }))}
-              urgent={pForm.urgent} onUrgent={urgent => setPForm(f => ({ ...f, urgent }))}
-              neededBy={pForm.needed_by} onNeededBy={needed_by => setPForm(f => ({ ...f, needed_by }))}
+            {/* Phần NHU CẦU — chỉ xem; Nhóm Vật Tư khai + gắn số No (điểm đo hai phần, 27/10/2026). */}
+            <PointNeedEditor readOnly
+              rows={pForm.need} onChange={() => undefined}
               hsn={manualHsn} connection={connectionOfHsn(manualHsn)}
-              allocated={editingId ? allocatedAssets(d?.assets ?? [], editingId) : undefined}
+              allocated={editingId ? liveFirst(d?.assets ?? [], editingId) : undefined}
               devices={d?.devices ?? []} />
 
             {/* Gợi ý bộ TI/TU trong kho khớp HSN — chỉ khi đo gián tiếp (HSN > 1). */}
@@ -2996,20 +3016,26 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
                       // để mắt nhận ra ngay đâu là thiết bị đang treo.
                       <tr key={r.key} className={r.active ? '' : 'opacity-60'}>
                         <td className="p-2">
-                          <Select value={r.type} variant="bare"
-                            onChange={v => setRow(r.key, { type: v as AssetType })}
-                            options={Object.entries(ASSET_LABEL).map(([value, label]) => ({ value, label }))}
-                            placeholder="Chọn thiết bị" />
-                          {/* Chưa có ngày treo = vật tư dự kiến. Nói ngay tại dòng,
-                              vì đây là thứ quyết định nó có kéo HSN hay không. */}
+                          {isNeedRow(r) ? (
+                            <span className="block p-2 text-soft">{r.type ? ASSET_LABEL[r.type as AssetType] : '—'}</span>
+                          ) : (
+                            <Select value={r.type} variant="bare"
+                              onChange={v => setRow(r.key, { type: v as AssetType })}
+                              options={Object.entries(ASSET_LABEL).map(([value, label]) => ({ value, label }))}
+                              placeholder="Chọn thiết bị" />
+                          )}
+                          {/* Dòng NHU CẦU chưa treo (Vật Tư gắn) — khai ngày treo là treo nó. */}
                           {r.type && r.serial.trim() && !r.dateOn.trim() && (
-                            <span className="mt-1 inline-flex items-center rounded-full bg-subtle px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-faint">
-                              dự kiến
+                            <span className="mt-1 inline-flex items-center rounded-full bg-subtle px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-faint"
+                              title="Nhóm Vật Tư gắn cho điểm đo — khai ngày treo khi đã treo thực tế">
+                              nhu cầu
                             </span>
                           )}
                         </td>
                         <td className="p-2">
-                          {(() => {
+                          {isNeedRow(r) ? (
+                            <span className="block p-2 font-mono font-semibold text-soft">{r.serial}</span>
+                          ) : (() => {
                             const opts = serialOptions(r);
                             return (<>
                               <Select value={r.serial.trim()} variant="bare" searchable
@@ -3059,10 +3085,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
                             onChange={v => setRow(r.key, { dateOff: v })} />
                         </td>
                         <td className="p-2 text-center">
-                          <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"
-                            className="p-1 text-faint transition-colors hover:text-red-500">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {!isNeedRow(r) && (
+                            <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"
+                              className="p-1 text-faint transition-colors hover:text-red-500">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

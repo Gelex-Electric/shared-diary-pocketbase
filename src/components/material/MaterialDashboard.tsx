@@ -4,7 +4,7 @@
  *
  * Nhóm này chỉ lo khai vật tư vào danh mục, nên chỉ có một nhóm menu
  * "Quản lý vật tư thiết bị điện":
- *  - Phân bổ vật tư (`SupplyAllocate`, 26/10/2026): điểm đo thiếu vật tư → phân bổ từ kho / mượn.
+ *  - Nhu cầu & phân bổ (`SupplyAllocate`): Vật Tư khai nhu cầu + gắn số No / mượn (điểm đo hai phần, 27/10/2026).
  *  - Đặt mua vật tư (`PurchaseManager`, 26/10/2026): cần mua theo quy cách, đơn mua, nhận hàng.
  *  - Danh mục vật tư theo điểm đo: cây KCN → Lộ → Trạm → Điểm đo (chỉ xem — `DataTree` không ghi).
  *  - Quản lý chung (`CatalogEntry`): CHỈ tab Kho vật tư (toàn quyền) + Rà soát vòng đời (chỉ tra cứu).
@@ -33,7 +33,7 @@ type Tab = 'tasks' | 'supply-alloc' | 'purchase' | 'dm-general' | 'dm-catalog';
 
 const TAB_LABEL: Record<Tab, string> = {
   tasks: 'Việc cần làm',
-  'supply-alloc': 'Phân bổ vật tư',
+  'supply-alloc': 'Nhu cầu & phân bổ',
   purchase: 'Đặt mua vật tư',
   'dm-general': 'Danh mục vật tư theo điểm đo',
   'dm-catalog': 'Quản lý chung',

@@ -1,14 +1,15 @@
 /**
- * PHÂN BỔ VẬT TƯ — màn của Nhóm Vật Tư (luồng cấp vật tư, đợt 2, 26/10/2026,
- * plan `plans/2026-10-26-luong-cap-vat-tu-diem-do-moi.md` mục 3.2–3.3, 5).
+ * NHU CẦU & PHÂN BỔ — màn của Nhóm Vật Tư (luồng cấp vật tư; điểm đo HAI PHẦN từ
+ * 27/10/2026, plan `plans/2026-10-27-diem-do-hai-phan-nhu-cau-treo-thao.md`).
  *
- * Mỗi điểm đo CÒN THIẾU vật tư so với nhu cầu Kinh Doanh khai một thẻ. Bấm
- * "Phân bổ" ở dòng thiếu ⇒ chọn thiết bị rảnh trong kho khớp quy cách; điểm đo
- * CẦN GẤP còn được MƯỢN vật tư dự kiến của điểm đo khác (ghi sổ `dm_borrow`).
+ * Phần NHU CẦU của điểm đo do Vật Tư làm cả hai việc: khai quy cách cần (bảng
+ * `PointNeedEditor`, nút "Điền theo HSN") và gắn số No từ kho. Bảng mỗi điểm đo
+ * tách "Đang treo" (phần treo tháo, KD/VH ghi) với "Đã gắn" (nhu cầu chưa treo).
+ * Điểm đo đã treo mà còn thiếu ⇒ "Treo bổ sung". Mượn vật tư nhu cầu chưa treo
+ * của điểm đo khác: điểm nào cũng mượn được (bỏ "Cần gấp" 27/10/2026), có ghi sổ.
  *
- * Phân bổ = tạo dòng `dm_asset` DỰ KIẾN + giữ chỗ — cùng luật và cùng hàm ghi
- * với "Gắn vào điểm đo" ở Kho vật tư (`lib/dm/attach.ts`, `attachRun.ts`).
- * Đủ/thiếu, gợi ý, đóng sổ mượn: `lib/dm/supply.ts` (thuần, có test).
+ * Gắn số No = tạo dòng `dm_asset` CHƯA ngày treo + giữ chỗ — cùng luật và cùng hàm
+ * ghi với "Gắn vào điểm đo" ở Kho vật tư (`lib/dm/attach.ts`, `attachRun.ts`).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search, PackageCheck, ArrowRightLeft, AlertTriangle } from 'lucide-react';
@@ -16,16 +17,18 @@ import { Select } from '../ui/Select';
 import { EmptyState } from '../ui/dashboard';
 import { toast } from '../../lib/toast';
 import { FormModal } from './entryUi';
-import { borrows as borrowRepo, isAbortError, loadCatalog, pbErrorMessage, type CatalogData } from '../../lib/dm/repo';
+import PointNeedEditor, { needFromRows, rowsFromNeed, type NeedRow } from './PointNeedEditor';
 import {
-  SUPPLY_STATE_LABEL, allocCandidates, borrowCandidates, borrowsToSettle, openBorrowsByPoint,
-  pointSupply, type BorrowCandidate, type Candidate, type PointSupply,
+  borrows as borrowRepo, isAbortError, loadCatalog, pbErrorMessage, points as pointRepo, type CatalogData,
+} from '../../lib/dm/repo';
+import {
+  SUPPLY_STATE_LABEL, allocCandidates, borrowCandidates, borrowsToSettle, liveFirst, openBorrowsByPoint,
+  pointSupply, type BorrowCandidate, type Candidate, type PointSupply, type SupplyState,
 } from '../../lib/dm/supply';
 import { planAttach } from '../../lib/dm/attach';
 import { runAttach } from '../../lib/dm/attachRun';
-import { formatRatio } from '../../lib/dm/hsn';
+import { connectionOfHsn, formatRatio } from '../../lib/dm/hsn';
 import { pointZoneId } from '../../lib/dm/pointScope';
-import { dmy } from '../../lib/dm/lifecycle';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
 import { ASSET_LABEL, CONNECTION_LABEL, SHAPE_LABEL, type Device, type NeedLine, type Point } from '../../lib/dm/types';
 
@@ -41,12 +44,28 @@ export function needText(n: NeedLine, withQty = true): string {
 
 interface Row { p: Point; s: PointSupply; zone?: string; borrowed: number }
 
+type View = 'can' | 'cho_treo' | 'all';
+const VIEW_STATES: Record<View, SupplyState[]> = {
+  can: ['chua_khai', 'thieu', 'cho_hang'],
+  cho_treo: ['cho_treo'],
+  all: ['chua_khai', 'thieu', 'cho_hang', 'cho_treo', 'du'],
+};
+const STATE_CLS: Partial<Record<SupplyState, string>> = {
+  chua_khai: 'vl-badge-danger', thieu: 'vl-badge-warning', cho_hang: 'vl-badge-info',
+  cho_treo: 'vl-badge-primary', du: 'vl-badge-success',
+};
+const isHungRow = (a: { date_on?: string; date_off?: string }) =>
+  !!(a.date_on ?? '').slice(0, 10) && !(a.date_off ?? '').slice(0, 10);
+
 export default function SupplyAllocate() {
   const [d, setD] = useState<CatalogData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [zone, setZone] = useState('');
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<View>('can');
+  /** Đang sửa nhu cầu của điểm đo nào (bảng dòng giữ dạng chuỗi cho ô nhập). */
+  const [needOf, setNeedOf] = useState<{ p: Point; rows: NeedRow[] } | null>(null);
 
   /** Đang phân bổ cho điểm đo nào, dòng nhu cầu nào (chỉ số trong `need`). */
   const [target, setTarget] = useState<{ p: Point; line: NeedLine; missing: number } | null>(null);
@@ -72,18 +91,33 @@ export default function SupplyAllocate() {
 
   const borrowed = useMemo(() => openBorrowsByPoint(d?.borrows ?? []), [d]);
 
-  /** Điểm đo còn thiếu (② thiếu, ③ chờ hàng). Gấp lên đầu, rồi bị mượn, rồi theo mã. */
+  /** Điểm đo theo bộ lọc trạng thái. Bị mượn lên đầu (ưu tiên bù), rồi theo mã. */
   const rows = useMemo<Row[]>(() => {
     if (!d) return [];
     return d.points
       .map(p => ({ p, s: pointSupply(p, d), zone: pointZoneId(p, d.stations, d.lines), borrowed: borrowed.get(p.id) ?? 0 }))
-      .filter(r => r.s.state === 'thieu' || r.s.state === 'cho_hang')
+      .filter(r => VIEW_STATES[view].includes(r.s.state))
       .sort((a, b) =>
-        Number(!!b.p.urgent) - Number(!!a.p.urgent)
-        || (a.p.urgent ? (a.p.needed_by || '9').localeCompare(b.p.needed_by || '9') : 0)
-        || Number(b.borrowed > 0) - Number(a.borrowed > 0)
+        Number(b.borrowed > 0) - Number(a.borrowed > 0)
         || (a.p.code ?? '').localeCompare(b.p.code ?? ''));
-  }, [d, borrowed]);
+  }, [d, borrowed, view]);
+  const viewOpts = [
+    { value: 'can', label: 'Cần xử lý (chưa khai / thiếu / chờ hàng)' },
+    { value: 'cho_treo', label: 'Đã gắn đủ — chờ treo' },
+    { value: 'all', label: 'Tất cả điểm đo có nhu cầu' },
+  ];
+
+  /* ------------------------------ sửa nhu cầu ------------------------------ */
+  const saveNeed = async () => {
+    if (!needOf) return;
+    setSaving(true);
+    try {
+      await pointRepo.update(needOf.p.id, { need: needFromRows(needOf.rows) });
+      toast.success('Đã lưu nhu cầu', needOf.p.code ?? '');
+      setNeedOf(null);
+      await load();
+    } catch (e) { toast.error('Không lưu được', pbErrorMessage(e)); } finally { setSaving(false); }
+  };
 
   const terms = useMemo(() => buildTerms(search), [search]);
   const shown = rows.filter(r => (!zone || r.zone === zone) && matchesTerms([r.p.code, r.p.note], terms));
@@ -99,7 +133,7 @@ export default function SupplyAllocate() {
   const fromStock: Candidate[] = useMemo(
     () => (target && d ? allocCandidates(target.p.id, target.line, d) : []), [target, d]);
   const fromBorrow: BorrowCandidate[] = useMemo(
-    () => (target?.p.urgent && d ? borrowCandidates(target.p.id, target.line, d.points, d) : []), [target, d]);
+    () => (target && d ? borrowCandidates(target.p.id, target.line, d.points, d) : []), [target, d]);
 
   const open = (p: Point, line: NeedLine, missing: number) => {
     setTarget({ p, line, missing });
@@ -130,7 +164,7 @@ export default function SupplyAllocate() {
     let n = 0;
     try {
       await runAttach(pickedDevices, target.p.id, '', plan.moves,
-        `Mượn cho điểm đo cần gấp ${target.p.code ?? ''}`.trim(), k => { n = k; });
+        `Mượn cho điểm đo ${target.p.code ?? ''}`.trim(), k => { n = k; });
       toast.success('Đã phân bổ', `${n} thiết bị cho ${target.p.code}`
         + (plan.moves.length ? ` (mượn ${plan.moves.length})` : '') + '.');
       setTarget(null);
@@ -146,12 +180,15 @@ export default function SupplyAllocate() {
     <div className="space-y-6">
       <div className="mb-2 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h2 className="text-2xl font-bold text-ink">Phân bổ vật tư</h2>
+          <h2 className="text-2xl font-bold text-ink">Nhu cầu &amp; phân bổ</h2>
           <p className="mt-1 text-sm text-soft">
-            Điểm đo còn thiếu so với nhu cầu Kinh Doanh khai — cần gấp và bị mượn xếp trước
+            Khai quy cách cần và gắn số No cho từng điểm đo — điểm đo bị mượn xếp trước
           </p>
         </div>
         <div className="flex w-full flex-wrap items-end gap-3 md:w-auto">
+          <div className="w-full sm:w-[280px]">
+            <Select value={view} onChange={v => setView(v as View)} options={viewOpts} />
+          </div>
           <div className="w-full sm:w-[220px]">
             <Select value={zone} onChange={setZone} options={zoneOpts} />
           </div>
@@ -172,8 +209,8 @@ export default function SupplyAllocate() {
 
       {!loading && shown.length === 0 && (
         <div className="vl-card p-5">
-          <EmptyState icon={PackageCheck} title="Không có điểm đo nào thiếu vật tư"
-            hint="Điểm đo chưa khai nhu cầu không hiện ở đây — Kinh Doanh khai ở form điểm đo." />
+          <EmptyState icon={PackageCheck} title="Không có điểm đo nào ở mục này"
+            hint="Đổi bộ lọc trạng thái phía trên để xem điểm đo khác." />
         </div>
       )}
 
@@ -181,21 +218,27 @@ export default function SupplyAllocate() {
         <div key={p.id} className="vl-card space-y-3 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[15px] font-bold text-ink">{p.code}</span>
-            <span className={s.state === 'cho_hang' ? 'vl-badge-info' : 'vl-badge-warning'}>
-              {SUPPLY_STATE_LABEL[s.state]} · thiếu {s.missing}
+            <span className={STATE_CLS[s.state] ?? 'vl-badge-info'}>
+              {SUPPLY_STATE_LABEL[s.state]}{s.missing ? ` · thiếu ${s.missing}` : ''}
             </span>
-            {p.urgent && (
-              <span className="vl-badge-danger">Cần gấp{p.needed_by ? ` · ${dmy(p.needed_by)}` : ''}</span>
-            )}
+            {s.hung && s.missing > 0 && <span className="vl-badge-warning">Treo bổ sung</span>}
             {nBorrowed > 0 && <span className="vl-badge-primary">Bị mượn {nBorrowed}</span>}
+            <button className="vl-btn vl-btn-sm vl-btn-outline-primary ml-auto"
+              onClick={() => setNeedOf({ p, rows: rowsFromNeed(p.need) })}>
+              {s.state === 'chua_khai' ? 'Khai nhu cầu' : 'Sửa nhu cầu'}
+            </button>
           </div>
-          <div className="overflow-x-auto">
+          {s.state === 'chua_khai' && (
+            <p className="text-[12px] text-faint">Chưa khai nhu cầu — bấm "Khai nhu cầu", dùng "Điền theo HSN" cho nhanh.</p>
+          )}
+          {s.lines.length > 0 && <div className="overflow-x-auto">
             <table className="vl-table w-full text-sm">
               <thead>
                 <tr>
                   <th className="text-left">Quy cách</th>
                   <th className="text-center">Cần</th>
-                  <th className="text-center">Đã có</th>
+                  <th className="text-center" title="Phần treo tháo — thật sự đang ở điểm đo">Đang treo</th>
+                  <th className="text-center" title="Phần nhu cầu — Vật Tư đã gắn, chưa treo">Đã gắn</th>
                   <th className="text-center">Thiếu</th>
                   <th />
                 </tr>
@@ -210,7 +253,8 @@ export default function SupplyAllocate() {
                       )}
                     </td>
                     <td className="text-center">{l.line.qty}</td>
-                    <td className="text-center">{l.have.length}</td>
+                    <td className="text-center">{l.have.filter(isHungRow).length || '—'}</td>
+                    <td className="text-center">{l.have.filter(a => !isHungRow(a)).length || '—'}</td>
                     <td className={`text-center font-bold ${l.missing ? 'text-bad' : 'text-faint'}`}>{l.missing || '—'}</td>
                     <td className="text-right">
                       {l.missing > 0 && (
@@ -223,9 +267,18 @@ export default function SupplyAllocate() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </div>}
         </div>
       ))}
+
+      <FormModal open={!!needOf} wide onClose={() => setNeedOf(null)} onSubmit={() => void saveNeed()} saving={saving}
+        title={needOf ? `Nhu cầu vật tư — ${needOf.p.code}` : ''} submitLabel="Lưu nhu cầu">
+        {needOf && d && (
+          <PointNeedEditor rows={needOf.rows} onChange={rows => setNeedOf(n => (n ? { ...n, rows } : n))}
+            hsn={needOf.p.hsn ?? null} connection={connectionOfHsn(needOf.p.hsn ?? null)}
+            allocated={liveFirst(d.assets, needOf.p.id)} devices={d.devices} />
+        )}
+      </FormModal>
 
       <FormModal open={!!target} wide onClose={() => setTarget(null)} onSubmit={() => void save()} saving={saving}
         title={target ? `Phân bổ ${needText(target.line, false)} cho ${target.p.code}` : ''}
@@ -234,27 +287,21 @@ export default function SupplyAllocate() {
           <p className="text-sm text-soft">
             Còn thiếu <b className="text-ink">{target.missing}</b>. Đã chọn <b className="text-ink">{pickedDevices.length}</b>
             {over > 0 && <span className="text-bad"> — thừa {over} so với số thiếu</span>}.
-            Thiết bị được ghi dạng <b>dự kiến</b> (chưa ngày treo) — Vận Hành khai ngày treo khi lắp.
+            Thiết bị được gắn vào phần <b>nhu cầu</b> (chưa ngày treo) — Kinh Doanh / Vận Hành khai ngày treo khi lắp.
           </p>
 
           <PickTable title={`Trong kho (${fromStock.length})`} picked={picked} onToggle={toggle}
             empty="Kho không còn thiết bị rảnh khớp quy cách này — cần đặt mua."
             rows={fromStock.map(c => ({ device: c.device, match: c.match }))} />
 
-          {target.p.urgent ? (
-            <PickTable title={`Mượn từ điểm đo khác (${fromBorrow.length})`} picked={picked} onToggle={toggle}
-              icon={ArrowRightLeft}
-              empty="Không có vật tư dự kiến nào ở điểm đo không gấp, chưa treo khớp quy cách này."
-              rows={fromBorrow.map(c => ({
-                device: c.device, match: c.match,
-                note: `đang dự kiến ở ${c.from.code}${c.fromReady ? ' — điểm đó đã đủ, đang chờ treo' : ''}`,
-                warn: c.fromReady,
-              }))} />
-          ) : (
-            <p className="text-[12px] text-faint">
-              Muốn mượn vật tư của điểm đo khác: Kinh Doanh bật <b>Cần gấp</b> ở form điểm đo này.
-            </p>
-          )}
+          <PickTable title={`Mượn từ điểm đo khác (${fromBorrow.length})`} picked={picked} onToggle={toggle}
+            icon={ArrowRightLeft}
+            empty="Không có vật tư nhu cầu chưa treo nào ở điểm đo khác khớp quy cách này."
+            rows={fromBorrow.map(c => ({
+              device: c.device, match: c.match,
+              note: `đang gắn cho ${c.from.code}${c.fromReady ? ' — điểm đó đã đủ, đang chờ treo' : ''}`,
+              warn: c.fromReady,
+            }))} />
 
           {plan.moves.length > 0 && (
             <div className="vl-alert vl-alert-light-warning text-[12px]">

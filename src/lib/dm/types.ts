@@ -167,9 +167,9 @@ export interface Point extends PbRecord {
    * Đủ hay thiếu tính ở `lib/dm/supply.ts`, không lưu.
    */
   need?: NeedLine[] | null;
-  /** Cần gấp — đẩy lên đầu danh sách của Vật Tư và cho phép MƯỢN vật tư điểm đo khác. */
+  /** ĐÃ BỎ 27/10/2026 (user chốt) — trường còn trong PB, app không đọc/ghi nữa. */
   urgent?: boolean;
-  /** Ngày cần có vật tư (đi kèm `urgent`, không bắt buộc). */
+  /** ĐÃ BỎ 27/10/2026 cùng `urgent`. */
   needed_by?: string;
 }
 

@@ -5,7 +5,7 @@
  */
 
 import {
-  allocCandidates, borrowCandidates, borrowsToSettle, cleanNeed, defaultNeed, matchDevice,
+  allocCandidates, borrowCandidates, reconcile, borrowsToSettle, cleanNeed, defaultNeed, matchDevice,
   nextPurchaseCode, openBorrowsByPoint, pointSupply, purchaseNeeds, purchaseState, specKey,
   suggestTiRatio, supplyOfPoint, supplyTasks, taskCount,
 } from '../src/lib/dm/supply';
@@ -107,10 +107,17 @@ const empty = { purchases: [] as Purchase[], purchaseLines: [] as PurchaseLine[]
   const need: NeedLine[] = [needVuong, { type: 'CONGTO', qty: 1 }];
   const assets = [asset(t1, 'P'), asset(t2, 'P'), asset(t3, 'P'), asset(m, 'P')];
   const r = pointSupply(point(need), { assets, devices, ...empty });
-  eq([r.state, r.missing, r.unsureShape], ['du_cho_treo', 0, 1], 'pointSupply: đủ (1 TI chưa rõ hình dạng)');
+  eq([r.state, r.missing, r.unsureShape], ['cho_treo', 0, 1], 'pointSupply: đủ quy cách, chưa treo ⇒ chờ treo (1 TI chưa rõ hình dạng)');
 
-  const hung = [...assets.slice(0, 3), asset(m, 'P', '2026-10-20')];
-  eq(pointSupply(point(need), { assets: hung, devices, ...empty }).state, 'da_treo', 'pointSupply: công tơ có ngày treo ⇒ đã treo');
+  const hungMeter = [...assets.slice(0, 3), asset(m, 'P', '2026-10-20')];
+  eq(pointSupply(point(need), { assets: hungMeter, devices, ...empty }).state, 'cho_treo',
+     'pointSupply: mới treo công tơ, TI còn chờ ⇒ vẫn chờ treo (điểm đo đã treo vẫn trong luồng)');
+  const allHung = [asset(t1, 'P', '2026-10-20'), asset(t2, 'P', '2026-10-20'), asset(t3, 'P', '2026-10-20'), asset(m, 'P', '2026-10-20')];
+  eq(pointSupply(point(need), { assets: allHung, devices, ...empty }).state, 'du', 'pointSupply: treo đủ ⇒ đã treo đủ');
+  const oldPoint = [asset(m, 'P', '2024-01-01')];
+  eq(pointSupply(point(undefined), { assets: oldPoint, devices, ...empty }).state, 'ngoai_luong', 'pointSupply: điểm đo cũ không nhu cầu ⇒ ngoài luồng');
+  eq(pointSupply(point(need), { assets: [asset(m, 'P', '2026-10-20')], devices, ...empty }).state, 'thieu',
+     'pointSupply: đã treo nhưng thiếu TI ⇒ thiếu (cần treo bổ sung)');
 
   const removed = [...assets.slice(0, 3), asset(m, 'P', '', '2026-10-21')];
   eq(pointSupply(point(need), { assets: removed, devices, ...empty }).missing, 1, 'pointSupply: dòng đã tháo không tính');
@@ -153,18 +160,19 @@ const empty = { purchases: [] as Purchase[], purchaseLines: [] as PurchaseLine[]
 {
   const a1 = ti('vuong'), a2 = ti('vuong'), b1 = ti('vuong'), u1 = ti('vuong'), h1 = ti('vuong'), m1 = dev('CONGTO');
   const points = [
-    point([{ ...needVuong, qty: 1 }], { id: 'P', code: 'P', urgent: true }),
-    point([{ ...needVuong, qty: 1 }], { id: 'A', code: 'A' }),                        // đủ, chờ treo
+    point([{ ...needVuong, qty: 1 }], { id: 'P', code: 'P' }),
+    point([{ ...needVuong, qty: 1 }], { id: 'A', code: 'A' }),                        // đã treo đủ (a2), a1 thừa
     point([{ ...needVuong, qty: 3 }], { id: 'B', code: 'B' }),                        // còn thiếu
-    point([{ ...needVuong, qty: 1 }], { id: 'U', code: 'U', urgent: true }),          // cũng gấp
-    point([{ ...needVuong, qty: 1 }, { type: 'CONGTO', qty: 1 }], { id: 'H', code: 'H' }), // đã treo
+    point([{ ...needVuong, qty: 1 }], { id: 'U', code: 'U' }),                        // đủ, chờ treo
+    point([{ ...needVuong, qty: 1 }, { type: 'CONGTO', qty: 1 }], { id: 'H', code: 'H' }), // công tơ treo, TI chờ treo
   ];
   const assets = [asset(a1, 'A'), asset(a2, 'A', '2026-10-01'), asset(b1, 'B'), asset(u1, 'U'),
     asset(h1, 'H'), asset(m1, 'H', '2026-10-01')];
   const ctx = { assets, devices: [a1, a2, b1, u1, h1, m1], ...empty };
   const c = borrowCandidates('P', needVuong, points, ctx);
-  eq(c.map(x => [x.device.serial, x.from.code, x.fromReady]), [[b1.serial, 'B', false], [a1.serial, 'A', true]],
-     'borrowCandidates: bỏ điểm gấp, điểm đã treo, vật tư đã treo; điểm còn thiếu xếp trước');
+  eq(c.map(x => [x.device.serial, x.from.code, x.fromReady]),
+     [[a1.serial, 'A', false], [b1.serial, 'B', false], [h1.serial, 'H', true], [u1.serial, 'U', true]],
+     'borrowCandidates: mọi điểm đo (bỏ "gấp"), chỉ dòng chưa treo; điểm chưa chờ treo xếp trước');
 
   // planAttach coi thiết bị dự kiến ở điểm đo khác là CHUYỂN (= mượn).
   const plan = planAttach([b1], 'P', { assets, points: points.map(p => ({ ...p, hsn: 200 })) });
@@ -230,7 +238,7 @@ const empty = { purchases: [] as Purchase[], purchaseLines: [] as PurchaseLine[]
   const pts = [
     point(undefined, { id: 'A', code: 'A' }),                                       // ① chưa khai
     point([{ type: 'CONGTO', qty: 1 }], { id: 'B', code: 'B' }),                    // ② thiếu
-    point([{ type: 'CONGTO', qty: 1 }], { id: 'C', code: 'C', urgent: true }),      // ④ đủ chờ treo
+    point([{ type: 'CONGTO', qty: 1 }], { id: 'C', code: 'C' }),                    // ④ đủ chờ treo
     point(undefined, { id: 'D', code: 'D' }),                                       // từng treo rồi tháo ⇒ thoát luồng
     point([{ type: 'CONGTO', qty: 1 }], { id: 'E', code: 'E' }),                    // đang treo
   ];
@@ -245,8 +253,50 @@ const empty = { purchases: [] as Purchase[], purchaseLines: [] as PurchaseLine[]
   eq([t.chuaKhai, t.thieu, t.choTreo].map(l => l.map(p => p.code)), [['A'], ['B'], ['C']],
      'supplyTasks: chia đúng nhóm; điểm đo từng treo rồi tháo không vào "chưa khai"');
   eq([t.lateOrders.map(o => o.code), t.tiNoShape], [['PO'], 1], 'supplyTasks: đơn trễ + TI chưa rõ hình dạng');
-  eq([taskCount(t, 'kinh_doanh'), taskCount(t, 'vat_tu'), taskCount(t, 'van_hanh')], [1, 2, 1], 'taskCount: theo nhóm');
+  eq([taskCount(t, 'kinh_doanh'), taskCount(t, 'vat_tu'), taskCount(t, 'van_hanh')], [1, 3, 1],
+     'taskCount: KD/VH = chờ treo; VT = chưa khai + thiếu + đơn trễ');
   eq(supplyTasks(pts, ctx, '2026-10-26', p => p.id !== 'C').choTreo.length, 0, 'supplyTasks: lọc theo KCN của người xem');
+}
+
+/* ------------------------------------------------------------ reconcile */
+
+{
+  const tA = ti('tron'), tB = ti('tron'), tC = ti('tron'), tX = ti('tron'), tY = ti('tron'), tZ = ti('tron');
+  const sim = dev('SIM'), m = dev('CONGTO');
+  const devices = [tA, tB, tC, tX, tY, tZ, sim, m];
+  const need3: NeedLine[] = [{ type: 'TI', ratio_primary: 1000, ratio_secondary: 5, shape: 'tron', qty: 3 }, { type: 'CONGTO', qty: 1 }];
+  const pt = point(need3);
+  const ids = (l: { id: string }[]) => l.map(a => a.id);
+
+  // Nhu cầu gắn A,B,C; hiện trường treo X,Y,Z cùng quy cách ⇒ A,B,C thừa ⇒ gỡ; không thiếu.
+  const plan = [asset(tA, 'P'), asset(tB, 'P'), asset(tC, 'P'), asset(m, 'P')];
+  const field = [asset(tX, 'P', '2026-10-27'), asset(tY, 'P', '2026-10-27'), asset(tZ, 'P', '2026-10-27'), asset(m, 'P', '2026-10-27')];
+  const r1 = reconcile(pt, [...plan.slice(0, 3), ...field], devices);
+  eq([ids(r1.release), r1.shortages.length, r1.extraHung.length], [ids(plan.slice(0, 3)), 0, 0],
+     'reconcile: treo khác số No cùng quy cách ⇒ gỡ nhu cầu thừa, không thiếu');
+
+  // Treo đúng 2/3 TI nhu cầu + 0 cái khác ⇒ dòng còn lại vẫn chờ treo, không gỡ gì, không thiếu.
+  const partial = [asset(tA, 'P', '2026-10-27'), asset(tB, 'P', '2026-10-27'), asset(tC, 'P'), asset(m, 'P', '2026-10-27')];
+  const r2 = reconcile(pt, partial, devices);
+  eq([r2.release.length, r2.shortages.length], [0, 0], 'reconcile: treo đúng nhu cầu một phần ⇒ không gỡ, không thiếu');
+
+  // Chỉ treo 2 TI khác (X,Y), nhu cầu còn A ⇒ A vẫn đủ bù 1 ⇒ không thiếu; B,C thừa ⇒ gỡ.
+  const r3 = reconcile(pt, [asset(tA, 'P'), asset(tB, 'P'), asset(tC, 'P'), asset(tX, 'P', '2026-10-27'), asset(tY, 'P', '2026-10-27'), asset(m, 'P', '2026-10-27')], devices);
+  eq([r3.release.length, r3.shortages.length], [2, 0], 'reconcile: treo khác 2/3 ⇒ gỡ 2 dòng nhu cầu thừa');
+
+  // Không có nhu cầu chưa treo, chỉ treo 2 TI ⇒ đề xuất treo bổ sung 1 TI.
+  const r4 = reconcile(pt, [asset(tX, 'P', '2026-10-27'), asset(tY, 'P', '2026-10-27'), asset(m, 'P', '2026-10-27')], devices);
+  eq(r4.shortages.map(l => [l.line.type, l.missing]), [['TI', 1]], 'reconcile: treo thiếu ⇒ đề xuất treo bổ sung');
+
+  // Treo thêm SIM ngoài nhu cầu ⇒ ghi chú, không đụng. Dòng nhu cầu SIM không thuộc quy cách nào ⇒ giữ.
+  const r5 = reconcile(pt, [...field, asset(sim, 'P', '2026-10-27')], devices);
+  eq(r5.extraHung.map(a => a.type), ['SIM'], 'reconcile: treo ngoài nhu cầu chỉ ghi chú');
+  const r6 = reconcile(pt, [...field, asset(sim, 'P')], devices);
+  eq(r6.release.length, 0, 'reconcile: dòng chưa treo không khớp quy cách nào ⇒ giữ nguyên');
+
+  // Không bao giờ gỡ dòng đã treo; điểm đo chưa khai nhu cầu ⇒ không làm gì.
+  eq(r1.release.every(a => !a.date_on), true, 'reconcile: không đụng dòng đã treo');
+  eq(reconcile(point(undefined), plan, devices).release.length, 0, 'reconcile: chưa khai nhu cầu ⇒ không làm gì');
 }
 
 /* ---------------------------------------------------------------- kết quả */

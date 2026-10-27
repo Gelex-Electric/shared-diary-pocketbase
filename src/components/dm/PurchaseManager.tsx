@@ -100,7 +100,7 @@ export default function PurchaseManager() {
           shape: (r.spec.shape || '') as TiShape | '',
           meterKind: (r.spec.meter_kind || '') as Connection | '',
         };
-        const pts = [...r.points].sort((a, b) => Number(b.borrowed) - Number(a.borrowed) || Number(!!b.point.urgent) - Number(!!a.point.urgent));
+        const pts = [...r.points].sort((a, b) => Number(b.borrowed) - Number(a.borrowed));
         for (const np of pts) {
           if (!left) break;
           const q = Math.min(left, np.missing);
@@ -289,7 +289,6 @@ export default function PurchaseManager() {
                           <span key={np.point.id} className="mr-2 inline-flex items-center gap-1 whitespace-nowrap">
                             <span className="font-mono">{np.point.code}</span> ×{np.missing}
                             {np.borrowed && <span className="vl-badge-primary">bị mượn</span>}
-                            {np.point.urgent && <span className="vl-badge-danger">gấp</span>}
                           </span>
                         ))}
                       </td>

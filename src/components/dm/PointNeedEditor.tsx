@@ -1,6 +1,7 @@
 /**
- * Khối "NHU CẦU VẬT TƯ" trong form điểm đo — Kinh Doanh khai điểm đo mới cần
- * gì (bước B2, plan `plans/2026-10-26-luong-cap-vat-tu-diem-do-moi.md`).
+ * Khối "NHU CẦU VẬT TƯ" của điểm đo. Từ 27/10/2026 (điểm đo hai phần) do NHÓM
+ * VẬT TƯ khai ở màn "Nhu cầu & phân bổ"; form điểm đo của Kinh Doanh chỉ XEM
+ * (`readOnly`). Bỏ "Cần gấp" cùng ngày.
  *
  * Tách khỏi `CatalogEntry.tsx` (đã > 3.000 dòng): form chỉ giữ mảng dòng và
  * gọi `needFromRows` lúc lưu. Đủ/thiếu tính ở `lib/dm/supply.ts`.
@@ -10,15 +11,13 @@
  */
 import { Plus, Trash2, ClipboardList, Wand2 } from 'lucide-react';
 import { Select } from '../ui/Select';
-import { Switch } from '../ui/Switch';
-import { DatePicker } from '../ui/DateTimePickers';
 import { CellInput } from './entryUi';
 import VariantCell from './VariantCell';
 import { formatRatio, parseRatio } from '../../lib/dm/hsn';
 import { useMemo } from 'react';
 import { HAS_RATIO, cleanNeed, defaultNeed, supplyOfPoint, type LineSupply } from '../../lib/dm/supply';
 import {
-  ASSET_LABEL, DEFAULT_TI_SHAPE, type Asset, type AssetType, type Connection, type Device, type NeedLine, type TiShape,
+  ASSET_LABEL, CONNECTION_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type Asset, type AssetType, type Connection, type Device, type NeedLine, type TiShape,
 } from '../../lib/dm/types';
 
 /** Một dòng trên form — tỷ số và số lượng giữ dạng CHUỖI cho ô nhập. */
@@ -58,15 +57,16 @@ export function needFromRows(rows: NeedRow[]): NeedLine[] {
 
 const TYPE_OPTS = (Object.keys(ASSET_LABEL) as AssetType[]).map(t => ({ value: t, label: ASSET_LABEL[t] }));
 
+/** Chữ "kiểu" để xem: hình dạng TI / loại công tơ. */
+const variantText = (r: NeedRow): string =>
+  r.type === 'TI' ? (r.shape ? SHAPE_LABEL[r.shape] : '—')
+    : r.type === 'CONGTO' ? (r.meter_kind ? CONNECTION_LABEL[r.meter_kind] : '—') : '—';
+
 export default function PointNeedEditor({
-  rows, onChange, urgent, onUrgent, neededBy, onNeededBy, hsn, connection, allocated, devices,
+  rows, onChange, hsn, connection, allocated, devices, readOnly = false,
 }: {
   rows: NeedRow[];
   onChange: (rows: NeedRow[]) => void;
-  urgent: boolean;
-  onUrgent: (v: boolean) => void;
-  neededBy: string;
-  onNeededBy: (v: string) => void;
   /** HSN đang nhập — để gợi ý tỷ số TI. */
   hsn: number | null;
   connection: Connection;
@@ -76,6 +76,8 @@ export default function PointNeedEditor({
    */
   allocated?: Asset[];
   devices: Device[];
+  /** Chỉ xem — form điểm đo của Kinh Doanh (nhu cầu do Vật Tư khai). */
+  readOnly?: boolean;
 }) {
   const set = (key: string, patch: Partial<NeedRow>) =>
     onChange(rows.map(r => {
@@ -101,15 +103,7 @@ export default function PointNeedEditor({
         <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-dim">
           <ClipboardList className="h-4 w-4" /> Nhu cầu vật tư
         </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <Switch checked={urgent} onChange={onUrgent} label="Cần gấp"
-            title="Đưa lên đầu danh sách của Nhóm Vật Tư, cho phép mượn vật tư dự kiến của điểm đo khác" />
-          {urgent && (
-            <div className="w-[170px]">
-              <DatePicker value={neededBy} onChange={onNeededBy} usePortal />
-            </div>
-          )}
-        </div>
+        {readOnly && <span className="text-[11px] text-faint">Nhóm Vật Tư khai và gắn số No</span>}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-surface">
@@ -136,13 +130,20 @@ export default function PointNeedEditor({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-[13px] italic text-faint">
-                  Chưa khai nhu cầu — bấm "Điền theo HSN" để có sẵn bộ mặc định.
+                  {readOnly ? 'Nhóm Vật Tư chưa khai nhu cầu cho điểm đo này.'
+                    : 'Chưa khai nhu cầu — bấm "Điền theo HSN" để có sẵn bộ mặc định.'}
                 </td>
               </tr>
             ) : rows.map(r => {
               const s = supply.get(r.key);
               return (
                 <tr key={r.key}>
+                  {readOnly ? (<>
+                    <td className="px-4 py-2">{r.type ? ASSET_LABEL[r.type as AssetType] : '—'}</td>
+                    <td className="px-4 py-2 font-mono">{HAS_RATIO.includes(r.type as AssetType) ? (r.ratio || '—') : '—'}</td>
+                    <td className="px-2 py-2">{variantText(r)}</td>
+                    <td className="px-2 py-2 text-center">{r.qty}</td>
+                  </>) : (<>
                   <td className="p-2">
                     <Select value={r.type} variant="bare" options={TYPE_OPTS} placeholder="Chọn loại"
                       onChange={v => set(r.key, { type: v as AssetType })} />
@@ -161,6 +162,7 @@ export default function PointNeedEditor({
                     <CellInput value={r.qty} type="number" align="center"
                       onChange={v => set(r.key, { qty: v })} />
                   </td>
+                  </>)}
                   <td className="px-2 py-2 text-[12px]">
                     {!s ? <span className="text-faint">—</span>
                       : s.missing === 0 ? (
@@ -175,10 +177,12 @@ export default function PointNeedEditor({
                     )}
                   </td>
                   <td className="p-2 text-center">
-                    <button type="button" title="Bỏ dòng" className="text-faint hover:text-bad"
-                      onClick={() => onChange(rows.filter(x => x.key !== r.key))}>
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {!readOnly && (
+                      <button type="button" title="Bỏ dòng" className="text-faint hover:text-bad"
+                        onClick={() => onChange(rows.filter(x => x.key !== r.key))}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -187,7 +191,7 @@ export default function PointNeedEditor({
         </table>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      {!readOnly && <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className="vl-btn vl-btn-sm vl-btn-secondary flex items-center gap-1.5"
           onClick={() => onChange([...rows, newRow()])}>
           <Plus className="h-4 w-4" /> Thêm dòng
@@ -197,7 +201,7 @@ export default function PointNeedEditor({
           onClick={fillDefault}>
           <Wand2 className="h-4 w-4" /> Điền theo HSN{rows.length ? ' (thay bảng)' : ''}
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

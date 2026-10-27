@@ -194,22 +194,28 @@ export function openPurchaseLines(
 /* ------------------------- trạng thái quy trình ------------------------- */
 
 /**
- *   chua_khai   ① điểm đo dự kiến, chưa khai nhu cầu          → việc Kinh Doanh
- *   thieu       ② còn thiếu, đơn mua chưa phủ                  → việc Vật Tư
- *   cho_hang    ③ phần thiếu đã nằm trong đơn mua chưa về      → Vật Tư theo dõi
- *   du_cho_treo ④ đủ vật tư, công tơ chưa có ngày treo         → việc Vận Hành
- *   da_treo     ⑤ công tơ đã có ngày treo — thoát luồng. Kể cả điểm đo TỪNG treo
- *               rồi tháo hết (đã tháo gỡ): đó không phải điểm đo mới, không được
- *               đẩy vào việc "chưa khai nhu cầu" của Kinh Doanh.
+ * ĐIỂM ĐO HAI PHẦN (user chốt 27/10/2026, plan `2026-10-27-diem-do-hai-phan-nhu-cau-treo-thao.md`):
+ *   - NHU CẦU   = `need` (quy cách) + lần lắp CHƯA ngày treo (số No Vật Tư đã gắn)
+ *   - TREO THÁO = lần lắp CÓ ngày treo — thứ thật sự ở hiện trường
+ * Đáp ứng nhu cầu tính ĐANG TREO trước, rồi mới tới nhu cầu chưa treo.
+ *
+ *   chua_khai   chưa khai nhu cầu, chưa từng treo             → việc Vật Tư
+ *   thieu       còn thiếu, đơn mua chưa phủ                   → việc Vật Tư
+ *   cho_hang    phần thiếu nằm trong đơn mua chưa về          → Vật Tư theo dõi
+ *   cho_treo    đủ quy cách nhưng còn dòng chưa treo          → việc Kinh Doanh + Vận Hành
+ *   du          đang treo đáp ứng đủ nhu cầu                  → xong
+ *   ngoai_luong đã từng treo và KHÔNG có nhu cầu (điểm đo cũ) → không xét
+ * Điểm đo đã treo VẪN trong luồng nếu có nhu cầu mà treo thực tế chưa đủ ⇒ treo bổ sung.
  */
-export type SupplyState = 'chua_khai' | 'thieu' | 'cho_hang' | 'du_cho_treo' | 'da_treo';
+export type SupplyState = 'chua_khai' | 'thieu' | 'cho_hang' | 'cho_treo' | 'du' | 'ngoai_luong';
 
 export const SUPPLY_STATE_LABEL: Record<SupplyState, string> = {
   chua_khai: 'Chưa khai nhu cầu',
   thieu: 'Thiếu vật tư',
   cho_hang: 'Chờ hàng về',
-  du_cho_treo: 'Đủ – chờ treo',
-  da_treo: 'Đã treo',
+  cho_treo: 'Chờ treo',
+  du: 'Đã treo đủ',
+  ngoai_luong: 'Điểm đo cũ',
 };
 
 export interface PointSupply {
@@ -217,6 +223,8 @@ export interface PointSupply {
   lines: LineSupply[];
   missing: number;
   unsureShape: number;
+  /** Đã có công tơ treo thực tế — để nói "treo bổ sung" thay vì "treo mới". */
+  hung: boolean;
 }
 
 /**
@@ -240,17 +248,28 @@ export interface SupplyContext {
   purchaseLines: PurchaseLine[];
 }
 
+const isPlanRow = (a: Asset) => !ymd(a.date_on) && !ymd(a.date_off);
+const isLiveRow = (a: Asset) => !!ymd(a.date_on) && !ymd(a.date_off);
+
+/** Lần lắp còn hiệu lực của điểm đo, ĐANG TREO xếp trước NHU CẦU CHƯA TREO. */
+export const liveFirst = (assets: Asset[], pointId: string): Asset[] => {
+  const mine = allocatedAssets(assets, pointId);
+  return [...mine.filter(isLiveRow), ...mine.filter(isPlanRow)];
+};
+
 export function pointSupply(p: Point, ctx: SupplyContext): PointSupply {
-  const mine = allocatedAssets(ctx.assets, p.id);
+  const mine = liveFirst(ctx.assets, p.id);
   const need = cleanNeed(p.need);
   const lines = supplyOfPoint(need, mine, ctx.devices);
   const missing = lines.reduce((s, l) => s + l.missing, 0);
   const unsureShape = lines.reduce((s, l) => s + l.unsureShape, 0);
-  const base = { lines, missing, unsureShape };
+  const hung = isHung(mine);
+  const base = { lines, missing, unsureShape, hung };
 
-  if (isHung(mine) || everHung(ctx.assets, p.id)) return { state: 'da_treo', ...base };
-  if (!need.length) return { state: 'chua_khai', ...base };
-  if (missing === 0) return { state: 'du_cho_treo', ...base };
+  if (!need.length) return { state: everHung(ctx.assets, p.id) ? 'ngoai_luong' : 'chua_khai', ...base };
+  if (missing === 0) {
+    return { state: lines.some(l => l.have.some(isPlanRow)) ? 'cho_treo' : 'du', ...base };
+  }
 
   // Đơn mua có phủ hết phần thiếu không — chỉ tính dòng đơn ghi "cho điểm đo này".
   const open = openPurchaseLines(ctx.purchases, ctx.purchaseLines, ctx.devices)
@@ -265,9 +284,45 @@ export function pointSupply(p: Point, ctx: SupplyContext): PointSupply {
   return { state: covered ? 'cho_hang' : 'thieu', ...base };
 }
 
-/* ---------------------- phân bổ + mượn (đợt 2) ---------------------- */
+/* ------------------- đối chiếu nhu cầu ↔ treo thực tế ------------------- */
 
-const isPlanRow = (a: Asset) => !ymd(a.date_on) && !ymd(a.date_off);
+export interface ReconcileResult {
+  /** Dòng nhu cầu CHƯA TREO đã thừa (treo thực tế đã đủ quy cách đó) ⇒ gỡ, thiết bị về kho. */
+  release: Asset[];
+  /** Quy cách còn thiếu sau khi tính cả treo thực tế lẫn nhu cầu chưa treo ⇒ đề xuất treo bổ sung. */
+  shortages: LineSupply[];
+  /** Vật tư đang treo không thuộc dòng nhu cầu nào — chỉ ghi chú. */
+  extraHung: Asset[];
+}
+
+/**
+ * Chạy sau MỖI lần ghi treo tháo (user chốt 27/10/2026, xử lý TỰ ĐỘNG).
+ * - Đáp ứng nhu cầu bằng vật tư ĐANG TREO trước, rồi mới tới dòng chưa treo.
+ * - Dòng chưa treo không còn được dùng mà CÓ khớp một quy cách cần ⇒ thừa ⇒ gỡ
+ *   (vd nhu cầu gắn TI A, hiện trường treo TI B cùng quy cách ⇒ A về kho).
+ *   Dòng chưa treo không khớp quy cách nào thì giữ nguyên — đó là Vật Tư gắn thêm,
+ *   không phải do treo khác.
+ * - KHÔNG BAO GIỜ đụng dòng đã có ngày treo.
+ * Điểm đo chưa khai nhu cầu ⇒ không làm gì.
+ */
+export function reconcile(p: Point, assets: Asset[], devices: Device[]): ReconcileResult {
+  const need = cleanNeed(p.need);
+  const out: ReconcileResult = { release: [], shortages: [], extraHung: [] };
+  if (!need.length) return out;
+  const mine = liveFirst(assets, p.id);
+  const lines = supplyOfPoint(need, mine, devices);
+  const used = new Set(lines.flatMap(l => l.have.map(a => a.id)));
+  const devOf = deviceIndex(devices);
+  for (const a of mine) {
+    if (used.has(a.id)) continue;
+    if (isLiveRow(a)) out.extraHung.push(a);
+    else if (need.some(n => matchDevice(devOf(a), n) !== 'no')) out.release.push(a);
+  }
+  out.shortages = lines.filter(l => l.missing > 0);
+  return out;
+}
+
+/* ---------------------- phân bổ + mượn (đợt 2) ---------------------- */
 
 export interface Candidate {
   device: Device;
@@ -309,9 +364,8 @@ export interface BorrowCandidate extends Candidate {
 }
 
 /**
- * Vật tư MƯỢN ĐƯỢC cho điểm đo cần gấp (user chốt 26/10/2026): chỉ vật tư DỰ
- * KIẾN (chưa ngày treo) ở điểm đo CHƯA TREO và KHÔNG GẤP. Không bao giờ lấy
- * vật tư đã treo.
+ * Vật tư MƯỢN ĐƯỢC: chỉ dòng NHU CẦU CHƯA TREO của điểm đo khác. Không bao giờ lấy
+ * vật tư đã treo. Từ 27/10/2026 bỏ "Cần gấp" — điểm đo nào cũng mượn được.
  * Thứ tự gợi ý: điểm đo cho mượn còn thiếu trước (đằng nào cũng chưa treo được),
  * điểm đo đã đủ chờ treo sau; trong đó khớp chắc chắn trước, rồi theo mã.
  */
@@ -322,9 +376,8 @@ export function borrowCandidates(
   const devBySerial = new Map(ctx.devices.map(d => [d.serial.trim(), d]));
   const out: BorrowCandidate[] = [];
   for (const q of points) {
-    if (q.id === pointId || q.urgent) continue;
+    if (q.id === pointId) continue;
     const mine = allocatedAssets(ctx.assets, q.id);
-    if (isHung(mine)) continue;
     let fromReady: boolean | undefined;
     for (const a of mine) {
       if (!isPlanRow(a)) continue;
@@ -332,7 +385,7 @@ export function borrowCandidates(
       if (!d || ymd(d.liquidated_at)) continue;
       const m = matchDevice(d, line);
       if (m === 'no') continue;
-      fromReady ??= pointSupply(q, ctx).state === 'du_cho_treo';
+      fromReady ??= pointSupply(q, ctx).state === 'cho_treo';
       out.push({ device: d, match: m, asset: a, from: q, fromReady });
     }
   }
@@ -356,7 +409,7 @@ export function borrowsToSettle(borrows: Borrow[], points: Point[], ctx: SupplyC
     if (!p) return false;
     if (!done.has(p.id)) {
       const s = pointSupply(p, ctx);
-      done.set(p.id, s.state === 'da_treo' || s.state === 'du_cho_treo');
+      done.set(p.id, s.state === 'du' || s.state === 'cho_treo' || s.state === 'ngoai_luong');
     }
     return done.get(p.id)!;
   });
@@ -488,17 +541,17 @@ export function nextPurchaseCode(purchases: Purchase[], year = new Date().getFul
 /* -------------------------- việc cần làm (đợt 4) -------------------------- */
 
 export interface SupplyTasks {
-  /** ① Kinh Doanh: điểm đo mới chưa khai nhu cầu. */
+  /** Vật Tư: điểm đo mới chưa khai nhu cầu. */
   chuaKhai: Point[];
-  /** ② Vật Tư: điểm đo còn thiếu, đơn mua chưa phủ. */
+  /** Vật Tư: điểm đo còn thiếu (kể cả đã treo cần bổ sung), đơn mua chưa phủ. */
   thieu: Point[];
-  /** ③ Vật Tư theo dõi: điểm đo chờ hàng về. */
+  /** Vật Tư theo dõi: điểm đo chờ hàng về. */
   choHang: Point[];
-  /** ④ Vận Hành: điểm đo đủ vật tư, chờ treo. */
+  /** Kinh Doanh + Vận Hành: điểm đo đủ quy cách, còn dòng chưa treo. */
   choTreo: Point[];
   /** Đơn mua quá ngày dự kiến về mà chưa về đủ. */
   lateOrders: Purchase[];
-  /** TI còn dùng được chưa khai hình dạng — chỉ để nhắc, KHÔNG đếm vào badge (quá nhiều TI cũ). */
+  /** TI còn dùng được chưa khai hình dạng — chỉ để nhắc, KHÔNG đếm vào badge. */
   tiNoShape: number;
 }
 
@@ -516,11 +569,10 @@ export function supplyTasks(
     if (st === 'chua_khai') t.chuaKhai.push(p);
     else if (st === 'thieu') t.thieu.push(p);
     else if (st === 'cho_hang') t.choHang.push(p);
-    else if (st === 'du_cho_treo') t.choTreo.push(p);
+    else if (st === 'cho_treo') t.choTreo.push(p);
   }
-  const urgentFirst = (a: Point, b: Point) =>
-    Number(!!b.urgent) - Number(!!a.urgent) || (a.code ?? '').localeCompare(b.code ?? '');
-  for (const k of ['chuaKhai', 'thieu', 'choHang', 'choTreo'] as const) t[k].sort(urgentFirst);
+  const byCode = (a: Point, b: Point) => (a.code ?? '').localeCompare(b.code ?? '');
+  for (const k of ['chuaKhai', 'thieu', 'choHang', 'choTreo'] as const) t[k].sort(byCode);
   t.lateOrders = ctx.purchases.filter(po => {
     if (!po.expected_at || ymd(po.expected_at) >= today) return false;
     const s = purchaseState(po, ctx.purchaseLines, ctx.devices).state;
@@ -530,9 +582,8 @@ export function supplyTasks(
   return t;
 }
 
-/** Số trên badge "Việc cần làm" của từng nhóm. */
+/** Số trên badge "Việc cần làm" của từng nhóm (phân việc 27/10/2026). */
 export function taskCount(t: SupplyTasks, group: 'van_hanh' | 'kinh_doanh' | 'vat_tu'): number {
-  if (group === 'kinh_doanh') return t.chuaKhai.length;
-  if (group === 'van_hanh') return t.choTreo.length;
-  return t.thieu.length + t.lateOrders.length;
+  if (group === 'vat_tu') return t.chuaKhai.length + t.thieu.length + t.lateOrders.length;
+  return t.choTreo.length;
 }

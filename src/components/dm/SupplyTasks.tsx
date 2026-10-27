@@ -23,7 +23,9 @@ export default function SupplyTasks({ group, tasks, data, onNavigate, onChanged 
   onNavigate?: (tab: string) => void;
   onChanged?: () => void;
 }) {
+  // Điểm đo hai phần (27/10/2026): việc của KD + VH là phần TREO THÁO.
   if (group === 'van_hanh') return <HangPoints scope="doi" onChanged={onChanged} />;
+  if (group === 'kinh_doanh') return <HangPoints scope="vanphong" onChanged={onChanged} />;
 
   const borrowed = openBorrowsByPoint(data?.borrows ?? []);
   const t = tasks;
@@ -38,32 +40,29 @@ export default function SupplyTasks({ group, tasks, data, onNavigate, onChanged 
       <div>
         <h2 className="text-2xl font-bold text-ink">Việc cần làm</h2>
         <p className="mt-1 text-sm text-soft">
-          Luồng cấp vật tư điểm đo mới: Kinh Doanh khai nhu cầu → Vật Tư phân bổ / đặt mua → Vận Hành treo
+          Điểm đo hai phần: Vật Tư khai nhu cầu + gắn số No / đặt mua → Kinh Doanh, Vận Hành ghi treo tháo
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile label="Chưa khai nhu cầu" value={t?.chuaKhai.length ?? '…'} icon={ClipboardList}
-          tone={group === 'kinh_doanh' && t?.chuaKhai.length ? 'warn' : 'neutral'} loading={!t} sub="Kinh Doanh" />
+          tone={t?.chuaKhai.length ? 'warn' : 'neutral'} loading={!t} sub="Vật Tư" />
         <StatTile label="Thiếu vật tư" value={t?.thieu.length ?? '…'} icon={PackageSearch}
-          tone={group === 'vat_tu' && t?.thieu.length ? 'warn' : 'neutral'} loading={!t} sub="Vật Tư" />
+          tone={t?.thieu.length ? 'warn' : 'neutral'} loading={!t} sub="Vật Tư (kể cả treo bổ sung)" />
         <StatTile label="Chờ hàng về" value={t?.choHang.length ?? '…'} icon={Truck}
           tone={t?.lateOrders.length ? 'bad' : 'neutral'} loading={!t}
           sub={t?.lateOrders.length ? `${t.lateOrders.length} đơn trễ` : 'Vật Tư'} />
-        <StatTile label="Đủ – chờ treo" value={t?.choTreo.length ?? '…'} icon={Wrench} tone="neutral"
-          loading={!t} sub="Vận Hành" />
+        <StatTile label="Chờ treo" value={t?.choTreo.length ?? '…'} icon={Wrench} tone="neutral"
+          loading={!t} sub="Kinh Doanh + Vận Hành" />
       </div>
 
-      {t && group === 'kinh_doanh' && (
-        <PointList title={`Điểm đo chưa khai nhu cầu vật tư (${t.chuaKhai.length})`} points={t.chuaKhai}
-          hint="Mở Quản lý chung → Điểm đo, sửa điểm đo và khai khối “Nhu cầu vật tư” (nút “Điền theo HSN”)."
-          action={go('dm-catalog', 'Mở Quản lý chung')} empty="Mọi điểm đo mới đã khai nhu cầu." />
-      )}
-
       {t && group === 'vat_tu' && (<>
+        <PointList title={`Điểm đo chưa khai nhu cầu (${t.chuaKhai.length})`} points={t.chuaKhai}
+          hint="Khai quy cách cần (nút “Điền theo HSN”) ở màn Nhu cầu & phân bổ."
+          action={go('supply-alloc', 'Nhu cầu & phân bổ')} empty="Mọi điểm đo mới đã khai nhu cầu." />
         <PointList title={`Điểm đo thiếu vật tư (${t.thieu.length})`} points={t.thieu} borrowed={borrowed}
-          hint="Phân bổ từ kho, điểm đo cần gấp có thể mượn; kho không còn thì đặt mua."
-          action={go('supply-alloc', 'Phân bổ vật tư')} empty="Không có điểm đo nào thiếu vật tư." />
+          hint="Gắn số No từ kho hoặc mượn của điểm đo khác; kho không còn thì đặt mua."
+          action={go('supply-alloc', 'Nhu cầu & phân bổ')} empty="Không có điểm đo nào thiếu vật tư." />
         {t.lateOrders.length > 0 && (
           <div className="vl-card space-y-2 p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -108,7 +107,6 @@ function PointList({ title, points, hint, action, empty, borrowed }: {
           {points.map(p => (
             <span key={p.id} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-subtle px-2.5 py-1.5 text-[12px]">
               <span className="font-mono font-semibold text-ink">{p.code}</span>
-              {p.urgent && <span className="vl-badge-danger">gấp{p.needed_by ? ` ${dmy(p.needed_by)}` : ''}</span>}
               {(borrowed?.get(p.id) ?? 0) > 0 && <span className="vl-badge-primary">bị mượn</span>}
             </span>
           ))}
