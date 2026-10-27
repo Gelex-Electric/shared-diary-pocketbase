@@ -61,7 +61,7 @@ import AssetLifecycle from './AssetLifecycle';
 import StockEntry from './StockEntry';
 import { TransferOwner } from './TransferOwner';
 import LineAssign from './LineAssign';
-import PointNeedEditor, { rowsFromNeed, type NeedRow } from './PointNeedEditor';
+import PointNeedEditor, { needFromRows, rowsFromNeed, type NeedRow } from './PointNeedEditor';
 import { liveFirst } from '../../lib/dm/supply';
 import { runReconcile } from '../../lib/dm/reconcileRun';
 import { ZoneTables } from './ZoneTables';
@@ -157,8 +157,8 @@ const EMPTY_P = {
   /** Vật tư khai luôn cùng điểm đo — mỗi dòng một thiết bị (ghi vào dm_asset). */
   assetRows: [] as AssetRow[],
   /**
-   * Nhu cầu vật tư — CHỈ ĐỂ XEM ở form này: từ 27/10/2026 Nhóm Vật Tư khai ở màn
-   * "Nhu cầu & phân bổ" (điểm đo hai phần). Form KHÔNG ghi `need` xuống PB.
+   * Nhu cầu vật tư (quy cách) — KINH DOANH khai ở form này (user chốt lại 27/10/2026);
+   * Nhóm Vật Tư chỉ GẮN số No dự kiến, KD + VH ghi treo tháo. Xem `PointNeedEditor`.
    */
   need: [] as NeedRow[],
 };
@@ -1169,7 +1169,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
   const treoBlocks = pForm.assetRows
     .filter(r => !r.id && r.serial.trim() && !r.dateOn.trim())
     .map(r => `${r.serial.trim()}: thêm ở đây là TREO thực tế nên phải có ngày treo `
-      + `(gắn trước cho điểm đo là việc của Nhóm Vật Tư ở màn Nhu cầu & phân bổ)`);
+      + `(gắn số No dự kiến là việc của Nhóm Vật Tư ở màn Gắn vật tư dự kiến)`);
 
   /** Mọi thứ CHẶN lưu điểm đo: HSN + đụng độ số chế tạo + thiếu/sai tỷ số + dòng mới thiếu ngày treo. */
   const saveBlocks = [...hsnBlocks, ...serialBlocks, ...ratioBlocks, ...treoBlocks];
@@ -1345,7 +1345,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
     if (rc.release.length) parts.push(`trả kho ${rc.release.map(a => a.serial).join(', ')} (treo thực tế đã thay)`);
     if (rc.shortages.length) {
       parts.push('cần treo bổ sung ' + rc.shortages.map(l => `${l.missing} × ${ASSET_LABEL[l.line.type]}`).join(', ')
-        + ' — Nhóm Vật Tư sẽ thấy ở Nhu cầu & phân bổ');
+        + ' — Nhóm Vật Tư sẽ thấy ở Gắn vật tư dự kiến');
     }
     if (parts.length) toast.info('Đối chiếu nhu cầu', parts.join('; ') + '.');
   };
@@ -1454,6 +1454,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
         hsn: effectiveHsn ?? undefined,
         status: derivedStatus || undefined,
         note: pForm.note.trim(),
+        need: needFromRows(pForm.need),
       };
       return void persist(async () => {
         for (const b of reclaim) {
@@ -1512,6 +1513,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
         hsn: effectiveHsn ?? undefined,
         status: derivedStatus || undefined,
         note: pForm.note.trim(),
+        need: needFromRows(pForm.need),
       };
       return void persist(async () => {
         /*
@@ -2926,9 +2928,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
               </div>
             </Field>
 
-            {/* Phần NHU CẦU — chỉ xem; Nhóm Vật Tư khai + gắn số No (điểm đo hai phần, 27/10/2026). */}
-            <PointNeedEditor readOnly
-              rows={pForm.need} onChange={() => undefined}
+            {/* Phần NHU CẦU (quy cách) — Kinh Doanh khai; Vật Tư gắn số No dự kiến (điểm đo hai phần, 27/10/2026). */}
+            <PointNeedEditor
+              rows={pForm.need} onChange={need => setPForm(f => ({ ...f, need }))}
               hsn={manualHsn} connection={connectionOfHsn(manualHsn)}
               allocated={editingId ? liveFirst(d?.assets ?? [], editingId) : undefined}
               devices={d?.devices ?? []} />

@@ -1,7 +1,7 @@
 /**
- * Khối "NHU CẦU VẬT TƯ" của điểm đo. Từ 27/10/2026 (điểm đo hai phần) do NHÓM
- * VẬT TƯ khai ở màn "Nhu cầu & phân bổ"; form điểm đo của Kinh Doanh chỉ XEM
- * (`readOnly`). Bỏ "Cần gấp" cùng ngày.
+ * Khối "NHU CẦU VẬT TƯ" (quy cách cần) của điểm đo — KINH DOANH khai ở form điểm
+ * đo (user chốt lại 27/10/2026). Nhóm Vật Tư chỉ gắn số No dự kiến ở màn riêng.
+ * `readOnly` để chỗ khác hiện bảng mà không sửa. Bỏ "Cần gấp" 27/10/2026.
  *
  * Tách khỏi `CatalogEntry.tsx` (đã > 3.000 dòng): form chỉ giữ mảng dòng và
  * gọi `needFromRows` lúc lưu. Đủ/thiếu tính ở `lib/dm/supply.ts`.
@@ -103,7 +103,7 @@ export default function PointNeedEditor({
         <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-dim">
           <ClipboardList className="h-4 w-4" /> Nhu cầu vật tư
         </p>
-        {readOnly && <span className="text-[11px] text-faint">Nhóm Vật Tư khai và gắn số No</span>}
+        {readOnly && <span className="text-[11px] text-faint">Kinh Doanh khai ở form điểm đo</span>}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-surface">
@@ -130,7 +130,7 @@ export default function PointNeedEditor({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-[13px] italic text-faint">
-                  {readOnly ? 'Nhóm Vật Tư chưa khai nhu cầu cho điểm đo này.'
+                  {readOnly ? 'Kinh Doanh chưa khai nhu cầu cho điểm đo này.'
                     : 'Chưa khai nhu cầu — bấm "Điền theo HSN" để có sẵn bộ mặc định.'}
                 </td>
               </tr>

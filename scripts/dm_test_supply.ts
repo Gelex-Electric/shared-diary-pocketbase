@@ -253,8 +253,8 @@ const empty = { purchases: [] as Purchase[], purchaseLines: [] as PurchaseLine[]
   eq([t.chuaKhai, t.thieu, t.choTreo].map(l => l.map(p => p.code)), [['A'], ['B'], ['C']],
      'supplyTasks: chia đúng nhóm; điểm đo từng treo rồi tháo không vào "chưa khai"');
   eq([t.lateOrders.map(o => o.code), t.tiNoShape], [['PO'], 1], 'supplyTasks: đơn trễ + TI chưa rõ hình dạng');
-  eq([taskCount(t, 'kinh_doanh'), taskCount(t, 'vat_tu'), taskCount(t, 'van_hanh')], [1, 3, 1],
-     'taskCount: KD/VH = chờ treo; VT = chưa khai + thiếu + đơn trễ');
+  eq([taskCount(t, 'kinh_doanh'), taskCount(t, 'vat_tu'), taskCount(t, 'van_hanh')], [2, 2, 1],
+     'taskCount: KD = chưa khai + chờ treo; VT = thiếu + đơn trễ; VH = chờ treo');
   eq(supplyTasks(pts, ctx, '2026-10-26', p => p.id !== 'C').choTreo.length, 0, 'supplyTasks: lọc theo KCN của người xem');
 }
 

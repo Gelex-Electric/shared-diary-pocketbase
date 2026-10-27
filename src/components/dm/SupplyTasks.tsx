@@ -25,7 +25,6 @@ export default function SupplyTasks({ group, tasks, data, onNavigate, onChanged 
 }) {
   // Điểm đo hai phần (27/10/2026): việc của KD + VH là phần TREO THÁO.
   if (group === 'van_hanh') return <HangPoints scope="doi" onChanged={onChanged} />;
-  if (group === 'kinh_doanh') return <HangPoints scope="vanphong" onChanged={onChanged} />;
 
   const borrowed = openBorrowsByPoint(data?.borrows ?? []);
   const t = tasks;
@@ -40,13 +39,13 @@ export default function SupplyTasks({ group, tasks, data, onNavigate, onChanged 
       <div>
         <h2 className="text-2xl font-bold text-ink">Việc cần làm</h2>
         <p className="mt-1 text-sm text-soft">
-          Điểm đo hai phần: Vật Tư khai nhu cầu + gắn số No / đặt mua → Kinh Doanh, Vận Hành ghi treo tháo
+          Kinh Doanh khai nhu cầu → Vật Tư gắn vật tư dự kiến / đặt mua → Kinh Doanh, Vận Hành ghi treo tháo
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile label="Chưa khai nhu cầu" value={t?.chuaKhai.length ?? '…'} icon={ClipboardList}
-          tone={t?.chuaKhai.length ? 'warn' : 'neutral'} loading={!t} sub="Vật Tư" />
+          tone={t?.chuaKhai.length ? 'warn' : 'neutral'} loading={!t} sub="Kinh Doanh" />
         <StatTile label="Thiếu vật tư" value={t?.thieu.length ?? '…'} icon={PackageSearch}
           tone={t?.thieu.length ? 'warn' : 'neutral'} loading={!t} sub="Vật Tư (kể cả treo bổ sung)" />
         <StatTile label="Chờ hàng về" value={t?.choHang.length ?? '…'} icon={Truck}
@@ -56,13 +55,17 @@ export default function SupplyTasks({ group, tasks, data, onNavigate, onChanged 
           loading={!t} sub="Kinh Doanh + Vận Hành" />
       </div>
 
-      {t && group === 'vat_tu' && (<>
+      {t && group === 'kinh_doanh' && (<>
         <PointList title={`Điểm đo chưa khai nhu cầu (${t.chuaKhai.length})`} points={t.chuaKhai}
-          hint="Khai quy cách cần (nút “Điền theo HSN”) ở màn Nhu cầu & phân bổ."
-          action={go('supply-alloc', 'Nhu cầu & phân bổ')} empty="Mọi điểm đo mới đã khai nhu cầu." />
+          hint="Mở Quản lý chung → Điểm đo, sửa điểm đo và khai khối “Nhu cầu vật tư” (nút “Điền theo HSN”)."
+          action={go('dm-catalog', 'Mở Quản lý chung')} empty="Mọi điểm đo mới đã khai nhu cầu." />
+        <HangPoints scope="vanphong" onChanged={onChanged} />
+      </>)}
+
+      {t && group === 'vat_tu' && (<>
         <PointList title={`Điểm đo thiếu vật tư (${t.thieu.length})`} points={t.thieu} borrowed={borrowed}
-          hint="Gắn số No từ kho hoặc mượn của điểm đo khác; kho không còn thì đặt mua."
-          action={go('supply-alloc', 'Nhu cầu & phân bổ')} empty="Không có điểm đo nào thiếu vật tư." />
+          hint="Gắn số No dự kiến từ kho hoặc mượn của điểm đo khác; kho không còn thì đặt mua."
+          action={go('supply-alloc', 'Gắn vật tư dự kiến')} empty="Không có điểm đo nào thiếu vật tư." />
         {t.lateOrders.length > 0 && (
           <div className="vl-card space-y-2 p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">

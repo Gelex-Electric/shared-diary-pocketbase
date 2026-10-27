@@ -199,7 +199,7 @@ export function openPurchaseLines(
  *   - TREO THÁO = lần lắp CÓ ngày treo — thứ thật sự ở hiện trường
  * Đáp ứng nhu cầu tính ĐANG TREO trước, rồi mới tới nhu cầu chưa treo.
  *
- *   chua_khai   chưa khai nhu cầu, chưa từng treo             → việc Vật Tư
+ *   chua_khai   chưa khai nhu cầu, chưa từng treo             → việc Kinh Doanh
  *   thieu       còn thiếu, đơn mua chưa phủ                   → việc Vật Tư
  *   cho_hang    phần thiếu nằm trong đơn mua chưa về          → Vật Tư theo dõi
  *   cho_treo    đủ quy cách nhưng còn dòng chưa treo          → việc Kinh Doanh + Vận Hành
@@ -541,7 +541,7 @@ export function nextPurchaseCode(purchases: Purchase[], year = new Date().getFul
 /* -------------------------- việc cần làm (đợt 4) -------------------------- */
 
 export interface SupplyTasks {
-  /** Vật Tư: điểm đo mới chưa khai nhu cầu. */
+  /** Kinh Doanh: điểm đo mới chưa khai nhu cầu. */
   chuaKhai: Point[];
   /** Vật Tư: điểm đo còn thiếu (kể cả đã treo cần bổ sung), đơn mua chưa phủ. */
   thieu: Point[];
@@ -582,8 +582,12 @@ export function supplyTasks(
   return t;
 }
 
-/** Số trên badge "Việc cần làm" của từng nhóm (phân việc 27/10/2026). */
+/**
+ * Số trên badge "Việc cần làm" của từng nhóm (phân việc user chốt lại 27/10/2026):
+ * KD = chưa khai nhu cầu + chờ treo · VT = thiếu (gắn dự kiến) + đơn trễ · VH = chờ treo.
+ */
 export function taskCount(t: SupplyTasks, group: 'van_hanh' | 'kinh_doanh' | 'vat_tu'): number {
-  if (group === 'vat_tu') return t.chuaKhai.length + t.thieu.length + t.lateOrders.length;
+  if (group === 'kinh_doanh') return t.chuaKhai.length + t.choTreo.length;
+  if (group === 'vat_tu') return t.thieu.length + t.lateOrders.length;
   return t.choTreo.length;
 }
