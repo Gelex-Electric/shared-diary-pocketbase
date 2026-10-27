@@ -8,7 +8,7 @@
  * nhập cho (`hold_zone`); bỏ các ô chung loại / tỷ số / mã lô / dành cho.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, PackagePlus, Trash2 } from 'lucide-react';
+import { Camera, Plus, PackagePlus, Trash2 } from 'lucide-react';
 import { Select } from '../ui/Select';
 import { DatePicker } from '../ui/DateTimePickers';
 import { toast } from '../../lib/toast';
@@ -17,6 +17,7 @@ import VariantCell from './VariantCell';
 import { devices as deviceRepo, pbErrorMessage } from '../../lib/dm/repo';
 import { parseRatio } from '../../lib/dm/hsn';
 import { findExisting, guessType, parsePaste, SERIAL_RE } from '../../lib/dm/stock';
+import type { PlateScan } from '../../lib/dm/plateScan';
 import {
   ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type AssetType, type Connection, type Device, type TiShape, type Zone,
 } from '../../lib/dm/types';
@@ -35,7 +36,18 @@ const DEFAULT_METER_KIND: Connection = 'gian_tiep';
 interface AddRow {
   key: string; serial: string; type: AssetType | ''; ratio: string; model: string;
   shape: TiShape | ''; meterKind: Connection | '';
+  /** Dòng đọc từ ảnh nhãn: ảnh thu nhỏ để đối chiếu + nguồn số No (ảnh không lưu). */
+  thumb?: string; scan?: PlateScan['source']; barcode?: string;
 }
+
+/** Ghi chú nguồn số No của dòng đọc từ ảnh — OCR một mình thì nhắc kiểm tra. */
+const SCAN_NOTE: Record<PlateScan['source'], { cls: string; text: string }> = {
+  'mã vạch khớp': { cls: 'text-emerald-600', text: 'ảnh: mã vạch khớp chữ in' },
+  'mã vạch': { cls: 'text-emerald-600', text: 'ảnh: số lấy từ mã vạch' },
+  OCR: { cls: 'text-warn', text: 'ảnh (OCR): kiểm tra lại số No' },
+  'lệch': { cls: 'text-red-500', text: 'ảnh: mã vạch ra số khác' },
+  '': { cls: 'text-red-500', text: 'ảnh không đọc ra số No — gõ tay' },
+};
 let addSeq = 0;
 const newAddRow = (): AddRow =>
   ({ key: `a${++addSeq}`, serial: '', type: '', ratio: '', model: '', shape: '', meterKind: '' });
@@ -95,6 +107,43 @@ export default function AddStockModal({ open, onClose, devices, zones, onSaved }
       return next;
     });
     return true;
+  };
+
+  /** Đang đọc ảnh nhãn — chữ tiến độ ('' = rảnh). */
+  const [scanning, setScanning] = useState('');
+
+  /**
+   * Chụp / chọn ảnh nhãn (user yêu cầu 27/10/2026, plan `2026-10-27-them-vat-tu-bang-anh.md`):
+   * mỗi ảnh một thiết bị, đọc lần lượt, đổ vào dòng TRỐNG đầu tiên hoặc thêm dòng.
+   */
+  const addFromPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const list = Array.from(files);
+    const { scanPlate } = await import('../../lib/dm/plateScan');
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const pre = list.length > 1 ? `Ảnh ${i + 1}/${list.length}: ` : '';
+        setScanning(`${pre}đang đọc…`);
+        let s: PlateScan;
+        try {
+          s = await scanPlate(list[i], m => setScanning(pre + m));
+        } catch (e) {
+          toast.error('Không đọc được ảnh', String((e as Error)?.message ?? e));
+          continue;
+        }
+        const p = s.plate;
+        const fill: Partial<AddRow> = {
+          serial: s.serial, thumb: s.thumb, scan: s.source, barcode: s.barcode,
+          type: p.type || guessType(s.serial) || '',
+          ratio: p.ratio ? `${p.ratio.primary}/${p.ratio.secondary}` : '',
+          model: p.model ?? '', meterKind: p.meterKind ?? '',
+        };
+        setAddRows(rs => {
+          const at = rs.findIndex(r => !r.serial.trim() && !r.thumb);
+          return at < 0 ? [...rs, { ...newAddRow(), ...fill }] : rs.map((r, j) => (j === at ? { ...r, ...fill } : r));
+        });
+      }
+    } finally { setScanning(''); }
   };
 
   const existing = useMemo(
@@ -213,9 +262,14 @@ export default function AddStockModal({ open, onClose, devices, zones, onSaved }
                 return (
                   <tr key={r.key} className={st.kind === 'dup' ? 'opacity-60' : ''}>
                     <td className="p-2">
-                      <CellInput value={r.serial} mono placeholder="Gõ hoặc dán từ Excel"
-                        onPasteText={text => pasteInto(r.key, text)}
-                        onChange={v => setAddRow(r.key, { serial: v })} />
+                      <div className="flex items-center gap-2">
+                        {r.thumb && <img src={r.thumb} alt="" className="h-9 w-9 shrink-0 rounded object-cover" />}
+                        <div className="min-w-0 flex-1">
+                          <CellInput value={r.serial} mono placeholder="Gõ hoặc dán từ Excel"
+                            onPasteText={text => pasteInto(r.key, text)}
+                            onChange={v => setAddRow(r.key, { serial: v })} />
+                        </div>
+                      </div>
                     </td>
                     <td className="p-2">
                       <Select value={r.type} variant="bare"
@@ -242,6 +296,11 @@ export default function AddStockModal({ open, onClose, devices, zones, onSaved }
                       {st.kind === 'new' && <span className="text-emerald-600">{st.text}</span>}
                       {st.kind === 'dup' && <span className="text-warn">{st.text}</span>}
                       {st.kind === 'bad' && <span className="text-red-500">{st.text}</span>}
+                      {r.scan !== undefined && (
+                        <span className={`block ${SCAN_NOTE[r.scan].cls}`}>
+                          {SCAN_NOTE[r.scan].text}{r.barcode ? ` (${r.barcode})` : ''}
+                        </span>
+                      )}
                     </td>
                     <td className="p-2 text-center">
                       <button type="button" title="Bỏ dòng"
@@ -257,11 +316,21 @@ export default function AddStockModal({ open, onClose, devices, zones, onSaved }
           </table>
         </div>
 
-        <button type="button" onClick={() => setAddRows(rs => [...rs, newAddRow()])}
-          className="mt-3 flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline">
-          <Plus className="h-4 w-4" /> Thêm dòng
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <button type="button" onClick={() => setAddRows(rs => [...rs, newAddRow()])}
+            className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline">
+            <Plus className="h-4 w-4" /> Thêm dòng
+          </button>
+          <label className={`flex items-center gap-1 text-xs font-bold text-blue-600 ${scanning ? 'pointer-events-none opacity-60' : 'cursor-pointer hover:underline'}`}>
+            <Camera className="h-4 w-4" /> Chụp / chọn ảnh nhãn
+            <input type="file" accept="image/*" multiple className="hidden" disabled={!!scanning}
+              onChange={e => { void addFromPhotos(e.target.files); e.target.value = ''; }} />
+          </label>
+          {scanning && <span className="text-xs text-accent">{scanning}</span>}
+        </div>
         <p className="mt-2 text-[11px] text-faint">
+          Ảnh nhãn: mỗi ảnh một thiết bị, đọc ngay trên máy (không gửi, không lưu ảnh) — chụp gần, rõ dòng "Số:" / "Tỷ số:";
+          dòng ghi "OCR" cần soát lại số No.{' '}
           Dán cả cột số No từ Excel vào một ô Số No — bảng tự thêm dòng; cột dạng 200/5 nhận làm tỷ số.
           TI mặc định tròn, công tơ mặc định gián tiếp — khác thì đổi ở cột Kiểu. Dòng đã có trong kho được bỏ qua, không ghi đè.
         </p>
