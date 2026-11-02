@@ -1,14 +1,10 @@
 /**
- * Khối "Việc được giao" trên trang Tổng hợp của TVH (user yêu cầu 02/11/2026): việc chưa xong
- * giao cho TVH mình / cả khối TVH, gấp + quá hạn lên đầu. Bấm để sang màn Giao việc.
+ * Dòng nhắc việc trên trang Tổng hợp của TVH (user chốt 02/11/2026): chỉ ghi "TVH … còn N việc
+ * cần làm" (việc chưa xong giao cho TVH mình / cả khối TVH). Bấm để sang màn Giao việc.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { ListTodo, ArrowRight, CalendarClock, AlertTriangle, User, CheckCircle2 } from 'lucide-react';
-import { Panel, EmptyState } from '../ui/dashboard';
-import { STATUS_LABEL, currentUser, listTasks, isForMe, isOverdue, targetLabel, type WorkTask } from '../../lib/workTasks';
-
-const fmtDay = (d: string) => (d ? d.split('-').reverse().join('/') : '');
-const MAX_ROWS = 6;
+import { ListTodo, ArrowRight } from 'lucide-react';
+import { currentUser, listTasks, isForMe, isOverdue, type WorkTask } from '../../lib/workTasks';
 
 export default function WorkTasksPanel({ onOpen }: { onOpen: () => void }) {
   const me = useMemo(currentUser, []);
@@ -20,59 +16,21 @@ export default function WorkTasksPanel({ onOpen }: { onOpen: () => void }) {
     return () => { ok = false; };
   }, []);
 
-  const open = (tasks ?? [])
-    .filter(t => t.status !== 'done' && isForMe(t, me))
-    .sort((a, b) =>
-      Number(isOverdue(b)) - Number(isOverdue(a))
-      || Number(b.priority === 'high') - Number(a.priority === 'high')
-      || (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+  if (!tasks) return null;
+  const open = tasks.filter(t => t.status !== 'done' && isForMe(t, me));
+  const overdue = open.filter(t => isOverdue(t)).length;
+  const team = me.areas.length === 1 ? `TVH ${me.areas[0]}` : 'TVH';
 
   return (
-    <Panel
-      title="Việc được giao"
-      sub={tasks ? `${open.length} việc chưa xong` : 'Đang tải…'}
-      icon={ListTodo}
-      actions={(
-        <button onClick={onOpen} className="vl-btn vl-btn-secondary vl-btn-sm gap-1.5">
-          Xem tất cả <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-      )}
-    >
-      {tasks && open.length === 0 ? (
-        <EmptyState icon={CheckCircle2} title="Không có việc đang chờ" />
-      ) : (
-        <ul className="divide-y divide-[var(--border)]">
-          {open.slice(0, MAX_ROWS).map(t => {
-            const overdue = isOverdue(t);
-            return (
-              <li key={t.id}>
-                <button onClick={onOpen} className="w-full text-left px-5 py-3 hover:bg-subtle transition-colors flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-ink truncate">{t.title}</p>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11px] text-soft">
-                      <span className="inline-flex items-center gap-1"><User className="w-3 h-3" />{targetLabel(t)}</span>
-                      {t.created_by_name && <span>Giao bởi {t.created_by_name}</span>}
-                      {t.deadline && (
-                        <span className={`inline-flex items-center gap-1 ${overdue ? 'text-bad font-bold' : ''}`}>
-                          {overdue ? <AlertTriangle className="w-3 h-3" /> : <CalendarClock className="w-3 h-3" />}
-                          {fmtDay(t.deadline)}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  {t.priority === 'high' && <span className="vl-badge-danger px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0">Gấp</span>}
-                  <span className={`${t.status === 'doing' ? 'vl-badge-primary' : 'vl-badge-warning'} px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0`}>
-                    {STATUS_LABEL[t.status]}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {open.length > MAX_ROWS && (
-        <p className="px-5 py-2 text-[11px] text-faint border-t border-[var(--border)]">Còn {open.length - MAX_ROWS} việc nữa</p>
-      )}
-    </Panel>
+    <button onClick={onOpen}
+      className={`vl-alert ${open.length ? 'vl-alert-light-warning' : 'vl-alert-light-success'} w-full text-left flex items-center gap-3 text-sm`}>
+      <ListTodo className="w-4 h-4 shrink-0" />
+      <span className="flex-1">
+        {open.length
+          ? <><b>{team}</b> còn <b>{open.length}</b> việc cần làm{overdue > 0 && <> ({overdue} quá hạn)</>}</>
+          : <><b>{team}</b> không còn việc cần làm</>}
+      </span>
+      <ArrowRight className="w-4 h-4 shrink-0" />
+    </button>
   );
 }
