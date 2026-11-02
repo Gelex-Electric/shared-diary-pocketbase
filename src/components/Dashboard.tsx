@@ -586,7 +586,7 @@ export default function Dashboard() {
         <div className="flex-1 px-4 py-6 md:px-6 md:py-8">
           <section>
             {topTab === 'summary' ? (
-              <SummaryDashboard />
+              <SummaryDashboard onOpenTasks={() => setTopTab('work')} />
             ) : topTab === 'operating' ? (
               <CustomerManager />
             ) : topTab === 'hes' ? (

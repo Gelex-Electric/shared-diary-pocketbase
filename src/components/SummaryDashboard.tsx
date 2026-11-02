@@ -7,6 +7,7 @@ import {
   Zap, TrendingUp, TrendingDown, Layers, Activity, BarChart3, Gauge, Building2, RefreshCw, Users,
 } from 'lucide-react';
 import { Select } from './ui/Select';
+import WorkTasksPanel from './tasks/WorkTasksPanel';
 import { StatTile, Panel, ChartTooltip, EmptyState, CHART, CustomerZoneCard } from './ui/dashboard';
 import {
   useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, ZONE_MAP, zoneCodeOf,
@@ -26,7 +27,7 @@ const pad2 = (n: number) => String(n).padStart(2, '0');
 const axisNum = (v: number) => new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(v);
 const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
 
-export default function SummaryDashboard() {
+export default function SummaryDashboard({ onOpenTasks }: { onOpenTasks?: () => void } = {}) {
   const endYear = new Date().getFullYear();
   const { bills, records, meterIndex, loading, error, reload, zoneLock } = useInvoices({ endYear, yearsBack: 2, lockToArea: true });
   const { rows: pmaxRows, loading: pmaxLoading } = usePmaxDaily();
@@ -302,6 +303,9 @@ export default function SummaryDashboard() {
       </div>
 
       {error && <div className="vl-alert vl-alert-light-danger text-sm">{error}</div>}
+
+      {/* Việc được giao — để TVH thấy ngay khi vào trang chủ (02/11/2026). */}
+      {onOpenTasks && <WorkTasksPanel onOpen={onOpenTasks} />}
 
       {/* Row 1 — KPI cards (kWh / ₫ / tổn thất năm) */}
       <div className={`grid grid-cols-1 gap-3 ${LOSS_DISABLED ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
