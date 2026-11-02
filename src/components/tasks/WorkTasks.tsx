@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ListTodo, Plus, User, Users, Inbox, CalendarClock, Pencil, Trash2, Send, CheckSquare, Square, X,
+  ListTodo, Plus, Users, Inbox, CalendarClock, Pencil, Trash2, Send, CheckSquare, Square, X,
   AlertTriangle, Circle, CircleDot, CheckCircle2, ChevronRight, Flag, MessageSquare,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
@@ -20,11 +20,12 @@ import { AREAS } from '../../lib/pocketbase';
 import {
   STATUS_LABEL, currentUser, listTasks, createTask, updateTask, setStatus, setChecklist,
   deleteTask, listComments, addComment, commentCounts, canEdit, canWork, isOverdue,
-  isForMe, isForMyTeam, targetLabel,
+  isForMyTeam, targetLabel,
   type WorkTask, type TaskStatus, type TaskInput, type TaskComment, type ChecklistItem, type Me,
 } from '../../lib/workTasks';
 
-type Filter = 'mine' | 'group' | 'created' | 'all';
+/** Không có tab 'Việc của tôi': cá nhân dùng chung tài khoản TVH (user chốt 02/11/2026). */
+type Filter = 'group' | 'created' | 'all';
 const STATUSES: TaskStatus[] = ['todo', 'doing', 'done'];
 const PRIORITY_OPTIONS = [{ value: 'normal', label: 'Thường' }, { value: 'high', label: 'Gấp' }];
 const STATUS_OPTIONS = STATUSES.map(s => ({ value: s, label: STATUS_LABEL[s] }));
@@ -71,7 +72,7 @@ export default function WorkTasks() {
   const [tasks, setTasks] = useState<WorkTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState<Filter>('mine');
+  const [filter, setFilter] = useState<Filter>('group');
   const [form, setForm] = useState<TaskInput | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -105,10 +106,9 @@ export default function WorkTasks() {
   const visible = tasks.filter(t =>
     filter === 'all' ? true
     : filter === 'created' ? t.created_by === me.id
-    : filter === 'group' ? isForMyTeam(t, me)
-    : isForMe(t, me));
+    : isForMyTeam(t, me));
 
-  const mineOpen = tasks.filter(t => t.status !== 'done' && isForMe(t, me)).length;
+  const teamOpen = tasks.filter(t => t.status !== 'done' && isForMyTeam(t, me)).length;
   const teamLabel = me.group === 'van_hanh' && me.areas.length === 1 ? `TVH ${me.areas[0]}` : GROUP_LABEL[me.group];
 
   const openNew = () => { setEditingId(null); setForm(emptyForm(me)); };
@@ -181,8 +181,7 @@ export default function WorkTasks() {
         value={filter}
         onChange={setFilter}
         tabs={[
-          { id: 'mine', label: mineOpen ? `Việc của tôi (${mineOpen})` : 'Việc của tôi', icon: User },
-          { id: 'group', label: teamLabel, icon: Users },
+          { id: 'group', label: teamOpen ? `${teamLabel} (${teamOpen})` : teamLabel, icon: Users },
           { id: 'created', label: 'Tôi giao', icon: Send },
           { id: 'all', label: 'Tất cả', icon: ListTodo },
         ]}
