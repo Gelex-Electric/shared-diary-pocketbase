@@ -18,7 +18,8 @@ import { EmptyState } from '../ui/dashboard';
 import { toast } from '../../lib/toast';
 import { FormModal } from './entryUi';
 import {
-  borrows as borrowRepo, isAbortError, loadCatalog, pbErrorMessage, type CatalogData,
+  assets as assetRepo, borrows as borrowRepo, devices as deviceRepo, isAbortError, loadCatalog, pbErrorMessage,
+  type CatalogData,
 } from '../../lib/dm/repo';
 import {
   SUPPLY_STATE_LABEL, allocCandidates, borrowCandidates, borrowsToSettle, openBorrowsByPoint,
@@ -29,7 +30,9 @@ import { runAttach } from '../../lib/dm/attachRun';
 import { formatRatio } from '../../lib/dm/hsn';
 import { pointZoneId } from '../../lib/dm/pointScope';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
-import { ASSET_LABEL, CONNECTION_LABEL, SHAPE_LABEL, type Device, type NeedLine, type Point } from '../../lib/dm/types';
+import {
+  ASSET_LABEL, CONNECTION_LABEL, SHAPE_LABEL, type Asset, type Device, type NeedLine, type Point,
+} from '../../lib/dm/types';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -64,9 +67,15 @@ export default function SupplyAllocate() {
   const [search, setSearch] = useState('');
   const [view, setView] = useState<View>('can');
 
-  /** Đang phân bổ cho điểm đo nào, dòng nhu cầu nào (chỉ số trong `need`). */
-  const [target, setTarget] = useState<{ p: Point; line: NeedLine; missing: number } | null>(null);
+  /**
+   * Đang phân bổ cho điểm đo nào, dòng nhu cầu nào. `current` = số No đã gắn dự kiến (chưa treo) của dòng —
+   * hộp mở bằng nút "Sửa" cho bỏ tích để GỠ (phân bổ sai ⇒ phân bổ lại, user yêu cầu 02/11/2026).
+   * `slots` = số chỗ còn được gắn dự kiến = thiếu + đang gắn dự kiến.
+   */
+  const [target, setTarget] = useState<{ p: Point; line: NeedLine; slots: number; current: Asset[] } | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  /** Lần lắp dự kiến đang gắn (theo id `dm_asset`) còn giữ — bỏ tích là gỡ. */
+  const [kept, setKept] = useState<Set<string>>(new Set());
 
   const load = async () => {
     setLoading(true);
@@ -121,12 +130,18 @@ export default function SupplyAllocate() {
   const fromBorrow: BorrowCandidate[] = useMemo(
     () => (target && d ? borrowCandidates(target.p.id, target.line, d.points, d) : []), [target, d]);
 
-  const open = (p: Point, line: NeedLine, missing: number) => {
-    setTarget({ p, line, missing });
-    // Chọn sẵn đủ số thiếu từ KHO (khớp chắc chắn trước) — không chọn sẵn hàng mượn.
-    const pre = d ? allocCandidates(p.id, line, d).slice(0, missing).map(c => c.device.id) : [];
+  const open = (p: Point, line: NeedLine, missing: number, current: Asset[], edit = false) => {
+    setTarget({ p, line, slots: missing + current.length, current });
+    setKept(new Set(current.map(a => a.id)));
+    // Phân bổ: chọn sẵn đủ số thiếu từ KHO (khớp chắc chắn trước) — không chọn sẵn hàng mượn. Sửa: không chọn sẵn gì thêm.
+    const pre = d && !edit ? allocCandidates(p.id, line, d).slice(0, missing).map(c => c.device.id) : [];
     setPicked(new Set(pre));
   };
+  const toggleKept = (id: string) => setKept(s => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
   const toggle = (id: string) => setPicked(s => {
     const n = new Set(s);
     if (n.has(id)) n.delete(id); else n.add(id);
@@ -140,23 +155,38 @@ export default function SupplyAllocate() {
   const plan = useMemo(
     () => (target && d ? planAttach(pickedDevices, target.p.id, d) : { blocks: [], moves: [] }),
     [pickedDevices, target, d]);
-  const over = target ? pickedDevices.length - target.missing : 0;
+  /** Lần lắp dự kiến bị bỏ tích ⇒ gỡ (xoá lần lắp + bỏ giữ chỗ, thiết bị về kho rảnh). */
+  const released = target ? target.current.filter(a => !kept.has(a.id)) : [];
+  const after = target ? target.current.length - released.length + pickedDevices.length : 0;
+  const over = target ? after - target.slots : 0;
 
   const save = async () => {
-    if (!target) return;
-    if (!pickedDevices.length) return toast.warning('Chưa chọn thiết bị', 'Tích ít nhất một thiết bị.');
+    if (!target || !d) return;
+    if (!pickedDevices.length && !released.length) {
+      return toast.warning('Chưa có thay đổi', 'Tích thiết bị để gắn, hoặc bỏ tích số No đang gắn để gỡ.');
+    }
     if (plan.blocks.length) return toast.error('Chưa phân bổ được', `${plan.blocks.join('. ')}.`);
     setSaving(true);
-    let n = 0;
+    let n = 0, r = 0;
     try {
-      await runAttach(pickedDevices, target.p.id, '', plan.moves,
-        `Mượn cho điểm đo ${target.p.code ?? ''}`.trim(), k => { n = k; });
-      toast.success('Đã phân bổ', `${n} thiết bị cho ${target.p.code}`
-        + (plan.moves.length ? ` (mượn ${plan.moves.length})` : '') + '.');
+      // Gỡ TRƯỚC rồi mới gắn: cùng cách ghi với `reconcileRun` (chỉ đụng dòng chưa có ngày treo).
+      for (const a of released) {
+        await assetRepo.remove(a.id);
+        const dev = d.devices.find(x => x.id === a.device) ?? d.devices.find(x => x.serial === a.serial);
+        if (dev && dev.hold_point === target.p.id) await deviceRepo.update(dev.id, { hold_point: '' });
+        r++;
+      }
+      if (pickedDevices.length) {
+        await runAttach(pickedDevices, target.p.id, '', plan.moves,
+          `Mượn cho điểm đo ${target.p.code ?? ''}`.trim(), k => { n = k; });
+      }
+      toast.success('Đã phân bổ', [
+        r ? `gỡ ${r}` : '', n ? `gắn ${n}${plan.moves.length ? ` (mượn ${plan.moves.length})` : ''}` : '',
+      ].filter(Boolean).join(', ') + ` thiết bị — ${target.p.code}.`);
       setTarget(null);
       await load();
     } catch (e) {
-      toast.error(`Dừng sau ${n} thiết bị`, pbErrorMessage(e));
+      toast.error(`Dừng sau khi gỡ ${r}, gắn ${n} thiết bị`, pbErrorMessage(e));
       await load();
     } finally { setSaving(false); }
   };
@@ -236,11 +266,21 @@ export default function SupplyAllocate() {
                     <td><SerialList rows={l.have.filter(a => !isHungRow(a))} /></td>
                     <td className={`text-center font-bold ${l.missing ? 'text-bad' : 'text-faint'}`}>{l.missing || '—'}</td>
                     <td className="text-right">
-                      {l.missing > 0 && (
-                        <button className="vl-btn vl-btn-sm vl-btn-primary" onClick={() => open(p, l.line, l.missing)}>
-                          Phân bổ
-                        </button>
-                      )}
+                      <div className="flex justify-end gap-2">
+                        {/* Sửa: gỡ số No gắn dự kiến sai rồi gắn lại (chỉ dòng chưa treo). */}
+                        {l.have.some(a => !isHungRow(a)) && (
+                          <button className="vl-btn vl-btn-sm vl-btn-outline-primary"
+                            onClick={() => open(p, l.line, l.missing, l.have.filter(a => !isHungRow(a)), true)}>
+                            Sửa
+                          </button>
+                        )}
+                        {l.missing > 0 && (
+                          <button className="vl-btn vl-btn-sm vl-btn-primary"
+                            onClick={() => open(p, l.line, l.missing, l.have.filter(a => !isHungRow(a)))}>
+                            Phân bổ
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -252,13 +292,37 @@ export default function SupplyAllocate() {
 
       <FormModal open={!!target} wide onClose={() => setTarget(null)} onSubmit={() => void save()} saving={saving}
         title={target ? `Phân bổ ${needText(target.line, false)} cho ${target.p.code}` : ''}
-        submitLabel={pickedDevices.length ? `Phân bổ ${pickedDevices.length} thiết bị` : 'Chưa chọn thiết bị'}>
+        submitLabel={!pickedDevices.length && !released.length ? 'Chưa có thay đổi'
+          : [released.length ? `Gỡ ${released.length}` : '', pickedDevices.length ? `Gắn ${pickedDevices.length}` : ''].filter(Boolean).join(' · ') + ' thiết bị'}>
         {target && (<>
           <p className="text-sm text-soft">
-            Còn thiếu <b className="text-ink">{target.missing}</b>. Đã chọn <b className="text-ink">{pickedDevices.length}</b>
-            {over > 0 && <span className="text-bad"> — thừa {over} so với số thiếu</span>}.
+            Cần gắn dự kiến <b className="text-ink">{target.slots}</b>, sau khi lưu sẽ có <b className="text-ink">{after}</b>
+            {over > 0 && <span className="text-bad"> — thừa {over}</span>}.
             Thiết bị được gắn vào phần <b>nhu cầu</b> (chưa ngày treo) — Kinh Doanh / Vận Hành khai ngày treo khi lắp.
           </p>
+
+          {target.current.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[12px] font-bold uppercase tracking-wide text-dim">
+                Đang gắn dự kiến ({target.current.length}) — bỏ tích để gỡ, thiết bị về kho
+              </p>
+              <div className="rounded-lg border border-[var(--border)]">
+                <table className="vl-table w-full text-sm">
+                  <tbody>
+                    {target.current.map(a => (
+                      <tr key={a.id} className="cursor-pointer" onClick={() => toggleKept(a.id)}>
+                        <td className="w-8">
+                          <input type="checkbox" checked={kept.has(a.id)} readOnly aria-label={`Giữ ${a.serial}`} />
+                        </td>
+                        <td className="font-mono font-semibold">{a.serial}</td>
+                        <td className="text-[12px]">{kept.has(a.id) ? <span className="text-soft">giữ</span> : <span className="text-bad">sẽ gỡ</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <PickTable title={`Trong kho (${fromStock.length})`} picked={picked} onToggle={toggle}
             empty="Kho không còn thiết bị rảnh khớp quy cách này — nhập thêm ở Kho vật tư."
