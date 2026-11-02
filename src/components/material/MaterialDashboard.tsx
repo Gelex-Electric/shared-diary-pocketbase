@@ -4,9 +4,9 @@
  *
  * Nhóm này chỉ lo khai vật tư vào danh mục, nên chỉ có một nhóm menu
  * "Quản lý vật tư thiết bị điện":
- *  - Gắn vật tư dự kiến (`SupplyAllocate`): gắn số No vào nhu cầu KD đã khai / mượn (điểm đo hai phần, 27/10/2026).
- *  - Danh mục vật tư theo điểm đo: cây KCN → Lộ → Trạm → Điểm đo (chỉ xem — `DataTree` không ghi).
- *  - Quản lý chung (`CatalogEntry`): CHỈ tab Kho vật tư (toàn quyền) + Rà soát vòng đời (chỉ tra cứu).
+ *  - Danh mục điểm đo: cây KCN → Lộ → Trạm → Điểm đo (chỉ xem — `DataTree` không ghi).
+ *  - Quản lý chung (`CatalogEntry`): tab ngang Kho vật tư (toàn quyền) · Gắn vật tư dự kiến (`SupplyAllocate`,
+ *    chuyển từ sidebar vào 02/11/2026) · Rà soát vòng đời (chỉ tra cứu).
  *
  * Sidebar + thanh trên chép bố cục `business/BusinessDashboard.tsx` (cùng lớp
  * `vl-*`, cùng kích thước) để hai khối trông như một sản phẩm. Sửa khung thì
@@ -23,28 +23,28 @@ import { useSupplyTasks } from '../dm/useSupplyTasks';
 import { motion, AnimatePresence } from 'motion/react';
 import GeneralManagement from '../dm/GeneralManagement';
 import CatalogEntry, { type CatTab } from '../dm/CatalogEntry';
-import SupplyAllocate from '../dm/SupplyAllocate';
 import ThemeToggle from '../ui/ThemeToggle';
 import { GROUP_LABEL } from '../../lib/userGroup';
 
-type Tab = 'tasks' | 'supply-alloc' | 'dm-general' | 'dm-catalog';
+type Tab = 'tasks' | 'dm-general' | 'dm-catalog';
 
 const TAB_LABEL: Record<Tab, string> = {
   tasks: 'Việc cần làm',
-  'supply-alloc': 'Gắn vật tư dự kiến',
-  'dm-general': 'Danh mục vật tư theo điểm đo',
+  'dm-general': 'Danh mục điểm đo',
   'dm-catalog': 'Quản lý chung',
 };
+/** Gắn vật tư dự kiến nay là tab ngang trong Quản lý chung (user chốt 02/11/2026). */
 const NAV: { id: Tab; label: string }[] = [
-  { id: 'supply-alloc', label: TAB_LABEL['supply-alloc'] },
   { id: 'dm-general', label: TAB_LABEL['dm-general'] },
   { id: 'dm-catalog', label: TAB_LABEL['dm-catalog'] },
 ];
 /** Kho vật tư đứng đầu ⇒ mở Danh mục là vào thẳng Kho. */
-const CATALOG_TABS: CatTab[] = ['stock', 'lifecycle'];
+const CATALOG_TABS: CatTab[] = ['stock', 'supply', 'lifecycle'];
 
 export default function MaterialDashboard() {
   const [topTab, setTopTab] = useState<Tab>('dm-catalog');
+  /** Tab ngang mở đầu của Quản lý chung — Việc cần làm bấm "Gắn vật tư dự kiến" thì mở thẳng tab đó. */
+  const [catTab, setCatTab] = useState<CatTab>('stock');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAssetExpanded, setIsAssetExpanded] = useState(true);
   /** Việc của Vật Tư: điểm đo thiếu vật tư + đơn mua trễ. */
@@ -123,7 +123,7 @@ export default function MaterialDashboard() {
                     <li key={n.id}>
                       <button
                         id={`nav-${n.id}-sub`}
-                        onClick={() => { setTopTab(n.id); onNavigate?.(); }}
+                        onClick={() => { setTopTab(n.id); setCatTab('stock'); onNavigate?.(); }}
                         className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
                           topTab === n.id ? 'text-accent' : 'text-soft hover:text-dim'
                         }`}
@@ -244,13 +244,13 @@ export default function MaterialDashboard() {
           <section>
             {topTab === 'tasks' ? (
               <SupplyTasks group="vat_tu" tasks={supply.tasks} data={supply.data}
-                onNavigate={tab => setTopTab(tab as Tab)} />
-            ) : topTab === 'supply-alloc' ? (
-              <SupplyAllocate />
+                onNavigate={tab => {
+                  if (tab === 'supply-alloc') { setCatTab('supply'); setTopTab('dm-catalog'); } else setTopTab(tab as Tab);
+                }} />
             ) : topTab === 'dm-general' ? (
               <GeneralManagement scope="vanphong" />
             ) : (
-              <CatalogEntry key="dm-catalog" scope="vanphong" tabs={CATALOG_TABS} />
+              <CatalogEntry key={`dm-catalog-${catTab}`} scope="vanphong" tabs={CATALOG_TABS} initialTab={catTab} />
             )}
           </section>
         </div>

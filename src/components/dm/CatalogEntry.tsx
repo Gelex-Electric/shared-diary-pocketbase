@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Building2, Cable, Factory, Users, Gauge, Package,
+  Building2, Cable, Factory, Users, Gauge, Package, PackageCheck,
   Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText, History, ArrowLeftRight, Search,
   CaseLower, TriangleAlert, UserCheck, Zap,
 } from 'lucide-react';
@@ -59,6 +59,7 @@ interface MkhMeter { serial: string; from: string; to: string; isCurrent: boolea
 import { groupByZone, sortByCode, sortByMkh } from './groupByZone';
 import AssetLifecycle from './AssetLifecycle';
 import StockEntry from './StockEntry';
+import SupplyAllocate from './SupplyAllocate';
 import { TransferOwner } from './TransferOwner';
 import LineAssign from './LineAssign';
 import PointNeedEditor, { needFromRows, rowsFromNeed, type NeedRow } from './PointNeedEditor';
@@ -76,7 +77,7 @@ import {
  * "Vòng đời vật tư" vào cuối dãy tab (user chốt 25/08/2026) thay vì đứng riêng
  * ngoài menu — người dùng khai điểm đo xong là đối chiếu ngay tại chỗ.
  */
-export type CatTab = 'zone' | 'line' | 'station' | 'customer' | 'point' | 'stock' | 'lifecycle';
+export type CatTab = 'zone' | 'line' | 'station' | 'customer' | 'point' | 'stock' | 'supply' | 'lifecycle';
 
 const TABS: TabItem<CatTab>[] = [
   { id: 'zone', label: 'Khu công nghiệp', icon: Building2, sub: 'dm_zone' },
@@ -85,12 +86,13 @@ const TABS: TabItem<CatTab>[] = [
   { id: 'customer', label: 'Khách hàng', icon: Users, sub: 'dm_customer' },
   { id: 'point', label: 'Điểm đo', icon: Gauge, sub: 'dm_point' },
   { id: 'stock', label: 'Kho vật tư', icon: Package, sub: 'Thiết bị · vòng đời' },
+  { id: 'supply', label: 'Gắn vật tư dự kiến', icon: PackageCheck, sub: 'Gắn số No vào nhu cầu' },
   { id: 'lifecycle', label: 'Rà soát', icon: History, sub: 'Đối chiếu hóa đơn' },
 ];
 
 /** Tiêu đề + nút Thêm của từng tab KHAI BÁO; tab `lifecycle` không có (chỉ tra cứu). */
 /** Gợi ý trong ô tìm kiếm — nói đúng cột nào tìm được, kẻo gõ mò. */
-const SEARCH_HINT: Record<Exclude<CatTab, 'lifecycle' | 'stock'>, string> = {
+const SEARCH_HINT: Record<Exclude<CatTab, 'lifecycle' | 'stock' | 'supply'>, string> = {
   zone: 'Tìm mã KCN, tên, địa chỉ...',
   line: 'Tìm mã lộ, tên lộ...',
   station: 'Tìm mã trạm, MKH, tên khách hàng...',
@@ -98,7 +100,7 @@ const SEARCH_HINT: Record<Exclude<CatTab, 'lifecycle' | 'stock'>, string> = {
   point: 'Tìm mã điểm đo, trạm, MKH, tên khách hàng...',
 };
 
-const HEAD: Record<Exclude<CatTab, 'lifecycle' | 'stock'>, { title: string; desc: string; add: string }> = {
+const HEAD: Record<Exclude<CatTab, 'lifecycle' | 'stock' | 'supply'>, { title: string; desc: string; add: string }> = {
   zone: {
     title: 'Khu công nghiệp',
     desc: 'Gốc của cây đơn vị — khai trước trạm và điểm đo',
@@ -245,7 +247,7 @@ const toNum = (s: string): number | undefined => {
 };
 const str = (n?: number) => (n == null ? '' : String(n));
 
-export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
+export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initialTab }: {
   scope?: Scope;
   /**
    * Chỉ hiện các tab này (mặc định: tất cả). Tab Khách hàng nằm ở Hồ sơ kinh doanh
@@ -253,9 +255,12 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
    * còn mục Khách hàng truyền `['customer']`. Một tab thì ẩn thanh tab.
    */
   tabs?: CatTab[];
+  /** Tab mở đầu (vd Việc cần làm → Gắn vật tư dự kiến); mặc định tab đầu tiên. */
+  initialTab?: CatTab;
 }) {
-  const shownTabs = tabs ? TABS.filter(t => tabs.includes(t.id)) : TABS;
-  const [tab, setTab] = useState<CatTab>(shownTabs[0]?.id ?? 'zone');
+  // Gắn vật tư dự kiến chỉ hiện khi được xin đích danh (Nhóm Vật Tư).
+  const shownTabs = tabs ? TABS.filter(t => tabs.includes(t.id)) : TABS.filter(t => t.id !== 'supply');
+  const [tab, setTab] = useState<CatTab>(initialTab ?? shownTabs[0]?.id ?? 'zone');
   /** Ô tìm kiếm dùng chung 4 tab danh mục. Đổi tab thì xóa — xem `setTab` dưới. */
   const [search, setSearch] = useState('');
   /** Bộ lọc KCN của 3 bảng Trạm / Khách hàng / Điểm đo. `''` = tất cả. */
@@ -2176,7 +2181,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
    * vỡ ngay khi đọc `.title`. Rơi về tab KCN cho an toàn; thanh tiêu đề dùng
    * `head` vốn đã bị ẩn ở tab này nên người dùng không thấy gì khác.
    */
-  const headOf = (t: CatTab) => HEAD[t === 'lifecycle' || t === 'stock' ? 'zone' : t];
+  const headOf = (t: CatTab) => HEAD[t === 'lifecycle' || t === 'stock' || t === 'supply' ? 'zone' : t];
   const head = headOf(tab);
   const modalTitle = editingId
     ? `Chỉnh sửa ${headOf(modal ?? tab).title.toLowerCase()}`
@@ -2189,7 +2194,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
       {/* ---------- Đầu trang: tiêu đề + hành động ---------- */}
       {/* Tab Vòng đời tự mang tiêu đề và nút Nạp lại riêng, và không có gì để
           "Thêm" — nên ẩn hẳn thanh này thay vì hiện một thanh nửa vời. */}
-      {tab !== 'lifecycle' && tab !== 'stock' && (
+      {tab !== 'lifecycle' && tab !== 'stock' && tab !== 'supply' && (
       <div className="mb-2 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h2 className="text-2xl font-bold text-ink">{head.title}</h2>
@@ -2254,6 +2259,9 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs }: {
 
       {/* ======================== Kho vật tư ======================== */}
       {tab === 'stock' && <StockEntry />}
+
+      {/* ============== Gắn vật tư dự kiến (Nhóm Vật Tư, 02/11/2026) ============== */}
+      {tab === 'supply' && <SupplyAllocate />}
 
 
       {/* ============================ KCN ============================ */}
