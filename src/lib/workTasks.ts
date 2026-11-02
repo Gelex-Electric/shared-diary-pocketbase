@@ -6,10 +6,15 @@
  * chỉ định người — đổi trạng thái, tick checklist, bình luận. PB chỉ chặn được XOÁ (nhóm có
  * thể suy từ `area`), phần còn lại chặn ở UI qua `canWork` / `canEdit`.
  *
+ * Đích giao (user chốt 02/11/2026): cả khối (`assignee_group`), một TVH (`assignee_area` = KCN,
+ * đúng giá trị `users.area`), kèm tên người phụ trách gõ tay (`assignee_name`) — mỗi TVH chỉ có
+ * MỘT tài khoản dùng chung nên không chọn tài khoản cá nhân. TVH giao trong TVH mình; Kinh Doanh
+ * giao cả khối TVH / một TVH (± tên người).
+ *
  * Tên người lưu kèm dạng text (`*_name`) vì `users.listRule` chỉ cho xem người cùng area.
  */
-import { pb } from './pocketbase';
-import { userGroupOf, type UserGroup } from './userGroup';
+import { pb, ID_TO_AREA } from './pocketbase';
+import { userGroupOf, GROUP_LABEL, type UserGroup } from './userGroup';
 
 export type TaskStatus = 'todo' | 'doing' | 'done';
 export type TaskPriority = 'normal' | 'high';
@@ -29,6 +34,7 @@ export interface WorkTask {
   status: TaskStatus;
   priority: TaskPriority;
   assignee_group: UserGroup;
+  assignee_area: string;
   assignee: string;
   assignee_name: string;
   deadline: string;          // 'YYYY-MM-DD' hoặc ''
@@ -49,11 +55,18 @@ export interface TaskComment {
   created: string;
 }
 
-export interface Me { id: string; name: string; group: UserGroup }
+export interface Me { id: string; name: string; group: UserGroup; areas: string[] }
+
+/** KCN (= TVH) của một user — `users.area` là select tên đầy đủ, có thể nhiều giá trị. */
+function areasOf(r: Record<string, any> | null | undefined): string[] {
+  const raw = r?.area;
+  const items: string[] = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',').map(x => x.trim()).filter(Boolean) : [];
+  return items.map(a => ID_TO_AREA[a] || a);
+}
 
 export function currentUser(): Me {
   const m = pb.authStore.model;
-  return { id: m?.id ?? '', name: m?.name || m?.username || 'Người dùng', group: userGroupOf(m) };
+  return { id: m?.id ?? '', name: m?.name || m?.username || 'Người dùng', group: userGroupOf(m), areas: areasOf(m) };
 }
 
 const TASKS = 'work_tasks';
@@ -70,6 +83,7 @@ function toTask(r: Record<string, any>): WorkTask {
     status: (r.status || 'todo') as TaskStatus,
     priority: (r.priority || 'normal') as TaskPriority,
     assignee_group: r.assignee_group,
+    assignee_area: r.assignee_area ?? '',
     assignee: r.assignee ?? '',
     assignee_name: r.assignee_name ?? '',
     deadline: dayOf(r.deadline),
@@ -92,6 +106,7 @@ export interface TaskInput {
   description: string;
   priority: TaskPriority;
   assignee_group: UserGroup;
+  assignee_area: string;
   assignee: string;
   assignee_name: string;
   deadline: string;
@@ -125,11 +140,6 @@ export async function setChecklist(id: string, checklist: ChecklistItem[]) {
   await pb.collection(TASKS).update(id, { checklist });
 }
 
-/** Người trong nhóm tự nhận việc chưa chỉ định người. */
-export async function claimTask(id: string, me: Me) {
-  await pb.collection(TASKS).update(id, { assignee: me.id, assignee_name: me.name });
-}
-
 export async function deleteTask(id: string) {
   await pb.collection(TASKS).delete(id);
 }
@@ -145,19 +155,17 @@ export async function addComment(taskId: string, body: string, me: Me) {
   await pb.collection(COMMENTS).create({ task: taskId, author: me.id, author_name: me.name, body });
 }
 
-/** Người dùng chọn được để giao — chỉ những ai `users.listRule` cho xem (cùng area). */
-export async function listAssignableUsers(): Promise<{ id: string; name: string; group: UserGroup }[]> {
-  try {
-    const rows = await pb.collection('users').getFullList({ sort: 'name', requestKey: null });
-    return rows.map(r => ({ id: r.id, name: r.name || r.username || r.id, group: userGroupOf(r) }));
-  } catch {
-    return [];
-  }
-}
-
 export const canEdit = (t: WorkTask, me: Me) => t.created_by === me.id;
-export const canWork = (t: WorkTask, me: Me) =>
-  canEdit(t, me) || t.assignee === me.id || (!t.assignee && t.assignee_group === me.group);
+/** Việc giao cho khối/TVH của mình (không tính việc giao đích danh người khác). */
+export const isForMyTeam = (t: WorkTask, me: Me) =>
+  t.assignee_group === me.group && (!t.assignee_area || me.areas.includes(t.assignee_area));
+export const isForMe = (t: WorkTask, me: Me) => t.assignee === me.id || (!t.assignee && isForMyTeam(t, me));
+export const canWork = (t: WorkTask, me: Me) => canEdit(t, me) || isForMe(t, me);
+
+/** Nhãn đích giao: tên người / TVH / cả khối. */
+export const targetLabel = (t: Pick<WorkTask, 'assignee_name' | 'assignee_area' | 'assignee_group'>) =>
+  [t.assignee_name, t.assignee_area ? `TVH ${t.assignee_area}` : t.assignee_group === 'van_hanh' ? 'Cả khối TVH' : GROUP_LABEL[t.assignee_group]]
+    .filter(Boolean).join(' · ');
 
 export function isOverdue(t: WorkTask, today = new Date().toISOString().slice(0, 10)) {
   return t.status !== 'done' && !!t.deadline && t.deadline < today;

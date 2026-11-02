@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ListTodo, Plus, User, Users, Inbox, CalendarClock, Pencil, Trash2, Send, CheckSquare, Square, X,
-  Hand, AlertTriangle,
+  AlertTriangle,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import { Select } from '../ui/Select';
@@ -15,15 +15,16 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { EmptyState } from '../ui/dashboard';
 import { FormModal, Field, TextInput, INPUT_CLS } from '../dm/entryUi';
 import { GROUP_LABEL, type UserGroup } from '../../lib/userGroup';
+import { AREAS } from '../../lib/pocketbase';
 import {
-  STATUS_LABEL, currentUser, listTasks, createTask, updateTask, setStatus, setChecklist, claimTask,
-  deleteTask, listComments, addComment, listAssignableUsers, canEdit, canWork, isOverdue,
-  type WorkTask, type TaskStatus, type TaskInput, type TaskComment, type ChecklistItem,
+  STATUS_LABEL, currentUser, listTasks, createTask, updateTask, setStatus, setChecklist,
+  deleteTask, listComments, addComment, canEdit, canWork, isOverdue,
+  isForMe, isForMyTeam, targetLabel,
+  type WorkTask, type TaskStatus, type TaskInput, type TaskComment, type ChecklistItem, type Me,
 } from '../../lib/workTasks';
 
 type Filter = 'mine' | 'group' | 'created' | 'all';
 const STATUSES: TaskStatus[] = ['todo', 'doing', 'done'];
-const GROUP_OPTIONS = (Object.keys(GROUP_LABEL) as UserGroup[]).map(g => ({ value: g, label: GROUP_LABEL[g] }));
 const PRIORITY_OPTIONS = [{ value: 'normal', label: 'Thường' }, { value: 'high', label: 'Gấp' }];
 const STATUS_OPTIONS = STATUSES.map(s => ({ value: s, label: STATUS_LABEL[s] }));
 
@@ -34,10 +35,35 @@ const fmtTime = (iso: string) => {
 };
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-const EMPTY_FORM: TaskInput = {
+const emptyForm = (me: Me): TaskInput => ({
   title: '', description: '', priority: 'normal', assignee_group: 'van_hanh',
+  // TVH mặc định giao trong TVH mình; khối khác mặc định cả khối TVH.
+  assignee_area: me.group === 'van_hanh' ? me.areas[0] ?? '' : '',
   assignee: '', assignee_name: '', deadline: '', checklist: [],
-};
+});
+
+/**
+ * Đích giao mã hoá trong một ô chọn: `block:<nhóm>` | `team:<KCN>`. Mỗi TVH chỉ có MỘT tài
+ * khoản dùng chung (kiểm 02/11/2026) ⇒ "cá nhân" là tên người phụ trách gõ tay (`assignee_name`),
+ * không phải tài khoản. TVH giao trong TVH mình; khối khác: cả khối TVH, một TVH, khối còn lại.
+ */
+function targetOptions(me: Me) {
+  const team = (a: string) => ({ value: `team:${a}`, label: `TVH ${a}` });
+  if (me.group === 'van_hanh') return (me.areas.length ? me.areas : AREAS).map(team);
+  return [
+    { value: 'block:van_hanh', label: 'Cả khối TVH' },
+    ...AREAS.map(team),
+    ...(['kinh_doanh', 'vat_tu'] as UserGroup[]).map(g => ({ value: `block:${g}`, label: GROUP_LABEL[g] })),
+  ];
+}
+
+const targetOf = (f: TaskInput) => (f.assignee_area ? `team:${f.assignee_area}` : `block:${f.assignee_group}`);
+
+function applyTarget(v: string): Pick<TaskInput, 'assignee_group' | 'assignee_area'> {
+  const [kind, id] = [v.slice(0, v.indexOf(':')), v.slice(v.indexOf(':') + 1)];
+  if (kind === 'team') return { assignee_group: 'van_hanh', assignee_area: id };
+  return { assignee_group: id as UserGroup, assignee_area: '' };
+}
 
 export default function WorkTasks() {
   const me = useMemo(currentUser, []);
@@ -45,7 +71,6 @@ export default function WorkTasks() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<Filter>('mine');
-  const [people, setPeople] = useState<{ id: string; name: string; group: UserGroup }[]>([]);
   const [form, setForm] = useState<TaskInput | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -63,7 +88,7 @@ export default function WorkTasks() {
     }
   }, []);
 
-  useEffect(() => { void reload(); void listAssignableUsers().then(setPeople); }, [reload]);
+  useEffect(() => { void reload(); }, [reload]);
 
   /** Chạy một thao tác ghi rồi nạp lại; lỗi hiện ở thanh đỏ đầu màn. */
   const run = async (fn: () => Promise<unknown>) => {
@@ -73,17 +98,18 @@ export default function WorkTasks() {
   const visible = tasks.filter(t =>
     filter === 'all' ? true
     : filter === 'created' ? t.created_by === me.id
-    : filter === 'group' ? t.assignee_group === me.group
-    : t.assignee === me.id || (!t.assignee && t.assignee_group === me.group));
+    : filter === 'group' ? isForMyTeam(t, me)
+    : isForMe(t, me));
 
-  const mineOpen = tasks.filter(t => t.status !== 'done' && (t.assignee === me.id || (!t.assignee && t.assignee_group === me.group))).length;
+  const mineOpen = tasks.filter(t => t.status !== 'done' && isForMe(t, me)).length;
+  const teamLabel = me.group === 'van_hanh' && me.areas.length === 1 ? `TVH ${me.areas[0]}` : GROUP_LABEL[me.group];
 
-  const openNew = () => { setEditingId(null); setForm({ ...EMPTY_FORM }); };
+  const openNew = () => { setEditingId(null); setForm(emptyForm(me)); };
   const openEdit = (t: WorkTask) => {
     setEditingId(t.id);
     setForm({
       title: t.title, description: t.description, priority: t.priority, assignee_group: t.assignee_group,
-      assignee: t.assignee, assignee_name: t.assignee_name, deadline: t.deadline, checklist: t.checklist,
+      assignee_area: t.assignee_area, assignee: t.assignee, assignee_name: t.assignee_name, deadline: t.deadline, checklist: t.checklist,
     });
   };
 
@@ -102,7 +128,7 @@ export default function WorkTasks() {
   };
 
   const openTask = tasks.find(t => t.id === openId) ?? null;
-  const groupPeople = people.filter(p => form && p.group === form.assignee_group);
+  const targets = useMemo(() => targetOptions(me), [me]);
 
   return (
     <div className="space-y-6">
@@ -121,7 +147,7 @@ export default function WorkTasks() {
         onChange={setFilter}
         tabs={[
           { id: 'mine', label: mineOpen ? `Việc của tôi (${mineOpen})` : 'Việc của tôi', icon: User },
-          { id: 'group', label: GROUP_LABEL[me.group], icon: Users },
+          { id: 'group', label: teamLabel, icon: Users },
           { id: 'created', label: 'Tôi giao', icon: Send },
           { id: 'all', label: 'Tất cả', icon: ListTodo },
         ]}
@@ -182,14 +208,12 @@ export default function WorkTasks() {
               <textarea rows={3} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className={INPUT_CLS} />
             </Field>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Giao cho nhóm" required>
-                <Select value={form.assignee_group} options={GROUP_OPTIONS}
-                  onChange={v => setForm({ ...form, assignee_group: v as UserGroup, assignee: '', assignee_name: '' })} />
+              <Field label="Giao cho" required>
+                <Select value={targetOf(form)} options={targets}
+                  onChange={v => setForm({ ...form, ...applyTarget(v) })} />
               </Field>
-              <Field label="Người cụ thể" hint={groupPeople.length ? undefined : 'Chỉ chọn được người cùng khu vực — để trống thì ai trong nhóm cũng nhận được.'}>
-                <Select value={form.assignee}
-                  options={[{ value: '', label: '— Cả nhóm —' }, ...groupPeople.map(p => ({ value: p.id, label: p.name }))]}
-                  onChange={v => setForm({ ...form, assignee: v, assignee_name: people.find(p => p.id === v)?.name ?? '' })} />
+              <Field label="Người phụ trách" hint="Để trống = cả nhóm/TVH.">
+                <TextInput value={form.assignee_name} onChange={v => setForm({ ...form, assignee_name: v })} placeholder="Tên người cụ thể" />
               </Field>
               <Field label="Hạn hoàn thành">
                 <DatePicker value={form.deadline} onChange={v => setForm({ ...form, deadline: v })} usePortal />
@@ -225,7 +249,7 @@ function TaskCard({ task: t, onOpen }: { task: WorkTask; onOpen: () => void }) {
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-soft">
           <span className="inline-flex items-center gap-1">
             {t.assignee ? <User className="w-3 h-3" /> : <Users className="w-3 h-3" />}
-            {t.assignee_name || GROUP_LABEL[t.assignee_group]}
+            {targetLabel(t)}
           </span>
           {t.deadline && (
             <span className={`inline-flex items-center gap-1 ${overdue ? 'text-bad font-bold' : ''}`}>
@@ -294,8 +318,7 @@ function TaskDetail({ task: t, me, onClose, onEdit, onDelete, run }: {
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-2 text-xs text-soft">
           <span>Giao bởi <b className="text-dim">{t.created_by_name || '—'}</b> · {fmtTime(t.created)}</span>
-          <span>→ <b className="text-dim">{t.assignee_name || GROUP_LABEL[t.assignee_group]}</b>
-            {t.assignee_name && <> ({GROUP_LABEL[t.assignee_group]})</>}</span>
+          <span>→ <b className="text-dim">{targetLabel(t)}</b></span>
           {t.deadline && <span className={isOverdue(t) ? 'text-bad font-bold' : ''}>· Hạn {fmtDay(t.deadline)}</span>}
         </div>
 
@@ -308,11 +331,6 @@ function TaskDetail({ task: t, me, onClose, onEdit, onDelete, run }: {
                 onChange={v => void run(() => setStatus(t.id, v as TaskStatus))} />
             </Field>
           </div>
-          {!t.assignee && t.status !== 'done' && t.assignee_group === me.group && (
-            <button type="button" onClick={() => void run(() => claimTask(t.id, me))} className="vl-btn vl-btn-outline-primary vl-btn-sm inline-flex items-center gap-1">
-              <Hand className="w-4 h-4" /> Nhận việc
-            </button>
-          )}
           {owner && (
             <>
               <button type="button" onClick={onEdit} className="vl-btn vl-btn-secondary vl-btn-sm inline-flex items-center gap-1"><Pencil className="w-4 h-4" /> Sửa</button>

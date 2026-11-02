@@ -61,6 +61,7 @@ const autodate = [
   { name: 'updated', type: 'autodate', onCreate: true, onUpdate: true },
 ];
 
+const AREA_FIELD = { name: 'assignee_area', type: 'text', max: 100 };
 const TASKS = {
   name: 'work_tasks', type: 'base',
   listRule: AUTH, viewRule: AUTH,
@@ -76,6 +77,8 @@ const TASKS = {
     userRel('assignee'),
     // Tên chụp lại lúc ghi: users.listRule chỉ cho xem người cùng area nên expand không đủ.
     { name: 'assignee_name', type: 'text', max: 200 },
+    // TVH (KCN, đúng giá trị users.area) được giao; trống = cả khối assignee_group (thêm 02/11/2026).
+    AREA_FIELD,
     { name: 'deadline', type: 'date' },
     { name: 'checklist', type: 'json', maxSize: 200000 },
     userRel('created_by', true),
@@ -89,13 +92,21 @@ let tasksCol = cols.find(c => c.name === 'work_tasks');
 const hasComments = cols.some(c => c.name === 'work_task_comments');
 console.log(tasksCol ? '= Đã có work_tasks' : 'SẼ TẠO work_tasks');
 console.log(hasComments ? '= Đã có work_task_comments' : 'SẼ TẠO work_task_comments');
-if (tasksCol && hasComments) process.exit(0);
+const needArea = tasksCol && !tasksCol.fields.some(f => f.name === AREA_FIELD.name);
+if (needArea) console.log('SẼ THÊM work_tasks.assignee_area');
+if (tasksCol && hasComments && !needArea) process.exit(0);
 if (!APPLY) { console.log('\n[XEM TRƯỚC] Chưa ghi gì. Thêm --apply để ghi thật.\n'); process.exit(0); }
 
 if (!tasksCol) {
   tasksCol = send('POST', '/api/collections', TASKS);
   if (!tasksCol?.id) { console.error('Tạo work_tasks thất bại:', JSON.stringify(tasksCol).slice(0, 500)); process.exit(1); }
   console.log('OK — tạo work_tasks');
+}
+if (needArea) {
+  /* PATCH phải gửi đủ trường cũ (kèm id) — thiếu trường nào PB xoá trường đó. */
+  const res = send('PATCH', `/api/collections/${tasksCol.id}`, { fields: [...tasksCol.fields, AREA_FIELD] });
+  if (!(res.fields ?? []).some(f => f.name === AREA_FIELD.name)) { console.error('Thêm assignee_area thất bại:', JSON.stringify(res).slice(0, 400)); process.exit(1); }
+  console.log('OK — thêm work_tasks.assignee_area');
 }
 if (!hasComments) {
   const res = send('POST', '/api/collections', {
