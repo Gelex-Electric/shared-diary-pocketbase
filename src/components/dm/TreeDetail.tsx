@@ -23,6 +23,8 @@ import type { Segment } from '../../lib/dm/lifecycle';
 import { kcnColorOf } from '../../lib/kcnColors';
 import { InfoTag, PointBadgeChip, StatusTag } from './pointIcons';
 import { SegmentBar, Warn } from './lifecycleUi';
+import { pointSupply } from '../../lib/dm/supply';
+import { needText } from './SupplyAllocate';
 
 /** Phần tử đang được chọn bên cây. */
 export type Sel = { kind: 'zone' | 'line' | 'station' | 'point'; id: string } | null;
@@ -281,7 +283,15 @@ function StationDetail({ station, d }: { station: Station; d: CatalogData }) {
 }
 
 function PointDetail({ point, d }: { point: Point; d: CatalogData }) {
-  const rows = d.assets.filter(a => a.point === point.id);
+  const all = d.assets.filter(a => a.point === point.id);
+  /** Bảng "đang gắn" chỉ kể lần lắp có ngày treo / tháo; dòng dự kiến (chưa treo) hiện ở phần riêng bên dưới. */
+  const rows = all.filter(a => ymd(a.date_on) || ymd(a.date_off));
+  /** Vật tư dự kiến (user yêu cầu 02/11/2026): nhu cầu KD khai + số No Vật Tư đã gắn, còn thiếu bao nhiêu. */
+  const supply = pointSupply(point, { assets: d.assets, devices: d.devices });
+  const planLines = supply.lines.map(l => ({ ...l, plan: l.have.filter(a => !ymd(a.date_on)) }))
+    .filter(l => l.plan.length || l.missing);
+  const planLoose = all.filter(a => !ymd(a.date_on) && !ymd(a.date_off)
+    && !supply.lines.some(l => l.have.includes(a)));
   const station = d.stations.find(s => s.id === point.station);
   const customer = d.customers.find(c => c.id === point.customer);
   const zone = d.zones.find(z => z.id === pointZoneId(point, d.stations, d.lines));
@@ -358,7 +368,9 @@ function PointDetail({ point, d }: { point: Point; d: CatalogData }) {
       <div>
         <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-faint">Vật tư đang gắn</p>
         {rows.length === 0 ? (
-          <p className="text-[13px] italic text-faint">Điểm đo này chưa khai vật tư nào.</p>
+          <p className="text-[13px] italic text-faint">
+            {planLines.length || planLoose.length ? 'Chưa treo vật tư nào — xem vật tư dự kiến bên dưới.' : 'Điểm đo này chưa khai vật tư nào.'}
+          </p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
             <table className="w-full border-collapse text-left text-[12px]">
@@ -395,6 +407,44 @@ function PointDetail({ point, d }: { point: Point; d: CatalogData }) {
           </div>
         )}
       </div>
+
+      {/* ------------------- vật tư dự kiến (chưa treo) ------------------- */}
+      {(planLines.length > 0 || planLoose.length > 0) && (
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-faint">Vật tư dự kiến — chưa treo</p>
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+            <table className="w-full border-collapse text-left text-[12px]">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-[11px] uppercase tracking-wider text-faint">
+                  <th className="px-3 py-2 font-bold">Nhu cầu</th>
+                  <th className="px-3 py-2 font-bold">Số No đã gắn dự kiến</th>
+                  <th className="px-3 py-2 font-bold">Còn thiếu</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {planLines.map((l, i) => (
+                  <tr key={i}>
+                    <td className="px-3 py-2 font-semibold text-dim">{needText(l.line)}</td>
+                    <td className="px-3 py-2 font-mono font-bold text-ink">
+                      {l.plan.length ? l.plan.map(a => a.serial).join(', ') : <span className="font-sans font-normal text-faint">—</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      {l.missing ? <span className="font-bold text-warn">{l.missing}</span> : <span className="text-good">đủ</span>}
+                    </td>
+                  </tr>
+                ))}
+                {planLoose.map(a => (
+                  <tr key={a.id}>
+                    <td className="px-3 py-2 font-semibold text-dim">{ASSET_LABEL[a.type]} (ngoài nhu cầu)</td>
+                    <td className="px-3 py-2 font-mono font-bold text-ink">{a.serial || '—'}</td>
+                    <td className="px-3 py-2 text-faint">—</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* --------------------------- vòng đời --------------------------- */}
       <div>
