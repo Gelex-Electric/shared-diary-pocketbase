@@ -170,3 +170,11 @@ export const targetLabel = (t: Pick<WorkTask, 'assignee_name' | 'assignee_area' 
 export function isOverdue(t: WorkTask, today = new Date().toISOString().slice(0, 10)) {
   return t.status !== 'done' && !!t.deadline && t.deadline < today;
 }
+
+/** Số bình luận theo việc — chỉ đọc trường `task` để nhẹ. */
+export async function commentCounts(): Promise<Record<string, number>> {
+  const rows = await pb.collection(COMMENTS).getFullList({ fields: 'task', requestKey: null });
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.task] = (out[r.task] ?? 0) + 1;
+  return out;
+}

@@ -1,12 +1,13 @@
 /**
  * Màn "Giao việc" — nhiệm vụ giao tay giữa các nhóm (plan 2026-11-02-viec-can-lam-giao-viec.md).
- * Một danh sách chung cho cả 3 nhóm; ba cột Chưa làm / Đang làm / Xong. Bấm thẻ để mở
- * chi tiết: checklist con + bình luận. Quyền xem `lib/workTasks.ts` (canEdit / canWork).
+ * Một danh sách chung cho cả 3 nhóm, dạng danh sách kiểu Microsoft To Do / Todoist (user chốt
+ * 02/11/2026): nhóm theo hạn (Quá hạn / Hôm nay / Sắp tới / Không hạn), "Đã xong" thu gọn,
+ * vòng tròn tick xong nhanh, ô thêm nhanh. Bấm dòng để mở chi tiết: checklist con + bình luận. Quyền xem `lib/workTasks.ts` (canEdit / canWork).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ListTodo, Plus, User, Users, Inbox, CalendarClock, Pencil, Trash2, Send, CheckSquare, Square, X,
-  AlertTriangle,
+  AlertTriangle, Circle, CircleDot, CheckCircle2, ChevronRight, Flag, MessageSquare,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import { Select } from '../ui/Select';
@@ -18,7 +19,7 @@ import { GROUP_LABEL, type UserGroup } from '../../lib/userGroup';
 import { AREAS } from '../../lib/pocketbase';
 import {
   STATUS_LABEL, currentUser, listTasks, createTask, updateTask, setStatus, setChecklist,
-  deleteTask, listComments, addComment, canEdit, canWork, isOverdue,
+  deleteTask, listComments, addComment, commentCounts, canEdit, canWork, isOverdue,
   isForMe, isForMyTeam, targetLabel,
   type WorkTask, type TaskStatus, type TaskInput, type TaskComment, type ChecklistItem, type Me,
 } from '../../lib/workTasks';
@@ -77,9 +78,15 @@ export default function WorkTasks() {
   const [openId, setOpenId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
 
+  const [quick, setQuick] = useState('');
+  const [showDone, setShowDone] = useState(false);
+  const [commentCount, setCommentCount] = useState<Record<string, number>>({});
+
   const reload = useCallback(async () => {
     try {
-      setTasks(await listTasks());
+      const [t, c] = await Promise.all([listTasks(), commentCounts().catch(() => ({}))]);
+      setTasks(t);
+      setCommentCount(c);
       setError('');
     } catch (e) {
       setError(`Không tải được danh sách việc: ${errMsg(e)}`);
@@ -127,6 +134,34 @@ export default function WorkTasks() {
     if (ok) { setOpenId(null); await run(() => deleteTask(t.id)); }
   };
 
+  const quickAdd = async () => {
+    if (!quick.trim()) return;
+    setSaving(true);
+    await run(() => createTask({ ...emptyForm(me), title: quick.trim() }, me));
+    setSaving(false);
+    setQuick('');
+  };
+
+  /** Nhóm theo hạn kiểu To Do; trong nhóm: Gấp trước, rồi hạn gần trước. */
+  const today = new Date().toISOString().slice(0, 10);
+  const byPriority = (a: WorkTask, b: WorkTask) =>
+    Number(b.priority === 'high') - Number(a.priority === 'high') || (a.deadline || '9').localeCompare(b.deadline || '9');
+  const pending = visible.filter(t => t.status !== 'done').sort(byPriority);
+  const done = visible.filter(t => t.status === 'done');
+  const groups = [
+    { id: 'overdue', label: 'Quá hạn', tone: 'text-bad', items: pending.filter(t => t.deadline && t.deadline < today) },
+    { id: 'today', label: 'Hôm nay', tone: 'text-warn', items: pending.filter(t => t.deadline === today) },
+    { id: 'later', label: 'Sắp tới', tone: 'text-faint', items: pending.filter(t => t.deadline > today) },
+    { id: 'none', label: 'Không hạn', tone: 'text-faint', items: pending.filter(t => !t.deadline) },
+  ];
+
+  /** Vòng tròn đầu dòng: Chưa làm/Đang làm → Xong; Xong → Chưa làm. */
+  const toggleDone = (t: WorkTask) => void run(() => setStatus(t.id, t.status === 'done' ? 'todo' : 'done'));
+  const row = (t: WorkTask) => (
+    <TaskRow key={t.id} task={t} today={today} comments={commentCount[t.id] ?? 0}
+      canToggle={canWork(t, me)} onToggle={() => toggleDone(t)} onOpen={() => setOpenId(t.id)} />
+  );
+
   const openTask = tasks.find(t => t.id === openId) ?? null;
   const targets = useMemo(() => targetOptions(me), [me]);
 
@@ -155,28 +190,41 @@ export default function WorkTasks() {
 
       {error && <div className="vl-alert vl-alert-light-danger">{error}</div>}
 
+      {/* Thêm nhanh kiểu To Do: gõ + Enter, đích giao mặc định (TVH mình / cả khối TVH). */}
+      <form
+        onSubmit={e => { e.preventDefault(); void quickAdd(); }}
+        className="flex items-center gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-surface px-4 py-2 focus-within:ring-2 focus-within:ring-accent"
+      >
+        <Plus className="w-5 h-5 text-accent shrink-0" />
+        <input value={quick} onChange={e => setQuick(e.target.value)} disabled={saving}
+          placeholder={`Thêm việc nhanh cho ${targetLabel(emptyForm(me))}… (Enter)`}
+          className="flex-1 bg-transparent py-2 text-sm font-semibold text-ink placeholder:text-faint focus:outline-none" />
+      </form>
+
       {loading ? (
         <div className="vl-card"><p className="text-sm text-soft">Đang tải…</p></div>
+      ) : visible.length === 0 ? (
+        <div className="vl-card"><EmptyState icon={Inbox} title="Chưa có việc nào" hint="Gõ vào ô trên để thêm việc." /></div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {STATUSES.map(s => {
-            const col = visible.filter(t => t.status === s);
-            return (
-              <div key={s} className="vl-card" style={{ padding: '1rem' }}>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="vl-section-title" style={{ margin: 0 }}>{STATUS_LABEL[s]}</p>
-                  <span className="text-xs font-bold text-faint">{col.length}</span>
-                </div>
-                {col.length === 0 ? (
-                  <EmptyState icon={Inbox} title="Không có việc" />
-                ) : (
-                  <ul className="space-y-2">
-                    {col.map(t => <TaskCard key={t.id} task={t} onOpen={() => setOpenId(t.id)} />)}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
+        <div className="vl-card" style={{ padding: 0, overflow: 'hidden' }}>
+          {groups.map(g => g.items.length > 0 && (
+            <section key={g.id}>
+              <p className={`px-5 pt-4 pb-2 text-[11px] font-bold uppercase tracking-widest ${g.tone}`}>
+                {g.label} · {g.items.length}
+              </p>
+              <ul>{g.items.map(row)}</ul>
+            </section>
+          ))}
+          {done.length > 0 && (
+            <section className="border-t border-[var(--border)]">
+              <button onClick={() => setShowDone(v => !v)}
+                className="w-full flex items-center gap-2 px-5 py-3 text-[11px] font-bold uppercase tracking-widest text-faint hover:text-dim">
+                <ChevronRight className={`w-4 h-4 transition-transform ${showDone ? 'rotate-90' : ''}`} />
+                Đã xong · {done.length}
+              </button>
+              {showDone && <ul>{done.map(row)}</ul>}
+            </section>
+          )}
         </div>
       )}
 
@@ -233,35 +281,42 @@ export default function WorkTasks() {
   );
 }
 
-function TaskCard({ task: t, onOpen }: { task: WorkTask; onOpen: () => void }) {
-  const done = t.checklist.filter(c => c.done).length;
-  const overdue = isOverdue(t);
+/** Một dòng việc kiểu Todoist / To Do: vòng tròn tick, tiêu đề, dòng chip phụ. */
+function TaskRow({ task: t, today, comments, canToggle, onToggle, onOpen }: {
+  task: WorkTask; today: string; comments: number; canToggle: boolean; onToggle: () => void; onOpen: () => void;
+}) {
+  const isDone = t.status === 'done';
+  const checked = t.checklist.filter(c => c.done).length;
+  const overdue = isOverdue(t, today);
+  const dueTone = isDone ? 'text-faint' : overdue ? 'text-bad font-bold' : t.deadline === today ? 'text-warn font-bold' : 'text-soft';
+  const StatusIcon = isDone ? CheckCircle2 : t.status === 'doing' ? CircleDot : Circle;
   return (
-    <li>
-      <button onClick={onOpen}
-        className="w-full text-left rounded-[var(--radius-sm)] border border-[var(--border)] bg-surface hover:bg-subtle p-3 transition-colors">
-        <div className="flex items-start gap-2">
-          <p className={`flex-1 text-sm font-semibold ${t.status === 'done' ? 'line-through text-faint' : 'text-ink'}`}>{t.title}</p>
-          {t.priority === 'high' && t.status !== 'done' && (
-            <span className="vl-badge-danger px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0">Gấp</span>
-          )}
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-soft">
-          <span className="inline-flex items-center gap-1">
-            {t.assignee ? <User className="w-3 h-3" /> : <Users className="w-3 h-3" />}
-            {targetLabel(t)}
-          </span>
+    <li className="group flex items-start gap-3 px-5 py-3 border-t border-[var(--border)] first:border-t-0 hover:bg-subtle transition-colors">
+      <button type="button" onClick={onToggle} disabled={!canToggle}
+        title={isDone ? 'Đánh dấu chưa xong' : 'Đánh dấu Xong'}
+        className={`mt-0.5 shrink-0 transition-colors disabled:cursor-not-allowed ${
+          isDone ? 'text-good' : t.priority === 'high' ? 'text-bad hover:text-good' : t.status === 'doing' ? 'text-accent hover:text-good' : 'text-faint hover:text-good'
+        }`}>
+        <StatusIcon className="w-5 h-5" />
+      </button>
+      <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
+        <p className={`text-sm font-semibold ${isDone ? 'line-through text-faint' : 'text-ink'}`}>{t.title}</p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-soft">
+          <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />{targetLabel(t)}</span>
+          {t.status === 'doing' && <span className="text-accent font-bold">{STATUS_LABEL.doing}</span>}
           {t.deadline && (
-            <span className={`inline-flex items-center gap-1 ${overdue ? 'text-bad font-bold' : ''}`}>
+            <span className={`inline-flex items-center gap-1 ${dueTone}`}>
               {overdue ? <AlertTriangle className="w-3 h-3" /> : <CalendarClock className="w-3 h-3" />}
-              {fmtDay(t.deadline)}
+              {t.deadline === today ? 'Hôm nay' : fmtDay(t.deadline)}
             </span>
           )}
           {t.checklist.length > 0 && (
-            <span className="inline-flex items-center gap-1"><CheckSquare className="w-3 h-3" />{done}/{t.checklist.length}</span>
+            <span className="inline-flex items-center gap-1"><CheckSquare className="w-3 h-3" />{checked}/{t.checklist.length}</span>
           )}
-        </div>
+          {comments > 0 && <span className="inline-flex items-center gap-1"><MessageSquare className="w-3 h-3" />{comments}</span>}
+        </p>
       </button>
+      {t.priority === 'high' && !isDone && <Flag className="w-4 h-4 mt-0.5 shrink-0 text-bad fill-current" aria-label="Gấp" />}
     </li>
   );
 }
