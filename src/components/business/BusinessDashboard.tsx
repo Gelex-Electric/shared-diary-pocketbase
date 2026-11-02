@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { pb } from '../../lib/pocketbase';
 import {
   LogOut, X, Menu, ChevronDown,
-  FileText, LayoutDashboard, Briefcase, Activity, Package, FileSignature, Bell,
+  FileText, LayoutDashboard, Briefcase, Activity, Package, FileSignature, Bell, ListTodo,
 } from 'lucide-react';
 import SupplyTasks from '../dm/SupplyTasks';
+import WorkTasks from '../tasks/WorkTasks';
 import { useSupplyTasks } from '../dm/useSupplyTasks';
 import { motion, AnimatePresence } from 'motion/react';
 import BusinessSummaryDashboard from './BusinessSummaryDashboard';
@@ -29,13 +30,14 @@ import ThemeToggle from '../ui/ThemeToggle';
 import { GROUP_LABEL } from '../../lib/userGroup';
 
 type Tab =
-  | 'summary' | 'tasks' | 'alerts' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'customers' | 'invoice-export'
+  | 'summary' | 'work' | 'tasks' | 'alerts' | 'bill-confirm' | 'quick-import' | 'customer-debt' | 'customers' | 'invoice-export'
   | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld'
   | 'dm-general' | 'dm-catalog'
   | 'qlvh';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:         'Dashboard',
+  work:            'Giao việc',
   tasks:           'Treo tháo',
   alerts:          'Cảnh báo',
   'bill-confirm':  'Biên bản xác nhận chỉ số',
@@ -140,6 +142,19 @@ export default function BusinessDashboard() {
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
               <span>Tổng hợp</span>
+            </button>
+          </li>
+
+          {/* Giao việc */}
+          <li className="relative mt-1">
+            <button
+              onClick={() => { setTopTab('work'); onNavigate?.(); }}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'work' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <ListTodo className="w-5 h-5 shrink-0" />
+              <span>Giao việc</span>
             </button>
           </li>
 
@@ -605,6 +620,8 @@ export default function BusinessDashboard() {
           <section>
             {topTab === 'summary' ? (
               <BusinessSummaryDashboard />
+            ) : topTab === 'work' ? (
+              <WorkTasks />
             ) : topTab === 'tasks' ? (
               <SupplyTasks group="kinh_doanh" tasks={supply.tasks} data={supply.data}
                 onNavigate={tab => { setTopTab(tab as Tab); if (tab === 'dm-catalog' && !isAssetExpanded) toggleSection('asset'); }} />

@@ -17,19 +17,21 @@
  */
 import { useState } from 'react';
 import { pb } from '../../lib/pocketbase';
-import { LogOut, X, Menu, ChevronDown, FileText, Package } from 'lucide-react';
+import { LogOut, X, Menu, ChevronDown, FileText, Package, ListTodo } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import GeneralManagement from '../dm/GeneralManagement';
 import CatalogEntry, { type CatTab } from '../dm/CatalogEntry';
 import ThemeToggle from '../ui/ThemeToggle';
+import WorkTasks from '../tasks/WorkTasks';
 import { GROUP_LABEL } from '../../lib/userGroup';
 
 /** Bỏ trang "Việc cần làm" của Nhóm Vật Tư (user chốt 02/11/2026). */
-type Tab = 'dm-general' | 'dm-catalog';
+type Tab = 'dm-general' | 'dm-catalog' | 'work';
 
 const TAB_LABEL: Record<Tab, string> = {
   'dm-general': 'Danh mục điểm đo',
   'dm-catalog': 'Quản lý chung',
+  work:         'Giao việc',
 };
 /** Gắn vật tư dự kiến nay là tab ngang trong Quản lý chung (user chốt 02/11/2026). */
 const NAV: { id: Tab; label: string }[] = [
@@ -74,7 +76,7 @@ export default function MaterialDashboard() {
               id="nav-asset"
               onClick={() => setIsAssetExpanded(v => !v)}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                'vl-sidebar-active text-accent'
+                topTab !== 'work' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
               }`}
             >
               <Package className="w-5 h-5 shrink-0" />
@@ -107,6 +109,17 @@ export default function MaterialDashboard() {
                 </motion.ul>
               )}
             </AnimatePresence>
+          </li>
+          <li className="relative mt-1">
+            <button
+              onClick={() => { setTopTab('work'); onNavigate?.(); }}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'work' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <ListTodo className="w-5 h-5 shrink-0" />
+              <span>Giao việc</span>
+            </button>
           </li>
         </ul>
       </nav>
@@ -213,7 +226,9 @@ export default function MaterialDashboard() {
 
         <div className="flex-1 px-4 py-6 md:px-6 md:py-8">
           <section>
-            {topTab === 'dm-general' ? (
+            {topTab === 'work' ? (
+              <WorkTasks />
+            ) : topTab === 'dm-general' ? (
               <GeneralManagement scope="vanphong" />
             ) : (
               <CatalogEntry key="dm-catalog" scope="vanphong" tabs={CATALOG_TABS} />

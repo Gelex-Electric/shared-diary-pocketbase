@@ -2,9 +2,10 @@
 import { pb } from '../lib/pocketbase';
 import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity, FileText, LayoutDashboard, Bell,
+  Activity, FileText, LayoutDashboard, Bell, ListTodo,
 } from 'lucide-react';
 import SupplyTasks from './dm/SupplyTasks';
+import WorkTasks from './tasks/WorkTasks';
 import { useSupplyTasks } from './dm/useSupplyTasks';
 import { NewUpdate } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -26,7 +27,7 @@ import { useUnresolvedAlerts } from './alerts/useUnresolvedAlerts';
 import { ALERT_KINDS } from '../lib/alerts';
 import ThemeToggle from './ui/ThemeToggle';
 
-type Tab = 'summary' | 'alerts' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'later';
+type Tab = 'summary' | 'alerts' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'work' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
@@ -41,6 +42,7 @@ const TAB_LABEL: Record<Tab, string> = {
   opchart:   'Đồ thị điện áp & công suất',
   loss:      'Tổn thất tính toán',
   sld:       'Sơ đồ một sợi',
+  work:      'Giao việc',
   later:     'Cập nhật sau',
 };
 
@@ -423,6 +425,17 @@ export default function Dashboard() {
         <ul className="list-none px-0 mt-2">
           <li className="relative mt-1">
             <button
+              onClick={() => { setTopTab('work'); onNavigate?.(); }}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'work' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <ListTodo className="w-5 h-5 shrink-0" />
+              <span>Giao việc</span>
+            </button>
+          </li>
+          <li className="relative mt-1">
+            <button
               onClick={() => { setTopTab('later'); onNavigate?.(); }}
               className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
                 topTab === 'later' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
@@ -586,6 +599,8 @@ export default function Dashboard() {
               <div className="vl-card" style={{ height: 'calc(100vh - 180px)', minHeight: 520, padding: 0, overflow: 'hidden' }}>
                 <SldPage />
               </div>
+            ) : topTab === 'work' ? (
+              <WorkTasks />
             ) : topTab === 'alerts' ? (
               <AlertCenter kind={alertKind} />
             ) : topTab === 'journal' ? (
