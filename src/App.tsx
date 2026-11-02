@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { pb } from './lib/pocketbase';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -7,6 +7,9 @@ import MaterialDashboard from './components/material/MaterialDashboard';
 import { userGroupOf } from './lib/userGroup';
 import { Toaster } from './lib/toast';
 import { RefreshCw } from 'lucide-react';
+
+// Trang thử quét mã vạch (27/10/2026) — chỉ đọc, không cần đăng nhập; tải riêng khi mở /thu-ma-vach.
+const BarcodeTest = lazy(() => import('./components/dm/BarcodeTest'));
 
 export default function App() {
   const [isAuth, setIsAuth] = useState<boolean | null>(null);
@@ -27,6 +30,10 @@ export default function App() {
 
   // Phân nhóm theo `users.nhom` (trống thì theo `area`) — xem lib/userGroup.ts.
   const group = userGroupOf(pb.authStore.model);
+
+  if (window.location.pathname === '/thu-ma-vach') {
+    return <Suspense fallback={null}><BarcodeTest /></Suspense>;
+  }
 
   return (
     <>
