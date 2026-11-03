@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, ID_TO_AREA } from '../lib/pocketbase';
-import { fetchMeterInfo } from '../lib/meterInfo';
+import { zones, customers } from '../lib/dm/repo';
 import { PowerOutage, OutageCustomer, OutageSlot, OutageAppendix } from '../types';
 import {
   Plus, Trash2, Edit2, X,
@@ -15,7 +15,6 @@ import { generateOutageDocx } from '../lib/outageDocx';
 import { loadLowNameMap, withLowNames } from '../lib/outageNames';
 import type { LowNameMap } from '../lib/outageNames';
 import { toast as notify } from '../lib/toast';
-import { loadHeadMeters } from '../lib/headMeters';
 
 const TOAST_TITLE: Record<ToastType, string> = {
   success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
@@ -187,32 +186,30 @@ export default function PowerOutageManager() {
     return () => { cancelled = true; };
   }, [showToast]);
 
-  /* load customers — từ metterinfo.csv, lọc theo khu vực (KCN) */
+  /**
+   * load customers — từ DANH MỤC khách hàng (`dm_customer`), lọc theo KCN.
+   * KHÔNG lấy từ metterinfo.csv (HES): mã KH bên HES lệch Danh mục ở vài khách
+   * (vd KCNTH-019 bên HES là RICO, bên Danh mục là Thành An — 03/11/2026), ghép
+   * tên theo mã thì RICO biến mất và văn bản in nhầm tên. User chốt: mọi thứ
+   * theo Danh mục, HES chỉ để đối chiếu công tơ.
+   */
   const loadCustomers = useCallback(async (a: string) => {
     if (!a) { setCustomerList([]); return; }
     setLoadingCustomers(true);
     try {
-      const [rows, heads] = await Promise.all([fetchMeterInfo(), loadHeadMeters()]);
-      const headSerials = new Set(heads.map(h => h.serial));
-      const map = new Map<string, OutageCustomer>();
-      rows
-        .filter(r => r.ADDRESS === a)
-        .forEach(r => {
-          // Điểm đo đầu nguồn không phải khách hàng → không có ai để gửi thông báo.
-          if (headSerials.has(r.METER_NO)) return;
-          const id = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
-          if (id && !map.has(id)) map.set(id, { id, MKH: r.CUSTOMER_CODE || '?', Name: r.CUSTOMER_NAME || '?' });
-        });
+      const [zs, cs] = await Promise.all([zones.list(), customers.list()]);
+      const zoneIds = new Set(zs.filter(z => z.name === a).map(z => z.id));
       setCustomerList(
-        withLowNames(Array.from(map.values()), lowNames)
+        cs.filter(c => c.active !== false && c.zone && zoneIds.has(c.zone))
+          .map(c => ({ id: c.mkh || c.id, MKH: c.mkh || '?', Name: (c.low_name || '').trim() || c.name || '?' }))
           .sort((x, y) => x.MKH.localeCompare(y.MKH)));
     } catch {
-      showToast('Lỗi tải danh sách khách hàng từ metterinfo.csv', 'error');
+      showToast('Lỗi tải danh sách khách hàng từ Danh mục', 'error');
       setCustomerList([]);
     } finally {
       setLoadingCustomers(false);
     }
-  }, [showToast, lowNames]);
+  }, [showToast]);
 
   useEffect(() => {
     if (isModalOpen && area) loadCustomers(area);
