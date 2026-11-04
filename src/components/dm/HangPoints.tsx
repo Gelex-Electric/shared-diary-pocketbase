@@ -129,14 +129,15 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
     const list = [...(own ? [own] : []), ...spare.filter(x => x.type === r.type && x.id !== own?.id)]
       .filter(x => !used.has(x.id));
     return [
-      ...list.map(x => ({
-        value: x.id,
-        label: `${x.serial}${ratioOf(x)}${x.id === own?.id ? ' (đề xuất)' : ''}`,
+      // Đề xuất → dự kiến của điểm đo khác (cùng trạm trước) → kho rảnh: kho rất dài, xếp sau thì không ai thấy mục đổi chỗ.
+      ...list.filter(x => x.id === own?.id).map(x => ({
+        value: x.id, label: `${x.serial}${ratioOf(x)} (đề xuất)`,
       })),
       ...plannedElsewhere(p, r.type).filter(x => !used.has(x.dev.id)).map(x => ({
         value: x.dev.id,
         label: `${x.dev.serial}${ratioOf(x.dev)} (dự kiến của ${x.from.code})`,
       })),
+      ...list.filter(x => x.id !== own?.id).map(x => ({ value: x.id, label: `${x.serial}${ratioOf(x)}` })),
     ];
   };
 
