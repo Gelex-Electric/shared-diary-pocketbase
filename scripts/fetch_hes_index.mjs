@@ -60,6 +60,7 @@ import { pathToFileURL } from 'node:url';
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
 import { metersForRange, buildHsnResolver } from './lib/thongso.mjs';
+import { hesSerials } from './lib/hes_list.mjs';
 import { raiseAlert, zoneOf } from './lib/pb_alert.mjs';
 import { detectReverse, peakNote, buildReverseAlert } from './lib/exportCheck.mjs';
 
@@ -424,7 +425,10 @@ console.log(`Danh mục: ${meters.length} công tơ ĐANG TREO (nguồn PocketBa
 */
 const liveBySerial = new Map(meters.map(m => [m.serial, m]));
 const hsnAt = buildHsnResolver(assets, points);
-const extraSerials = metersForRange(assets, ymd(day), ymd(day)).filter(sn => !liveBySerial.has(sn));
+/* Từ 04/11/2026 tải cả MỌI công tơ của HES (`lib/hes_list.mjs`): chưa khai Danh mục thì
+   HSN trống, số RAW vẫn được giữ — khai xong khỏi phải tải lại. */
+const extraSerials = [...new Set([...metersForRange(assets, ymd(day), ymd(day)), ...hesSerials()])]
+  .filter(sn => !liveBySerial.has(sn));
 const fetchList = [
   ...meters,
   ...extraSerials.map(sn => {

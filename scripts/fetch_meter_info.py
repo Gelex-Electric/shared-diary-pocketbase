@@ -45,18 +45,20 @@ PB_EMAIL = os.environ.get("PB_EMAIL", "")
 PB_PASS = os.environ.get("PB_PASS", "")
 API_FIELDS = ["METER_NO", "METER_NAME", "METER_MODEL_DESC", "CUSTOMER_CODE",
               "CUSTOMER_NAME", "ADDRESS", "LINE_NAME"]
+# Doc tu API nhung noi vao CUOI file: moi noi doc theo TEN cot nen khong phai sua.
+EXTRA_API_FIELDS = ["CREATED"]
 # LINE_ID/CODE/ROLE bo sung tu GetLineList + GetMeter (anh xa cong to -> tram).
 #   ROLE = "chinh" khi line co CODE != rong  -> diem do dem chinh (cong P, Q)
 #   ROLE = "phu"   khi CODE rong             -> diem do phu (bo qua khi tinh ton that)
 STATION_FIELDS = ["LINE_ID", "CODE", "ROLE"]
-FIELDS = API_FIELDS + STATION_FIELDS + ["STATUS"]
+FIELDS = API_FIELDS + STATION_FIELDS + ["STATUS"] + EXTRA_API_FIELDS
 BATCH_SLEEP = float(os.environ.get("BATCH_SLEEP", "0.15"))  # nghi giua cac lan goi GetMeter
 USER_ID = os.environ.get("USER_ID", "2")   # tai khoan luon dung UserID = 2
 INACTIVE_DAYS = int(os.environ.get("INACTIVE_DAYS", "7"))  # so ngay lien tiep U=0 moi gan No
 
 
 def fetch_accounts(user_id: str, token: str):
-    r = requests.get(
+    r = get_retry(
         f"{BASE_URL}/GetMeterAccount",
         params={"UserID": user_id, "Token": token},
         timeout=60,
@@ -246,7 +248,7 @@ def fetch_meter_line(meter_no: str, token: str):
         data = r.json()
     except Exception as e:  # noqa: BLE001
         print(f"[WARN] GetMeter {meter_no}: {e}")
-        return "", ""
+        return None, None
     if isinstance(data, list):
         data = data[0] if data else {}
     if isinstance(data, dict):
@@ -259,8 +261,14 @@ def enrich_stations(meters: dict, token: str, lines: dict) -> list:
     Tra ve danh sach tram bat thuong (CODE != rong nhung KHONG phai tien to LINE_NAME)."""
     bad_stations = []          # tram co CODE nhung LINE_NAME khong bat dau bang CODE
     seen_bad = set()
+    failed = 0
     for no, m in meters.items():
         lid, lname = fetch_meter_line(no, token)   # GetMeter: LINE_ID + LINE_NAME
+        # GetMeter loi: GIU nguyen tram cu. Ghi rong se bien diem do chinh thanh "phu"
+        # chi vi mot loi mang (04/11/2026).
+        if lid is None:
+            failed += 1
+            continue
         line = lines.get(lid, {})
         code = line.get("CODE", "")
         if lname:
@@ -277,6 +285,8 @@ def enrich_stations(meters: dict, token: str, lines: dict) -> list:
             m["ROLE"] = "phu"
         if BATCH_SLEEP:
             time.sleep(BATCH_SLEEP)
+    if failed:
+        print(f"[WARN] GetMeter loi {failed} cong to -> giu nguyen thong tin tram cu.")
     return bad_stations
 
 
@@ -322,7 +332,7 @@ def main():
             added += 1
         else:
             updated += 1
-        for k in API_FIELDS:
+        for k in API_FIELDS + EXTRA_API_FIELDS:
             meters[no][k] = rec.get(k) if rec.get(k) is not None else ""
         meters[no]["METER_NO"] = no
 

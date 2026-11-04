@@ -14,6 +14,7 @@
  */
 import type { MeterInfoRow } from '../meterInfo';
 import type { CatalogData } from './repo';
+import type { Customer, Point } from './types';
 import { pointZoneId } from './pointScope';
 
 /** Một khách hàng kèm toàn bộ công tơ của họ. */
@@ -81,6 +82,84 @@ export function customerMetersOf(d: CatalogData): CustomerMeters[] {
     g.meters.sort((x, y) => x.METER_NO.localeCompare(y.METER_NO, 'vi', { numeric: true }));
   }
   return [...out.values()].sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true }));
+}
+
+/** Các bảng Danh mục mà `meterInstallsOf` cần — màn đồ thị không phải nạp cả kho/sổ mượn. */
+export type InstallCatalog = Pick<CatalogData, 'zones' | 'lines' | 'stations' | 'customers' | 'points' | 'assets'>;
+
+/** Một LẦN TREO công tơ ở một điểm đo, đã có ngày treo. */
+export interface MeterInstall {
+  serial: string;
+  /** `YYYY-MM-DD`. */
+  dateOn: string;
+  /** `YYYY-MM-DD`; rỗng = đang treo. */
+  dateOff: string;
+  point: Point;
+  /** Tên KCN theo trạm/điểm đo — khớp `AREAS`. */
+  zone: string;
+  /** Tra khách hàng đứng tên điểm đo tại một ngày (theo `owner_history`). */
+  ownerOn: (day: string) => Customer | undefined;
+}
+
+/**
+ * Mọi lần treo công tơ trong Danh mục, cho các màn hiển thị số đo theo ngày.
+ *
+ * Công tơ có thể TÁI SỬ DỤNG ở điểm đo khác (user nhắc 04/11/2026) nên khoá phải là
+ * (công tơ, ngày), cùng luật với `buildHsnResolver`. Lần treo chưa có ngày treo thì bỏ:
+ * không biết từ khi nào thì không được đoán nó thuộc khách nào.
+ */
+export function meterInstallsOf(d: InstallCatalog): MeterInstall[] {
+  const zoneName = new Map(d.zones.map(z => [z.id, z.name]));
+  const stationById = new Map(d.stations.map(s => [s.id, s]));
+  const customerById = new Map(d.customers.map(c => [c.id, c]));
+  const customerByMkh = new Map(d.customers.map(c => [c.mkh, c]));
+  const pointById = new Map(d.points.map(p => [p.id, p]));
+  const ymd = (v?: string) => (v ?? '').slice(0, 10);
+
+  const out: MeterInstall[] = [];
+  for (const a of d.assets) {
+    if (a.type !== 'CONGTO' || !a.point || !a.serial || !ymd(a.date_on)) continue;
+    const point = pointById.get(a.point);
+    if (!point) continue;
+    const zid = pointZoneId(point, stationById, d.lines);
+    const transfers = [...(point.owner_history ?? [])]
+      .sort((x, y) => ymd(x.date).localeCompare(ymd(y.date)));
+    out.push({
+      serial: a.serial.trim(),
+      dateOn: ymd(a.date_on),
+      dateOff: ymd(a.date_off),
+      point,
+      zone: (zid && zoneName.get(zid)) || '',
+      ownerOn: (day) => {
+        /* Lần chuyển chủ ĐẦU TIÊN sau ngày đang xem: chủ lúc đó chính là `from` của nó. */
+        const next = transfers.find(t => ymd(t.date) > day);
+        if (next) return next.from ? customerByMkh.get(next.from) : undefined;
+        return point.customer ? customerById.get(point.customer) : undefined;
+      },
+    });
+  }
+  return out;
+}
+
+/** Lần treo của mỗi công tơ tại `day`. Tháo và treo lại cùng ngày ⇒ lần MUỘN hơn, như tra HSN. */
+export function installsOnDay(list: MeterInstall[], day: string): MeterInstall[] {
+  const best = new Map<string, MeterInstall>();
+  for (const m of list) {
+    if (m.dateOn > day || (m.dateOff && m.dateOff < day)) continue;
+    const cur = best.get(m.serial);
+    if (!cur || m.dateOn > cur.dateOn) best.set(m.serial, m);
+  }
+  return [...best.values()];
+}
+
+/** Lần treo MỚI NHẤT của mỗi công tơ — cho số liệu nhiều tháng không gắn với một ngày. */
+export function latestInstalls(list: MeterInstall[]): MeterInstall[] {
+  const best = new Map<string, MeterInstall>();
+  for (const m of list) {
+    const cur = best.get(m.serial);
+    if (!cur || m.dateOn > cur.dateOn) best.set(m.serial, m);
+  }
+  return [...best.values()];
 }
 
 /**

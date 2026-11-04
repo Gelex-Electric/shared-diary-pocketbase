@@ -79,20 +79,10 @@ jobs:
           PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
         run: node scripts/fetch_thongso_30min.mjs
 
-      # 3) Pmax ngay (dinh TUC THOI tu mau 30 phut) — ban Node tu 29/09/2026.
-      #    Nguon doi sang ThongSo_30min (RAW) nen script phai tu tra HSN cua
-      #    DIEM DO tai thoi diem cua moc => can PB_EMAIL/PB_PASS, khac ban
-      #    Python cu doc datametter.csv da nhan san HSN.
-      - name: Compute daily Pmax
-        env:
-          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
-          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
-        run: node scripts/pmax_daily.mjs
-
       # 4) Chi so HES chi tiet 30 phut, giu 30 ngay.
       # Ban Node thay ban Python tu 16/09/2026. Khac hai cho:
-      #   - danh sach cong to lay tu DANH MUC PocketBase (cong to dang treo),
-      #     khong phai metterinfo.csv;
+      #   - danh sach cong to = MOI cong to cua HES (metterinfo.csv, buoc 1) + Danh muc
+      #     (doi 04/11/2026; truoc do chi Danh muc nen cong to chua khai bi mat so);
       #   - HSN lay tu dm_point.hsn, khong phai METER_NAME cua HES.
       # Script chi dung thu vien co san cua Node, khong can npm install.
       - name: Fetch HES index
@@ -104,6 +94,31 @@ jobs:
         # se trong tron suot ma nhin vao lai tuong la khong co su co nao.
         # (Phat hien 17/09/2026 khi doi chieu ngay 16.)
         run: node scripts/fetch_hes_index.mjs --notify
+
+      # 4a) Tai bu moc con thieu cua 7 ngay gan nhat, bao cong to van thieu (kind congto).
+      #     Dat TRUOC moi buoc tinh de so tinh ra co ca phan vua bu. continue-on-error:
+      #     HES loi o buoc nay khong duoc lam mat du lieu cac buoc sau.
+      - name: Tai bu moc thieu
+        continue-on-error: true
+        env:
+          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
+        run: node scripts/fill_gaps_30min.mjs --notify
+
+      # 4a') Vong doi cong to: ngay co so dau tien / gan nhat. Khong goi mang.
+      - name: Vong doi cong to
+        run: node scripts/meter_lifecycle.mjs
+
+      # 3) Pmax ngay (dinh TUC THOI tu mau 30 phut) — ban Node tu 29/09/2026.
+      #    Nguon doi sang ThongSo_30min (RAW) nen script phai tu tra HSN cua
+      #    DIEM DO tai thoi diem cua moc => can PB_EMAIL/PB_PASS, khac ban
+      #    Python cu doc datametter.csv da nhan san HSN.
+      #    Doi xuong sau buoc tai bu (04/11/2026) de Pmax hom qua co ca moc vua bu.
+      - name: Compute daily Pmax
+        env:
+          PB_EMAIL: ${{ secrets.PB_ADMIN_EMAIL }}
+          PB_PASS: ${{ secrets.PB_ADMIN_PASS }}
+        run: node scripts/pmax_daily.mjs
 
       # 4b) Pmax cua tung LO DUONG DAY, tinh tu chinh du lieu 30 phut buoc 4 vua
       #     ghi. Phai tinh va LUU NGAY moi dem: du lieu 30 phut chi giu 30 ngay,
@@ -165,7 +180,7 @@ jobs:
           # Cung ly do voi ChiSo_30min: ThongSo_30min chi giu 40 ngay, file qua
           # han bi XOA nen phai `-A` moi ghi nhan viec xoa.
           git add -A public/ThongSo_30min
-          git add public/metterinfo.csv public/pmax_daily.csv public/pmax_line_daily.csv public/head_balance_daily.csv
+          git add public/meter_lifecycle.csv public/metterinfo.csv public/pmax_daily.csv public/pmax_line_daily.csv public/head_balance_daily.csv
           # Ba file ton that: BO khoi day 16/09 luc tam dung, THEM LAI 24/09.
           # Quen dong nay thi buoc 5+6 van chay, van sinh file, roi bi vut di ma
           # khong ai biet — pipeline van xanh.

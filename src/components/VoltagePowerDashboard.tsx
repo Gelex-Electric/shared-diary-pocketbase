@@ -25,11 +25,13 @@ import {
   Cable,
 } from 'lucide-react';
 import { pb, ID_TO_AREA, AREAS } from '../lib/pocketbase';
-import { fetchMeterInfo, MeterInfoRow } from '../lib/meterInfo';
+import { zones as dmZones, lines as dmLines, stations as dmStations, customers as dmCustomers, points as dmPoints, assets as dmAssets } from '../lib/dm/repo';
+import { meterInstallsOf, installsOnDay, latestInstalls, type MeterInstall } from '../lib/dm/meterRows';
+import { isHeadPoint } from '../lib/dm/pointScope';
 import { DatePicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
 import { Tabs, TabItem } from './ui/Tabs';
-import { useHeadSerials, HEAD_LABEL, HEAD_HINT } from '../lib/headMeters';
+import { HEAD_LABEL, HEAD_HINT } from '../lib/headMeters';
 import CustomerPmaxTab from './CustomerPmaxTab';
 import LinePmaxTab from './LinePmaxTab';
 import HeadBalanceTab from './HeadBalanceTab';
@@ -251,8 +253,6 @@ type PageTab = 'chart' | 'pmax' | 'linePmax' | 'head';
 export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }: VoltagePowerDashboardProps = {}) {
   /* ---- Tab đang xem ---- */
   const [tab, setTab] = useState<PageTab>('chart');
-  /* Công tơ đầu nguồn theo Danh mục (role dau_nguon) — không còn theo tên LINE_NAME. */
-  const headSerials = useHeadSerials();
 
   /* ================================================================
      DỮ LIỆU ĐO XA — public/ThongSo_30min/<ngày>.csv
@@ -268,6 +268,7 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
   const [dayRows, setDayRows] = useState<RawRow[]>([]);
   const [isLoadingDay, setIsLoadingDay] = useState(true);
   const [csvError, setCsvError] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>('');
 
   // Lỗi đọc dữ liệu → toast (thay cho banner inline cũ).
   useEffect(() => {
@@ -286,8 +287,10 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
     return () => { mounted = false; };
   }, []);
 
-  /* ---- Khách hàng & công tơ từ metterinfo.csv (lọc theo KCN) ---- */
-  const [meterRows, setMeterRows] = useState<MeterInfoRow[]>([]);
+  /* ---- Khách hàng & công tơ từ Danh mục PocketBase (user chốt 04/11/2026) ----
+     Trước đây đọc metterinfo.csv: tên khách theo HES, lệch với mọi màn đã chuyển sang
+     Danh mục. HES nay chỉ còn là nguồn danh sách công tơ để TẢI SỐ. */
+  const [installs, setInstalls] = useState<MeterInstall[]>([]);
   const [isLoadingMeters, setIsLoadingMeters] = useState(true);
 
   /** Chuẩn hoá Unicode (NFC) + trim để so khớp area tiếng Việt an toàn. */
@@ -313,39 +316,46 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
   useEffect(() => {
     let mounted = true;
     setIsLoadingMeters(true);
-    fetchMeterInfo()
-      .then(rows => { if (mounted) setMeterRows(rows); })
-      .catch(err => console.error('Lỗi tải metterinfo.csv:', err))
+    Promise.all([
+      dmZones.list(), dmLines.list(), dmStations.list(),
+      dmCustomers.list(), dmPoints.list(), dmAssets.list(),
+    ])
+      .then(([zones, lines, stations, customers, points, assets]) => {
+        if (mounted) setInstalls(meterInstallsOf({ zones, lines, stations, customers, points, assets }));
+      })
+      .catch(err => {
+        console.error('Lỗi tải Danh mục:', err);
+        if (mounted) setCsvError('Không tải được Danh mục khách hàng & công tơ.');
+      })
       .finally(() => { if (mounted) setIsLoadingMeters(false); });
     return () => { mounted = false; };
   }, []);
 
-  // customerId -> CustomerInfo (gồm danh sách công tơ của khách), lọc theo khu vực (KCN)
-  const customerInfoMap = useMemo(() => {
+  /* Gom lần treo thành khách hàng, theo KCN được xem. Công tơ chưa có khách thì bỏ ở đây
+     và được đếm riêng (`noCustomer`). */
+  const groupByCustomer = (list: MeterInstall[], ownerDay: string) => {
     const map = new Map<string, CustomerInfo>();
-    // Khối Văn phòng (zoneFilter khác undefined) ưu tiên bộ chọn KCN: '' = tất cả, ngược lại lọc 1 KCN.
-    // Khối Vận hành (zoneFilter undefined) giữ lọc theo KCN của user.
-    const allowed = zoneFilter !== undefined
-      ? (zoneFilter ? new Set([normArea(zoneFilter)]) : null)
-      : (userAreas.length > 0 ? new Set(userAreas) : null);
-    for (const r of meterRows) {
-      if (allowed && !allowed.has(normArea(r.ADDRESS))) continue;
+    for (const m of list) {
+      if (allowedZones && !allowedZones.has(normArea(m.zone))) continue;
       // Điểm đo đầu nguồn KHÔNG phải khách hàng — tách ra thẻ riêng, xem `headStations`.
-      if (headSerials.has(r.METER_NO)) continue;
-      const cid = r.CUSTOMER_CODE || r.CUSTOMER_NAME;
-      if (!cid) continue;
-      if (!map.has(cid)) {
-        map.set(cid, {
-          id: cid,
-          mkh: r.CUSTOMER_CODE || '?',
-          name: r.CUSTOMER_NAME || 'Không rõ',
-          meters: [],
-        });
-      }
-      map.get(cid)!.meters.push({ meterNo: r.METER_NO, line: r.LINE_NAME || '' });
+      if (isHeadPoint(m.point)) continue;
+      const c = m.ownerOn(ownerDay);
+      if (!c) continue;
+      if (!map.has(c.id)) map.set(c.id, { id: c.id, mkh: c.mkh, name: c.name, meters: [] });
+      map.get(c.id)!.meters.push({ meterNo: m.serial, line: m.point.code || m.point.line_name || '' });
     }
     return map;
-  }, [meterRows, userAreas, zoneFilter, headSerials]);
+  };
+
+  /* Lần treo TẠI ngày đang xem: công tơ tái sử dụng phải về đúng khách của ngày đó. */
+  const dayInstalls = useMemo(
+    () => (selectedDate ? installsOnDay(installs, selectedDate) : []),
+    [installs, selectedDate]);
+
+  // customerId -> CustomerInfo (gồm danh sách công tơ của khách) tại ngày đang xem
+  const customerInfoMap = useMemo(
+    () => groupByCustomer(dayInstalls, selectedDate),
+    [dayInstalls, selectedDate, allowedZones]);
 
   /* ---- Dòng RAW của ngày đang xem → chỉ mục theo công tơ (giữ nguyên thời điểm) ----
      Điện áp giữ nguyên (TU hạ thế 1/1), công suất ×HSN của điểm đo tại đúng mốc.
@@ -361,7 +371,14 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
       if (isNaN(dt.getTime())) continue;
 
       const r = hsnAt(meterNo, row.DATE_TIME);
-      if (!hsnOk(r)) { miss.set(meterNo, HSN_MISS_TEXT[r.reason]); continue; }
+      if (!hsnOk(r)) {
+        /* Từ 04/11/2026 file có MỌI công tơ của HES, gồm công tơ đã tháo về kho. Chỉ báo
+           công tơ THỰC SỰ có điện; công tơ nằm kho (U = 0) không có gì bị thiếu. */
+        if (Number(row.U_A) > 0 || Number(row.U_B) > 0 || Number(row.U_C) > 0) {
+          miss.set(meterNo, HSN_MISS_TEXT[r.reason]);
+        }
+        continue;
+      }
       const s = scaleRow(row, r.hsn);
       const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
@@ -397,7 +414,6 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
   }, [dateKeys]);
 
   /* ---- Ngày đang chọn ---- */
-  const [selectedDate, setSelectedDate] = useState<string>('');
   useEffect(() => {
     if (defaultDate && !selectedDate) setSelectedDate(defaultDate);
   }, [defaultDate, selectedDate]);
@@ -432,6 +448,24 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
         + (unresolved.size > lines.length ? `… và ${unresolved.size - lines.length} công tơ nữa.` : ''),
     );
   }, [unresolved, isLoadingDay, hsnReady]);
+
+  /* Có số, có HSN nhưng điểm đo chưa gắn khách: không còn lấy tên HES bù vào nên phải
+     nói ra, nếu không công tơ biến khỏi danh sách mà không ai biết. */
+  const noCustomer = useMemo(() => {
+    if (!selectedDate) return [] as string[];
+    return dayInstalls
+      .filter(m => !isHeadPoint(m.point) && !m.ownerOn(selectedDate) && readingIndex.has(m.serial)
+        && (!allowedZones || allowedZones.has(normArea(m.zone))))
+      .map(m => m.serial);
+  }, [dayInstalls, selectedDate, readingIndex, allowedZones]);
+  useEffect(() => {
+    if (!noCustomer.length || isLoadingDay || isLoadingMeters) return;
+    notify.error(
+      `${noCustomer.length} công tơ chưa gắn khách hàng`,
+      `Điểm đo chưa khai khách hàng trong Danh mục: ${noCustomer.slice(0, 5).join(', ')}`
+        + (noCustomer.length > 5 ? `… và ${noCustomer.length - 5} công tơ nữa.` : ''),
+    );
+  }, [noCustomer.join(','), isLoadingDay, isLoadingMeters]);
 
   /* ---- Dựng dữ liệu biểu đồ cho từng khách hàng theo ngày chọn ----
      Mỗi TRẠM (công tơ) là một chuỗi riêng; khách nhiều điểm đo → nhiều trạm
@@ -535,25 +569,25 @@ export default function VoltagePowerDashboard({ zoneFilter, onZoneFilterChange }
     { id: 'linePmax', label: 'Pmax theo lộ', icon: Cable, sub: 'Đỉnh cả lộ · trung bình 30 phút' },
     { id: 'head', label: 'Đầu nguồn', icon: Zap, sub: 'Đối soát đầu nguồn ↔ tổng điểm đo' },
   ];
-  // Danh sách khách hàng đã lọc theo KCN của tài khoản → dùng chung cho tab Pmax.
-  const pmaxCustomers = useMemo(() => Array.from(customerInfoMap.values()), [customerInfoMap]);
+  /* Tab Pmax xem nhiều tháng: mỗi công tơ một dòng theo lần treo mới nhất, chủ hiện tại.
+     KHÔNG dùng `customerInfoMap` — nó chỉ có công tơ treo đúng ngày đang chọn. */
+  const pmaxCustomers = useMemo(
+    () => Array.from(groupByCustomer(latestInstalls(installs), '9999-12-31').values()),
+    [installs, allowedZones]);
 
   /* ---- Điểm đo ĐẦU NGUỒN: tách hẳn khỏi danh sách khách hàng, vẽ thẻ riêng ----
      Nó đo TỔNG cả KCN nên để chung sẽ luôn chiếm thẻ "P max cao nhất". */
   const headStations = useMemo<StationSeries[]>(() => {
     if (!selectedDate) return [];
-    const allowed = zoneFilter !== undefined
-      ? (zoneFilter ? new Set([normArea(zoneFilter)]) : null)
-      : (userAreas.length > 0 ? new Set(userAreas) : null);
     const out: StationSeries[] = [];
-    for (const r of meterRows) {
-      if (!headSerials.has(r.METER_NO)) continue;
-      if (allowed && !allowed.has(normArea(r.ADDRESS))) continue;
-      const st = buildStation(r.METER_NO, r.LINE_NAME || '', readingIndex.get(r.METER_NO)?.get(selectedDate));
+    for (const m of dayInstalls) {
+      if (!isHeadPoint(m.point)) continue;
+      if (allowedZones && !allowedZones.has(normArea(m.zone))) continue;
+      const st = buildStation(m.serial, m.point.code || m.point.line_name || '', readingIndex.get(m.serial)?.get(selectedDate));
       if (st) out.push(st);
     }
     return out;
-  }, [meterRows, readingIndex, selectedDate, userAreas, zoneFilter, headSerials]);
+  }, [dayInstalls, readingIndex, selectedDate, allowedZones]);
 
   /* ---- Render 1 thẻ biểu đồ (1 trạm: 3 đường điện áp + 1 cột P) ---- */
   const renderCard = (i: number) => {

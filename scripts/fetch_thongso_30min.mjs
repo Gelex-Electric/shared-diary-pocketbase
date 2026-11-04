@@ -7,8 +7,8 @@
  * LƯU RAW — KHÔNG nhân HSN, KHÔNG có cột HSN. Nơi đọc nhân theo điểm đo mà công tơ
  * gắn vào tại thời điểm của mốc: `buildHsnResolver` + `scaleRow` trong `lib/thongso.mjs`.
  *
- * Danh sách công tơ: Danh mục PocketBase — mọi lần treo `dm_asset` có khoảng giao
- * với cửa sổ ngày (`metersForRange`), không phải metterinfo.csv của HES.
+ * Danh sách công tơ (đổi 04/11/2026): MỌI công tơ của HES (`metterinfo.csv`) ∪ mọi lần
+ * treo `dm_asset` giao cửa sổ ngày (`metersForRange`) — xem `lib/hes_list.mjs`.
  *
  * Mỗi công tơ MỘT lời gọi `GetInstantByDate` cho cả khoảng — backfill 40 ngày cũng
  * chỉ ~130 lời gọi.
@@ -28,6 +28,7 @@ import { pathToFileURL } from 'node:url';
 import { getJson, getToken, mapLimit, stamp } from './lib/hes_api.mjs';
 import { pbLogin, allOf } from './lib/pb_meters.mjs';
 import { rawRow, metersForRange, THONGSO_COLUMNS } from './lib/thongso.mjs';
+import { hesSerials } from './lib/hes_list.mjs';
 
 const OUT_DIR = process.env.THONGSO_30MIN_DIR || 'public/ThongSo_30min';
 const KEEP_DAYS = Number(process.env.KEEP_DAYS_THONGSO || 40);
@@ -117,8 +118,8 @@ async function main() {
   const dry = process.argv.includes('--dry-run');
   const pbToken = await pbLogin();
   const assets = await allOf('dm_asset', pbToken);
-  const serials = metersForRange(assets, from, to);
-  console.log(`ThongSo_30min ${from} → ${to}: ${serials.length} công tơ (Danh mục, mọi lần treo giao cửa sổ)`
+  const serials = [...new Set([...hesSerials(), ...metersForRange(assets, from, to)])].sort();
+  console.log(`ThongSo_30min ${from} → ${to}: ${serials.length} công tơ (HES ∪ Danh mục)`
     + `${dry ? ' — DRY-RUN' : ''}`);
   if (!serials.length) { console.error('Không có công tơ nào — dừng.'); process.exit(1); }
 
