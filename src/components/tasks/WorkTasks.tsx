@@ -2,12 +2,12 @@
  * Màn "Giao việc" — nhiệm vụ giao tay giữa các nhóm (plan 2026-11-02-viec-can-lam-giao-viec.md).
  * Một danh sách chung cho cả 3 nhóm, dạng danh sách kiểu Microsoft To Do / Todoist (user chốt
  * 02/11/2026): nhóm theo hạn (Quá hạn / Hôm nay / Sắp tới / Không hạn), "Đã xong" thu gọn,
- * vòng tròn tick xong nhanh, ô thêm nhanh. Bấm dòng để mở chi tiết: checklist con + bình luận. Quyền xem `lib/workTasks.ts` (canEdit / canWork).
+ * nút Hoàn thành / Hoàn tác (user chốt 04/11/2026), ô thêm nhanh. Bấm dòng để mở chi tiết: checklist con + bình luận dạng hội thoại. Quyền xem `lib/workTasks.ts` (canEdit / canWork).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ListTodo, Plus, Users, Inbox, CalendarClock, Pencil, Trash2, Send, CheckSquare, Square, X,
-  AlertTriangle, Circle, CircleDot, CheckCircle2, ChevronRight, Flag, MessageSquare,
+  AlertTriangle, Circle, CircleDot, CheckCircle2, ChevronRight, Flag, MessageSquare, Check, Undo2,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import { Select } from '../ui/Select';
@@ -16,11 +16,12 @@ import { useConfirm } from '../ui/ConfirmDialog';
 import { EmptyState } from '../ui/dashboard';
 import { RichTextEditor, RichTextView } from '../ui/RichText';
 import { FormModal, Field, TextInput, INPUT_CLS } from '../dm/entryUi';
+import { toast } from '../../lib/toast';
 import { GROUP_LABEL, type UserGroup } from '../../lib/userGroup';
 import { AREAS } from '../../lib/pocketbase';
 import {
   DESCRIPTION_MAX, STATUS_LABEL, currentUser, listTasks, createTask, updateTask, setStatus, setChecklist,
-  deleteTask, listComments, addComment, commentCounts, canEdit, canWork, isOverdue,
+  deleteTask, listComments, addComment, recallComment, commentCounts, canEdit, canWork, isOverdue,
   isForMyTeam, targetLabel,
   type WorkTask, type TaskStatus, type TaskInput, type TaskComment, type ChecklistItem, type Me,
 } from '../../lib/workTasks';
@@ -101,7 +102,7 @@ export default function WorkTasks() {
 
   /** Chạy một thao tác ghi rồi nạp lại; lỗi hiện ở thanh đỏ đầu màn. */
   const run = async (fn: () => Promise<unknown>) => {
-    try { await fn(); await reload(); } catch (e) { setError(errMsg(e)); }
+    try { await fn(); await reload(); return true; } catch (e) { setError(errMsg(e)); return false; }
   };
 
   const visible = tasks.filter(t =>
@@ -157,11 +158,20 @@ export default function WorkTasks() {
     { id: 'none', label: 'Không hạn', tone: 'text-faint', items: pending.filter(t => !t.deadline) },
   ];
 
-  /** Vòng tròn đầu dòng: Chưa làm/Đang làm → Xong; Xong → Chưa làm. */
-  const toggleDone = (t: WorkTask) => void run(() => setStatus(t.id, t.status === 'done' ? 'todo' : 'done'));
+  /** Việc xong chui vào mục thu gọn nên có thông báo kèm Hoàn tác, trả về đúng trạng thái trước đó. */
+  const complete = async (t: WorkTask) => {
+    const prev = t.status;
+    if (await run(() => setStatus(t.id, 'done'))) {
+      toast.success('Đã hoàn thành', t.title, {
+        key: `task-done-${t.id}`, duration: 8000,
+        confirm: { text: 'Hoàn tác', onConfirm: () => void run(() => setStatus(t.id, prev)) },
+      });
+    }
+  };
+  const undoDone = (t: WorkTask) => { toast.dismissKey(`task-done-${t.id}`); void run(() => setStatus(t.id, 'todo')); };
   const row = (t: WorkTask) => (
     <TaskRow key={t.id} task={t} today={today} comments={commentCount[t.id] ?? 0}
-      canToggle={canWork(t, me)} onToggle={() => toggleDone(t)} onOpen={() => setOpenId(t.id)} />
+      canWork={canWork(t, me)} onComplete={() => void complete(t)} onUndo={() => undoDone(t)} onOpen={() => setOpenId(t.id)} />
   );
 
   const openTask = tasks.find(t => t.id === openId) ?? null;
@@ -236,6 +246,8 @@ export default function WorkTasks() {
           onClose={() => setOpenId(null)}
           onEdit={() => { setOpenId(null); openEdit(openTask); }}
           onDelete={() => void remove(openTask)}
+          onComplete={() => void complete(openTask)}
+          onUndo={() => undoDone(openTask)}
           run={run}
         />
       )}
@@ -281,9 +293,22 @@ export default function WorkTasks() {
   );
 }
 
-/** Một dòng việc kiểu Todoist / To Do: vòng tròn tick, tiêu đề, dòng chip phụ. */
-function TaskRow({ task: t, today, comments, canToggle, onToggle, onOpen }: {
-  task: WorkTask; today: string; comments: number; canToggle: boolean; onToggle: () => void; onOpen: () => void;
+/** Nút chốt việc: Hoàn thành khi chưa xong, Hoàn tác khi đã xong. */
+function CompleteButton({ done, onComplete, onUndo }: { done: boolean; onComplete: () => void; onUndo: () => void }) {
+  return done ? (
+    <button type="button" onClick={onUndo} className="vl-btn vl-btn-secondary vl-btn-sm inline-flex items-center gap-1 shrink-0">
+      <Undo2 className="w-4 h-4" /> Hoàn tác
+    </button>
+  ) : (
+    <button type="button" onClick={onComplete} className="vl-btn vl-btn-success vl-btn-sm inline-flex items-center gap-1 shrink-0">
+      <Check className="w-4 h-4" /> Hoàn thành
+    </button>
+  );
+}
+
+/** Một dòng việc kiểu Todoist / To Do: biểu tượng trạng thái, tiêu đề, dòng chip phụ, nút chốt việc. */
+function TaskRow({ task: t, today, comments, canWork: work, onComplete, onUndo, onOpen }: {
+  task: WorkTask; today: string; comments: number; canWork: boolean; onComplete: () => void; onUndo: () => void; onOpen: () => void;
 }) {
   const isDone = t.status === 'done';
   const checked = t.checklist.filter(c => c.done).length;
@@ -292,13 +317,11 @@ function TaskRow({ task: t, today, comments, canToggle, onToggle, onOpen }: {
   const StatusIcon = isDone ? CheckCircle2 : t.status === 'doing' ? CircleDot : Circle;
   return (
     <li className="group flex items-start gap-3 px-5 py-3 border-t border-[var(--border)] first:border-t-0 hover:bg-subtle transition-colors">
-      <button type="button" onClick={onToggle} disabled={!canToggle}
-        title={isDone ? 'Đánh dấu chưa xong' : 'Đánh dấu Xong'}
-        className={`mt-0.5 shrink-0 transition-colors disabled:cursor-not-allowed ${
-          isDone ? 'text-good' : t.priority === 'high' ? 'text-bad hover:text-good' : t.status === 'doing' ? 'text-accent hover:text-good' : 'text-faint hover:text-good'
-        }`}>
+      <span title={STATUS_LABEL[t.status]} className={`mt-0.5 shrink-0 ${
+        isDone ? 'text-good' : t.priority === 'high' ? 'text-bad' : t.status === 'doing' ? 'text-accent' : 'text-faint'
+      }`}>
         <StatusIcon className="w-5 h-5" />
-      </button>
+      </span>
       <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
         <p className={`text-sm font-semibold ${isDone ? 'line-through text-faint' : 'text-ink'}`}>{t.title}</p>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-soft">
@@ -317,6 +340,7 @@ function TaskRow({ task: t, today, comments, canToggle, onToggle, onOpen }: {
         </p>
       </button>
       {t.priority === 'high' && !isDone && <Flag className="w-4 h-4 mt-0.5 shrink-0 text-bad fill-current" aria-label="Gấp" />}
+      {work && <CompleteButton done={isDone} onComplete={onComplete} onUndo={onUndo} />}
     </li>
   );
 }
@@ -345,18 +369,22 @@ function ChecklistEditor({ items, onChange }: { items: ChecklistItem[]; onChange
   );
 }
 
-function TaskDetail({ task: t, me, onClose, onEdit, onDelete, run }: {
+function TaskDetail({ task: t, me, onClose, onEdit, onDelete, onComplete, onUndo, run }: {
   task: WorkTask; me: ReturnType<typeof currentUser>;
-  onClose: () => void; onEdit: () => void; onDelete: () => void;
-  run: (fn: () => Promise<unknown>) => Promise<void>;
+  onClose: () => void; onEdit: () => void; onDelete: () => void; onComplete: () => void; onUndo: () => void;
+  run: (fn: () => Promise<unknown>) => Promise<boolean>;
 }) {
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [body, setBody] = useState('');
   const work = canWork(t, me);
   const owner = canEdit(t, me);
+  const { confirm, dialog } = useConfirm();
+  const chatEnd = useRef<HTMLDivElement>(null);
 
   const loadComments = useCallback(() => { void listComments(t.id).then(setComments).catch(() => setComments([])); }, [t.id]);
   useEffect(loadComments, [loadComments]);
+  // Tin mới nhất ở dưới cùng như khung nhắn tin.
+  useEffect(() => { chatEnd.current?.parentElement?.scrollTo({ top: chatEnd.current.offsetTop }); }, [comments.length]);
 
   const toggle = (i: number) =>
     void run(() => setChecklist(t.id, t.checklist.map((c, j) => (j === i ? { ...c, done: !c.done } : c))));
@@ -368,7 +396,13 @@ function TaskDetail({ task: t, me, onClose, onEdit, onDelete, run }: {
     loadComments();
   };
 
+  const recall = async (c: TaskComment) => {
+    const ok = await confirm({ title: 'Thu hồi tin nhắn?', message: 'Nội dung sẽ bị xoá với mọi người và không khôi phục được.', confirmLabel: 'Thu hồi', variant: 'danger' });
+    if (ok) { await run(() => recallComment(c.id)); loadComments(); }
+  };
+
   return (
+    <>
     <FormModal open title={t.title} onClose={onClose} onSubmit={onClose} submitLabel="Đóng">
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-2 text-xs text-soft">
@@ -386,6 +420,7 @@ function TaskDetail({ task: t, me, onClose, onEdit, onDelete, run }: {
                 onChange={v => void run(() => setStatus(t.id, v as TaskStatus))} />
             </Field>
           </div>
+          {work && <CompleteButton done={t.status === 'done'} onComplete={onComplete} onUndo={onUndo} />}
           {owner && (
             <>
               <button type="button" onClick={onEdit} className="vl-btn vl-btn-secondary vl-btn-sm inline-flex items-center gap-1"><Pencil className="w-4 h-4" /> Sửa</button>
@@ -412,15 +447,32 @@ function TaskDetail({ task: t, me, onClose, onEdit, onDelete, run }: {
         )}
 
         <div>
-          <p className="ml-1 mb-2 text-[10px] font-bold uppercase text-faint">Bình luận ({comments.length})</p>
-          <ul className="space-y-2 mb-3">
-            {comments.map(c => (
-              <li key={c.id} className="rounded-[var(--radius-sm)] bg-subtle px-3 py-2">
-                <p className="text-[11px] text-soft"><b className="text-dim">{c.author_name || '—'}</b> · {fmtTime(c.created)}</p>
-                <p className="text-sm text-dim whitespace-pre-wrap">{c.body}</p>
-              </li>
-            ))}
-          </ul>
+          <p className="ml-1 mb-2 text-[10px] font-bold uppercase text-faint">Bình luận ({comments.filter(c => !c.recalled).length})</p>
+          {comments.length > 0 && (
+            <div className="vl-chat mb-3">
+              {comments.map((c, i) => {
+                const mine = c.author === me.id;
+                const followUp = comments[i - 1]?.author === c.author;
+                return (
+                  <div key={c.id} className={`vl-chat-row ${mine ? 'vl-chat-mine' : ''} ${followUp ? 'vl-chat-follow' : ''}`}>
+                    {!mine && !followUp && <p className="vl-chat-name">{c.author_name || '—'}</p>}
+                    <div className="vl-chat-line">
+                      <p className={`vl-chat-bubble ${c.recalled ? 'vl-chat-recalled' : ''}`}>
+                        {c.recalled ? (mine ? 'Bạn đã thu hồi một tin nhắn' : 'Tin nhắn đã được thu hồi') : c.body}
+                      </p>
+                      {mine && !c.recalled && (
+                        <button type="button" onClick={() => void recall(c)} title="Thu hồi tin nhắn" aria-label="Thu hồi tin nhắn" className="vl-chat-recall">
+                          <Undo2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="vl-chat-time">{fmtTime(c.created)}</p>
+                  </div>
+                );
+              })}
+              <div ref={chatEnd} />
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <input value={body} placeholder="Viết bình luận…" className={INPUT_CLS}
               onChange={e => setBody(e.target.value)}
@@ -430,5 +482,7 @@ function TaskDetail({ task: t, me, onClose, onEdit, onDelete, run }: {
         </div>
       </div>
     </FormModal>
+    {dialog}
+    </>
   );
 }

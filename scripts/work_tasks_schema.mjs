@@ -62,6 +62,9 @@ const autodate = [
 ];
 
 const DESC_MAX = 20000; // description lưu HTML richtext (nâng từ 5000 ngày 04/11/2026)
+/* Thu hồi bình luận (04/11/2026): người gửi tự đánh dấu, không được đổi task/author. */
+const RECALLED_FIELD = { name: 'recalled', type: 'bool' };
+const COMMENT_UPDATE_RULE = 'author = @request.auth.id && @request.body.task:isset = false && @request.body.author:isset = false';
 const AREA_FIELD = { name: 'assignee_area', type: 'text', max: 100 };
 const TASKS = {
   name: 'work_tasks', type: 'base',
@@ -97,7 +100,10 @@ const needArea = tasksCol && !tasksCol.fields.some(f => f.name === AREA_FIELD.na
 if (needArea) console.log('SẼ THÊM work_tasks.assignee_area');
 const needDescMax = tasksCol && tasksCol.fields.find(f => f.name === 'description')?.max !== DESC_MAX;
 if (needDescMax) console.log(`SẼ NÂNG work_tasks.description.max → ${DESC_MAX}`);
-if (tasksCol && hasComments && !needArea && !needDescMax) process.exit(0);
+let commentsCol = cols.find(c => c.name === 'work_task_comments');
+const needRecall = commentsCol && (!commentsCol.fields.some(f => f.name === RECALLED_FIELD.name) || commentsCol.updateRule !== COMMENT_UPDATE_RULE);
+if (needRecall) console.log('SẼ THÊM work_task_comments.recalled + updateRule cho người gửi');
+if (tasksCol && hasComments && !needArea && !needDescMax && !needRecall) process.exit(0);
 if (!APPLY) { console.log('\n[XEM TRƯỚC] Chưa ghi gì. Thêm --apply để ghi thật.\n'); process.exit(0); }
 
 if (!tasksCol) {
@@ -118,18 +124,25 @@ if (needDescMax) {
   if (res.fields?.find(f => f.name === 'description')?.max !== DESC_MAX) { console.error('Nâng description.max thất bại:', JSON.stringify(res).slice(0, 400)); process.exit(1); }
   console.log('OK — nâng work_tasks.description.max');
 }
+if (needRecall) {
+  const fields = commentsCol.fields.some(f => f.name === RECALLED_FIELD.name) ? commentsCol.fields : [...commentsCol.fields, RECALLED_FIELD];
+  const res = send('PATCH', `/api/collections/${commentsCol.id}`, { fields, updateRule: COMMENT_UPDATE_RULE });
+  if (res.updateRule !== COMMENT_UPDATE_RULE || !res.fields?.some(f => f.name === RECALLED_FIELD.name)) { console.error('Thêm thu hồi thất bại:', JSON.stringify(res).slice(0, 400)); process.exit(1); }
+  console.log('OK — thêm thu hồi bình luận');
+}
 if (!hasComments) {
   const res = send('POST', '/api/collections', {
     name: 'work_task_comments', type: 'base',
     listRule: AUTH, viewRule: AUTH,
     createRule: `${AUTH} && author = @request.auth.id`,
-    updateRule: null,
+    updateRule: COMMENT_UPDATE_RULE,
     deleteRule: 'author = @request.auth.id',
     fields: [
       { name: 'task', type: 'relation', required: true, collectionId: tasksCol.id, maxSelect: 1, cascadeDelete: true },
       userRel('author', true),
       { name: 'author_name', type: 'text', max: 200 },
       { name: 'body', type: 'text', required: true, max: 3000 },
+      RECALLED_FIELD,
       ...autodate,
     ],
   });

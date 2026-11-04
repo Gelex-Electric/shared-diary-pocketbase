@@ -56,6 +56,7 @@ export interface TaskComment {
   author: string;
   author_name: string;
   body: string;
+  recalled: boolean;
   created: string;
 }
 
@@ -152,11 +153,16 @@ export async function listComments(taskId: string): Promise<TaskComment[]> {
   const rows = await pb.collection(COMMENTS).getFullList({
     filter: pb.filter('task = {:t}', { t: taskId }), sort: 'created', requestKey: null,
   });
-  return rows.map(r => ({ id: r.id, task: r.task, author: r.author, author_name: r.author_name ?? '', body: r.body, created: r.created }));
+  return rows.map(r => ({ id: r.id, task: r.task, author: r.author, author_name: r.author_name ?? '', body: r.body, recalled: !!r.recalled, created: r.created }));
 }
 
 export async function addComment(taskId: string, body: string, me: Me) {
   await pb.collection(COMMENTS).create({ task: taskId, author: me.id, author_name: me.name, body });
+}
+
+/** Thu hồi kiểu nhắn tin: xoá hẳn nội dung, giữ chỗ trong hội thoại. `body` bắt buộc nên ghi dòng thay thế. */
+export async function recallComment(id: string) {
+  await pb.collection(COMMENTS).update(id, { recalled: true, body: 'Tin nhắn đã được thu hồi' });
 }
 
 export const canEdit = (t: WorkTask, me: Me) => t.created_by === me.id;
@@ -175,10 +181,10 @@ export function isOverdue(t: WorkTask, today = new Date().toISOString().slice(0,
   return t.status !== 'done' && !!t.deadline && t.deadline < today;
 }
 
-/** Số bình luận theo việc — chỉ đọc trường `task` để nhẹ. */
+/** Số bình luận theo việc (không tính tin đã thu hồi) — chỉ đọc 2 trường để nhẹ. */
 export async function commentCounts(): Promise<Record<string, number>> {
-  const rows = await pb.collection(COMMENTS).getFullList({ fields: 'task', requestKey: null });
+  const rows = await pb.collection(COMMENTS).getFullList({ fields: 'task,recalled', requestKey: null });
   const out: Record<string, number> = {};
-  for (const r of rows) out[r.task] = (out[r.task] ?? 0) + 1;
+  for (const r of rows) if (!r.recalled) out[r.task] = (out[r.task] ?? 0) + 1;
   return out;
 }

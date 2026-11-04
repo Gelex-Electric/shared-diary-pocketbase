@@ -467,3 +467,19 @@ p { text-wrap: pretty; }
 .vl-richtext-input { min-height: 7rem; max-height: 20rem; overflow-y: auto; padding: 0.75rem; font-size: 0.875rem; color: var(--text-dim, inherit); outline: none; }
 .vl-richtext-input:empty::before { content: attr(data-placeholder); opacity: 0.5; }
 .vl-richtext-url { flex: 1; min-width: 0; padding: 0.25rem 0.5rem; font-size: 0.8rem; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none; }
+
+/* Bình luận dạng hội thoại (tasks/WorkTasks.tsx): tin của mình bên phải màu accent, người khác bên trái kèm tên. */
+.vl-chat { position: relative; max-height: 22rem; overflow-y: auto; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.vl-chat-row { display: flex; flex-direction: column; align-items: flex-start; margin-top: 0.75rem; }
+.vl-chat-row:first-child { margin-top: 0; }
+.vl-chat-follow { margin-top: 0.25rem; }
+.vl-chat-mine { align-items: flex-end; }
+.vl-chat-name { margin: 0 0 0.2rem 0.75rem; font-size: 11px; font-weight: 700; color: var(--color-soft, inherit); }
+.vl-chat-line { display: flex; align-items: center; gap: 0.25rem; max-width: 80%; }
+.vl-chat-mine .vl-chat-line { flex-direction: row-reverse; }
+.vl-chat-bubble { padding: 0.45rem 0.75rem; border-radius: 1rem 1rem 1rem 0.25rem; background: var(--color-subtle, rgba(127, 127, 127, 0.14)); font-size: 0.875rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.vl-chat-mine .vl-chat-bubble { border-radius: 1rem 1rem 0.25rem 1rem; background: var(--accent); color: var(--on-accent); }
+.vl-chat-row .vl-chat-recalled, .vl-chat-mine .vl-chat-recalled { background: transparent; color: inherit; opacity: 0.6; font-style: italic; border: 1px dashed var(--border); }
+.vl-chat-recall { flex-shrink: 0; padding: 0.25rem; border-radius: 9999px; opacity: 0.45; }
+.vl-chat-recall:hover, .vl-chat-recall:focus-visible { opacity: 1; color: var(--color-bad, #dc2626); }
+.vl-chat-time { margin: 0.15rem 0.75rem 0; font-size: 10px; opacity: 0.6; }
