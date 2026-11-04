@@ -2,7 +2,7 @@
 import { pb } from '../lib/pocketbase';
 import {
   RefreshCw, LogOut, ClipboardList, X, Menu, ChevronDown,
-  Activity, FileText, LayoutDashboard, Bell, ListTodo,
+  Activity, FileSignature, FileText, LayoutDashboard, Bell, ListTodo,
 } from 'lucide-react';
 import SupplyTasks from './dm/SupplyTasks';
 import WorkTasks from './tasks/WorkTasks';
@@ -21,13 +21,14 @@ import NewUpdateTour from './NewUpdateTour';
 import SldPage from './sld/SldPage';
 import BillConfirmManager from './business/BillConfirmManager';
 import CustomerDebtManager from './business/CustomerDebtManager';
+import QlvhSummary from './qlvh/QlvhSummary';
 import NotificationBell from './ui/NotificationBell';
 import AlertCenter from './alerts/AlertCenter';
 import { useUnresolvedAlerts } from './alerts/useUnresolvedAlerts';
 import { ALERT_KINDS } from '../lib/alerts';
 import ThemeToggle from './ui/ThemeToggle';
 
-type Tab = 'summary' | 'alerts' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'work' | 'later';
+type Tab = 'summary' | 'alerts' | 'journal' | 'outage' | 'handover-record' | 'billconfirm' | 'debt' | 'qlvh' | 'operating' | 'hes' | 'opchart' | 'loss' | 'sld' | 'work' | 'later';
 
 const TAB_LABEL: Record<Tab, string> = {
   summary:   'Dashboard',
@@ -37,6 +38,7 @@ const TAB_LABEL: Record<Tab, string> = {
   'handover-record': 'Biên bản treo tháo',
   billconfirm: 'Biên bản xác nhận chỉ số',
   debt:        'Công nợ khách hàng',
+  qlvh:        'Quản lý vận hành',
   operating: 'Thông số vận hành',
   hes:       'Lấy chỉ số HES',
   opchart:   'Đồ thị điện áp & công suất',
@@ -90,6 +92,7 @@ export default function Dashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isJournalExpanded, setIsJournalExpanded] = useState(true);
   const [isOperatingExpanded, setIsOperatingExpanded] = useState(false);
+  const [isQlvhExpanded, setIsQlvhExpanded] = useState(false);
   const [showNewUpdate, setShowNewUpdate] = useState(false);
   const [newUpdateId, setNewUpdateId] = useState<string | null>(null);
 
@@ -133,15 +136,19 @@ export default function Dashboard() {
   const handleLogout = () => { pb.authStore.clear(); window.location.reload(); };
 
   // Accordion: mở nhóm này thì nhóm kia tự đóng
-  const toggleSection = (section: 'journal' | 'operating') => {
-    if (section === 'journal') {
+  const toggleSection = (section: 'journal' | 'operating' | 'qlvh') => {
+    if (section === 'qlvh') {
+      const willOpen = !isQlvhExpanded;
+      setIsQlvhExpanded(willOpen);
+      if (willOpen) { setIsJournalExpanded(false); setIsOperatingExpanded(false); }
+    } else if (section === 'journal') {
       const willOpen = !isJournalExpanded;
       setIsJournalExpanded(willOpen);
-      if (willOpen) setIsOperatingExpanded(false);
+      if (willOpen) { setIsOperatingExpanded(false); setIsQlvhExpanded(false); }
     } else {
       const willOpen = !isOperatingExpanded;
       setIsOperatingExpanded(willOpen);
-      if (willOpen) setIsJournalExpanded(false);
+      if (willOpen) { setIsJournalExpanded(false); setIsQlvhExpanded(false); }
     }
   };
 
@@ -273,6 +280,43 @@ export default function Dashboard() {
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
                       <span className="flex-1">Công nợ khách hàng</span>
+                    </button>
+                  </motion.li>
+                </motion.ul>
+              )}
+            </AnimatePresence>
+          </li>
+
+          {/* Quản lý Hợp đồng — khối Vận hành CHỈ XEM trang Tổng hợp theo KCN của mình
+              (user chốt 04/11/2026); tab Danh sách hợp đồng chỉ có ở khối Kinh doanh. */}
+          <li className="relative mt-1">
+            <button
+              id="nav-qlvh"
+              onClick={() => toggleSection('qlvh')}
+              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
+                topTab === 'qlvh' ? 'vl-sidebar-active text-accent' : 'text-dim hover:bg-subtle'
+              }`}
+            >
+              <FileSignature className="w-5 h-5 shrink-0" />
+              <span className="flex-1 text-left">Quản lý Hợp đồng</span>
+              <ChevronDown className={`w-4 h-4 text-faint transition-transform duration-300 ${isQlvhExpanded ? 'rotate-180' : ''}`} />
+            </button>
+            <AnimatePresence initial={false}>
+              {isQlvhExpanded && (
+                <motion.ul
+                  initial="closed" animate="open" exit="closed" variants={subMenuV}
+                  className="overflow-hidden list-none px-0"
+                >
+                  <motion.li variants={subItemV}>
+                    <button
+                      id="nav-qlvh-sub"
+                      onClick={() => { setTopTab('qlvh'); onNavigate?.(); }}
+                      className={`w-full text-left flex items-center gap-2 px-9 py-[.7rem] text-[.78rem] font-medium tracking-wide transition-all hover:translate-x-1 ${
+                        topTab === 'qlvh' ? 'text-accent' : 'text-soft hover:text-dim'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 opacity-50" />
+                      <span className="flex-1">Quản lý vận hành</span>
                     </button>
                   </motion.li>
                 </motion.ul>
@@ -611,6 +655,8 @@ export default function Dashboard() {
               <BillConfirmManager readOnly />
             ) : topTab === 'debt' ? (
               <CustomerDebtManager readOnly />
+            ) : topTab === 'qlvh' ? (
+              <QlvhSummary scope="doi" />
             ) : topTab === 'handover-record' ? (
               // Biên bản treo tháo = phần TREO THÁO của điểm đo (user chốt 27/10/2026):
               // điểm đo Vật Tư đã gắn vật tư dự kiến, Vận Hành ghi treo thực tế.
