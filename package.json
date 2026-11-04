@@ -16,6 +16,7 @@
     "@types/pdfmake": "^0.3.2",
     "@vitejs/plugin-react": "^5.0.4",
     "docxtemplater": "^3.68.7",
+    "dompurify": "^3.4.17",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "flatpickr": "^4.6.13",

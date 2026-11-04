@@ -6,10 +6,11 @@
  * chỉ định người — đổi trạng thái, tick checklist, bình luận. PB chỉ chặn được XOÁ (nhóm có
  * thể suy từ `area`), phần còn lại chặn ở UI qua `canWork` / `canEdit`.
  *
- * Đích giao (user chốt 02/11/2026): cả khối (`assignee_group`), một TVH (`assignee_area` = KCN,
- * đúng giá trị `users.area`), kèm tên người phụ trách gõ tay (`assignee_name`) — mỗi TVH chỉ có
- * MỘT tài khoản dùng chung nên không chọn tài khoản cá nhân. TVH giao trong TVH mình; Kinh Doanh
- * giao cả khối TVH / một TVH (± tên người).
+ * Đích giao (user chốt 02/11/2026, bỏ ô tên người 04/11/2026): cả khối (`assignee_group`) hoặc
+ * một TVH (`assignee_area` = KCN, đúng giá trị `users.area`); `assignee_name` chỉ còn ở việc cũ.
+ * Mỗi TVH chỉ có MỘT tài khoản dùng chung nên không chọn tài khoản cá nhân. TVH giao trong TVH mình;
+ * Kinh Doanh giao cả khối TVH / một TVH. `description` là HTML đã lọc (lib/richText.ts); việc cũ có
+ * thể là chữ thường.
  *
  * Tên người lưu kèm dạng text (`*_name`) vì `users.listRule` chỉ cho xem người cùng area.
  */
@@ -24,6 +25,9 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   doing: 'Đang làm',
   done: 'Xong',
 };
+
+/** Khớp `work_tasks.description.max` (scripts/work_tasks_schema.mjs). */
+export const DESCRIPTION_MAX = 20000;
 
 export interface ChecklistItem { text: string; done: boolean }
 

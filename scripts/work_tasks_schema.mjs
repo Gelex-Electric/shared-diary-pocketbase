@@ -61,6 +61,7 @@ const autodate = [
   { name: 'updated', type: 'autodate', onCreate: true, onUpdate: true },
 ];
 
+const DESC_MAX = 20000; // description lưu HTML richtext (nâng từ 5000 ngày 04/11/2026)
 const AREA_FIELD = { name: 'assignee_area', type: 'text', max: 100 };
 const TASKS = {
   name: 'work_tasks', type: 'base',
@@ -70,7 +71,7 @@ const TASKS = {
   deleteRule: 'created_by = @request.auth.id',
   fields: [
     { name: 'title', type: 'text', required: true, max: 300 },
-    { name: 'description', type: 'text', max: 5000 },
+    { name: 'description', type: 'text', max: DESC_MAX },
     { name: 'status', type: 'select', required: true, maxSelect: 1, values: ['todo', 'doing', 'done'] },
     { name: 'priority', type: 'select', maxSelect: 1, values: ['normal', 'high'] },
     { name: 'assignee_group', type: 'select', required: true, maxSelect: 1, values: ['van_hanh', 'kinh_doanh', 'vat_tu'] },
@@ -94,7 +95,9 @@ console.log(tasksCol ? '= Đã có work_tasks' : 'SẼ TẠO work_tasks');
 console.log(hasComments ? '= Đã có work_task_comments' : 'SẼ TẠO work_task_comments');
 const needArea = tasksCol && !tasksCol.fields.some(f => f.name === AREA_FIELD.name);
 if (needArea) console.log('SẼ THÊM work_tasks.assignee_area');
-if (tasksCol && hasComments && !needArea) process.exit(0);
+const needDescMax = tasksCol && tasksCol.fields.find(f => f.name === 'description')?.max !== DESC_MAX;
+if (needDescMax) console.log(`SẼ NÂNG work_tasks.description.max → ${DESC_MAX}`);
+if (tasksCol && hasComments && !needArea && !needDescMax) process.exit(0);
 if (!APPLY) { console.log('\n[XEM TRƯỚC] Chưa ghi gì. Thêm --apply để ghi thật.\n'); process.exit(0); }
 
 if (!tasksCol) {
@@ -107,6 +110,13 @@ if (needArea) {
   const res = send('PATCH', `/api/collections/${tasksCol.id}`, { fields: [...tasksCol.fields, AREA_FIELD] });
   if (!(res.fields ?? []).some(f => f.name === AREA_FIELD.name)) { console.error('Thêm assignee_area thất bại:', JSON.stringify(res).slice(0, 400)); process.exit(1); }
   console.log('OK — thêm work_tasks.assignee_area');
+}
+if (needDescMax) {
+  const res = send('PATCH', `/api/collections/${tasksCol.id}`, {
+    fields: (tasksCol.fields).map(f => (f.name === 'description' ? { ...f, max: DESC_MAX } : f)),
+  });
+  if (res.fields?.find(f => f.name === 'description')?.max !== DESC_MAX) { console.error('Nâng description.max thất bại:', JSON.stringify(res).slice(0, 400)); process.exit(1); }
+  console.log('OK — nâng work_tasks.description.max');
 }
 if (!hasComments) {
   const res = send('POST', '/api/collections', {

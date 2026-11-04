@@ -14,11 +14,12 @@ import { Select } from '../ui/Select';
 import { DatePicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { EmptyState } from '../ui/dashboard';
+import { RichTextEditor, RichTextView } from '../ui/RichText';
 import { FormModal, Field, TextInput, INPUT_CLS } from '../dm/entryUi';
 import { GROUP_LABEL, type UserGroup } from '../../lib/userGroup';
 import { AREAS } from '../../lib/pocketbase';
 import {
-  STATUS_LABEL, currentUser, listTasks, createTask, updateTask, setStatus, setChecklist,
+  DESCRIPTION_MAX, STATUS_LABEL, currentUser, listTasks, createTask, updateTask, setStatus, setChecklist,
   deleteTask, listComments, addComment, commentCounts, canEdit, canWork, isOverdue,
   isForMyTeam, targetLabel,
   type WorkTask, type TaskStatus, type TaskInput, type TaskComment, type ChecklistItem, type Me,
@@ -46,8 +47,8 @@ const emptyForm = (me: Me): TaskInput => ({
 
 /**
  * Đích giao mã hoá trong một ô chọn: `block:<nhóm>` | `team:<KCN>`. Mỗi TVH chỉ có MỘT tài
- * khoản dùng chung (kiểm 02/11/2026) ⇒ "cá nhân" là tên người phụ trách gõ tay (`assignee_name`),
- * không phải tài khoản. TVH giao trong TVH mình; khối khác: cả khối TVH, một TVH, khối còn lại.
+ * khoản dùng chung (kiểm 02/11/2026) nên giao theo TVH/khối; ô tên người đã bỏ (user chốt 04/11/2026),
+ * việc cũ vẫn giữ `assignee_name`. TVH giao trong TVH mình; khối khác: cả khối TVH, một TVH, khối còn lại.
  */
 function targetOptions(me: Me) {
   const team = (a: string) => ({ value: `team:${a}`, label: `TVH ${a}` });
@@ -122,6 +123,7 @@ export default function WorkTasks() {
 
   const submit = async () => {
     if (!form || !form.title.trim()) { setError('Nhập tiêu đề việc.'); return; }
+    if (form.description.length > DESCRIPTION_MAX) { setError('Mô tả quá dài, hãy rút gọn.'); return; }
     setSaving(true);
     const input = { ...form, title: form.title.trim(), checklist: form.checklist.filter(c => c.text.trim()) };
     await run(() => (editingId ? updateTask(editingId, input) : createTask(input, me)));
@@ -170,7 +172,7 @@ export default function WorkTasks() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-ink">Giao việc</h2>
-          <p className="text-sm text-soft mt-1">Tạo việc, giao cho nhóm hoặc một người, theo dõi tới khi xong.</p>
+          <p className="text-sm text-soft mt-1">Tạo việc, giao cho TVH hoặc cả khối, theo dõi tới khi xong.</p>
         </div>
         <button onClick={openNew} className="vl-btn vl-btn-primary inline-flex items-center gap-2">
           <Plus className="w-4 h-4" /> Việc mới
@@ -252,16 +254,15 @@ export default function WorkTasks() {
               <TextInput value={form.title} onChange={v => setForm({ ...form, title: v })} placeholder="Vd: Kiểm tra công tơ trạm X" />
             </Field>
             <Field label="Mô tả">
-              <textarea rows={3} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className={INPUT_CLS} />
+              <RichTextEditor value={form.description} onChange={v => setForm({ ...form, description: v })} placeholder="Nội dung cần làm…" />
             </Field>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Giao cho" required>
-                <Select value={targetOf(form)} options={targets}
-                  onChange={v => setForm({ ...form, ...applyTarget(v) })} />
-              </Field>
-              <Field label="Người phụ trách" hint="Để trống = cả nhóm/TVH.">
-                <TextInput value={form.assignee_name} onChange={v => setForm({ ...form, assignee_name: v })} placeholder="Tên người cụ thể" />
-              </Field>
+              <div className="sm:col-span-2">
+                <Field label="Giao cho" required>
+                  <Select value={targetOf(form)} options={targets}
+                    onChange={v => setForm({ ...form, ...applyTarget(v) })} />
+                </Field>
+              </div>
               <Field label="Hạn hoàn thành">
                 <DatePicker value={form.deadline} onChange={v => setForm({ ...form, deadline: v })} usePortal />
               </Field>
@@ -376,7 +377,7 @@ function TaskDetail({ task: t, me, onClose, onEdit, onDelete, run }: {
           {t.deadline && <span className={isOverdue(t) ? 'text-bad font-bold' : ''}>· Hạn {fmtDay(t.deadline)}</span>}
         </div>
 
-        {t.description && <p className="text-sm text-dim whitespace-pre-wrap">{t.description}</p>}
+        {t.description && <RichTextView value={t.description} className="text-sm text-dim" />}
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-48">
