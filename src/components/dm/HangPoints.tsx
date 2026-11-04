@@ -11,11 +11,15 @@
  * ⇒ báo "cần treo bổ sung" (Vật Tư thấy ở Nhu cầu & phân bổ). Rồi ghi lại
  * `dm_point.status` theo `derivePointStatus` (mốc là ngày treo công tơ).
  *
+ * Treo nhầm chỗ so với dự kiến (user báo 04/11/2026, YONGDING X1-T3.1 ↔ T3.2): ô số No thực tế chọn được
+ * cả thiết bị đang DỰ KIẾN ở điểm đo khác. Cùng loại (TI/TU cùng tỷ số) ⇒ HOÁN ĐỔI: thiết bị đề xuất của dòng
+ * chuyển sang làm dự kiến của điểm đo kia. Không có gì để đổi ⇒ MƯỢN, ghi sổ như `runAttach`.
+ *
  * Nhận `scope` (nguyên tắc 17): 'doi' = chỉ KCN của tài khoản (Vận Hành),
  * 'vanphong' = mọi KCN (Kinh Doanh).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, CheckCircle2, Wrench, Plus, Trash2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2, Wrench, Plus, Search, Trash2 } from 'lucide-react';
 import { Select } from '../ui/Select';
 import { DatePicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
@@ -27,7 +31,9 @@ import { countAssets, derivePointStatus } from '../../lib/dm/pointStatus';
 import { formatRatio } from '../../lib/dm/hsn';
 import { inAreas, isHeadPoint, pointZoneId } from '../../lib/dm/pointScope';
 import { dmy } from '../../lib/dm/lifecycle';
+import { planAttach } from '../../lib/dm/attach';
 import { runAttach } from '../../lib/dm/attachRun';
+import { buildTerms, matchesTerms } from '../../lib/dm/search';
 import { runReconcile } from '../../lib/dm/reconcileRun';
 import { useScopeAreas, type Scope } from '../../lib/scope';
 import { ASSET_LABEL, type Asset, type AssetType, type Device, type Point } from '../../lib/dm/types';
@@ -54,6 +60,9 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
   const [dates, setDates] = useState<Record<string, string>>({});
   /** Bảng treo đang khai theo điểm đo; chưa sửa thì dựng mặc định từ dòng nhu cầu. */
   const [edits, setEdits] = useState<Record<string, HangRow[]>>({});
+
+  const [search, setSearch] = useState('');
+  const [zone, setZone] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -82,6 +91,28 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     : []), [d, areas, scope]);
 
+  const terms = useMemo(() => buildTerms(search), [search]);
+  const planOf = (p: Point) => allocatedAssets(d!.assets, p.id).filter(isPlan);
+  /** Tìm theo mã điểm đo, KCN, khách hàng, số No dự kiến. */
+  const shown = rows.filter(({ p }) => (!zone || zoneName(p) === zone) && matchesTerms([
+    p.code, p.note, zoneName(p),
+    ...(() => { const c = d!.customers.find(x => x.id === p.customer); return [c?.mkh, c?.name]; })(),
+    ...planOf(p).map(a => a.serial),
+  ], terms));
+  const zoneOpts = [
+    { value: '', label: `Tất cả KCN (${rows.length})` },
+    ...[...new Set(rows.map(r => zoneName(r.p)))].filter(Boolean).sort()
+      .map(z => ({ value: z, label: `${z} (${rows.filter(r => zoneName(r.p) === z).length})` })),
+  ];
+
+  /** Thiết bị đang dự kiến ở điểm đo KHÁC trong phạm vi — hiện trường có thể treo nhầm chỗ so với dự kiến. */
+  const plannedElsewhere = (p: Point, type: AssetType | '') => rows
+    .filter(x => x.p.id !== p.id)
+    .sort((a, b) => Number(b.p.station === p.station) - Number(a.p.station === p.station))
+    .flatMap(x => planOf(x.p).filter(a => a.type === type).map(a => ({ from: x.p, dev: devOfAsset(a) })))
+    .filter((x): x is { from: Point; dev: Device } => !!x.dev && !x.dev.liquidated_at);
+  const fromPointOf = (p: Point, r: HangRow) => plannedElsewhere(p, r.type).find(x => x.dev.id === r.deviceId)?.from;
+
   const rowsOf = (p: Point): HangRow[] => edits[p.id] ?? allocatedAssets(d!.assets, p.id).filter(isPlan)
     .map(a => ({ key: a.id, asset: a, type: a.type, deviceId: devOfAsset(a)?.id ?? '', on: true }));
   const setRows = (p: Point, fn: (rs: HangRow[]) => HangRow[]) =>
@@ -91,16 +122,22 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
   const ratioOf = (x: Device) => ((x.type === 'TI' || x.type === 'TU') && x.ratio_primary
     ? ` · ${formatRatio(x.ratio_primary, x.ratio_secondary)}` : '');
 
-  /** Số No chọn được cho một dòng: thiết bị rảnh cùng loại + chính thiết bị nhu cầu của dòng. */
-  const optsFor = (r: HangRow, all: HangRow[]) => {
+  /** Số No chọn được cho một dòng: chính thiết bị nhu cầu của dòng + thiết bị rảnh cùng loại + dự kiến ở điểm đo khác. */
+  const optsFor = (p: Point, r: HangRow, all: HangRow[]) => {
     const own = r.asset ? devOfAsset(r.asset) : undefined;
     const used = new Set(all.filter(x => x.key !== r.key).map(x => x.deviceId));
     const list = [...(own ? [own] : []), ...spare.filter(x => x.type === r.type && x.id !== own?.id)]
       .filter(x => !used.has(x.id));
-    return list.map(x => ({
-      value: x.id,
-      label: `${x.serial}${ratioOf(x)}${x.id === own?.id ? ' (đề xuất)' : ''}`,
-    }));
+    return [
+      ...list.map(x => ({
+        value: x.id,
+        label: `${x.serial}${ratioOf(x)}${x.id === own?.id ? ' (đề xuất)' : ''}`,
+      })),
+      ...plannedElsewhere(p, r.type).filter(x => !used.has(x.dev.id)).map(x => ({
+        value: x.dev.id,
+        label: `${x.dev.serial}${ratioOf(x.dev)} (dự kiến của ${x.from.code})`,
+      })),
+    ];
   };
 
   const hang = async (p: Point) => {
@@ -110,10 +147,28 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
     if (!rs.length) return toast.warning('Chưa có gì để treo', 'Tích ít nhất một dòng và chọn số No.');
     const keep = rs.filter(r => r.asset && devOfAsset(r.asset)?.id === r.deviceId);
     const fresh = rs.filter(r => !keep.includes(r)).map(r => devById.get(r.deviceId)!).filter(Boolean);
+    // Đọc lại dữ liệu mới nhất: thiết bị của điểm đo khác có thể vừa bị người khác treo / gỡ.
+    const cur = await loadCatalog();
+    const plan = planAttach(fresh, p.id, cur);
+    const blocked = plan.blocks.filter(b => fresh.some(x => b.startsWith(x.serial)));
+    if (blocked.length) { toast.error('Chưa ghi được', `${blocked.join('. ')}. Bấm Nạp lại.`); return; }
+    /** Hoán đổi: dòng đổi sang thiết bị dự kiến của điểm đo kia, cùng loại và cùng tỷ số ⇒ thiết bị đề xuất sang bên đó. */
+    const swaps = rs.flatMap(r => {
+      const own = r.asset ? devOfAsset(r.asset) : undefined;
+      const dev = devById.get(r.deviceId);
+      const move = plan.moves.find(m => m.device === r.deviceId);
+      if (!own || !dev || !move || own.id === dev.id || own.type !== dev.type) return [];
+      if ((own.type === 'TI' || own.type === 'TU')
+        && (own.ratio_primary !== dev.ratio_primary || own.ratio_secondary !== dev.ratio_secondary)) return [];
+      return [{ asset: r.asset!, own, move }];
+    });
+    const borrows = plan.moves.filter(m => !swaps.some(x => x.move === m));
     const ok = await confirm({
       title: 'Ghi treo',
       message: `Ghi ngày treo ${dmy(date)} cho ${rs.length} thiết bị của ${p.code}`
-        + (fresh.length ? ` (${fresh.length} thiết bị khác nhu cầu — nhu cầu bị thay sẽ tự về kho)` : '') + '?',
+        + (fresh.length ? ` (${fresh.length} thiết bị khác nhu cầu)` : '') + '?'
+        + swaps.map(x => ` Đổi chỗ: ${x.own.serial} chuyển thành dự kiến của ${x.move.fromCode}.`).join('')
+        + borrows.map(m => ` Mượn: ${m.serial} từ ${m.fromCode}, điểm đó sẽ thiếu vật tư.`).join(''),
     });
     if (!ok) return;
     setSaving(p.id);
@@ -126,8 +181,14 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
         if (dev?.hold_point) await deviceRepo.update(dev.id, { hold_point: '' });
         n++;
       }
-      // Treo thiết bị KHÁC nhu cầu / ngoài nhu cầu: thiết bị rảnh ⇒ tạo lần lắp có ngày treo.
-      if (fresh.length) await runAttach(fresh, p.id, date, [], '', k => { n = keep.length + k; });
+      // Hoán đổi: dòng dự kiến của thiết bị bên kia gỡ đi, dòng đề xuất ở đây chuyển sang điểm đo kia (vẫn chưa treo).
+      for (const x of swaps) {
+        await assetRepo.remove(x.move.assetId);
+        await assetRepo.update(x.asset.id, { point: x.move.fromPoint });
+        await deviceRepo.update(x.own.id, { hold_point: x.move.fromPoint });
+      }
+      // Treo thiết bị KHÁC nhu cầu / ngoài nhu cầu ⇒ tạo lần lắp có ngày treo; lấy của điểm đo khác mà không đổi được thì ghi sổ mượn.
+      if (fresh.length) await runAttach(fresh, p.id, date, borrows, `Treo thực tế cho điểm đo ${p.code ?? ''}`.trim(), k => { n = keep.length + k; });
 
       // Đối chiếu tự động: nhu cầu bị thay về kho, còn thiếu thì nhắc treo bổ sung.
       const rc = await runReconcile(p.id);
@@ -164,20 +225,32 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
             Ghi vật tư thật sự treo ở hiện trường. Treo khác nhu cầu thì đổi số No — nhu cầu bị thay tự về kho
           </p>
         </div>
-        <button onClick={() => void load()} disabled={loading}
-          className="vl-btn vl-btn-secondary flex items-center gap-2">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Nạp lại
-        </button>
+        <div className="flex w-full flex-wrap items-end gap-3 md:w-auto">
+          <div className="w-full sm:w-[220px]">
+            <Select value={zone} onChange={setZone} options={zoneOpts} />
+          </div>
+          <div className="relative w-full md:w-auto">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Tìm điểm đo, khách hàng, số No..."
+              className="w-full rounded-lg border border-[var(--border)] bg-surface py-2 pl-10 pr-4
+                text-sm text-dim focus:outline-none focus:ring-1 focus:ring-accent sm:w-[260px]" />
+          </div>
+          <button onClick={() => void load()} disabled={loading}
+            className="vl-btn vl-btn-secondary flex items-center gap-2">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Nạp lại
+          </button>
+        </div>
       </div>
 
-      {!loading && rows.length === 0 && (
+      {!loading && shown.length === 0 && (
         <div className="vl-card p-5">
-          <EmptyState icon={CheckCircle2} title="Không có điểm đo nào chờ treo"
-            hint="Điểm đo hiện ở đây khi Nhóm Vật Tư đã gắn số No vào phần nhu cầu." />
+          <EmptyState icon={CheckCircle2} title={rows.length ? 'Không có điểm đo nào khớp tìm kiếm' : 'Không có điểm đo nào chờ treo'}
+            hint={rows.length ? 'Đổi từ khoá hoặc KCN.' : 'Điểm đo hiện ở đây khi Nhóm Vật Tư đã gắn số No vào phần nhu cầu.'} />
         </div>
       )}
 
-      {rows.map(({ p, s }) => {
+      {shown.map(({ p, s }) => {
         const rs = rowsOf(p);
         const nOn = rs.filter(r => r.on && r.deviceId).length;
         return (
@@ -225,12 +298,12 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
                           {own ? `${own.serial}${ratioOf(own)}` : <span className="font-sans font-normal text-faint">—</span>}
                         </td>
                         <td className="min-w-[240px]">
-                          <Select value={r.deviceId} variant="bare" searchable options={optsFor(r, rs)}
+                          <Select value={r.deviceId} variant="bare" searchable options={optsFor(p, r, rs)}
                             placeholder="Chọn số No"
                             onChange={v => setRows(p, xs => xs.map(x => (x.key === r.key ? { ...x, deviceId: v } : x)))} />
                           {changed && (
                             <span className="text-[11px] text-warn">
-                              khác đề xuất — {own!.serial} sẽ về kho
+                              khác đề xuất — {own!.serial} {fromPointOf(p, r) ? `đổi sang ${fromPointOf(p, r)!.code} nếu cùng quy cách` : 'sẽ về kho'}
                             </span>
                           )}
                         </td>
