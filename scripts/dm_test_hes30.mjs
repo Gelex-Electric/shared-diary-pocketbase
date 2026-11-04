@@ -83,6 +83,11 @@ eq('ngày không có file → rỗng, không ném lỗi', r2.meters.size, 0);
 ok('có báo thiếu file', r2.missingFiles.includes('2026-09-25'));
 eq('readDayFile ngày không tồn tại → []', readDayFile('2099-01-01', dir), []);
 
+console.log('\nHSN tra lúc đọc (hsnOf)');
+const r3 = buildDaySeries('2026-09-22', { dir, hsnOf: (sn) => (sn === 'M1' ? 200 : null) });
+eq('hsnOf thay cột HSN của file: M1 gấp đôi', r3.meters.get('M1').slots.get(1).p, 400);
+eq('hsnOf trả null ⇒ không tính, không dùng cột file', r3.meters.get('M2')?.energyKwh ?? 0, 0);
+
 /* ---------- chạy thử trên dữ liệu THẬT ---------- */
 console.log('\nDữ liệu thật (public/ChiSo_30min)');
 /* Chọn ngày MỚI NHẤT đang có thay vì cố định: cây làm việc có thể sau `main`

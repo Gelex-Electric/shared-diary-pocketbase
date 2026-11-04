@@ -42,6 +42,7 @@ import path from 'node:path';
 import { pbLogin, liveMeters } from './lib/pb_meters.mjs';
 import { buildDaySeries, addDays, slotLabel, SLOTS_PER_DAY } from './lib/hes30.mjs';
 import { resolveLossParams, SKIP_TRUNG_THE } from './lib/lossParams.mjs';
+import { hsnLookup } from './lib/thongso.mjs';
 
 /* ------------------------------- tham số ------------------------------- */
 const arg = (n, d = '') => {
@@ -110,7 +111,8 @@ const num = (x, d = 6) => {
 
 /* --------------------------- đọc Danh mục PB --------------------------- */
 const token = await pbLogin();
-const { meters, points, stations } = await liveMeters(token);
+const { meters, points, stations, assets } = await liveMeters(token);
+const hsnOf = hsnLookup(assets, points);
 
 const pointById = new Map(points.map(p => [p.id, p]));
 /* Điểm đo CHÍNH đang vận hành, kèm công tơ đang treo. */
@@ -170,7 +172,7 @@ function voltageSlots(day) {
 
 /* ------------------------------ tính 1 ngày ------------------------------ */
 function computeDay(day) {
-  const series = buildDaySeries(day);
+  const series = buildDaySeries(day, { hsnOf });
   const volt = voltageSlots(day);
   const rows30 = [], rowsDay = [];
   const skipped = new Map();      // lý do → [mô tả]

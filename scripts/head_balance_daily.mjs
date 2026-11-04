@@ -24,6 +24,7 @@ import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { pbLogin, allOf } from './lib/pb_meters.mjs';
 import { buildDaySeries, addDays } from './lib/hes30.mjs';
 import { metersByLine } from './lib/lineMembers.mjs';
+import { hsnLookup } from './lib/thongso.mjs';
 import { balanceOfDay, alertsOfRow, BALANCE_FIELDS, LOSS_DEV_PP, LOSS_WINDOW, PMAX_RATIO_MIN, PMAX_RATIO_MAX } from './lib/headBalance.mjs';
 import { raiseAlert } from './lib/pb_alert.mjs';
 import { readCsv } from './fetch_hes_index.mjs';
@@ -54,6 +55,7 @@ const token = await pbLogin();
 const [points, assets, stations, lines, customers, zones] = await Promise.all(
   ['dm_point', 'dm_asset', 'dm_station', 'dm_line', 'dm_customer', 'dm_zone'].map(c => allOf(c, token)));
 const byLine = metersByLine({ stations, points, assets, customers });
+const hsnOf = hsnLookup(assets, points);
 
 const heads = points.filter(p => p.role === 'dau_nguon').map(p => {
   const line = lines.find(l => l.id === p.line);
@@ -74,7 +76,7 @@ if (!ok.length) { console.error('Không có điểm đo đầu nguồn nào (rol
 const lineRows = new Map(readCsv(LINE_CSV).map(r => [`${r.LINE_CODE}|${r.DATE}`, r]));
 const out = [];
 for (const day of days) {
-  const series = buildDaySeries(day, { dir: DIR_30 });
+  const series = buildDaySeries(day, { dir: DIR_30, hsnOf });
   for (const h of ok) {
     const members = byLine.get(h.lineId) ?? [];
     const row = balanceOfDay(series, h, members, lineRows.get(`${h.lineCode}|${day}`));

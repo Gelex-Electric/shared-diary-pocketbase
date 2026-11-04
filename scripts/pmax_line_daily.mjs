@@ -38,7 +38,8 @@
  */
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { pbLogin } from './lib/pb_meters.mjs';
+import { pbLogin, allOf } from './lib/pb_meters.mjs';
+import { hsnLookup } from './lib/thongso.mjs';
 /* Tập công tơ của một lộ — dùng CHUNG với head_balance_daily.mjs (đối soát đầu nguồn). */
 import { metersByLine } from './lib/lineMembers.mjs';
 
@@ -82,14 +83,9 @@ function writeCsv(path, rows) {
 
 /* --------------------------- danh mục từ PB --------------------------- */
 async function catalog(token) {
-  const get = async (c) => {
-    const r = await fetch(`${PB_URL}/api/collections/${c}/records?perPage=1000`,
-      { headers: { Authorization: token } });
-    if (!r.ok) { console.error(`Không đọc được ${c}: HTTP ${r.status}`); process.exit(1); }
-    return (await r.json()).items;
-  };
+  /* `allOf` lấy hết các trang: tra HSN mà thiếu lần treo là công tơ mất khỏi Pmax. */
   const [lines, stations, points, assets, customers] = await Promise.all(
-    ['dm_line', 'dm_station', 'dm_point', 'dm_asset', 'dm_customer'].map(get));
+    ['dm_line', 'dm_station', 'dm_point', 'dm_asset', 'dm_customer'].map(c => allOf(c, token)));
   return { lines, stations, points, assets, customers };
 }
 
@@ -228,6 +224,7 @@ if (!days.length) { console.error(`Không có file nào trong ${DIR_30}.`); proc
 const token = await pbLogin();
 const cat = await catalog(token);
 const byLine = metersByLine(cat);
+const hsnOf = hsnLookup(cat.assets, cat.points);
 const lineCode = new Map(cat.lines.map(l => [l.id, l.code]));
 console.log(`Danh mục: ${cat.lines.length} lộ · ${byLine.size} lộ có công tơ ở điểm đo chính.`);
 
@@ -243,8 +240,10 @@ for (const day of days) {
   const rowsByMeter = new Map();
   for (const r of readCsv(path)) {
     const pg = Number(r.PG);
-    const hsn = Number(r.HSN);
-    if (!Number.isFinite(pg) || !Number.isFinite(hsn)) continue;
+    /* HSN tra Danh mục lúc ĐỌC (04/11/2026). Cột HSN trống từng đọc thành 0 ⇒ công tơ
+       góp 0 kW mà vẫn được đếm vào COVERED. */
+    const hsn = hsnOf(r.METER_NO, r.DATE_TIME);
+    if (!Number.isFinite(pg) || hsn === null) continue;
     if (!rowsByMeter.has(r.METER_NO)) rowsByMeter.set(r.METER_NO, []);
     rowsByMeter.get(r.METER_NO).push({ time: String(r.DATE_TIME).slice(11, 16), pg, hsn });
   }

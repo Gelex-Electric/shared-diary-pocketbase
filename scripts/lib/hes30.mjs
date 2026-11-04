@@ -98,7 +98,9 @@ export function readDayFile(day, dir = DIR) {
  * Dựng chuỗi công suất theo mốc 30 phút cho MỘT ngày.
  *
  * @param {string} day `YYYY-MM-DD`
- * @param {{dir?: string}} [opt]
+ * @param {{dir?: string, hsnOf?: (serial: string, stamp: string) => number|null}} [opt]
+ *   `hsnOf` (`hsnLookup` trong `lib/thongso.mjs`): tra HSN từ Danh mục lúc ĐỌC, bỏ qua cột
+ *   HSN của file (04/11/2026) — cột đó chốt lúc tải nên khai PB sau là số cũ vẫn trống.
  * @returns {{day: string, meters: Map<string, {
  *   hsn: number, slots: Map<number, {p: number, q: number}>,
  *   energyKwh: number, energyKvarh: number, covered: number, regress: number
@@ -127,7 +129,7 @@ export function buildDaySeries(day, opt = {}) {
     const t = minutesFrom(day, r.stamp);
     if (t === null || r.pg === null) continue;
     if (!byMeter.has(r.serial)) byMeter.set(r.serial, []);
-    byMeter.get(r.serial).push({ t, hsn: r.hsn, pg: r.pg, vc: r.vc });
+    byMeter.get(r.serial).push({ t, hsn: opt.hsnOf ? opt.hsnOf(r.serial, r.stamp) : r.hsn, pg: r.pg, vc: r.vc });
   }
 
   const DAY_MIN = 24 * 60;

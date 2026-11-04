@@ -109,6 +109,12 @@ export function buildHsnResolver(assets, points) {
   };
 }
 
+/** `buildHsnResolver` rút gọn cho nơi chỉ cần con số: không tra được ⇒ `null`, không đoán. */
+export function hsnLookup(assets, points) {
+  const hsnAt = buildHsnResolver(assets, points);
+  return (serial, dateTime) => hsnAt(serial, dateTime).hsn ?? null;
+}
+
 /**
  * Các công tơ cần LẤY thông số cho khoảng ngày [from, to]: mọi lần treo có
  * khoảng giao với cửa sổ. Rộng hơn `liveMeters()` (chỉ đang treo) để backfill
