@@ -77,7 +77,7 @@ export function PointBadgeChip({ point }: { point: Point }) {
   return (
     <span
       title={b.title}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider"
+      className="vl-badge"
       style={{ backgroundColor: `${b.hex}1f`, color: b.hex }}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -113,7 +113,7 @@ const STATUS_STYLE: Record<Exclude<PointStatus, ''>, string> = {
 export function StatusTag({ status }: { status?: PointStatus }) {
   if (!status) return <span className="text-[11px] italic text-faint">chưa tính</span>;
   return (
-    <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${STATUS_STYLE[status]}`}>
+    <span className={`vl-badge ${STATUS_STYLE[status]}`}>
       {STATUS_LABEL[status]}
     </span>
   );
@@ -151,8 +151,8 @@ export function StatusIcon({ status }: { status?: PointStatus }) {
 
 /**
  * Tag thông tin trung tính (HSN, mã khách hàng…) — CÙNG hình khối với
- * `StatusTag` và `PointBadgeChip`: viên thuốc bo tròn, `px-3 py-1`, chữ 11px in
- * hoa giãn nhẹ.
+ * `StatusTag` và `PointBadgeChip`: viên thuốc bo tròn, khuôn `vl-badge` trong `index.css`,
+ * cùng mọi tag khác của app.
  *
  * Có mặt vì rà lại 25/08/2026: cùng một hàng đang trộn ba kiểu tag khác nhau —
  * badge màu bó sát chữ, viên thuốc, và chữ trần không viền — nhìn như ba thứ
@@ -161,7 +161,7 @@ export function StatusIcon({ status }: { status?: PointStatus }) {
 export function InfoTag({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
     <span title={title}
-      className="inline-flex shrink-0 items-center rounded-full bg-subtle px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-soft">
+      className="vl-badge vl-badge-neutral shrink-0">
       {children}
     </span>
   );
