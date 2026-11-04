@@ -7,7 +7,7 @@
  * Thanh số liệu trên cùng cho mọi nhóm thấy cả luồng đang dồn ở bước nào.
  */
 import { ClipboardList, PackageSearch, Wrench, CheckCircle2, ArrowRight } from 'lucide-react';
-import { StatTile, EmptyState } from '../ui/dashboard';
+import { StatTile } from '../ui/dashboard';
 import HangPoints from './HangPoints';
 import { openBorrowsByPoint, type SupplyTasks as Tasks } from '../../lib/dm/supply';
 import type { CatalogData } from '../../lib/dm/repo';
@@ -78,6 +78,14 @@ function PointList({ title, points, hint, action, empty, borrowed }: {
   title: string; points: Point[]; hint: string; action?: React.ReactNode; empty: string;
   borrowed?: Map<string, number>;
 }) {
+  // Không còn việc ⇒ thu về một dòng, nhường chỗ cho phần bên dưới (user yêu cầu 04/11/2026).
+  if (points.length === 0) {
+    return (
+      <div className="vl-card flex items-center gap-2 px-5 py-3 text-sm font-medium text-soft">
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-good" /> {empty}
+      </div>
+    );
+  }
   return (
     <div className="vl-card space-y-3 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -87,18 +95,14 @@ function PointList({ title, points, hint, action, empty, borrowed }: {
         </div>
         {action}
       </div>
-      {points.length === 0 ? (
-        <EmptyState icon={CheckCircle2} title={empty} />
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {points.map(p => (
-            <span key={p.id} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-subtle px-2.5 py-1.5 text-[12px]">
-              <span className="font-mono font-semibold text-ink">{p.code}</span>
-              {(borrowed?.get(p.id) ?? 0) > 0 && <span className="vl-badge-primary">bị mượn</span>}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {points.map(p => (
+          <span key={p.id} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-subtle px-2.5 py-1.5 text-[12px]">
+            <span className="font-mono font-semibold text-ink">{p.code}</span>
+            {(borrowed?.get(p.id) ?? 0) > 0 && <span className="vl-badge-primary">bị mượn</span>}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
