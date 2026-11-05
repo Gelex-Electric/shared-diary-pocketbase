@@ -73,9 +73,7 @@ export default function MaterialDashboard() {
             <button
               id="nav-asset"
               onClick={() => setIsAssetExpanded(v => !v)}
-              className={`vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all ${
-                'vl-sidebar-active text-accent'
-              }`}
+              className="vl-sidebar-link relative w-full flex items-center gap-4 px-6 py-[.7rem] text-[.875rem] font-semibold transition-all vl-sidebar-active text-accent"
             >
               <Package className="w-5 h-5 shrink-0" />
               <span className="flex-1 text-left">Quản lý vật tư thiết bị điện</span>
