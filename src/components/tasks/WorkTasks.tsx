@@ -49,7 +49,8 @@ const emptyForm = (me: Me): TaskInput => ({
 /**
  * Đích giao mã hoá trong một ô chọn: `block:<nhóm>` | `team:<KCN>`. Mỗi TVH chỉ có MỘT tài
  * khoản dùng chung (kiểm 02/11/2026) nên giao theo TVH/khối; ô tên người đã bỏ (user chốt 04/11/2026),
- * việc cũ vẫn giữ `assignee_name`. TVH giao trong TVH mình; khối khác: cả khối TVH, một TVH, khối còn lại.
+ * việc cũ vẫn giữ `assignee_name`. TVH giao trong TVH mình; Kinh Doanh: cả khối TVH, một TVH, khối mình.
+ * Khối Vật Tư chưa dùng Giao việc (user chốt 05/11/2026) nên không phải đích giao.
  */
 function targetOptions(me: Me) {
   const team = (a: string) => ({ value: `team:${a}`, label: `TVH ${a}` });
@@ -57,7 +58,7 @@ function targetOptions(me: Me) {
   return [
     { value: 'block:van_hanh', label: 'Cả khối TVH' },
     ...AREAS.map(team),
-    ...(['kinh_doanh', 'vat_tu'] as UserGroup[]).map(g => ({ value: `block:${g}`, label: GROUP_LABEL[g] })),
+    { value: 'block:kinh_doanh', label: GROUP_LABEL.kinh_doanh },
   ];
 }
 
