@@ -41,7 +41,7 @@ import { connectionOfHsn, deriveHsn, formatRatio, hsnFormula, parseRatio, pickRa
 import {
   deviceRatio, freeDevices, parseHsnInput, setMatchesHsn, suggestSets, type SetOption,
 } from '../../lib/dm/tutiPick';
-import { REMOTE_LABEL, TI_PER_SET, countAssets, derivePointStatus, missingRemote } from '../../lib/dm/pointStatus';
+import { REMOTE_LABEL, TI_PER_SET, countAssets, derivePointStatus, missingRemote, overCap } from '../../lib/dm/pointStatus';
 import type { Scope } from '../../lib/scope';
 import {
   CellInput, DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
@@ -1182,8 +1182,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
   const treoRows = pForm.assetRows.filter(r => !isNeedRow(r));
   const needRows = pForm.assetRows.filter(isNeedRow);
 
-  /** Mọi thứ CHẶN lưu điểm đo: HSN + đụng độ số chế tạo + thiếu/sai tỷ số + dòng mới thiếu ngày treo. */
-  const saveBlocks = [...hsnBlocks, ...serialBlocks, ...ratioBlocks, ...treoBlocks];
+  /**
+   * TRẦN vật tư hoạt động (user chốt 12/11/2026): tối đa 1 GP-03, 1 công tơ, 3 TI
+   * đang treo. Treo bổ sung vượt trần thì phải khai ngày tháo cho cái tương ứng — chặn lưu.
+   */
+  const capBlocks = overCap(pForm.assetRows
+    .filter(r => r.serial.trim() && r.active && r.dateOn.trim() && !r.dateOff.trim())
+    .map(r => r.type))
+    .map(x => `${ASSET_LABEL[x.type]} đang treo ${x.have}, tối đa ${x.cap} — `
+      + `treo bổ sung thì khai ngày tháo cho ${x.have - x.cap} cái cũ`);
+
+  /** Mọi thứ CHẶN lưu điểm đo: HSN + đụng độ số chế tạo + thiếu/sai tỷ số + dòng mới thiếu ngày treo + vượt trần. */
+  const saveBlocks = [...hsnBlocks, ...serialBlocks, ...ratioBlocks, ...treoBlocks, ...capBlocks];
 
   /**
    * Cảnh báo vật tư — CHỈ nhắc, không chặn lưu (user chốt 14/08). Điểm đo đang
@@ -1205,8 +1215,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
     assetWarnings.push(`HSN ${manualHsn} là đo gián tiếp nhưng chưa khai TI — lưu được, `
       + 'nhớ bổ sung bộ TI khớp HSN sau');
   }
+  // Nhiều hơn 1 công tơ đang treo nay là LỖI chặn lưu (`capBlocks`, trần vật tư 12/11/2026).
   if (countType('CONGTO') === 0) assetWarnings.push('chưa có công tơ đang hoạt động');
-  else if (countType('CONGTO') > 1) assetWarnings.push('có nhiều hơn 1 công tơ đang hoạt động');
   // Không nhắc "thiếu GP-03" nữa: user bỏ ràng buộc bắt buộc có đo xa (20/08/2026).
 
   // Lệch tỷ số trong cùng một bộ TI (hoặc TU): 3 TI phải cùng tỷ số, khác nhau
@@ -1226,7 +1236,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
     assetWarnings.push('có thiết bị khai ngày tháo trước ngày treo');
   }
   // Có TI = đo gián tiếp ⇒ phải đủ bộ 3. Không có TI = đo thẳng, HSN = 1.
-  if (hasTi && countType('TI') > 0 && countType('TI') !== TI_PER_SET) {
+  if (hasTi && countType('TI') > 0 && countType('TI') < TI_PER_SET) {
     assetWarnings.push(`đo gián tiếp phải đủ ${TI_PER_SET} TI (đang có ${countType('TI')} cái hoạt động)`);
   }
   /*

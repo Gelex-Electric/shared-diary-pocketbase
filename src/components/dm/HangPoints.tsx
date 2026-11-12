@@ -27,7 +27,7 @@ import { EmptyState } from '../ui/dashboard';
 import { toast } from '../../lib/toast';
 import { isAbortError, loadCatalog, pbErrorMessage, points as pointRepo, assets as assetRepo, devices as deviceRepo, type CatalogData } from '../../lib/dm/repo';
 import { SUPPLY_STATE_LABEL, allocatedAssets, pointSupply, spareDevices } from '../../lib/dm/supply';
-import { countAssets, derivePointStatus } from '../../lib/dm/pointStatus';
+import { countAssets, derivePointStatus, overCap, type CapExcess } from '../../lib/dm/pointStatus';
 import { formatRatio } from '../../lib/dm/hsn';
 import { inAreas, isHeadPoint, pointZoneId } from '../../lib/dm/pointScope';
 import { dmy } from '../../lib/dm/lifecycle';
@@ -60,13 +60,15 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
   const [dates, setDates] = useState<Record<string, string>>({});
   /** Bảng treo đang khai theo điểm đo; chưa sửa thì dựng mặc định từ dòng nhu cầu. */
   const [edits, setEdits] = useState<Record<string, HangRow[]>>({});
+  /** Thiết bị đang treo được chọn THÁO XUỐNG khi lượt treo vượt trần (12/11/2026), theo điểm đo. */
+  const [offs, setOffs] = useState<Record<string, string[]>>({});
 
   const [search, setSearch] = useState('');
   const [zone, setZone] = useState('');
 
   const load = async () => {
     setLoading(true);
-    try { setD(await loadCatalog()); setEdits({}); } catch (e) {
+    try { setD(await loadCatalog()); setEdits({}); setOffs({}); } catch (e) {
       if (!isAbortError(e)) toast.error('Không đọc được dữ liệu', pbErrorMessage(e));
     } finally { setLoading(false); }
   };
@@ -81,11 +83,16 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
     const z = d ? pointZoneId(p, d.stations, d.lines) : undefined;
     return d?.zones.find(x => x.id === z)?.name ?? '';
   };
-  /** Điểm đo trong phạm vi còn dòng nhu cầu chưa treo — đủ hay chưa đủ đều treo được phần đã có. */
+  /**
+   * Điểm đo trong phạm vi còn dòng nhu cầu chưa treo — đủ hay chưa đủ đều treo được phần đã có.
+   * Đã TREO ĐỦ (tính theo trần vật tư, 12/11/2026) thì bỏ: dòng chưa treo còn sót là thừa, lần
+   * lưu tới tự trả kho — vd V-GREEN khai 2 GP-03, đã treo 1 ⇒ không đề xuất treo cái thứ hai.
+   */
   const rows = useMemo(() => (d ? d.points
     .filter(p => scope === 'vanphong' || inAreas(zoneName(p), areas))
     .filter(p => allocatedAssets(d.assets, p.id).some(isPlan))
     .map(p => ({ p, s: pointSupply(p, d) }))
+    .filter(x => x.s.state !== 'du')
     .sort((a, b) => Number(b.s.state === 'cho_treo') - Number(a.s.state === 'cho_treo')
       || (a.p.code ?? '').localeCompare(b.p.code ?? ''))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -118,6 +125,23 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
   const setRows = (p: Point, fn: (rs: HangRow[]) => HangRow[]) =>
     setEdits(e => ({ ...e, [p.id]: fn(rowsOf(p)) }));
 
+  /** Vật tư ĐANG TREO và còn hoạt động ở điểm đo. */
+  const liveOf = (p: Point) => allocatedAssets(d!.assets, p.id).filter(a => ymd(a.date_on) && a.active !== false);
+  /**
+   * Loại mà lượt treo này làm VƯỢT TRẦN (đang treo + dòng tích treo), kèm số cái đang treo
+   * đã chọn tháo. Phải chọn tháo đủ `have - cap` cái mới ghi được.
+   */
+  const capNeedsOff = (p: Point, rs: HangRow[]): (CapExcess & { picked: number })[] => {
+    const off = new Set(offs[p.id] ?? []);
+    const live = liveOf(p);
+    return overCap([...live.map(a => a.type), ...rs.filter(r => r.on && r.deviceId).map(r => r.type)])
+      .map(x => ({ ...x, picked: live.filter(a => a.type === x.type && off.has(a.id)).length }));
+  };
+  const toggleOff = (p: Point, id: string) => setOffs(o => {
+    const cur = o[p.id] ?? [];
+    return { ...o, [p.id]: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] };
+  });
+
   /** Tỷ số chỉ có nghĩa với TI/TU — công tơ, GP-03 trong kho hay mang "0/0". */
   const ratioOf = (x: Device) => ((x.type === 'TI' || x.type === 'TU') && x.ratio_primary
     ? ` · ${formatRatio(x.ratio_primary, x.ratio_secondary)}` : '');
@@ -146,6 +170,15 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
     const date = dates[p.id] || today();
     const rs = rowsOf(p).filter(r => r.on && r.deviceId);
     if (!rs.length) return toast.warning('Chưa có gì để treo', 'Tích ít nhất một dòng và chọn số No.');
+    // Trần vật tư (12/11/2026): treo bổ sung vượt trần thì phải tháo cái tương ứng xuống.
+    const excess = capNeedsOff(p, rowsOf(p));
+    const unmet = excess.filter(x => x.picked < x.have - x.cap);
+    if (unmet.length) {
+      return toast.warning('Vượt trần vật tư', unmet.map(x =>
+        `${ASSET_LABEL[x.type]} sẽ có ${x.have}/${x.cap} — chọn ${x.have - x.cap - x.picked} cái đang treo để tháo`).join('. '));
+    }
+    const offTypes = new Set(excess.map(x => x.type));
+    const offAssets = liveOf(p).filter(a => (offs[p.id] ?? []).includes(a.id) && offTypes.has(a.type));
     const keep = rs.filter(r => r.asset && devOfAsset(r.asset)?.id === r.deviceId);
     const fresh = rs.filter(r => !keep.includes(r)).map(r => devById.get(r.deviceId)!).filter(Boolean);
     // Đọc lại dữ liệu mới nhất: thiết bị của điểm đo khác có thể vừa bị người khác treo / gỡ.
@@ -168,6 +201,7 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
       title: 'Ghi treo',
       message: `Ghi ngày treo ${dmy(date)} cho ${rs.length} thiết bị của ${p.code}`
         + (fresh.length ? ` (${fresh.length} thiết bị khác nhu cầu)` : '') + '?'
+        + (offAssets.length ? ` Tháo xuống cùng ngày: ${offAssets.map(a => a.serial).join(', ')}.` : '')
         + swaps.map(x => ` Đổi chỗ: ${x.own.serial} chuyển thành dự kiến của ${x.move.fromCode}.`).join('')
         + borrows.map(m => ` Mượn: ${m.serial} từ ${m.fromCode}, điểm đó sẽ thiếu vật tư.`).join(''),
     });
@@ -175,6 +209,10 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
     setSaving(p.id);
     let n = 0;
     try {
+      // Tháo trước: cái cũ xuống thì cái mới mới được lên (trần vật tư, 12/11/2026).
+      for (const a of offAssets) {
+        await assetRepo.update(a.id, { date_off: date, active: false, status: 'thao_go' });
+      }
       // Tuần tự — lỗi giữa chừng thì biết đã ghi tới đâu.
       for (const r of keep) {
         await assetRepo.update(r.asset!.id, { date_on: date, status: 'dang_treo', active: true });
@@ -205,9 +243,10 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
         rc.release.length ? `trả kho ${rc.release.map(a => a.serial).join(', ')}` : '',
         rc.shortages.length ? `cần treo bổ sung ${rc.shortages.map(l => `${l.missing} × ${ASSET_LABEL[l.line.type]}`).join(', ')}` : '',
       ].filter(Boolean);
+      if (offAssets.length) notes.unshift(`tháo ${offAssets.map(a => a.serial).join(', ')}`);
       toast.success('Đã ghi treo', `${p.code} · ${n} thiết bị${notes.length ? ` — ${notes.join('; ')}` : ''}.`);
       onChanged?.();
-      setD(fresh2); setEdits({});
+      setD(fresh2); setEdits({}); setOffs({});
     } catch (e) {
       toast.error(`Dừng sau ${n} thiết bị`, pbErrorMessage(e));
       await load();
@@ -254,6 +293,8 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
       {shown.map(({ p, s }) => {
         const rs = rowsOf(p);
         const nOn = rs.filter(r => r.on && r.deviceId).length;
+        const excess = capNeedsOff(p, rs);
+        const unmet = excess.some(x => x.picked < x.have - x.cap);
         return (
           <div key={p.id} className="vl-card space-y-3 p-5">
             <div className="flex flex-wrap items-center gap-2">
@@ -322,6 +363,25 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
                 </tbody>
               </table>
             </div>
+            {/* Trần vật tư (12/11/2026): treo thêm vượt trần ⇒ chọn cái đang treo để tháo xuống cùng ngày. */}
+            {excess.map(x => (
+              <div key={x.type} className="rounded-lg border border-[var(--border)] bg-subtle p-3 text-sm">
+                <p className={`mb-2 text-[12px] ${x.picked < x.have - x.cap ? 'text-warn' : 'text-soft'}`}>
+                  <b>Vượt trần:</b> {ASSET_LABEL[x.type]} sẽ có {x.have} cái hoạt động, tối đa {x.cap}. Chọn{' '}
+                  {x.have - x.cap} cái đang treo để tháo xuống (ngày tháo = ngày treo).
+                </p>
+                <div className="flex flex-wrap gap-x-5 gap-y-1">
+                  {liveOf(p).filter(a => a.type === x.type).map(a => (
+                    <label key={a.id} className="flex items-center gap-2">
+                      <input type="checkbox" checked={(offs[p.id] ?? []).includes(a.id)}
+                        aria-label={`Tháo ${a.serial}`} onChange={() => toggleOff(p, a.id)} />
+                      <span className="font-mono">{a.serial}</span>
+                      <span className="text-[11px] text-faint">treo {dmy(ymd(a.date_on))}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
             <div className="flex flex-wrap items-end gap-3">
               <button type="button" className="vl-btn vl-btn-sm vl-btn-secondary flex items-center gap-1.5"
                 onClick={() => setRows(p, xs => [...xs, { key: `x${++seq}`, type: '', deviceId: '', on: true }])}>
@@ -332,7 +392,7 @@ export default function HangPoints({ scope = 'doi', onChanged }: {
                   onChange={v => setDates(x => ({ ...x, [p.id]: v }))} />
               </div>
               <button className="vl-btn vl-btn-success flex items-center gap-2"
-                disabled={saving === p.id || !nOn} onClick={() => void hang(p)}>
+                disabled={saving === p.id || !nOn || unmet} onClick={() => void hang(p)}>
                 <CheckCircle2 className="h-4 w-4" />
                 {saving === p.id ? 'Đang ghi…' : `Ghi treo ${nOn} thiết bị`}
               </button>

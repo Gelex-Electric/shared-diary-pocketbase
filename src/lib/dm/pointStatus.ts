@@ -17,7 +17,7 @@
  * Luật "đo gián tiếp phải đủ 3 TI" vẫn còn, nhưng chỉ là CẢNH BÁO trên form
  * chứ không còn quyết định trạng thái.
  */
-import type { PointStatus } from './types';
+import type { AssetType, PointStatus } from './types';
 
 export interface PointStatusInput {
   /** Tổng số công tơ đã khai ở điểm đo, kể cả cái đã tháo. */
@@ -52,6 +52,29 @@ export interface PointStatusInput {
 
 /** Bộ TI của một điểm đo gián tiếp: 3 cái chạy song song trên 3 pha. */
 export const TI_PER_SET = 3;
+
+/**
+ * TRẦN vật tư ĐANG HOẠT ĐỘNG trên một điểm đo (user chốt 12/11/2026): 1 đo xa
+ * GP-03, 1 công tơ, 3 TI (đo gián tiếp — đo trực tiếp thì không có TI nào).
+ * Treo bổ sung vượt trần thì PHẢI tháo cái tương ứng xuống. Loại khác (SIM, TU…)
+ * chưa giới hạn. Nhu cầu khai vượt trần chỉ CẢNH BÁO, nhưng không bao giờ được
+ * đề xuất treo phần vượt (`capNeed` trong `supply.ts`).
+ */
+export const ASSET_CAP: Partial<Record<AssetType, number>> = { GP03: 1, CONGTO: 1, TI: TI_PER_SET };
+
+export interface CapExcess { type: AssetType; have: number; cap: number }
+
+/** Loại nào vượt trần, từ danh sách loại của các vật tư đang tính (mỗi phần tử = một thiết bị). */
+export function overCap(types: Iterable<AssetType | '' | undefined>): CapExcess[] {
+  const n = new Map<AssetType, number>();
+  for (const t of types) if (t) n.set(t, (n.get(t) ?? 0) + 1);
+  const out: CapExcess[] = [];
+  for (const [type, have] of n) {
+    const cap = ASSET_CAP[type];
+    if (cap != null && have > cap) out.push({ type, have, cap });
+  }
+  return out;
+}
 
 export function derivePointStatus(i: PointStatusInput): PointStatus {
   // Chưa có công tơ nào ⇒ mới chỉ là dự kiến, chưa lắp đặt.

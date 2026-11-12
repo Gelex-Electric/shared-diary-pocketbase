@@ -15,7 +15,7 @@
  * Test: `npx tsx scripts/dm_test_supply.ts`.
  */
 import { formatRatio } from './hsn';
-import { TI_PER_SET } from './pointStatus';
+import { ASSET_CAP, TI_PER_SET } from './pointStatus';
 import type {
   Asset, AssetType, Borrow, Connection, Device, NeedLine, Point, TiShape,
 } from './types';
@@ -114,6 +114,32 @@ export function cleanNeed(need: NeedLine[] | null | undefined): NeedLine[] {
       if (n.note?.trim()) out.note = n.note.trim();
       return out;
     });
+}
+
+/**
+ * Cắt nhu cầu về TRẦN vật tư hoạt động (`ASSET_CAP`, user chốt 12/11/2026): tổng số
+ * lượng một loại không vượt trần, dòng sau bị cắt trước. Nhu cầu khai vượt trần chỉ
+ * bị CẢNH BÁO ở form, còn đủ/thiếu và đề xuất treo luôn tính theo phần trong trần —
+ * vd khai 2 GP-03 mà đã treo 1 thì là ĐỦ, không đề xuất treo cái thứ hai.
+ */
+export function capNeed(need: NeedLine[]): NeedLine[] {
+  const left = new Map<AssetType, number>();
+  return need.map(n => {
+    const cap = ASSET_CAP[n.type];
+    if (cap == null) return n;
+    const rem = left.get(n.type) ?? cap;
+    const qty = Math.min(n.qty, rem);
+    left.set(n.type, rem - qty);
+    return { ...n, qty };
+  }).filter(n => n.qty > 0);
+}
+
+/** Loại nào khai nhu cầu vượt trần → tổng số lượng đang khai. */
+export function needOverCap(need: NeedLine[]): Map<AssetType, number> {
+  const sum = new Map<AssetType, number>();
+  for (const n of need) sum.set(n.type, (sum.get(n.type) ?? 0) + n.qty);
+  for (const [t, q] of sum) if (ASSET_CAP[t] == null || q <= ASSET_CAP[t]!) sum.delete(t);
+  return sum;
 }
 
 /* ----------------------------- đủ / thiếu ----------------------------- */
@@ -234,7 +260,7 @@ export const liveFirst = (assets: Asset[], pointId: string): Asset[] => {
 
 export function pointSupply(p: Point, ctx: SupplyContext): PointSupply {
   const mine = liveFirst(ctx.assets, p.id);
-  const need = cleanNeed(p.need);
+  const need = capNeed(cleanNeed(p.need));
   const lines = supplyOfPoint(need, mine, ctx.devices);
   const missing = lines.reduce((s, l) => s + l.missing, 0);
   const unsureShape = lines.reduce((s, l) => s + l.unsureShape, 0);
@@ -271,7 +297,7 @@ export interface ReconcileResult {
  * Điểm đo chưa khai nhu cầu ⇒ không làm gì.
  */
 export function reconcile(p: Point, assets: Asset[], devices: Device[]): ReconcileResult {
-  const need = cleanNeed(p.need);
+  const need = capNeed(cleanNeed(p.need));
   const out: ReconcileResult = { release: [], shortages: [], extraHung: [] };
   if (!need.length) return out;
   const mine = liveFirst(assets, p.id);

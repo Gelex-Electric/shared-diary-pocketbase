@@ -5,11 +5,12 @@
  */
 
 import {
-  allocCandidates, borrowCandidates, reconcile, borrowsToSettle, cleanNeed, defaultNeed, matchDevice,
+  allocCandidates, borrowCandidates, capNeed, needOverCap, reconcile, borrowsToSettle, cleanNeed, defaultNeed, matchDevice,
   openBorrowsByPoint, pointSupply, specKey,
   suggestTiRatio, supplyOfPoint, supplyTasks, taskCount,
 } from '../src/lib/dm/supply';
 import { planAttach } from '../src/lib/dm/attach';
+import { overCap } from '../src/lib/dm/pointStatus';
 import type { Asset, AssetType, Borrow, Device, NeedLine, Point } from '../src/lib/dm/types';
 
 let pass = 0;
@@ -237,6 +238,22 @@ const empty = {};
   // Không bao giờ gỡ dòng đã treo; điểm đo chưa khai nhu cầu ⇒ không làm gì.
   eq(r1.release.every(a => !a.date_on), true, 'reconcile: không đụng dòng đã treo');
   eq(reconcile(point(undefined), plan, devices).release.length, 0, 'reconcile: chưa khai nhu cầu ⇒ không làm gì');
+}
+
+/* --------------------------------------------- trần vật tư (12/11/2026) */
+{
+  eq(capNeed([{ type: 'GP03', qty: 2 }, { type: 'TI', qty: 4 }, { type: 'SIM', qty: 2 }]),
+    [{ type: 'GP03', qty: 1 }, { type: 'TI', qty: 3 }, { type: 'SIM', qty: 2 }], 'capNeed: cắt GP-03/TI, SIM không giới hạn');
+  eq(capNeed([{ type: 'CONGTO', qty: 1 }, { type: 'CONGTO', qty: 1 }]), [{ type: 'CONGTO', qty: 1 }], 'capNeed: hai dòng công tơ ⇒ dòng sau bị bỏ');
+  eq([...needOverCap([{ type: 'GP03', qty: 2 }, { type: 'CONGTO', qty: 1 }])], [['GP03', 2]], 'needOverCap: chỉ báo loại vượt');
+  eq(overCap(['TI', 'TI', 'TI', 'TI', 'GP03', 'SIM', 'SIM']), [{ type: 'TI', have: 4, cap: 3 }], 'overCap: 4 TI vượt, SIM không tính');
+
+  // V-GREEN: khai 2 GP-03, đã treo 1 + 1 dự kiến ⇒ ĐỦ, không chờ treo; reconcile trả kho cái dự kiến.
+  const g1 = dev('GP03'); const g2 = dev('GP03'); const m = dev('CONGTO');
+  const assets = [asset(m, 'P', '2026-08-30'), asset(g1, 'P', '2026-08-30'), asset(g2, 'P')];
+  const p = point([{ type: 'CONGTO', qty: 1 }, { type: 'GP03', qty: 2 }]);
+  eq(pointSupply(p, { assets, devices: [g1, g2, m], ...empty }).state, 'du', 'trần: 2 GP-03 khai, 1 treo ⇒ đủ');
+  eq(reconcile(p, assets, [g1, g2, m]).release.map(a => a.serial), [g2.serial], 'trần: GP-03 dự kiến thừa ⇒ trả kho');
 }
 
 /* ---------------------------------------------------------------- kết quả */

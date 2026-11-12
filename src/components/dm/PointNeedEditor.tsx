@@ -15,7 +15,8 @@ import { CellInput } from './entryUi';
 import VariantCell from './VariantCell';
 import { formatRatio, parseRatio } from '../../lib/dm/hsn';
 import { useMemo } from 'react';
-import { HAS_RATIO, cleanNeed, defaultNeed, supplyOfPoint, type LineSupply } from '../../lib/dm/supply';
+import { HAS_RATIO, cleanNeed, defaultNeed, needOverCap, supplyOfPoint, type LineSupply } from '../../lib/dm/supply';
+import { ASSET_CAP } from '../../lib/dm/pointStatus';
 import {
   ASSET_LABEL, CONNECTION_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type Asset, type AssetType, type Connection, type Device, type NeedLine, type TiShape,
 } from '../../lib/dm/types';
@@ -96,6 +97,8 @@ export default function PointNeedEditor({
     supplyOfPoint(valid.map(x => x.n), allocated, devices).forEach((ls, i) => m.set(valid[i].key, ls));
     return m;
   }, [rows, allocated, devices]);
+  /** Loại khai vượt trần vật tư hoạt động (12/11/2026) — chỉ cảnh báo, vẫn lưu được. */
+  const over = useMemo(() => needOverCap(needFromRows(rows)), [rows]);
 
   return (
     <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
@@ -175,6 +178,11 @@ export default function PointNeedEditor({
                         {s.unsureShape} chưa rõ kiểu (hình dạng / loại)
                       </span>
                     )}
+                    {r.type && over.has(r.type) && (
+                      <span className="mt-1 block text-[11px] leading-snug text-warn">
+                        Vượt trần {ASSET_CAP[r.type]}
+                      </span>
+                    )}
                   </td>
                   <td className="p-2 text-center">
                     {!readOnly && (
@@ -190,6 +198,14 @@ export default function PointNeedEditor({
           </tbody>
         </table>
       </div>
+
+      {over.size > 0 && (
+        <p className="mt-2 text-[12px] text-warn">
+          <b>Nhắc:</b> mỗi điểm đo chỉ hoạt động tối đa 1 đo xa GP-03, 1 công tơ, 3 TI — đang khai{' '}
+          {[...over].map(([t, q]) => `${q} ${ASSET_LABEL[t]}`).join(', ')}. Vẫn lưu được, nhưng phần vượt trần
+          không được đề xuất treo.
+        </p>
+      )}
 
       {!readOnly && <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className="vl-btn vl-btn-sm vl-btn-secondary flex items-center gap-1.5"
