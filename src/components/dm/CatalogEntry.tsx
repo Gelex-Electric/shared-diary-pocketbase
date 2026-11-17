@@ -16,55 +16,49 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Building2, Cable, Factory, Users, Gauge, Package, PackageCheck,
   Plus, Trash2, Edit2, RefreshCw, CornerDownRight, FileText, History, ArrowLeftRight, Search,
-  CaseLower, TriangleAlert, UserCheck, Zap,
+  CaseLower,
 } from 'lucide-react';
 import { Tabs } from '../ui/Tabs';
 import type { TabItem } from '../ui/Tabs';
 import { Select } from '../ui/Select';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { toast } from '../../lib/toast';
-import { Toggle } from '../ui/Toggle';
 import { Switch } from '../ui/Switch';
 /* Luật chọn P0/Pk nằm ở `scripts/lib/lossParams.mjs` để pipeline (Node thuần,
    Actions không `npm ci` nên không có tsx) và app dùng CHUNG một bản. */
 import { estimateLossParams } from '@/scripts/lib/lossParams.mjs';
-import { DatePicker } from '../ui/DateTimePickers';
 import { assets, borrows, customers, devices, isAbortError, lines, loadCatalog, pbErrorMessage, points, stations, zones } from '../../lib/dm/repo';
 import type { CatalogData } from '../../lib/dm/repo';
-import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
+import { ASSET_LABEL } from '../../lib/dm/types';
 import { isHeadPoint, pointZoneId } from '../../lib/dm/pointScope';
 import type {
-  AssetType, Customer, Line, Point, PointRole, Station,
+  Customer, Line, Point, PointRole, Station,
   VoltageLevel, Zone,
 } from '../../lib/dm/types';
-import { connectionOfHsn, formatRatio, hsnFormula } from '../../lib/dm/hsn';
-import { deviceRatio, freeDevices, type SetOption } from '../../lib/dm/tutiPick';
-import { TI_PER_SET } from '../../lib/dm/pointStatus';
+import { connectionOfHsn, formatRatio } from '../../lib/dm/hsn';
 import type { Scope } from '../../lib/scope';
 import {
-  CellInput, DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
+  DerivedValue, Field, FormModal, NumberInput, TableCard, TextInput, TH_CLS,
 } from './entryUi';
 import { PointBadgeChip, PointBadgeIcon, StatusTag } from './pointIcons';
-import { invoicesOfMkh, invoicesOfSerial, loadCustomerFacts } from '../../lib/dm/invoiceRepo';
+import { loadCustomerFacts } from '../../lib/dm/invoiceRepo';
 import { isEmptyPlan, latestByMkh, planCustomerSync } from '../../lib/dm/customerSync';
 import { ISSUE_LABEL, autoFillable, checkLowName, planLowNameFix, toLowName } from '../../lib/dm/lowName';
 import type { LowNameRow } from '../../lib/dm/lowName';
-import { bySerial, dmy, dmyRange, segmentOf, segmentsOf } from '../../lib/dm/lifecycle';
-import type { Segment } from '../../lib/dm/lifecycle';
-import { CUSTOM, checkPointForm, type MkhMeter } from '../../lib/dm/pointCheck';
+import { CUSTOM } from '../../lib/dm/pointCheck';
 import { savePoint } from '../../lib/dm/pointSave';
+import { EMPTY_P, usePointForm } from './catalog/usePointForm';
+import PointForm from './catalog/PointForm';
 import { groupByZone, sortByCode, sortByMkh } from './groupByZone';
 import AssetLifecycle from './AssetLifecycle';
 import StockEntry from './StockEntry';
 import SupplyAllocate from './SupplyAllocate';
 import { TransferOwner } from './TransferOwner';
 import LineAssign from './LineAssign';
-import PointNeedEditor, { needFromRows, rowsFromNeed, type NeedRow } from './PointNeedEditor';
-import { HAS_RATIO, liveFirst } from '../../lib/dm/supply';
+import { needFromRows, rowsFromNeed } from './PointNeedEditor';
 import {
-  addRow as addRowIn, applyRowRules as applyRowRulesIn, applySet as applySetIn,
-  hsnSig, liveElsewhere as liveElsewhereIn, lockedOn as lockedOnIn,
-  newRowKey, ymdOf, type AssetRow, type RowCtx,
+  hsnSig,
+  newRowKey, type AssetRow,
 } from '../../lib/dm/pointForm';
 import { runReconcile } from '../../lib/dm/reconcileRun';
 import { ZoneTables } from './ZoneTables';
@@ -149,36 +143,12 @@ const EMPTY_S = {
   auto_loss_param: false, mv_metering: false,
 };
 const EMPTY_C = { mkh: '', name: '', low_name: '', short_name: '', address: '', zone: '' };
-/** `code` cũng do hệ thống sinh; `customer` chỉ dùng khi là điểm đo phụ. */
-const EMPTY_P = {
-  station: '', role: 'chinh' as PointRole,
-  /** Chỉ cho điểm ĐẦU NGUỒN (schema v17): lộ nó đo + mã nhập tay (khớp LINE_NAME HES). */
-  line: '', head_code: '',
-  customer: '', parent_point: '', ident: '', hsn: '',
-  /** Chỉ dùng khi điểm phụ trùng KH với điểm chính: mã nhãn, hoặc CUSTOM. */
-  purpose: '', purpose_custom: '',
-  note: '',
-  /** Vật tư khai luôn cùng điểm đo — mỗi dòng một thiết bị (ghi vào dm_asset). */
-  assetRows: [] as AssetRow[],
-  /**
-   * Nhu cầu vật tư (quy cách) — KINH DOANH khai ở form này (user chốt lại 27/10/2026);
-   * Nhóm Vật Tư chỉ GẮN số No dự kiến, KD + VH ghi treo tháo. Xem `PointNeedEditor`.
-   */
-  need: [] as NeedRow[],
-};
 
 /*
   Dòng vật tư (`AssetRow`) và các luật sửa bảng vật tư nằm ở `lib/dm/pointForm.ts`
   (tách 17/11/2026 để test được — `scripts/dm_test_point_form.ts`).
 */
 
-/** Trạng thái thiết bị trong ô chọn Số No — icon thay cho nhãn dài (28/09/2026). */
-type SerialState = 'kho' | 'du_kien' | 'dang_treo';
-const SERIAL_STATE: Record<SerialState, { icon: typeof Package; cls: string; label: string }> = {
-  kho: { icon: Package, cls: 'text-emerald-500', label: 'Trong kho' },
-  du_kien: { icon: UserCheck, cls: 'text-amber-500', label: 'Đã gắn khách hàng dự kiến' },
-  dang_treo: { icon: Zap, cls: 'text-red-500', label: 'Đang treo, hoạt động' },
-};
 
 
 
@@ -227,8 +197,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
   const [transferring, setTransferring] = useState<Point | null>(null);
   /** Lộ đang mở hộp "Gắn trạm" hàng loạt; `null` = đóng. */
   const [assigning, setAssigning] = useState<Line | null>(null);
-  /** Người dùng đã bấm "Sinh lại mã" cho điểm đo đang sửa. */
-  const [regenCode, setRegenCode] = useState(false);
 
   const [zForm, setZForm] = useState(EMPTY_Z);
   const [lForm, setLForm] = useState(EMPTY_L);
@@ -239,13 +207,13 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
     () => checkLowName({ name: cForm.name, low_name: cForm.low_name }),
     [cForm.name, cForm.low_name],
   );
-  const [pForm, setPForm] = useState(EMPTY_P);
-  /**
-   * Chữ ký HSN + vật tư lúc MỞ form sửa điểm đo — để chỉ chặn "TI×TU lệch HSN"
-   * khi người dùng thực sự đụng vào phần đó (user chốt 28/09: dữ liệu cũ giữ
-   * nguyên, mở ra sửa ghi chú không bị chặn). Điểm đo mới: rỗng ⇒ luôn chặn.
-   */
-  const [pSnap, setPSnap] = useState('');
+  /* Form điểm đo: state + logic ở `catalog/usePointForm.ts`. */
+  const pf = usePointForm({ d: data, editingId, modal });
+  const {
+    setRegenCode, pForm, setPForm, setPSnap, pStation, isSub, isHead, pLine, lineHeadTaken,
+    subLabel, pointCodeMissing, pointCode, effectiveHsn, serialInForm, reclaim, saveBlocks,
+    derivedStatus,
+  } = pf;
 
   const load = async () => {
     setLoading(true);
@@ -294,8 +262,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
   };
   const stationsOfZone = (id: string) => d?.stations.filter(s => s.zone === id).length ?? 0;
 
-  /** Dữ liệu mà luật bảng vật tư (`lib/dm/pointForm`) cần đọc. */
-  const rowCtx: RowCtx = { devices: d?.devices ?? [], assets: d?.assets ?? [], editingId };
   const pointsOfStation = (id: string) => d?.points.filter(p => p.station === id).length ?? 0;
   const pointsOfCustomer = (id: string) => d?.points.filter(p => p.customer === id).length ?? 0;
 
@@ -409,172 +375,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
     return estimateLossParams(pool, toNum(sForm.sdm_kva));
   }, [d?.stations, editingId, sForm.auto_loss_param, sForm.sdm_kva]);
 
-  /* ------------ Đối chiếu công tơ với hóa đơn (chỉ tham chiếu) ------------ */
-  /**
-   * Hóa đơn là nguồn CHUẨN NHẤT cho HSN (đối chiếu 8 điểm đo: 7 khớp tuyệt
-   * đối, 1 lệch do khai sai tỷ số TI). Nhưng hóa đơn KHÔNG cho biết ngày treo /
-   * ngày tháo — công tơ treo trước rồi mới dùng điện — nên ở đây chỉ HIỂN THỊ
-   * để đối chiếu, tuyệt đối không tự điền vào ô nào.
-   */
-  const [invSegs, setInvSegs] = useState<Record<string, Segment[]>>({});
-  const [invLoading, setInvLoading] = useState(false);
-
-  /** MKH của điểm đo: điểm phụ mang KH riêng, điểm chính theo chủ trạm. */
-  const pointMkh = mkhOf(pForm.customer || d?.stations.find(s => s.id === pForm.station)?.customer);
-
-  /** Số chế tạo của các dòng công tơ — ngắn quá thì chưa gõ xong, đừng tra vội. */
-  const meterSerials = useMemo(
-    () => pForm.assetRows
-      .filter(r => r.type === 'CONGTO' && r.serial.trim().length >= 6)
-      .map(r => r.serial.trim()),
-    [pForm.assetRows]);
-  const serialKey = meterSerials.join('|');
-
-  useEffect(() => {
-    if (modal !== 'point') return;
-    const missing = meterSerials.filter(s => !(s in invSegs));
-    if (!missing.length) return;
-    // Chờ người dùng gõ xong rồi mới tra, khỏi bắn một request mỗi ký tự.
-    const timer = setTimeout(async () => {
-      setInvLoading(true);
-      try {
-        const got: Record<string, Segment[]> = {};
-        for (const s of missing) got[s] = segmentsOf(await invoicesOfSerial(s));
-        setInvSegs(prev => ({ ...prev, ...got }));
-      } catch {
-        // Tra cứu hỏng thì thôi, không được chặn việc nhập liệu.
-      } finally {
-        setInvLoading(false);
-      }
-    }, 600);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serialKey, modal, invSegs]);
-
-  /* ---- Đối chiếu NGƯỢC: khách hàng này trong hóa đơn dùng công tơ nào ---- */
-  /**
-   * Tra theo số công tơ chỉ trả lời được "số đang khai có thuộc khách này
-   * không". Gõ nhầm sang một số không tồn tại thì không có hóa đơn nào và câu
-   * hỏi đó im lặng. Hỏi từ phía khách hàng mới chỉ ra được số ĐÚNG là số nào.
-   */
-  const [mkhSerials, setMkhSerials] = useState<Record<string, MkhMeter[]>>({});
-
-  useEffect(() => {
-    if (modal !== 'point' || !pointMkh || pointMkh in mkhSerials) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const rows = await invoicesOfMkh(pointMkh);
-        const out: MkhMeter[] = [];
-        for (const [serial, list] of bySerial(rows)) {
-          const seg = segmentOf(segmentsOf(list), pointMkh);
-          if (seg) out.push({ serial, from: seg.from, to: seg.to, isCurrent: seg.isCurrent });
-        }
-        out.sort((a, b) => (a.to < b.to ? 1 : -1));
-        if (!cancelled) setMkhSerials(prev => ({ ...prev, [pointMkh]: out }));
-      } catch {
-        // Tra cứu hỏng thì thôi — đối chiếu là tham chiếu, không được chặn nhập.
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pointMkh, modal, mkhSerials]);
-
-  /* Kiểm tra form điểm đo: `lib/dm/pointCheck.ts` (thuần, có test). */
-  const {
-    pStation, pStationZone, pStationCustomer, pSubCustomer, isSub, isHead, pLine, lineHeadTaken,
-    allLineOpts, sameCustomer, purposeLabel, mainTenant, subLabel, generatedCode, pointCodeMissing,
-    codeLocked, pointCode, hsnFromPlan, ratioRowOf, hasTi, hsnInput, derivedHsn, activeSeg,
-    invoiceHsn, tuRow, canFillTi, suggestedTi, meterRefs, invoiceNotes, refHsn, manualHsn,
-    effectiveHsn, serialInForm, reclaim, hsnMismatch, setSuggestions, isNeedRow, treoRows, needRows,
-    saveBlocks, assetWarnings, derivedStatus, statusReason,
-  } = checkPointForm({ d, pForm, editingId, regenCode, pSnap, pointMkh, invSegs, mkhSerials });
-
-  /** Điền tỷ số suy từ HSN hóa đơn cho CẢ BỘ TI đang hoạt động. */
-  const fillTiFromInvoice = () =>
-    setPForm(f => ({
-      ...f,
-      assetRows: f.assetRows.map(r =>
-        r.type === 'TI' && r.active ? { ...r, ratio: suggestedTi } : r),
-    }));
-
-  /** Điền một ngày lấy từ hóa đơn vào đúng dòng công tơ đó. */
-  const fillDate = (key: string, field: 'dateOn' | 'dateOff', value: string) =>
-    setRow(key, { [field]: value });
-
-  /**
-   * Ô Số No CHỌN TỪ KHO (user chốt 28/09/2026 — plan
-   * `2026-09-28-diem-do-chon-vat-tu-tu-kho-theo-hsn`, task 3): vật tư phải khai ở
-   * tab Kho vật tư trước, form điểm đo không còn tạo thiết bị.
-   *
-   * - Bỏ thiết bị ĐÃ THANH LÝ và số No đã nằm ở dòng khác của form.
-   * - Thiết bị rảnh xếp trước. Thiết bị đang treo ở điểm đo KHÁC vẫn hiện (xếp
-   *   cuối, ghi rõ nơi treo) chứ không ẩn: khai lần lắp CŨ của nó và đổi chỗ
-   *   giữa hai điểm đo dự kiến là hai luồng hợp lệ đã có — luật (4) và
-   *   `reclaim`/`busyElsewhere` vẫn lo phần chặn.
-   * - Số No hiện tại của dòng mà không có trong kho vẫn giữ trong danh sách,
-   *   kèm nhãn, để ô không hiện trống với dữ liệu cũ.
-   */
-  const serialOptions = (r: AssetRow) => {
-    const taken = new Set(pForm.assetRows.filter(x => x.key !== r.key).map(x => x.serial.trim()));
-    const pool = (d?.devices ?? []).filter(dev => {
-      const sn = dev.serial.trim();
-      return !!sn && !taken.has(sn) && (!r.type || dev.type === r.type) && !ymdOf(dev.liquidated_at)
-        // Dòng thêm từ bộ gợi ý theo HSN: chỉ đúng tỷ số của bộ đó.
-        && (!r.want || r.id || deviceRatio(dev) === r.want);
-    });
-    const free = new Set(freeDevices(pool, d?.assets ?? [], { pointId: editingId }).map(x => x.id));
-    /*
-      Nhãn CHỈ là Số No + ICON trạng thái (user chốt 28/09/2026): nhãn dài
-      "tỷ số · dành cho …" bị cắt trong ô hẹp của bảng. Chi tiết nằm ở `title`
-      (rê chuột). Ba trạng thái — xem `SERIAL_STATE`:
-        kho      — rảnh, chưa dành cho ai
-        du_kien  — đã gắn khách hàng / điểm đo dự kiến
-        dang_treo — đang treo, hoạt động ở điểm đo khác
-    */
-    const opts = pool
-      .map(dev => {
-        const sn = dev.serial.trim();
-        const detail = [ASSET_LABEL[dev.type] ?? dev.type, deviceRatio(dev), dev.model_desc?.trim()];
-        let state: SerialState = 'kho';
-        if (!free.has(dev.id)) {
-          const at = (d?.assets ?? []).find(a =>
-            (a.device === dev.id || a.serial.trim() === sn) && a.date_on && !a.date_off
-            && a.point !== editingId);
-          state = 'dang_treo';
-          detail.push(`đang treo ở ${pointCodeOf(at?.point)}`);
-        } else if (dev.hold_point && dev.hold_point !== editingId) {
-          state = 'du_kien';
-          detail.push(`dành cho ${pointCodeOf(dev.hold_point)}`);
-        } else if (dev.hold_for_customer || dev.hold_for_note?.trim()) {
-          state = 'du_kien';
-          detail.push(`dành cho ${[customerMkh(dev.hold_for_customer), dev.hold_for_note?.trim()]
-            .filter(x => x && x !== '—').join(' · ')}`);
-        }
-        const s = SERIAL_STATE[state];
-        return {
-          value: sn, label: sn, icon: s.icon, iconClass: s.cls,
-          title: `${s.label} — ${detail.filter(Boolean).join(' · ')}`,
-          rank: state === 'kho' ? 0 : state === 'du_kien' ? 1 : 2,
-        };
-      })
-      .sort((a, b) => a.rank - b.rank || a.value.localeCompare(b.value))
-      .map(({ rank: _r, ...o }) => o);
-    const cur = r.serial.trim();
-    if (cur && !opts.some(o => o.value === cur)) {
-      opts.unshift({ value: cur, label: cur, icon: TriangleAlert, iconClass: 'text-bad',
-        title: 'Không có trong Kho vật tư' });
-    }
-    return opts;
-  };
-
-
-  /** Điểm đo chính trong cùng trạm — nguồn chọn cha cho điểm đo phụ. */
-  const parentOpts = useMemo(
-    () => (d?.points ?? [])
-      .filter(p => p.role === 'chinh' && p.station === pForm.station && p.id !== editingId)
-      .map(p => ({ value: p.id, label: p.code || p.line_name || p.id })),
-    [d, pForm.station, editingId]);
 
   /* --------------------------- lưu --------------------------- */
   /**
@@ -973,22 +773,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
   );
 
 
-  /* ------------- thao tác trên bảng vật tư của form điểm đo ------------- */
-
-  /* Luật nằm ở `lib/dm/pointForm.ts` (thuần, có test) — đây chỉ nối với state của form. */
-  const liveElsewhere = (serial: string) => liveElsewhereIn(rowCtx, serial);
-  const lockedOn = (r: AssetRow) => lockedOnIn(rowCtx, r);
-
-  const setRow = (key: string, patch: Partial<AssetRow>) =>
-    setPForm(f => ({ ...f, assetRows: applyRowRulesIn(rowCtx, f.assetRows, key, patch) }));
-
-  const applySet = (s: SetOption) =>
-    setPForm(f => ({ ...f, assetRows: applySetIn(f.assetRows, s) }));
-
-  const addRow = (type: AssetType | '' = '') =>
-    setPForm(f => ({ ...f, assetRows: addRowIn(rowCtx, f.assetRows, type) }));
-  const removeRow = (key: string) =>
-    setPForm(f => ({ ...f, assetRows: f.assetRows.filter(r => r.key !== key) }));
 
   const stationsOfLine = (id: string) => d?.stations.filter(s => s.line === id).length ?? 0;
   const lineCodeOf = (id?: string) => d?.lines.find(l => l.id === id)?.code;
@@ -1759,492 +1543,8 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
         )}
 
         {modal === 'point' && (
-          <>
-            {/* Mã điểm đo đứng ĐẦU form: nó là kết quả của mọi ô bên dưới, để
-                trên cùng thì vừa gõ vừa thấy mã đổi theo, khỏi cuộn xuống. */}
-            {isHead ? (
-              <Field label="Mã điểm đo đầu nguồn" required
-                hint="Nhập tay, khớp LINE_NAME bên HES (vd TTI.DIEMDOPHU). Đầu nguồn không thuộc trạm nên không sinh mã theo trạm được.">
-                <TextInput value={pForm.head_code} mono placeholder="TTI.DIEMDOPHU"
-                  onChange={v => setPForm(f => ({ ...f, head_code: v }))} />
-              </Field>
-            ) : (<>
-            <Field label={codeLocked ? 'Mã điểm đo (đang giữ nguyên)' : 'Mã điểm đo (hệ thống tự sinh)'}
-              hint={codeLocked
-                ? 'Điểm đo đã chuyển chủ thể nên mã được giữ nguyên để khớp LINE_NAME bên HES.'
-                : isSub
-                ? `Ghép: mã trạm . ${sameCustomer ? 'nhãn mục đích' : 'tên tắt KH phụ'}(định danh điểm đo)`
-                : mainTenant
-                  ? 'Ghép: mã trạm . tên tắt khách thuê(định danh điểm đo) — điểm đo khác chủ trạm'
-                  : 'Ghép: mã trạm(định danh điểm đo)'}>
-              <DerivedValue value={pointCodeMissing.length ? '' : pointCode}
-                placeholder={pForm.station ? pointCode : 'Chọn trạm trước'} />
-            </Field>
-
-            {/*
-              Mã đang bị giữ mà dữ liệu hiện tại sinh ra mã khác ⇒ nói rõ hai mã,
-              và cho đổi nhưng phải bấm — không âm thầm đổi định danh của điểm đo.
-            */}
-            {codeLocked && generatedCode !== pointCode && (
-              <div className="-mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-subtle px-4 py-3">
-                <span className="text-[12px] text-soft">
-                  Theo dữ liệu hiện tại, mã sẽ là{' '}
-                  <b className="font-mono text-dim">{generatedCode}</b>. Đang giữ mã cũ.
-                </span>
-                <button type="button" onClick={() => setRegenCode(true)}
-                  className="vl-btn vl-btn-secondary vl-btn-sm">
-                  Sinh lại mã
-                </button>
-              </div>
-            )}
-            {pointCodeMissing.length > 0 && (
-              <p className="-mt-3 ml-1 text-[11px] font-semibold text-warn">
-                Còn thiếu: {pointCodeMissing.join(', ')}. Các mảnh này lấy từ hồ sơ trạm và khách hàng.
-              </p>
-            )}
-            </>)}
-
-            {isHead ? (
-              <Field label="Lộ đường dây" required
-                hint={lineHeadTaken ? 'Lộ này đã có điểm đo đầu nguồn — mỗi lộ một điểm.'
-                  : pLine ? `KCN ${d?.zones.find(z => z.id === pLine.zone)?.name ?? '—'} · đo TỔNG mọi trạm của lộ` : undefined}>
-                <Select value={pForm.line} onChange={v => setPForm(f => ({ ...f, line: v }))}
-                  options={allLineOpts} placeholder="Chọn lộ" searchable />
-              </Field>
-            ) : (
-            <Field label="Trạm" required
-              hint={pStation ? `KCN ${pStationZone?.code ?? '—'} · KH ${pStationCustomer?.short_name ?? '—'} · ${pStation.ident ?? '—'} · ${pStation.sdm_kva ?? '—'} kVA` : undefined}>
-              <Select value={pForm.station}
-                onChange={v => setPForm(f => {
-                  // Doi tram thi KH mac dinh theo chu tram moi, tru khi dang sua
-                  // mot diem do da khai KH rieng.
-                  const st = d?.stations.find(x => x.id === v);
-                  const keep = f.customer && f.customer !== pStation?.customer;
-                  return { ...f, station: v, parent_point: '',
-                    customer: keep ? f.customer : (st?.customer ?? '') };
-                })}
-                options={stationOpts} placeholder="Chọn trạm" searchable />
-            </Field>
-            )}
-
-            {/*
-              Không còn ô "Đấu nối": HSN = 1 đã là đấu trực tiếp rồi, hỏi thêm
-              chỉ tạo cơ hội khai mâu thuẫn với bảng vật tư (user chốt 20/08).
-            */}
-            <Field label="Loại điểm đo">
-              <Toggle value={pForm.role}
-                onChange={v => setPForm(f => ({ ...f, role: v, parent_point: '' }))}
-                options={[
-                  { value: 'chinh', label: ROLE_LABEL.chinh },
-                  { value: 'phu', label: ROLE_LABEL.phu, hex: '#8b5cf6' },
-                  { value: 'dau_nguon', label: ROLE_LABEL.dau_nguon, hex: '#f59e0b' },
-                ]} />
-            </Field>
-
-            {/* Đầu nguồn: không khách, không điểm cha, không đuôi mã — bỏ cả cụm. */}
-            {!isHead && (<>
-            {/*
-              Khách hàng của điểm đo — cho CẢ điểm chính. Mặc định là chủ trạm,
-              nhưng trạm cho thuê thì điểm đo thuộc khách thuê, khác chủ trạm.
-            */}
-            <Field label={isSub ? 'Khách hàng phụ' : 'Khách hàng của điểm đo'} required
-              hint={pSubCustomer && !pSubCustomer.short_name
-                ? 'KH này chưa khai tên tắt — chưa ghép được đuôi mã'
-                : mainTenant
-                  ? `Khác chủ trạm (${pStationCustomer?.short_name ?? '—'}) → mã thêm đuôi ${normalizeShortName(pSubCustomer?.short_name ?? '')}`
-                  : isSub ? 'Tên tắt của KH này thành đuôi mã' : 'Mặc định là chủ trạm; đổi được nếu trạm cho thuê'}>
-              <Select value={pForm.customer} onChange={v => setPForm(f => ({ ...f, customer: v }))}
-                options={customerOpts} placeholder="Chọn khách hàng" searchable />
-            </Field>
-
-            {/* Điểm đo phụ: cần thêm điểm đo chính chứa nó */}
-            {isSub && (
-              <>
-                <Field label="Phụ của điểm đo chính" required
-                  hint={pForm.station ? undefined : 'Chọn trạm trước'}>
-                  <Select value={pForm.parent_point} onChange={v => setPForm(f => ({ ...f, parent_point: v }))}
-                    options={parentOpts} placeholder={parentOpts.length ? 'Chọn điểm đo chính' : 'Trạm này chưa có điểm đo chính'}
-                    disabled={!parentOpts.length} searchable />
-                </Field>
-
-              </>
-            )}
-
-            {/*
-              Nhãn mục đích + định danh: hai mảnh đuôi của mã điểm đo, để cạnh
-              nhau cho thấy ngay mã sẽ ra thế nào. Nhãn LUÔN hiện, không còn chỉ
-              bật khi điểm phụ trùng khách hàng (user chốt 25/08/2026).
-            */}
-            <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Nhãn mục đích (đuôi mã)"
-                required={isSub && sameCustomer}
-                hint={isSub && sameCustomer
-                  ? 'Trùng khách hàng với điểm đo chính nên phải có nhãn để phân biệt.'
-                  : 'Không bắt buộc. Bỏ trống thì đuôi mã lấy theo tên tắt khách hàng.'}>
-                <Select value={pForm.purpose} onChange={v => setPForm(f => ({ ...f, purpose: v }))}
-                  options={[
-                    { value: '', label: 'Không có nhãn' },
-                    ...SUB_PURPOSES.map(x => ({ value: x.code, label: `${x.label} (${x.code})` })),
-                    { value: CUSTOM, label: 'Tự nhập ký tự…' },
-                  ]}
-                  placeholder="Không có nhãn" searchable />
-              </Field>
-
-              <Field label="Định danh điểm đo" hint="Không bắt buộc. Gõ 0,4 → mã có đuôi (0,4)">
-                <TextInput value={pForm.ident} mono placeholder="0,4"
-                  onChange={v => setPForm(f => ({ ...f, ident: v }))} />
-              </Field>
-
-              {/*
-                Ô tự nhập nằm NGAY DƯỚI bộ chọn nhãn (ô thứ 3 của lưới 2 cột), để
-                chọn "Tự nhập ký tự…" xong là thấy ngay chỗ gõ.
-
-                KHÔNG chuẩn hoá lúc gõ nữa: `normalizeShortName` viết hoa và xoá
-                mọi ký tự ngoài [A-Z0-9-] ngay từng phím một, nên gõ dấu tiếng
-                Việt hay khoảng trắng là chữ biến mất trước mắt — cảm giác "gõ
-                không ăn gì". Giữ nguyên chữ người dùng gõ, chỉ chuẩn hoá khi
-                GHÉP MÃ, và hiện luôn kết quả bên dưới cho thấy mã sẽ ra sao.
-              */}
-              {pForm.purpose === CUSTOM && (
-                <Field label="Ký tự tự nhập" required
-                  hint={purposeLabel
-                    ? `Đuôi mã sẽ là: ${purposeLabel}`
-                    : SHORT_NAME_HINT}>
-                  <TextInput value={pForm.purpose_custom} mono placeholder="KHO-LANH-2"
-                    onChange={v => setPForm(f => ({ ...f, purpose_custom: v }))} />
-                </Field>
-              )}
-            </div>
-            </>)}
-
-            {/*
-              HSN NHẬP TAY, đặt TRÊN bảng vật tư (user chốt 28/09/2026): khai HSN
-              trước rồi mới chọn bộ TI/TU cho khớp. HSN suy từ vật tư và HSN hóa
-              đơn chỉ hiện để tham chiếu, bấm mới điền — không tự điền ngầm.
-            */}
-            <Field label="HSN điểm đo" required
-              hint={`Vật tư đang khai: ${hsnFormula(hsnInput)}`
-                + (hsnFromPlan ? ' (theo vật tư dự kiến)' : '')
-                + (refHsn != null ? ` · Hóa đơn: HSN ${refHsn}` : '')}>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="min-w-[10rem] flex-1">
-                  <TextInput value={pForm.hsn} mono placeholder="vd 40 (TI 200/5) · 1 = đo thẳng"
-                    onChange={v => setPForm(f => ({ ...f, hsn: v }))} />
-                </div>
-                {derivedHsn != null && derivedHsn > 0 && derivedHsn !== manualHsn && (
-                  <button type="button" className="vl-btn vl-btn-sm vl-btn-outline-primary"
-                    onClick={() => setPForm(f => ({ ...f, hsn: String(derivedHsn) }))}>
-                    Dùng {derivedHsn} theo vật tư
-                  </button>
-                )}
-                {refHsn != null && refHsn !== manualHsn && refHsn !== derivedHsn && (
-                  <button type="button" className="vl-btn vl-btn-sm vl-btn-outline-primary"
-                    onClick={() => setPForm(f => ({ ...f, hsn: String(refHsn) }))}>
-                    Dùng {refHsn} theo hóa đơn
-                  </button>
-                )}
-              </div>
-            </Field>
-
-            {/* Phần NHU CẦU (quy cách) — Kinh Doanh khai; Vật Tư gắn số No dự kiến (điểm đo hai phần, 27/10/2026). */}
-            <PointNeedEditor
-              rows={pForm.need} onChange={need => setPForm(f => ({ ...f, need }))}
-              hsn={manualHsn} connection={connectionOfHsn(manualHsn)}
-              allocated={editingId ? liveFirst(d?.assets ?? [], editingId) : undefined}
-              devices={d?.devices ?? []} />
-            {/* Số No Vật Tư đã gắn dự kiến — thuộc phần NHU CẦU, chưa treo (treo ở màn Treo tháo). */}
-            {needRows.length > 0 && (
-              <div className="rounded-lg border border-[var(--border)] bg-subtle px-4 py-3 text-[12px]">
-                <p className="mb-2 font-bold uppercase tracking-wide text-dim">
-                  Vật tư dự kiến đã gắn ({needRows.length}) — chưa treo
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {needRows.map(r => (
-                    <span key={r.key} className="rounded-md border border-[var(--border)] bg-surface px-2 py-1">
-                      {r.type ? ASSET_LABEL[r.type as AssetType] : '—'}{' '}
-                      <b className="font-mono text-ink">{r.serial}</b>{r.ratio ? ` · ${r.ratio}` : ''}
-                    </span>
-                  ))}
-                </div>
-                <p className="mt-2 text-faint">Treo thực tế thì ghi ở màn Treo tháo — số No khác đề xuất sẽ tự trả kho.</p>
-              </div>
-            )}
-
-            {/* Gợi ý bộ TI/TU trong kho khớp HSN — chỉ khi đo gián tiếp (HSN > 1). */}
-            {manualHsn != null && manualHsn > 1 && (hsnMismatch || !hasTi) && (
-              setSuggestions.length ? (
-                <div className="vl-alert vl-alert-light-primary space-y-2 text-[12px]">
-                  <p className="font-bold">Bộ TI còn trong Kho khớp HSN {manualHsn}:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {setSuggestions.map(s => (
-                      <button key={`${s.ti}|${s.tu ?? ''}`} type="button"
-                        className="vl-btn vl-btn-sm vl-btn-outline-primary"
-                        onClick={() => applySet(s)}>
-                        TI {s.ti} ({s.tiFree} rảnh)
-                        {s.tu && <> × TU {s.tu} ({s.tuFree} rảnh)</>}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[11px] opacity-80">
-                    Bấm một bộ để thêm sẵn {TI_PER_SET} dòng TI rồi chọn Số No.
-                  </p>
-                </div>
-              ) : (
-                <div className="vl-alert vl-alert-light-warning text-[12px]">
-                  Kho chưa có bộ TI nào (đủ {TI_PER_SET} cái rảnh) khớp HSN {manualHsn}
-                  — khai thiết bị ở tab Kho vật tư trước.
-                </div>
-              )
-            )}
-
-            {/* ---------------- Bảng vật tư gắn ở điểm đo ---------------- */}
-            <div className="rounded-lg border border-[var(--border)] bg-subtle p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-dim">
-                  <Package className="h-4 w-4" /> Treo tháo — vật tư thực tế ở điểm đo
-                </p>
-                <span className="text-[11px] text-faint">
-                  {treoRows.length} thiết bị · bắt buộc ngày treo
-                  {treoRows.some(r => !r.active) &&
-                    ` · ${treoRows.filter(r => r.active).length} đang hoạt động`}
-                </span>
-              </div>
-              {/* Chú giải icon ở ô chọn Số No. */}
-              <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-faint">
-                {Object.values(SERIAL_STATE).map(s => (
-                  <span key={s.label} className="flex items-center gap-1">
-                    <s.icon className={`h-3.5 w-3.5 ${s.cls}`} /> {s.label}
-                  </span>
-                ))}
-              </div>
-
-              <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-surface">
-                {/* table-fixed + colgroup: khoá tỷ lệ cột, không để nội dung
-                    trong ô tự kéo co làm cột "Số No" teo lại. */}
-                <table className="w-full table-fixed text-sm">
-                  <colgroup>
-                    <col style={{ width: '17%' }} />
-                    <col style={{ width: '20%' }} />
-                    <col style={{ width: '13%' }} />
-                    <col style={{ width: '16%' }} />
-                    <col style={{ width: '16%' }} />
-                    <col style={{ width: '12%' }} />
-                    <col style={{ width: '6%' }} />
-                  </colgroup>
-                  <thead className="border-b border-[var(--border)] bg-subtle">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-bold text-soft">Thiết bị</th>
-                      <th className="px-4 py-3 text-left font-bold text-soft">Số No</th>
-                      <th className="px-4 py-3 text-left font-bold text-soft">Tỷ số</th>
-                      <th className="px-2 py-3 text-left font-bold text-soft">Ngày treo</th>
-                      <th className="px-2 py-3 text-left font-bold text-soft">Ngày tháo</th>
-                      <th className="px-2 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border)]">
-                    {treoRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-[13px] italic text-faint">
-                          Chưa treo thiết bị nào — treo thực tế thì bấm "Thêm dòng" và khai ngày treo.
-                        </td>
-                      </tr>
-                    ) : treoRows.map(r => (
-                      // Dòng đã ngưng hoạt động làm mờ đi — vẫn sửa được, chỉ
-                      // để mắt nhận ra ngay đâu là thiết bị đang treo.
-                      <tr key={r.key} className={r.active ? '' : 'opacity-60'}>
-                        <td className="p-2">
-                          {isNeedRow(r) ? (
-                            <span className="block p-2 text-soft">{r.type ? ASSET_LABEL[r.type as AssetType] : '—'}</span>
-                          ) : (
-                            <Select value={r.type} variant="bare"
-                              onChange={v => setRow(r.key, { type: v as AssetType })}
-                              options={Object.entries(ASSET_LABEL).map(([value, label]) => ({ value, label }))}
-                              placeholder="Chọn thiết bị" />
-                          )}
-                          {/* Dòng NHU CẦU chưa treo (Vật Tư gắn) — khai ngày treo là treo nó. */}
-                          {r.type && r.serial.trim() && !r.dateOn.trim() && (
-                            <span className="mt-1 inline-flex items-center rounded-full bg-subtle px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-faint"
-                              title="Nhóm Vật Tư gắn cho điểm đo — khai ngày treo khi đã treo thực tế">
-                              nhu cầu
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-2">
-                          {isNeedRow(r) ? (
-                            <span className="block p-2 font-mono font-semibold text-soft">{r.serial}</span>
-                          ) : (() => {
-                            const opts = serialOptions(r);
-                            return (<>
-                              <Select value={r.serial.trim()} variant="bare" searchable
-                                onChange={v => setRow(r.key, { serial: v })}
-                                options={opts} placeholder="Chọn từ Kho" />
-                              {opts.length === 0 && (
-                                <span className="mt-1 block text-[11px] leading-snug text-bad">
-                                  Kho chưa có {r.type ? ASSET_LABEL[r.type as AssetType] : 'vật tư'} nào
-                                  — khai ở tab Kho vật tư trước
-                                </span>
-                              )}
-                            </>);
-                          })()}
-                        </td>
-                        <td className="p-2">
-                          {/* Dòng MỚI: tỷ số theo thiết bị trong kho, chỉ đọc.
-                              Dòng đã lưu giữ ô nhập như cũ. */}
-                          {!r.id && HAS_RATIO.includes(r.type as AssetType) ? (
-                            <span className={`block p-2 font-mono ${r.ratio ? 'text-ink' : 'text-faint'}`}
-                              title="Tỷ số lấy theo thiết bị trong Kho — sửa ở tab Kho vật tư">
-                              {r.ratio || '—'}
-                            </span>
-                          ) : HAS_RATIO.includes(r.type as AssetType) ? (
-                            <CellInput value={r.ratio} mono
-                              placeholder={r.type === 'TU' ? '22000/100' : '200/5'}
-                              onChange={v => setRow(r.key, { ratio: v })} />
-                          ) : <span className="block p-2 text-faint">—</span>}
-                        </td>
-                        <td className="p-2">
-                          {/* usePortal: bảng nằm trong khung overflow-hidden,
-                              không có portal thì lịch bị cắt mất. */}
-                          {lockedOn(r) ? (
-                            // Thiết bị còn treo ở điểm đo cũ — khoá ngày treo.
-                            <span className="flex items-center gap-1 p-2 text-[11px] leading-snug text-faint"
-                              title={`Đang treo ở ${pointCodeOf(liveElsewhere(r.serial)?.point)} — `
-                                + 'khai ngày tháo ở điểm đo đó trước rồi mới khai ngày treo ở đây'}>
-                              <Zap className="h-3.5 w-3.5 shrink-0 text-red-500" />
-                              Chờ tháo ở {pointCodeOf(liveElsewhere(r.serial)?.point)}
-                            </span>
-                          ) : (
-                            <DatePicker value={r.dateOn} usePortal
-                              onChange={v => setRow(r.key, { dateOn: v })} />
-                          )}
-                        </td>
-                        <td className="p-2">
-                          <DatePicker value={r.dateOff} usePortal
-                            onChange={v => setRow(r.key, { dateOff: v })} />
-                        </td>
-                        <td className="p-2 text-center">
-                          {!isNeedRow(r) && (
-                            <button type="button" onClick={() => removeRow(r.key)} title="Bỏ dòng"
-                              className="p-1 text-faint transition-colors hover:text-red-500">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <button type="button" onClick={() => addRow()}
-                className="mt-3 flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline">
-                <Plus className="h-4 w-4" /> Thêm dòng
-              </button>
-            </div>
-
-
-            {/*
-              Đối chiếu hóa đơn — THAM CHIẾU, không tự điền gì cả.
-              Hóa đơn chuẩn cho HSN, nhưng không nói được ngày treo/tháo.
-            */}
-            {(invLoading || activeSeg || invoiceNotes.length > 0) && (
-              <div className="rounded-lg border border-dashed border-[var(--border)] bg-subtle/40 p-4 text-[12px] space-y-2">
-                <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-[10px] text-faint">
-                  <FileText className="h-3.5 w-3.5" />
-                  Đối chiếu hóa đơn
-                  {invLoading && <RefreshCw className="h-3 w-3 animate-spin" />}
-                </div>
-
-                {meterRefs.filter(m => m.mine).length ? (
-                  <div className="space-y-2">
-                    {meterRefs.filter(m => m.mine).map(({ row, mine }) => (
-                      <div key={row.key} className={`space-y-1 ${row.active ? '' : 'opacity-70'}`}>
-                        <p className="text-soft">
-                          Công tơ <span className="font-mono font-bold text-ink">{row.serial.trim()}</span>
-                          {!row.active && <span className="ml-1 text-[10px] font-bold uppercase text-faint">đã tháo</span>}
-                          {' '}· khách <span className="font-mono font-bold text-ink">{mine!.mkh}</span>
-                          {' '}· phát sinh tiền điện{' '}
-                          <b className="text-ink">{dmyRange(mine!.from, mine!.to)}</b>
-                          {' '}({mine!.count} HĐ){mine!.isCurrent && ' — còn phát sinh gần đây'}
-                          {mine!.hsn != null && <> · HSN hóa đơn <b className="text-ink">{mine!.hsn}</b></>}
-                        </p>
-                        {/*
-                          Nút điền nhanh cho trường hợp ngày treo/tháo trùng đúng
-                          mốc hóa đơn. Chỉ hiện khi ô đang khác giá trị đó — điền
-                          rồi thì nút biến mất, khỏi bấm nhầm lần nữa.
-                        */}
-                        <div className="flex flex-wrap gap-2">
-                          {row.dateOn !== mine!.from && (
-                            <button type="button" onClick={() => fillDate(row.key, 'dateOn', mine!.from)}
-                              className="vl-btn vl-btn-secondary vl-btn-sm">
-                              Ngày treo = {dmy(mine!.from)}
-                            </button>
-                          )}
-                          {row.dateOff !== mine!.to && (
-                            <button type="button" onClick={() => fillDate(row.key, 'dateOff', mine!.to)}
-                              className="vl-btn vl-btn-secondary vl-btn-sm">
-                              Ngày tháo = {dmy(mine!.to)}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : !invLoading && (
-                  <p className="italic text-faint">
-                    Chưa tra được hóa đơn nào cho các công tơ của điểm đo này.
-                  </p>
-                )}
-
-                {canFillTi && suggestedTi !== ratioRowOf('TI')?.ratio && (
-                  <button type="button" onClick={fillTiFromInvoice}
-                    className="vl-btn vl-btn-secondary vl-btn-sm">
-                    Điền tỷ số TI theo hóa đơn: {suggestedTi} (HSN {invoiceHsn})
-                  </button>
-                )}
-                {hasTi && invoiceHsn != null && tuRow && (
-                  <p className="text-faint">
-                    Có TU nên không suy ngược được tỷ số — nhập cả TI và TU sao cho
-                    tích hai tỷ số bằng <b className="text-ink">{invoiceHsn}</b>.
-                  </p>
-                )}
-
-                {invoiceNotes.length > 0 && (
-                  <div className="vl-alert vl-alert-light-warning text-[12px]">
-                    <b>Nhắc:</b> {invoiceNotes.join('; ')}. Vẫn lưu được.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Trạng thái do hệ thống suy — xem `lib/dm/pointStatus.ts`. */}
-            <Field label="Trạng thái (hệ thống tự gắn)"
-              hint="Chưa gắn công tơ, hoặc công tơ chưa khai ngày treo → Dự kiến · đã treo nhưng chưa có hóa đơn → Chưa vận hành · đã có hóa đơn → Đang vận hành · mọi vật tư đã ngưng → Đã tháo gỡ.">
-              <div className="rounded border border-dashed border-[var(--border)] bg-subtle px-4 py-3">
-                <StatusTag status={derivedStatus} />
-                {statusReason && (
-                  <div className="mt-2 text-[12px] text-muted">{statusReason}</div>
-                )}
-              </div>
-            </Field>
-
-            {/* Màu đỏ = thứ CHẶN lưu (đụng số chế tạo, thiếu/sai tỷ số). */}
-            {saveBlocks.length > 0 && (
-              <div className="vl-alert vl-alert-light-danger text-[12px]">
-                <b>Không lưu được:</b> {saveBlocks.join('; ')}.
-              </div>
-            )}
-
-            {assetWarnings.length > 0 && (
-              <div className="vl-alert vl-alert-light-warning text-[12px]">
-                <b>Nhắc:</b> {assetWarnings.join('; ')}. Vẫn lưu được — điểm đo khai dở
-                sẽ hiện nhãn thiếu vật tư.
-              </div>
-            )}
-
-            <Field label="Ghi chú">
-              <TextInput value={pForm.note} onChange={v => setPForm(f => ({ ...f, note: v }))} />
-            </Field>
-          </>
+          <PointForm {...pf} d={d} editingId={editingId} customerOpts={customerOpts}
+            stationOpts={stationOpts} pointCodeOf={pointCodeOf} />
         )}
       </FormModal>
 
