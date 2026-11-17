@@ -19,6 +19,7 @@ import { FormModal, Field, TextInput, INPUT_CLS } from '../dm/entryUi';
 import { toast } from '../../lib/toast';
 import { GROUP_LABEL, type UserGroup } from '../../lib/userGroup';
 import { AREAS } from '../../lib/pocketbase';
+import { today as localToday } from '../../lib/format';
 import {
   DESCRIPTION_MAX, STATUS_LABEL, currentUser, listTasks, createTask, updateTask, setStatus, setChecklist,
   deleteTask, listComments, addComment, recallComment, commentCounts, canEdit, canWork, isOverdue,
@@ -147,7 +148,7 @@ export default function WorkTasks() {
   };
 
   /** Nhóm theo hạn kiểu To Do; trong nhóm: Gấp trước, rồi hạn gần trước. */
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const byPriority = (a: WorkTask, b: WorkTask) =>
     Number(b.priority === 'high') - Number(a.priority === 'high') || (a.deadline || '9').localeCompare(b.deadline || '9');
   const pending = visible.filter(t => t.status !== 'done').sort(byPriority);

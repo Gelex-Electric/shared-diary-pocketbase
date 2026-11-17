@@ -16,6 +16,7 @@
  */
 import { pb, ID_TO_AREA } from './pocketbase';
 import { userGroupOf, GROUP_LABEL, type UserGroup } from './userGroup';
+import { today as localToday } from './format';
 
 export type TaskStatus = 'todo' | 'doing' | 'done';
 export type TaskPriority = 'normal' | 'high';
@@ -177,7 +178,7 @@ export const targetLabel = (t: Pick<WorkTask, 'assignee_name' | 'assignee_area' 
   [t.assignee_name, t.assignee_area ? `TVH ${t.assignee_area}` : t.assignee_group === 'van_hanh' ? 'Cả khối TVH' : GROUP_LABEL[t.assignee_group]]
     .filter(Boolean).join(' · ');
 
-export function isOverdue(t: WorkTask, today = new Date().toISOString().slice(0, 10)) {
+export function isOverdue(t: WorkTask, today = localToday()) {
   return t.status !== 'done' && !!t.deadline && t.deadline < today;
 }
 
