@@ -22,7 +22,7 @@ import {
   ymdOf, type AssetRow, type RowCtx,
 } from '../../../lib/dm/pointForm';
 import type { NeedRow } from '../PointNeedEditor';
-import type { CatTab } from '../CatalogEntry';
+import type { CatTab } from './constants';
 
 /** `code` cũng do hệ thống sinh; `customer` chỉ dùng khi là điểm đo phụ. */
 export const EMPTY_P = {
