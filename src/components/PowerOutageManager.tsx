@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
 import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
-import { generateOutageDocx } from '../lib/outageDocx';
+import { generateOutageDocx, defaultAreaText } from '../lib/outageDocx';
 import { loadLowNameMap, withLowNames } from '../lib/outageNames';
 import type { LowNameMap } from '../lib/outageNames';
 import { toast as notify } from '../lib/toast';
@@ -72,11 +72,13 @@ interface SlotForm {
   endTime: string;
   scope: string;
   appendixIndex: number;
+  /** Chữ cột Khu vực đã sửa. Rỗng = theo chữ mặc định của KCN đang chọn. */
+  areaText: string;
 }
 const emptySlot = (): SlotForm => ({
   startDate: todayStr(), startTime: '08:00',
   endDate: todayStr(),   endTime: '12:00',
-  scope: '', appendixIndex: 0,
+  scope: '', appendixIndex: 0, areaText: '',
 });
 
 /* ── appendix form ── */
@@ -311,6 +313,7 @@ export default function PowerOutageManager() {
         endDate: et.date,   endTime: et.time,
         scope: s.scope || '',
         appendixIndex: s.appendixIndex ?? 0,
+        areaText: s.areaText || '',
       };
     }));
     setAppendices((n.appendices || []).map(a => ({
@@ -348,6 +351,9 @@ export default function PowerOutageManager() {
         endTime:   joinDT(s.endDate, s.endTime),
         scope:     s.scope,
         appendixIndex: s.appendixIndex,
+        // Chỉ lưu khi khác chữ mặc định — để đổi KCN thì cột tự theo KCN mới.
+        ...(s.areaText.trim() && s.areaText.trim() !== defaultAreaText(area)
+          ? { areaText: s.areaText.trim() } : {}),
       }));
       const outageAppendices: OutageAppendix[] = appendices.map(a => ({
         customers: allCustomers.filter(c => a.selectedIds.includes(c.id)),
@@ -691,8 +697,12 @@ export default function PowerOutageManager() {
                               </div>
                             </div>
                           </td>
-                          <td className="border border-black px-2 py-3 text-center align-middle text-[12px] font-medium">
-                            {area || <span className="text-faint italic text-[11px]">—</span>}
+                          <td className="border border-black px-2 py-3 align-middle">
+                            {/* Sửa được (17/11/2026); xoá hết chữ = quay về chữ mặc định của KCN. */}
+                            <textarea value={s.areaText || defaultAreaText(area)}
+                              onChange={e => updateSlot(i, { areaText: e.target.value })}
+                              placeholder="Khu vực..." rows={4}
+                              className="w-full text-center text-[12px] font-medium bg-accent-soft/40 border border-dashed border-blue-200 rounded outline-none resize-none focus:border-blue-400 p-1.5 placeholder:text-faint placeholder:italic" />
                           </td>
                           <td className="border border-black px-2 py-3">
                             <div className="space-y-1.5">

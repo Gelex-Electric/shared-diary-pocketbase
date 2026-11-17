@@ -10,6 +10,21 @@ const AREA_TEMPLATE: Record<string, string> = {
   'KCN Số 3':          'PO.KCN-03.docx',
 };
 
+/**
+ * Chữ mặc định cột "Khu vực" của bảng khung giờ — đúng nguyên văn chữ từng in
+ * cố định trong mẫu Word trước khi mẫu đổi sang ô điền `{areaText}` (17/11/2026,
+ * user cho sửa cột này theo từng khung giờ).
+ */
+const AREA_TEXT: Record<string, string> = {
+  'KCN Tiền Hải':      'KCN Tiền Hải, xã Ái Quốc, tỉnh Hưng Yên',
+  'KCN Phong Điền':    'KCN Phong Điền – Viglacera, TP Huế',
+  'KCN Thuận Thành I': 'KCN Số Thuận Thành I, tỉnh Bắc Ninh',
+  'KCN Yên Mỹ':        'KCN Yên Mỹ, tỉnh Hưng Yên',
+  'KCN Số 3':          'KCN Số 3, tỉnh Hưng Yên',
+};
+
+export const defaultAreaText = (area: string) => AREA_TEXT[area] || area;
+
 const p2 = (n: number) => String(n).padStart(2, '0');
 const toUTC = (dt: string) => new Date(dt.includes('Z') ? dt : dt + 'Z');
 
@@ -60,6 +75,7 @@ export async function generateOutageDocx(n: PowerOutage): Promise<Blob> {
       startTime:   fmtMoment(s.startTime),
       endTime:     fmtMoment(s.endTime),
       scope:       s.scope || '',
+      areaText:    (s.areaText || '').trim() || defaultAreaText(n.area),
       appendixRef: `Phụ lục ${String((s.appendixIndex ?? 0) + 1).padStart(2, '0')}`,
     })),
     appendices: appendices.map((a, i) => ({
