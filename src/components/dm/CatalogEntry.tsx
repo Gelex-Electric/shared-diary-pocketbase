@@ -34,10 +34,10 @@ import type { CatalogData } from '../../lib/dm/repo';
 import { ASSET_LABEL, ROLE_LABEL } from '../../lib/dm/types';
 import { isHeadPoint, pointZoneId } from '../../lib/dm/pointScope';
 import type {
-  AssetStatus, AssetType, Customer, Line, Point, PointRole, Station,
+  AssetType, Customer, Line, Point, PointRole, Station,
   VoltageLevel, Zone,
 } from '../../lib/dm/types';
-import { connectionOfHsn, formatRatio, hsnFormula, parseRatio } from '../../lib/dm/hsn';
+import { connectionOfHsn, formatRatio, hsnFormula } from '../../lib/dm/hsn';
 import { deviceRatio, freeDevices, type SetOption } from '../../lib/dm/tutiPick';
 import { TI_PER_SET } from '../../lib/dm/pointStatus';
 import type { Scope } from '../../lib/scope';
@@ -52,6 +52,7 @@ import type { LowNameRow } from '../../lib/dm/lowName';
 import { bySerial, dmy, dmyRange, segmentOf, segmentsOf } from '../../lib/dm/lifecycle';
 import type { Segment } from '../../lib/dm/lifecycle';
 import { CUSTOM, checkPointForm, type MkhMeter } from '../../lib/dm/pointCheck';
+import { savePoint } from '../../lib/dm/pointSave';
 import { groupByZone, sortByCode, sortByMkh } from './groupByZone';
 import AssetLifecycle from './AssetLifecycle';
 import StockEntry from './StockEntry';
@@ -567,23 +568,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
     return opts;
   };
 
-  /**
-   * Ghi SỔ MƯỢN cho các dòng CHUYỂN về đây (luồng cấp vật tư đợt 2, 26/10/2026):
-   * điểm đo kia mất vật tư dự kiến nên phải được bù sau. Đổi chỗ thì hai bên
-   * đều nhận lại một thiết bị — không ai mất — nên không ghi.
-   */
-  const recordBorrows = async (toPoint: string) => {
-    for (const b of reclaim) {
-      if (b.swapTo || !b.asset.point || b.asset.point === toPoint) continue;
-      const dev = b.asset.device
-        || (d?.devices ?? []).find(x => x.serial.trim() === b.serial)?.id;
-      if (!dev) continue;
-      await borrows.create({
-        device: dev, from_point: b.asset.point, to_point: toPoint,
-        borrowed_at: new Date().toISOString().slice(0, 10), reason: 'Chuyển ở form điểm đo',
-      });
-    }
-  };
 
   /** Điểm đo chính trong cùng trạm — nguồn chọn cha cho điểm đo phụ. */
   const parentOpts = useMemo(
@@ -637,6 +621,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
         + ' — Nhóm Vật Tư sẽ thấy ở Gắn vật tư dự kiến');
     }
     if (parts.length) toast.info('Đối chiếu nhu cầu', parts.join('; ') + '.');
+  };
+
+  /**
+   * Lưu điểm đo + vật tư (`lib/dm/pointSave` — một bản cho cả điểm đầu nguồn lẫn
+   * điểm thường) rồi đối chiếu nhu cầu.
+   */
+  const saveCurrentPoint = async (body: Partial<Point>) => {
+    const id = await savePoint({
+      repo: { points, assets, devices, borrows }, d, editingId, body,
+      assetRows: pForm.assetRows, reclaim, today: new Date().toISOString().slice(0, 10),
+    });
+    await reportReconcile(id);
   };
 
   const persist = async (fn: () => Promise<unknown>, okMsg: string) => {
@@ -745,24 +741,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
         note: pForm.note.trim(),
         need: needFromRows(pForm.need),
       };
-      return void persist(async () => {
-        for (const b of reclaim) {
-          if (!b.swapTo) { await assets.remove(b.asset.id); continue; }
-          const dev = (d?.devices ?? []).find(x => x.serial.trim() === b.swapTo);
-          await assets.update(b.asset.id, {
-            serial: b.swapTo,
-            ...(dev ? {
-              device: dev.id, type: dev.type,
-              ratio_primary: dev.ratio_primary, ratio_secondary: dev.ratio_secondary,
-            } : {}),
-          });
-          if (dev) await devices.update(dev.id, { hold_point: b.asset.point ?? '' });
-        }
-        const rec = editingId ? await points.update(editingId, body) : await points.create(body);
-        await recordBorrows((rec as { id: string }).id);
-        await syncAssets((rec as { id: string }).id);
-        await reportReconcile((rec as { id: string }).id);
-      }, `Điểm đo đầu nguồn ${code}`);
+      return void persist(() => saveCurrentPoint(body), `Điểm đo đầu nguồn ${code}`);
     }
 
     if (modal === 'point') {
@@ -804,42 +783,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
         note: pForm.note.trim(),
         need: needFromRows(pForm.need),
       };
-      return void persist(async () => {
-        /*
-          ĐỔI CHỖ (hoặc chuyển) SỐ NO VỚI ĐIỂM ĐO DỰ KIẾN KIA — LÀM TRƯỚC.
-
-          Phải trước `syncAssets`: cặp `(serial, point)` là UNIQUE, để nguyên
-          bản ghi cũ thì PocketBase từ chối ngay khi ghi dòng mới ở đây.
-
-          Có số cũ để đưa lại ⇒ ĐỔI CHỖ: bên kia nhận số cũ của dòng này, kèm
-          đúng thiết bị tương ứng (loại và tỷ số nằm trên `dm_device`, không
-          phải trên lần lắp).
-          Không có ⇒ CHUYỂN: gỡ dòng bên kia, vì không còn gì để trả lại.
-        */
-        for (const b of reclaim) {
-          if (!b.swapTo) { await assets.remove(b.asset.id); continue; }
-          const dev = (d?.devices ?? []).find(x => x.serial.trim() === b.swapTo);
-          await assets.update(b.asset.id, {
-            serial: b.swapTo,
-            ...(dev ? {
-              device: dev.id, type: dev.type,
-              ratio_primary: dev.ratio_primary, ratio_secondary: dev.ratio_secondary,
-            } : {}),
-          });
-          // Giữ chỗ đi theo thiết bị: số cũ nay dành cho điểm đo bên kia.
-          if (dev) await devices.update(dev.id, { hold_point: b.asset.point ?? '' });
-        }
-
-        const rec = editingId
-          ? await points.update(editingId, body)
-          : await points.create(body);
-        // CHUYỂN (không phải đổi chỗ) = điểm đo kia mất vật tư ⇒ ghi sổ mượn.
-        await recordBorrows((rec as { id: string }).id);
-        // Vật tư lưu sau vì cần id điểm đo; lỗi ở đây sẽ báo nguyên văn từ PB
-        // (thường là trùng số No với vật tư đang gắn ở điểm đo khác).
-        await syncAssets((rec as { id: string }).id);
-        await reportReconcile((rec as { id: string }).id);
-      }, `Điểm đo ${body.code}`);
+      return void persist(() => saveCurrentPoint(body), `Điểm đo ${body.code}`);
     }
   };
 
@@ -1028,80 +972,6 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
     </div>
   );
 
-  /**
-   * Đồng bộ vật tư của một điểm đo theo những gì đang khai trên form.
-   * Khớp bản ghi cũ theo (loại, pha): còn số No thì cập nhật, bỏ trống thì gỡ
-   * bản ghi cũ đi — nhờ vậy sửa điểm đo không đẻ ra vật tư trùng.
-   */
-  const syncAssets = async (pointId: string) => {
-    const rows = pForm.assetRows.filter(r => r.type && r.serial.trim());
-    const keptIds = new Set(rows.map(r => r.id).filter(Boolean));
-
-    // Dòng bị xoá khỏi bảng → gỡ bản ghi tương ứng.
-    for (const old of d?.assets.filter(a => a.point === pointId) ?? []) {
-      if (keptIds.has(old.id)) continue;
-      await assets.remove(old.id);
-      /*
-        Gỡ luôn giữ chỗ nếu thiết bị đang dành cho chính điểm đo này. Bỏ sót
-        thì thiết bị quay về kho mà vẫn mang nhãn "đang giữ cho <điểm đo>" của
-        một dòng không còn tồn tại.
-      */
-      const dev = (d?.devices ?? []).find(x => x.serial.trim() === old.serial.trim());
-      if (dev?.hold_point === pointId) await devices.update(dev.id, { hold_point: '' });
-    }
-
-    for (const r of rows) {
-      const hasRatio = HAS_RATIO.includes(r.type as AssetType);
-      const { primary, secondary } = parseRatio(r.ratio);
-      const serial = r.serial.trim();
-
-      /*
-        MỖI SỐ NO PHẢI CÓ ĐÚNG MỘT THIẾT BỊ trong `dm_device`.
-
-        Có sẵn trong kho thì DÙNG LẠI bản ghi đó — đây là chỗ dễ đẻ dữ liệu rác
-        nhất: gõ lại số No ở form điểm đo mà tạo thiết bị thứ hai thì kho có hai
-        dòng cùng số, `serial` UNIQUE sẽ chặn và người dùng nhận một câu lỗi
-        không hiểu gì.
-
-        Chưa có trong kho thì DỪNG (user chốt 28/09/2026): vật tư phải khai ở
-        tab Kho vật tư trước. Trước đây chỗ này tạo thiết bị ngầm; `notInStock`
-        đã chặn ở form, ném lỗi ở đây là chốt chặn cuối để không bao giờ lặng lẽ
-        đẻ thiết bị mới nữa.
-      */
-      const dev = (d?.devices ?? []).find(x => x.serial.trim() === serial);
-      if (!dev) {
-        throw new Error(`Số No ${serial} chưa có trong Kho vật tư — khai thiết bị ở tab Kho vật tư trước.`);
-      }
-
-      /*
-        GIỮ CHỖ đồng bộ ngay: dòng chưa có ngày treo nghĩa là thiết bị mới chỉ
-        được dành cho điểm đo này, chưa lắp. Khai ngày treo thì bỏ giữ chỗ —
-        nó đã có chỗ thật rồi, để cả hai là hai thông tin đá nhau.
-
-        Trạng thái kho/đang treo KHÔNG ghi ở đây: `deriveDeviceStatus` tính lại
-        từ các lần lắp, nên tháo xuống là tự về kho, không cần thao tác nào.
-      */
-      const hold = r.dateOn.trim() ? '' : pointId;
-      if ((dev.hold_point ?? '') !== hold) await devices.update(dev.id, { hold_point: hold });
-
-      const body = {
-        serial,
-        type: r.type as AssetType,
-        device: dev.id,
-        point: pointId,
-        ratio_primary: hasRatio ? (primary ?? undefined) : undefined,
-        ratio_secondary: hasRatio ? (secondary ?? undefined) : undefined,
-        date_on: r.dateOn || '',
-        date_off: r.dateOff || '',
-        active: r.active,
-        // `status` là vòng đời trong kho, `active` là "đang đo ở điểm đo này":
-        // thiết bị tắt hoạt động coi như đã tháo khỏi điểm đo.
-        status: (r.active ? 'dang_treo' : 'thao_go') as AssetStatus,
-      };
-      if (r.id) await assets.update(r.id, body);
-      else await assets.create(body);
-    }
-  };
 
   /* ------------- thao tác trên bảng vật tư của form điểm đo ------------- */
 
