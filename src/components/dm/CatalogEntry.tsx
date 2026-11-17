@@ -63,7 +63,12 @@ import SupplyAllocate from './SupplyAllocate';
 import { TransferOwner } from './TransferOwner';
 import LineAssign from './LineAssign';
 import PointNeedEditor, { needFromRows, rowsFromNeed, type NeedRow } from './PointNeedEditor';
-import { liveFirst } from '../../lib/dm/supply';
+import { HAS_RATIO, liveFirst } from '../../lib/dm/supply';
+import {
+  addRow as addRowIn, applyRowRules as applyRowRulesIn, applySet as applySetIn,
+  deviceOf as deviceOfIn, hsnSig, liveElsewhere as liveElsewhereIn, lockedOn as lockedOnIn,
+  newRowKey, ymdOf, type AssetRow, type RowCtx,
+} from '../../lib/dm/pointForm';
 import { runReconcile } from '../../lib/dm/reconcileRun';
 import { ZoneTables } from './ZoneTables';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
@@ -165,54 +170,11 @@ const EMPTY_P = {
   need: [] as NeedRow[],
 };
 
-/**
- * Một dòng vật tư trong bảng của form điểm đo.
- * `id` có giá trị = bản ghi `dm_asset` đã tồn tại (đang sửa); rỗng = dòng mới.
- * `key` chỉ để React phân biệt dòng, không lưu xuống PB.
- */
-interface AssetRow {
-  key: string;
-  id?: string;
-  type: AssetType | '';
-  serial: string;
-  /** Gõ nguyên chuỗi `200/5`; tách ra 2 số khi lưu (`parseRatio`). */
-  ratio: string;
-  /** `YYYY-MM-DD`, khớp định dạng của `ui/DatePicker`. */
-  dateOn: string;
-  dateOff: string;
-  /** Đang đo ở điểm đo này hay không — thiết bị cũ đã thay vẫn giữ trong bảng. */
-  active: boolean;
-  /**
-   * Tỷ số MUỐN chọn — đặt khi bấm một bộ gợi ý theo HSN. Ô Số No của dòng mới
-   * chỉ lọc thiết bị đúng tỷ số này. Không lưu xuống PB.
-   */
-  want?: string;
-}
+/*
+  Dòng vật tư (`AssetRow`) và các luật sửa bảng vật tư nằm ở `lib/dm/pointForm.ts`
+  (tách 17/11/2026 để test được — `scripts/dm_test_point_form.ts`).
+*/
 
-let rowSeq = 0;
-const newRow = (type: AssetType | '' = ''): AssetRow =>
-  ({ key: `r${++rowSeq}`, type, serial: '', ratio: '', dateOn: '', dateOff: '', active: true });
-
-/** Loại có tỷ số biến đổi — chỉ 2 loại này mới hiện ô tỷ số. */
-const HAS_RATIO: AssetType[] = ['TI', 'TU'];
-
-/**
- * Loại chỉ được có ĐÚNG MỘT cái đang hoạt động ở mỗi điểm đo. Khai thêm cái
- * mới cùng loại thì cái cũ tự tắt hoạt động (thay thiết bị), không xoá đi để
- * còn giữ lịch sử treo/tháo.
- *
- * TI/TU không nằm ở đây: một bộ gồm 3 TI cùng hoạt động song song.
- */
-
-/** `"2026-02-07 00:00:00.000Z"` → `"2026-02-07"`. */
-const ymdOf = (v?: string) => (v ?? '').slice(0, 10);
-
-/**
- * "Đang hoạt động" KHÔNG còn là ô người dùng gạt (user chốt 25/08/2026): có
- * ngày tháo tức là đã tháo, chưa có tức là còn treo. Hai nguồn sự thật cho cùng
- * một việc chỉ đẻ ra mâu thuẫn — cảnh báo "đang hoạt động nhưng đã khai ngày
- * tháo" từng phải tồn tại chính vì thế.
- */
 /** Trạng thái thiết bị trong ô chọn Số No — icon thay cho nhãn dài (28/09/2026). */
 type SerialState = 'kho' | 'du_kien' | 'dang_treo';
 const SERIAL_STATE: Record<SerialState, { icon: typeof Package; cls: string; label: string }> = {
@@ -220,13 +182,6 @@ const SERIAL_STATE: Record<SerialState, { icon: typeof Package; cls: string; lab
   du_kien: { icon: UserCheck, cls: 'text-amber-500', label: 'Đã gắn khách hàng dự kiến' },
   dang_treo: { icon: Zap, cls: 'text-red-500', label: 'Đang treo, hoạt động' },
 };
-
-/** Chữ ký phần HSN + vật tư của form (bỏ `key`, `want` — chỉ là phụ trợ giao diện). */
-const hsnSig = (hsn: string, rows: AssetRow[]) =>
-  JSON.stringify([hsn.trim(), rows.map(({ key: _k, want: _w, ...rest }) => rest)]);
-
-const normalizeActive = (rows: AssetRow[]): AssetRow[] =>
-  rows.map(r => ({ ...r, active: !r.dateOff.trim() }));
 
 
 /** Giá trị đặc biệt của bộ chọn nhãn mục đích: cho gõ tay chuỗi bất kỳ. */
@@ -344,11 +299,10 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
   };
   const stationsOfZone = (id: string) => d?.stations.filter(s => s.zone === id).length ?? 0;
 
+  /** Dữ liệu mà luật bảng vật tư (`lib/dm/pointForm`) cần đọc. */
+  const rowCtx: RowCtx = { devices: d?.devices ?? [], assets: d?.assets ?? [], editingId };
   /** Thiết bị trong kho mang số No này — nguồn của loại và tỷ số. */
-  const deviceOf = (serial: string) => {
-    const sn = serial.trim();
-    return sn ? (d?.devices ?? []).find(x => x.serial.trim() === sn) : undefined;
-  };
+  const deviceOf = (serial: string) => deviceOfIn(rowCtx, serial);
   const pointsOfStation = (id: string) => d?.points.filter(p => p.station === id).length ?? 0;
   const pointsOfCustomer = (id: string) => d?.points.filter(p => p.customer === id).length ?? 0;
 
@@ -408,7 +362,7 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
     const rows: AssetRow[] = (d?.assets ?? [])
       .filter(a => a.point === p.id)
       .map(a => ({
-        key: `r${++rowSeq}`, id: a.id, type: a.type, serial: a.serial,
+        key: newRowKey(), id: a.id, type: a.type, serial: a.serial,
         ratio: formatRatio(a.ratio_primary, a.ratio_secondary),
         dateOn: (a.date_on ?? '').slice(0, 10),
         dateOff: (a.date_off ?? '').slice(0, 10),
@@ -1837,162 +1791,18 @@ export default function CatalogEntry({ scope: _scope = 'vanphong', tabs, initial
 
   /* ------------- thao tác trên bảng vật tư của form điểm đo ------------- */
 
-  /**
-   * Vật tư CÙNG SỐ NO đang hoạt động ở điểm đo KHÁC — dùng để suy ngày tháo.
-   *
-   * Một số chế tạo chỉ có thể đang đo ở đúng một chỗ. Nếu nó đang treo ở nơi
-   * khác mà giờ được khai vào điểm đo này, thì lần lắp ở đây phải đã KẾT THÚC
-   * đúng vào ngày nó được treo ở nơi kia (user chốt 25/08/2026).
-   */
-  const liveElsewhere = (serial: string) => {
-    const sn = serial.trim();
-    if (!sn) return undefined;
-    return (d?.assets ?? []).find(a =>
-      a.serial === sn && a.active && a.point && a.point !== editingId && a.date_on);
-  };
-
-  /**
-   * Dòng MỚI chọn thiết bị ĐANG TREO, HOẠT ĐỘNG ở điểm đo khác ⇒ KHÔNG được khai
-   * ngày treo cho tới khi điểm đo cũ khai ngày tháo (user chốt 28/09/2026).
-   * Chỉ được giữ ở dạng dự kiến. Dòng đã lưu không áp — đó là lịch sử cũ.
-   */
-  const lockedOn = (r: AssetRow) => !r.id && !!liveElsewhere(r.serial);
-
-  /**
-   * Sửa một dòng rồi áp các luật nghiệp vụ lên những dòng còn lại.
-   *
-   * 1. **Tỷ số dùng chung theo loại** — 3 TI của một bộ luôn cùng tỷ số, TU
-   *    cũng vậy. Nhập tỷ số cho một cái thì các dòng cùng loại CÒN TRỐNG tự
-   *    điền theo; dòng đã có tỷ số khác thì KHÔNG đè, chỉ cảnh báo lệch.
-   * 2. **Ngày treo lan cho cả bộ** — khai điểm đo lần đầu thì công tơ, 3 TI và
-   *    đo xa đều lên cùng một ngày. Chỉ điền vào dòng CÒN TRỐNG ngày treo, nên
-   *    vật tư lắp bổ sung sau này không bị đè.
-   * 3. **Vật tư mới thay vật tư cũ** — dòng cùng loại đang treo từ TRƯỚC ngày
-   *    treo của cái mới thì tự nhận ngày tháo = ngày treo của cái mới. Không
-   *    đụng dòng cùng ngày (cả bộ lắp một lượt) và không đè ngày tháo đã khai.
-   * 4. **Số No đang treo ở nơi khác** — điền sẵn ngày tháo = ngày treo bên đó.
-   *
-   * Cuối cùng CHUẨN HOÁ active = chưa có ngày tháo — xem ghi chú ở cột bảng.
-   */
-  const applyRowRules = (rows: AssetRow[], key: string, patch: Partial<AssetRow>): AssetRow[] => {
-    const next = rows.map(r => (r.key === key ? { ...r, ...patch } : r));
-    const me = next.find(r => r.key === key);
-    if (!me || !me.type) return normalizeActive(next);
-    const type = me.type as AssetType;
-
-    // Đổi loại sang TI/TU mà chưa có tỷ số → thừa hưởng tỷ số của bộ cùng loại.
-    let inherited = next;
-    if (patch.type !== undefined && HAS_RATIO.includes(type) && !me.ratio.trim()) {
-      const src = next.find(r => r.key !== key && r.type === type && r.ratio.trim());
-      if (src) inherited = next.map(r => (r.key === key ? { ...r, ratio: src.ratio } : r));
-    }
-
-    // Nhập tỷ số → lan sang các dòng cùng loại đang bỏ trống.
-    const spread = patch.ratio !== undefined && HAS_RATIO.includes(type) && patch.ratio.trim()
-      ? inherited.map(r =>
-          r.key !== key && r.type === type && !r.ratio.trim() ? { ...r, ratio: patch.ratio! } : r)
-      : inherited;
-
-    const on = me.dateOn.trim();
-
-    // Vừa khai ngày treo → lan cho các dòng chưa có ngày treo nào (lắp cùng đợt),
-    // rồi đóng các dòng cùng loại đang treo từ trước đó (thay thế vật tư).
-    let dated = spread;
-    if (patch.dateOn !== undefined && on) {
-      dated = spread.map(r => {
-        if (r.key === key) return r;
-        // Dòng trắng tinh thì bỏ qua; dòng đã bắt đầu khai (có loại hoặc có số No)
-        // thì coi là cùng đợt lắp.
-        if (!r.type && !r.serial.trim()) return r;
-        // Dòng mới mang thiết bị còn treo ở điểm đo khác: KHÔNG lan ngày treo —
-        // phải đợi điểm đo cũ khai ngày tháo (xem `lockedOn`).
-        if (lockedOn(r)) return r;
-        // (2) cả bộ lên cùng ngày
-        if (!r.dateOn.trim() && !r.dateOff.trim()) return { ...r, dateOn: on };
-        // (3) cái cũ cùng loại nhường chỗ cho cái mới
-        if (r.type === type && r.dateOn.trim() && r.dateOn.trim() < on && !r.dateOff.trim()) {
-          return { ...r, dateOff: on };
-        }
-        return r;
-      });
-    }
-
-    // (4) Số No này đang treo ở điểm đo khác ⇒ lần lắp ở đây đã kết thúc từ ngày
-    // nó sang bên kia. Chỉ điền khi ô ngày tháo còn trống.
-    // CHỈ cho dòng ĐÃ LƯU (ghi lại lịch sử). Dòng MỚI chọn thiết bị đang treo là
-    // lần lắp SẮP TỚI: để trống cả hai ngày, khoá ngày treo (28/09/2026).
-    const busy = me.id ? liveElsewhere(me.serial) : undefined;
-    const withOff = busy && !me.dateOff.trim()
-      ? dated.map(r => (r.key === key ? { ...r, dateOff: ymdOf(busy.date_on) } : r))
-      : dated;
-
-    /*
-      (5) SỐ NO CÓ SẴN TRONG KHO ⇒ LẤY LOẠI VÀ TỶ SỐ TỪ THIẾT BỊ.
-
-      Thiết bị đã khai một lần trong kho thì không việc gì phải gõ lại loại và
-      tỷ số — vừa mất công vừa là cơ hội gõ lệch với bản ghi gốc.
-
-      Dòng ĐÃ LƯU: chỉ điền vào ô CÒN TRỐNG — dữ liệu cũ giữ nguyên, chênh
-      lệch tỷ số đã có cảnh báo riêng lo.
-
-      Dòng MỚI (từ 28/09/2026 chỉ chọn được số No có trong kho): loại và tỷ số
-      LUÔN theo thiết bị. Tỷ số là thuộc tính của thiết bị (schema v13), ô tỷ
-      số của dòng mới chỉ đọc nên không có gì của người dùng để tôn trọng.
-    */
-    const fromStock = patch.serial !== undefined ? deviceOf(me.serial) : undefined;
-    const stockRatio = fromStock ? formatRatio(fromStock.ratio_primary, fromStock.ratio_secondary) : '';
-    const filled = fromStock
-      ? withOff.map(r => (r.key !== key ? r : r.id ? {
-        ...r,
-        type: r.type || fromStock.type,
-        ratio: r.ratio.trim() || stockRatio,
-      } : {
-        ...r,
-        type: fromStock.type,
-        ratio: HAS_RATIO.includes(fromStock.type) ? stockRatio : '',
-      }))
-      // Dòng mới đổi sang loại khác loại của số No đang chọn ⇒ bỏ số No đó.
-      : patch.type !== undefined && !me.id && me.serial.trim()
-          && deviceOf(me.serial) && deviceOf(me.serial)!.type !== type
-        ? withOff.map(r => (r.key === key ? { ...r, serial: '', ratio: '' } : r))
-        : withOff;
-
-    // Vừa chọn thiết bị đang treo nơi khác cho dòng mới ⇒ bỏ ngày treo đã gõ.
-    if (patch.serial !== undefined) {
-      const mine = filled.find(r => r.key === key);
-      if (mine && lockedOn(mine) && mine.dateOn) {
-        return normalizeActive(filled.map(r => (r.key === key ? { ...r, dateOn: '' } : r)));
-      }
-    }
-
-    return normalizeActive(filled);
-  };
+  /* Luật nằm ở `lib/dm/pointForm.ts` (thuần, có test) — đây chỉ nối với state của form. */
+  const liveElsewhere = (serial: string) => liveElsewhereIn(rowCtx, serial);
+  const lockedOn = (r: AssetRow) => lockedOnIn(rowCtx, r);
 
   const setRow = (key: string, patch: Partial<AssetRow>) =>
-    setPForm(f => ({ ...f, assetRows: applyRowRules(f.assetRows, key, patch) }));
+    setPForm(f => ({ ...f, assetRows: applyRowRulesIn(rowCtx, f.assetRows, key, patch) }));
 
-  /**
-   * Chọn một bộ gợi ý theo HSN ⇒ thêm sẵn `TI_PER_SET` dòng TI (+ 1 dòng TU
-   * nếu bộ có TU; cần thêm TU thì bấm "Thêm dòng"). Các dòng mang `want` để ô
-   * Số No chỉ lọc thiết bị đúng tỷ số; tỷ số thật vẫn lấy từ thiết bị khi chọn.
-   * Dòng trắng (chưa loại, chưa số No) có sẵn thì dọn đi cho gọn.
-   */
   const applySet = (s: SetOption) =>
-    setPForm(f => {
-      const mk = (type: AssetType, want: string): AssetRow => ({ ...newRow(type), want, ratio: want });
-      const rows = [
-        ...Array.from({ length: TI_PER_SET }, () => mk('TI', s.ti)),
-        ...(s.tu ? [mk('TU', s.tu)] : []),
-      ];
-      const kept = f.assetRows.filter(r => r.id || r.type || r.serial.trim());
-      return { ...f, assetRows: normalizeActive([...kept, ...rows]) };
-    });
+    setPForm(f => ({ ...f, assetRows: applySetIn(f.assetRows, s) }));
 
   const addRow = (type: AssetType | '' = '') =>
-    setPForm(f => {
-      const row = newRow(type);
-      return { ...f, assetRows: applyRowRules([...f.assetRows, row], row.key, { type }) };
-    });
+    setPForm(f => ({ ...f, assetRows: addRowIn(rowCtx, f.assetRows, type) }));
   const removeRow = (key: string) =>
     setPForm(f => ({ ...f, assetRows: f.assetRows.filter(r => r.key !== key) }));
 
