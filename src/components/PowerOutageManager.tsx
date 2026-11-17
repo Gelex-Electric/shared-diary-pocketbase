@@ -15,10 +15,9 @@ import { generateOutageDocx } from '../lib/outageDocx';
 import { loadLowNameMap, withLowNames } from '../lib/outageNames';
 import type { LowNameMap } from '../lib/outageNames';
 import { toast as notify } from '../lib/toast';
+import { pad2 as p2 } from '../lib/format';
+import { TOAST_TITLE } from '../lib/toast';
 
-const TOAST_TITLE: Record<ToastType, string> = {
-  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
-};
 
 const TYPE_LABEL: Record<PowerOutage['type'], string> = {
   emergency: 'Khẩn cấp',
@@ -26,7 +25,6 @@ const TYPE_LABEL: Record<PowerOutage['type'], string> = {
 };
 
 /* ── helpers ── */
-const p2 = (n: number) => String(n).padStart(2, '0');
 const todayStr = () => {
   const t = new Date();
   return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`;

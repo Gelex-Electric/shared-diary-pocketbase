@@ -39,11 +39,11 @@ import {
   loadThongSoIndex, loadThongSoDay, scaleRow, hsnOk, HSN_MISS_TEXT, type RawRow,
 } from '../lib/thongso';
 import { useHsnResolver } from '../lib/hsnResolver';
+import { pad2 as p2 } from '../lib/format';
 
 /* ================================================================
    HELPERS
 ================================================================ */
-const p2 = (n: number) => String(n).padStart(2, '0');
 
 const fmtDateKey = (d: Date) =>
   `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;

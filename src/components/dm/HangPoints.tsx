@@ -37,8 +37,8 @@ import { buildTerms, matchesTerms } from '../../lib/dm/search';
 import { runReconcile } from '../../lib/dm/reconcileRun';
 import { useScopeAreas, type Scope } from '../../lib/scope';
 import { ASSET_LABEL, type Asset, type AssetType, type Device, type Point } from '../../lib/dm/types';
+import { today } from '../../lib/format';
 
-const today = () => new Date().toISOString().slice(0, 10);
 const ymd = (v?: string) => (v ?? '').slice(0, 10);
 const isPlan = (a: Asset) => !ymd(a.date_on) && !ymd(a.date_off);
 

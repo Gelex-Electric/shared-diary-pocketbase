@@ -136,32 +136,6 @@ export function idleDays(row: StockRow, today: string): number {
 export const IDLE_WARN_DAYS = 90;
 
 /**
- * Tách danh sách số No người dùng dán vào ô nhập lô.
- *
- * Chấp nhận mọi kiểu ngắt mà bảng tính hay sinh ra: xuống dòng, tab, dấu phẩy,
- * chấm phẩy, khoảng trắng. Bỏ dấu nháy dẫn `'` — Excel hay thêm để giữ số dài
- * khỏi bị đổi sang dạng khoa học.
- *
- * Trả về danh sách đã BỎ TRÙNG, giữ nguyên thứ tự gõ, kèm số lần bị lặp để
- * giao diện nói rõ thay vì âm thầm nuốt.
- */
-export function parseSerialList(text: string): { serials: string[]; duplicated: string[] } {
-  const raw = (text ?? '')
-    .split(/[\s,;]+/)
-    .map(s => s.replace(/^'+/, '').trim())
-    .filter(Boolean);
-  const seen = new Set<string>();
-  const serials: string[] = [];
-  const duplicated: string[] = [];
-  for (const s of raw) {
-    if (seen.has(s)) { if (!duplicated.includes(s)) duplicated.push(s); continue; }
-    seen.add(s);
-    serials.push(s);
-  }
-  return { serials, duplicated };
-}
-
-/**
  * Đoán loại từ DẠNG SỐ — chỉ ở chỗ chắc chắn, và chỉ để GỢI Ý.
  *
  * - GP-03 mang IMEI: 15 chữ số bắt đầu `869`.

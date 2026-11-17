@@ -12,6 +12,7 @@
  */
 import { pb } from './pocketbase';
 import { num } from './invoices';
+import { pad2, dateOnly } from './format';
 
 /**
  * Bốn thành phần hiện trên bảng. Cột hai bảng chỉ số đã thống nhất (user chốt
@@ -56,8 +57,6 @@ export interface InvoiceIndexRow {
   merged: boolean;
 }
 
-const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
-const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /**
  * Khoá gộp của một kỳ hóa đơn, theo đúng thứ tự ưu tiên của màn Biên bản:
