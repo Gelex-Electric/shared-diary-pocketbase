@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, ID_TO_AREA } from '../lib/pocketbase';
-import { zones, customers } from '../lib/dm/repo';
+import { zones, customers, points } from '../lib/dm/repo';
+import { operatingCustomerIds } from '../lib/dm/pointStatus';
 import { PowerOutage, OutageCustomer, OutageSlot, OutageAppendix } from '../types';
 import {
   Plus, Trash2, Edit2, X,
@@ -11,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
 import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
-import { generateOutageDocx } from '../lib/outageDocx';
+import { generateOutageDocx, defaultAreaText } from '../lib/outageDocx';
 import { loadLowNameMap, withLowNames } from '../lib/outageNames';
 import type { LowNameMap } from '../lib/outageNames';
 import { toast as notify } from '../lib/toast';
@@ -69,11 +70,13 @@ interface SlotForm {
   endTime: string;
   scope: string;
   appendixIndex: number;
+  /** Chữ cột Khu vực đã sửa. Rỗng = theo chữ mặc định của KCN đang chọn. */
+  areaText: string;
 }
 const emptySlot = (): SlotForm => ({
   startDate: todayStr(), startTime: '08:00',
   endDate: todayStr(),   endTime: '12:00',
-  scope: '', appendixIndex: 0,
+  scope: '', appendixIndex: 0, areaText: '',
 });
 
 /* ── appendix form ── */
@@ -190,15 +193,21 @@ export default function PowerOutageManager() {
    * (vd KCNTH-019 bên HES là RICO, bên Danh mục là Thành An — 03/11/2026), ghép
    * tên theo mã thì RICO biến mất và văn bản in nhầm tên. User chốt: mọi thứ
    * theo Danh mục, HES chỉ để đối chiếu công tơ.
+   *
+   * CHỈ khách ĐANG VẬN HÀNH (user chốt 17/11/2026): có ≥1 điểm đo chính/phụ
+   * `active` — xem `operatingCustomerIds`. Khách đã tháo gỡ / chưa đóng điện
+   * không hiện để chọn mới; thông báo cũ đã chọn họ thì vẫn giữ (bản chụp
+   * `manualCustomers` khôi phục lúc mở sửa).
    */
   const loadCustomers = useCallback(async (a: string) => {
     if (!a) { setCustomerList([]); return; }
     setLoadingCustomers(true);
     try {
-      const [zs, cs] = await Promise.all([zones.list(), customers.list()]);
+      const [zs, cs, ps] = await Promise.all([zones.list(), customers.list(), points.list()]);
       const zoneIds = new Set(zs.filter(z => z.name === a).map(z => z.id));
+      const operating = operatingCustomerIds(ps);
       setCustomerList(
-        cs.filter(c => c.active !== false && c.zone && zoneIds.has(c.zone))
+        cs.filter(c => c.active !== false && c.zone && zoneIds.has(c.zone) && operating.has(c.id))
           .map(c => ({ id: c.mkh || c.id, MKH: c.mkh || '?', Name: (c.low_name || '').trim() || c.name || '?' }))
           .sort((x, y) => x.MKH.localeCompare(y.MKH)));
     } catch {
@@ -302,6 +311,7 @@ export default function PowerOutageManager() {
         endDate: et.date,   endTime: et.time,
         scope: s.scope || '',
         appendixIndex: s.appendixIndex ?? 0,
+        areaText: s.areaText || '',
       };
     }));
     setAppendices((n.appendices || []).map(a => ({
@@ -339,6 +349,9 @@ export default function PowerOutageManager() {
         endTime:   joinDT(s.endDate, s.endTime),
         scope:     s.scope,
         appendixIndex: s.appendixIndex,
+        // Chỉ lưu khi khác chữ mặc định — để đổi KCN thì cột tự theo KCN mới.
+        ...(s.areaText.trim() && s.areaText.trim() !== defaultAreaText(area)
+          ? { areaText: s.areaText.trim() } : {}),
       }));
       const outageAppendices: OutageAppendix[] = appendices.map(a => ({
         customers: allCustomers.filter(c => a.selectedIds.includes(c.id)),
@@ -682,8 +695,12 @@ export default function PowerOutageManager() {
                               </div>
                             </div>
                           </td>
-                          <td className="border border-black px-2 py-3 text-center align-middle text-[12px] font-medium">
-                            {area || <span className="text-faint italic text-[11px]">—</span>}
+                          <td className="border border-black px-2 py-3 align-middle">
+                            {/* Sửa được (17/11/2026); xoá hết chữ = quay về chữ mặc định của KCN. */}
+                            <textarea value={s.areaText || defaultAreaText(area)}
+                              onChange={e => updateSlot(i, { areaText: e.target.value })}
+                              placeholder="Khu vực..." rows={4}
+                              className="w-full text-center text-[12px] font-medium bg-accent-soft/40 border border-dashed border-blue-200 rounded outline-none resize-none focus:border-blue-400 p-1.5 placeholder:text-faint placeholder:italic" />
                           </td>
                           <td className="border border-black px-2 py-3">
                             <div className="space-y-1.5">

@@ -115,6 +115,8 @@ export interface OutageSlot {
   endTime: string;
   scope: string;
   appendixIndex: number;  // index vào appendices[]
+  /** Chữ cột "Khu vực" trong văn bản (17/11/2026). Không có = chữ mặc định của KCN (`defaultAreaText`). */
+  areaText?: string;
 }
 
 export interface OutageAppendix {
