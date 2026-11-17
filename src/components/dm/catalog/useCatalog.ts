@@ -12,33 +12,30 @@ import { estimateLossParams } from '@/scripts/lib/lossParams.mjs';
 import { assets, borrows, customers, devices, isAbortError, lines, loadCatalog, pbErrorMessage, points, stations, zones } from '../../../lib/dm/repo';
 import type { CatalogData } from '../../../lib/dm/repo';
 import { ASSET_LABEL } from '../../../lib/dm/types';
-import { isHeadPoint, pointZoneId } from '../../../lib/dm/pointScope';
+import { isHeadPoint } from '../../../lib/dm/pointScope';
 import type {
   Customer, Line, Point, PointRole, Station,
   VoltageLevel, Zone,
 } from '../../../lib/dm/types';
 import { connectionOfHsn, formatRatio } from '../../../lib/dm/hsn';
 import type { Scope } from '../../../lib/scope';
-import { loadCustomerFacts } from '../../../lib/dm/invoiceRepo';
-import { isEmptyPlan, latestByMkh, planCustomerSync } from '../../../lib/dm/customerSync';
-import { autoFillable, checkLowName, planLowNameFix, toLowName } from '../../../lib/dm/lowName';
-import type { LowNameRow } from '../../../lib/dm/lowName';
+import { checkLowName, toLowName } from '../../../lib/dm/lowName';
 import { CUSTOM } from '../../../lib/dm/pointCheck';
 import { savePoint } from '../../../lib/dm/pointSave';
 import { EMPTY_P, usePointForm } from './usePointForm';
-import { groupByZone, sortByCode, sortByMkh } from '../groupByZone';
 import { needFromRows, rowsFromNeed } from '../PointNeedEditor';
 import {
   hsnSig,
   newRowKey, type AssetRow,
 } from '../../../lib/dm/pointForm';
 import { runReconcile } from '../../../lib/dm/reconcileRun';
-import { buildTerms, matchesTerms } from '../../../lib/dm/search';
 import {
   SHORT_NAME_HINT, SUB_PURPOSES, buildStationCode, isValidShortName,
   missingStationCodeParts, normalizeShortName,
 } from '../../../lib/dm/naming';
 import { CatTab, TABS, HEAD, EMPTY_Z, EMPTY_L, EMPTY_S, EMPTY_C, toNum, str } from './constants';
+import { useCustomerTools } from './useCustomerTools';
+import { useCatalogGroups } from './useCatalogGroups';
 
 export function useCatalog({ scope: _scope = 'vanphong', tabs, initialTab }: {
   scope?: Scope;
@@ -460,150 +457,10 @@ export function useCatalog({ scope: _scope = 'vanphong', tabs, initialTab }: {
     }
   };
 
-  /* ---------------- Đồng bộ khách hàng từ hóa đơn ---------------- */
-  /**
-   * `MKHang` là khoá không đổi, còn tên/địa chỉ khách hàng thì đổi theo thời
-   * gian ⇒ lấy theo hóa đơn có ngày chốt mới nhất.
-   *
-   * Ghi thẳng vào dữ liệu thật nên: xem trước → hỏi → mới ghi; chỉ tạo và cập
-   * nhật, KHÔNG BAO GIỜ xoá; chạy lại không nhân bản.
-   */
-  const [syncing, setSyncing] = useState(false);
-
-  /* ---------- Soát tên viết thường (`low_name`) ----------
-   *
-   * `low_name` là cột LƯU SẴN bản viết thường của `name` (PocketBase không có
-   * `lower()` trong filter). Lưu sẵn thì lệch được: sửa `name` ở nơi khác, gõ
-   * tay thiếu chữ, hoặc bản ghi cũ có trước khi cột ra đời.
-   *
-   * `null` = chưa soát lần nào; `[]` = đã soát và không có gì lệch.
-   */
-  const [lowNameRows, setLowNameRows] = useState<LowNameRow[] | null>(null);
-  const [lowNameOpen, setLowNameOpen] = useState(false);
-  const [fixingLowName, setFixingLowName] = useState(false);
-
-  const auditLowName = () => {
-    if (!d) return;
-    const rows = planLowNameFix(d.customers);
-    if (!rows.length) {
-      toast.success('Khớp hết',
-        `Đã soát ${d.customers.length} khách hàng — tên viết thường khớp đủ chữ với tên gốc.`);
-      return;
-    }
-    setLowNameRows(rows);
-    setLowNameOpen(true);
-  };
-
-  /**
-   * CHỈ điền các ô đang TRỐNG, bằng tên gốc hạ chữ hoa.
-   *
-   * KHÔNG ghi đè ô đã có: `low_name` do người dùng soạn (danh từ riêng giữ hoa),
-   * hạ hoa tất cả là phá dữ liệu — đã suýt xảy ra ngày 15/09/2026 khi 88/101 bản
-   * ghi bị luật cũ coi là "lệch". Các dòng sai CHỮ thì phải người đọc quyết bên
-   * nào đúng, máy không tự sửa được.
-   *
-   * Ghi thẳng vào dữ liệu THẬT (staging dùng chung PocketBase với production)
-   * ⇒ đã xem trước ở bảng, còn hỏi thêm một lần nữa. Chỉ `update`, không xóa.
-   */
-  const fixAllLowName = async () => {
-    const rows = autoFillable(lowNameRows ?? []);
-    if (!rows.length) return;
-
-    const ok = await confirm({
-      title: `Sửa tên viết thường cho ${rows.length} khách hàng?`,
-      message: `Ghi cột "Đề nghị" vào ${rows.length} bản ghi: lấy ký tự của tên gốc, `
-        + `giữ kiểu viết hoa đang có. Không đụng tên gốc, không xóa bản ghi nào. `
-        + `Ghi thẳng vào dữ liệu thật.`,
-      confirmLabel: 'Sửa', variant: 'warning',
-    });
-    if (!ok) return;
-
-    setFixingLowName(true);
-    let done = 0;
-    try {
-      for (const r of rows) {
-        await customers.update(r.id, { low_name: r.expected });
-        done++;
-      }
-      setLowNameOpen(false);
-      setLowNameRows(null);
-      toast.success('Đã sửa', `Cập nhật tên viết thường cho ${done} khách hàng.`);
-      await load();
-    } catch (err) {
-      // Dừng giữa chừng thì nói rõ đã ghi được bao nhiêu — bấm soát lại là ra
-      // phần còn lại, không sợ ghi trùng.
-      toast.error(`Dừng sau ${done}/${rows.length} bản ghi`, pbErrorMessage(err));
-      await load();
-    } finally {
-      setFixingLowName(false);
-    }
-  };
-
-  const syncCustomers = async () => {
-    if (!d) return;
-    setSyncing(true);
-    try {
-      const plan = planCustomerSync(latestByMkh(await loadCustomerFacts()), d.zones, d.customers);
-
-      if (isEmptyPlan(plan)) {
-        toast.info('Không có gì thay đổi', 'Danh mục khách hàng đã khớp hóa đơn.');
-        return;
-      }
-
-      const lines = [
-        plan.zonesToCreate.length && `• Tạo ${plan.zonesToCreate.length} KCN: ${plan.zonesToCreate.map(z => z.code).join(', ')}`,
-        plan.customersToCreate.length && `• Tạo ${plan.customersToCreate.length} khách hàng mới`,
-        plan.customersToUpdate.length && `• Cập nhật ${plan.customersToUpdate.length} khách hàng (tên / địa chỉ / KCN)`,
-        plan.unknownZoneCodes.length && `• Bỏ qua mã KCN lạ: ${plan.unknownZoneCodes.join(', ')}`,
-      ].filter(Boolean).join('\n');
-
-      const ok = await confirm({
-        title: 'Đồng bộ khách hàng từ hóa đơn?',
-        message: `${lines}\n\nKhông xóa bản ghi nào, không đụng tên tắt đã khai. `
-          + `Ghi thẳng vào dữ liệu thật.`,
-        confirmLabel: 'Đồng bộ', variant: 'warning',
-      });
-      if (!ok) return;
-
-      // Tạo KCN trước để còn lấy id gắn cho khách hàng.
-      const zoneIdByCode = new Map(d.zones.map(z => [z.code, z.id]));
-      for (const z of plan.zonesToCreate) {
-        const rec = await zones.create({ code: z.code, name: z.name, active: true });
-        zoneIdByCode.set(z.code, (rec as unknown as Zone).id);
-      }
-
-      for (const c of plan.customersToCreate) {
-        await customers.create({
-          mkh: c.mkh, name: c.name, address: c.address,
-          zone: zoneIdByCode.get(c.zoneCode) || undefined, active: true,
-        });
-      }
-
-      for (const u of plan.customersToUpdate) {
-        const body: Partial<Customer> = {};
-        for (const ch of u.changes) {
-          if (ch.field === 'name') body.name = ch.to;
-          if (ch.field === 'address') body.address = ch.to;
-          if (ch.field === 'zone') body.zone = zoneIdByCode.get(ch.to) || undefined;
-        }
-        await customers.update(u.id, body);
-      }
-
-      toast.success('Đã đồng bộ',
-        `${plan.zonesToCreate.length} KCN, ${plan.customersToCreate.length} khách mới, `
-        + `${plan.customersToUpdate.length} khách cập nhật.`);
-      if (plan.customersToCreate.length) {
-        toast.warning('Chưa có tên tắt',
-          `${plan.customersToCreate.length} khách hàng mới chưa có tên tắt — `
-          + 'phải khai thì mới sinh được mã trạm.');
-      }
-      await load();
-    } catch (e) {
-      toast.error('Đồng bộ thất bại', pbErrorMessage(e));
-    } finally {
-      setSyncing(false);
-    }
-  };
+  /* Đồng bộ khách hàng từ hóa đơn + soát tên viết thường (`low_name`) → `useCustomerTools.ts`. */
+  const {
+    auditLowName, fixAllLowName, syncCustomers, syncing, setSyncing, lowNameRows, setLowNameRows, lowNameOpen, setLowNameOpen, fixingLowName, setFixingLowName,
+  } = useCustomerTools({ d, load, confirm });
 
   const del = async (label: string, fn: () => Promise<unknown>, warn?: string) => {
     const ok = await confirm({
@@ -633,186 +490,13 @@ export function useCatalog({ scope: _scope = 'vanphong', tabs, initialTab }: {
     : stationCodeOf(p.station);
   const childrenOf = (id: string) => d?.points.filter(p => p.parent_point === id).length ?? 0;
 
-  /* ---------------------------------------------------------------------
-   * Ba bảng Trạm / Khách hàng / Điểm đo đều: xếp theo MKH → gom theo KCN.
-   * Mỗi KCN một dòng tiêu đề màu, giống bảng lấy chỉ số HES.
-   * ------------------------------------------------------------------- */
+  /* Gom nhóm theo KCN, lọc KCN và tìm kiếm cho 5 bảng của màn Danh mục (+ ô chọn lọc KCN). → `useCatalogGroups.ts`. */
+  const {
+    zoneRows, lineGroups, stationGroups, customerGroups, pointGroups, NO_ZONE, byFilterZone, terms, customerName, bySearch, pointGroupsShown, zoneRowsShown, lineGroupsShown, stationGroupsShown, customerGroupsShown, emptyText, zoneFilterOpts,
+  } = useCatalogGroups({
+    d, search, filterZone, tab, zoneName, mkhOf, customerMkh, stationCodeOf,
+  });
 
-
-  /** KCN xếp theo mã, để bảng KCN cũng có thứ tự ổn định. */
-  const zoneRows = useMemo(
-    () => [...(d?.zones ?? [])].sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true })),
-    [d]);
-
-  /* Lộ xếp theo MÃ, không theo MKH — lộ không có khách hàng. */
-  const lineGroups = useMemo(
-    () => groupByZone(sortByCode(d?.lines ?? [], l => l.code), l => l.zone, d?.zones ?? []),
-    [d]);
-
-  const stationGroups = useMemo(
-    () => groupByZone(sortByMkh(d?.stations ?? [], s => mkhOf(s.customer)), s => s.zone, d?.zones ?? []),
-    [d]);
-
-  const customerGroups = useMemo(
-    () => groupByZone(sortByMkh(d?.customers ?? [], c => c.mkh), c => c.zone, d?.zones ?? []),
-    [d]);
-
-  /**
-   * Điểm đo giữ nguyên phân cấp: mỗi điểm chính kéo theo đàn điểm phụ của nó
-   * (thụt lề). Vì vậy phải sắp xếp theo CỤM — xếp các điểm chính theo MÃ ĐIỂM ĐO
-   * rồi mới trải phẳng, chứ không xếp từng dòng, kẻo điểm phụ bị tách khỏi cha.
-   *
-   * Điểm phụ mất cha, hoặc chưa gán cha, thành cụm một dòng xếp cuối để không
-   * biến mất khỏi danh sách.
-   */
-  const pointGroups = useMemo(() => {
-    const all = d?.points ?? [];
-    /** Mã để xếp: điểm đo cũ chưa có `code` thì lấy tạm `line_name` bên HES. */
-    const codeOfPoint = (p: Point) => p.code || p.line_name || '';
-    const placed = new Set<string>();
-    const clusters: { head: Point; rows: { point: Point; isChild: boolean }[] }[] = [];
-
-    // Điểm đo chính xếp theo mã điểm đo (user chốt 22/08/2026) — cột đầu của
-    // bảng chính là cột này, xếp theo nó thì mắt dò xuôi được.
-    const mains = sortByCode(all.filter(x => x.role === 'chinh'), codeOfPoint);
-
-    for (const p of mains) {
-      const rows = [{ point: p, isChild: false }];
-      placed.add(p.id);
-      // Điểm phụ trong cùng cụm cũng xếp theo mã của chính nó.
-      for (const child of sortByCode(all.filter(x => x.parent_point === p.id), codeOfPoint)) {
-        rows.push({ point: child, isChild: true });
-        placed.add(child.id);
-      }
-      clusters.push({ head: p, rows });
-    }
-    for (const p of sortByCode(all.filter(x => !placed.has(x.id)), codeOfPoint)) {
-      clusters.push({ head: p, rows: [{ point: p, isChild: false }] });
-    }
-
-    // Cụm giữ nguyên thứ tự đã xếp ở trên; `sortByCode` ổn định nên không đảo lại.
-    const sorted = sortByCode(clusters, c => codeOfPoint(c.head));
-    // KCN của cụm lấy theo trạm của điểm chính (điểm đo không giữ KCN riêng).
-    const zoneOfCluster = (c: (typeof clusters)[number]) =>
-      d ? pointZoneId(c.head, d.stations, d.lines) : undefined;
-
-    return groupByZone(sorted, zoneOfCluster, d?.zones ?? [])
-      .map(g => ({ zone: g.zone, rows: g.rows.flatMap(c => c.rows) }));
-  }, [d]);
-
-  /**
-   * Bộ lọc KCN: giữ nguyên cách gom nhóm, chỉ bỏ bớt nhóm không được chọn. Nhờ
-   * vậy dòng tiêu đề nhóm và số đếm vẫn đúng khi lọc.
-   */
-  const NO_ZONE = '__no_zone';
-  const byFilterZone = <T,>(groups: { zone: Zone | null; rows: T[] }[]) =>
-    filterZone
-      ? groups.filter(g => (filterZone === NO_ZONE ? g.zone === null : g.zone?.id === filterZone))
-      : groups;
-
-  /* ------------------------- Lọc theo tìm kiếm ------------------------- */
-  const terms = useMemo(() => buildTerms(search), [search]);
-
-  /** Tên khách hàng — tìm theo tên công ty chứ không chỉ mã. */
-  const customerName = (id?: string) => d?.customers.find(c => c.id === id)?.name;
-
-  /**
-   * Lọc trong TỪNG nhóm KCN rồi bỏ nhóm rỗng: giữ được thẻ KCN và số đếm trên
-   * đầu thẻ đúng với những gì đang hiện, thay vì đếm toàn bộ danh mục.
-   */
-  const bySearch = <T,>(
-    groups: { zone: Zone | null; rows: T[] }[],
-    textOf: (row: T) => (string | number | null | undefined)[],
-  ) => terms.length
-    ? groups
-      .map(g => ({ ...g, rows: g.rows.filter(r => matchesTerms(textOf(r), terms)) }))
-      .filter(g => g.rows.length)
-    : groups;
-
-  /**
-   * Điểm đo lọc riêng: bảng này THỤT LỀ điểm phụ dưới điểm chính, nên cắt rời
-   * một dòng khỏi cụm là mất luôn ngữ cảnh. Vì vậy giữ cả cụm quanh dòng khớp:
-   * điểm chính khớp thì kéo theo đàn con; điểm phụ khớp thì kéo theo cha.
-   */
-  const pointGroupsShown = useMemo(() => {
-    const groups = byFilterZone(pointGroups);
-    if (!terms.length) return groups;
-
-    return groups
-      .map(g => {
-        const hit = new Set(g.rows
-          .filter(r => matchesTerms([
-            r.point.code, r.point.line_name, r.point.sub_label, r.point.hsn,
-            stationCodeOf(r.point.station), customerMkh(r.point.customer),
-            customerName(r.point.customer),
-          ], terms))
-          .map(r => r.point.id));
-
-        const kept = g.rows.filter(r =>
-          hit.has(r.point.id)
-          // cha của một điểm phụ đang khớp
-          || g.rows.some(x => hit.has(x.point.id) && x.point.parent_point === r.point.id)
-          // con của một điểm chính đang khớp
-          || (r.point.parent_point ? hit.has(r.point.parent_point) : false));
-
-        return { ...g, rows: kept };
-      })
-      .filter(g => g.rows.length);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pointGroups, filterZone, terms, d]);
-
-  const zoneRowsShown = useMemo(
-    () => zoneRows.filter(z => matchesTerms([z.code, z.name, z.address], terms)),
-    [zoneRows, terms]);
-
-  const lineGroupsShown = useMemo(
-    () => bySearch(byFilterZone(lineGroups), l => [l.code, l.name, zoneName(l.zone)]),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lineGroups, filterZone, terms, d]);
-
-  const stationGroupsShown = useMemo(
-    () => bySearch(byFilterZone(stationGroups), s => [
-      s.code, s.sdm_kva, customerMkh(s.customer), customerName(s.customer), zoneName(s.zone),
-    ]),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stationGroups, filterZone, terms, d]);
-
-  const customerGroupsShown = useMemo(
-    () => bySearch(byFilterZone(customerGroups), c => [
-      c.mkh, c.name, c.short_name, c.address, zoneName(c.zone),
-    ]),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [customerGroups, filterZone, terms, d]);
-
-  /**
-   * Câu báo bảng rỗng: phải phân biệt "lọc ra không có gì" với "chưa khai gì
-   * cả" — không thì người dùng tưởng mất dữ liệu.
-   */
-  const emptyText = (unit: string, none: string) =>
-    terms.length ? `Không có ${unit} nào khớp "${search.trim()}".`
-      : filterZone ? `Không có ${unit} nào trong KCN đang lọc.`
-        : none;
-
-  /**
-   * Liệt kê ĐỦ các KCN kèm số bản ghi ở tab hiện tại, kể cả KCN đang có 0 bản
-   * ghi. Nếu chỉ liệt kê KCN có dữ liệu thì đổi tab xong lựa chọn cũ biến mất
-   * khỏi danh sách: ô hiện "Tất cả KCN" trong khi bộ lọc vẫn đang chạy.
-   */
-  const zoneFilterOpts = useMemo(() => {
-    const groups = tab === 'station' ? stationGroups
-      : tab === 'customer' ? customerGroups
-        : tab === 'point' ? pointGroups : [];
-    const countOf = (id: string | null) =>
-      groups.find(g => (g.zone?.id ?? null) === id)?.rows.length ?? 0;
-    const orphans = countOf(null);
-
-    return [
-      { value: '', label: `Tất cả KCN — ${groups.reduce((n, g) => n + g.rows.length, 0)}` },
-      ...zoneRows.map(z => ({ value: z.id, label: `${z.name} (${z.code}) — ${countOf(z.id)}` })),
-      ...(orphans ? [{ value: NO_ZONE, label: `Chưa gắn KCN — ${orphans}` }] : []),
-    ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, zoneRows, stationGroups, customerGroups, pointGroups]);
   /**
    * Tab `lifecycle` không có mục trong `HEAD` (nó chỉ tra cứu, không khai báo),
    * mà dòng này chạy ở MỌI lần render — lấy thẳng `HEAD[tab]` là `undefined` rồi
