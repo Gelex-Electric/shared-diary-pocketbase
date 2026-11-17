@@ -141,3 +141,22 @@ export function missingRemote<T extends AssetCountRow>(rows: T[]): RemoteType[] 
   const live = (t: RemoteType) => rows.some(r => r.type === t && r.active && hasDateOn(r));
   return REMOTE_TYPES.filter(t => !live(t));
 }
+
+/**
+ * Khách hàng ĐANG VẬN HÀNH = có ít nhất một điểm đo chính/phụ ở trạng thái
+ * `active` (user chốt 17/11/2026, màn Thông báo ngừng cấp điện). Khách chỉ có
+ * điểm đo dự kiến / chưa vận hành / đã tháo gỡ, hoặc chưa có điểm đo nào, KHÔNG
+ * tính. Điểm đầu nguồn đo tổng lộ, không thuộc khách nào nên bỏ qua.
+ *
+ * `status` đọc từ bản ghi `dm_point` — cron `dm_sync_point_status.mjs` tính lại
+ * hằng đêm theo `derivePointStatus`, nên không phải suy lại ở đây.
+ */
+export function operatingCustomerIds(
+  points: Iterable<{ customer?: string; role?: string; status?: PointStatus }>,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const p of points) {
+    if (p.customer && p.role !== 'dau_nguon' && p.status === 'active') ids.add(p.customer);
+  }
+  return ids;
+}

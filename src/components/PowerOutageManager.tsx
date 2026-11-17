@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pb, AREAS, ID_TO_AREA } from '../lib/pocketbase';
-import { zones, customers } from '../lib/dm/repo';
+import { zones, customers, points } from '../lib/dm/repo';
+import { operatingCustomerIds } from '../lib/dm/pointStatus';
 import { PowerOutage, OutageCustomer, OutageSlot, OutageAppendix } from '../types';
 import {
   Plus, Trash2, Edit2, X,
@@ -192,15 +193,21 @@ export default function PowerOutageManager() {
    * (vd KCNTH-019 bên HES là RICO, bên Danh mục là Thành An — 03/11/2026), ghép
    * tên theo mã thì RICO biến mất và văn bản in nhầm tên. User chốt: mọi thứ
    * theo Danh mục, HES chỉ để đối chiếu công tơ.
+   *
+   * CHỈ khách ĐANG VẬN HÀNH (user chốt 17/11/2026): có ≥1 điểm đo chính/phụ
+   * `active` — xem `operatingCustomerIds`. Khách đã tháo gỡ / chưa đóng điện
+   * không hiện để chọn mới; thông báo cũ đã chọn họ thì vẫn giữ (bản chụp
+   * `manualCustomers` khôi phục lúc mở sửa).
    */
   const loadCustomers = useCallback(async (a: string) => {
     if (!a) { setCustomerList([]); return; }
     setLoadingCustomers(true);
     try {
-      const [zs, cs] = await Promise.all([zones.list(), customers.list()]);
+      const [zs, cs, ps] = await Promise.all([zones.list(), customers.list(), points.list()]);
       const zoneIds = new Set(zs.filter(z => z.name === a).map(z => z.id));
+      const operating = operatingCustomerIds(ps);
       setCustomerList(
-        cs.filter(c => c.active !== false && c.zone && zoneIds.has(c.zone))
+        cs.filter(c => c.active !== false && c.zone && zoneIds.has(c.zone) && operating.has(c.id))
           .map(c => ({ id: c.mkh || c.id, MKH: c.mkh || '?', Name: (c.low_name || '').trim() || c.name || '?' }))
           .sort((x, y) => x.MKH.localeCompare(y.MKH)));
     } catch {
