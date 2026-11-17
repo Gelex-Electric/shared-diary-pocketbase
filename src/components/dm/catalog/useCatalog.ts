@@ -22,6 +22,7 @@ import type { Scope } from '../../../lib/scope';
 import { checkLowName, toLowName } from '../../../lib/dm/lowName';
 import { CUSTOM } from '../../../lib/dm/pointCheck';
 import { savePoint } from '../../../lib/dm/pointSave';
+import { todayStr } from '../../../lib/qlvhRules';
 import { EMPTY_P, usePointForm } from './usePointForm';
 import { needFromRows, rowsFromNeed } from '../PointNeedEditor';
 import {
@@ -300,7 +301,7 @@ export function useCatalog({ scope: _scope = 'vanphong', tabs, initialTab }: {
   const saveCurrentPoint = async (body: Partial<Point>) => {
     const id = await savePoint({
       repo: { points, assets, devices, borrows }, d, editingId, body,
-      assetRows: pForm.assetRows, reclaim, today: new Date().toISOString().slice(0, 10),
+      assetRows: pForm.assetRows, reclaim, today: todayStr(),
     });
     await reportReconcile(id);
   };
