@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 .env
 .env.local
+
+# Bản backup PocketBase có tài khoản/mật khẩu — KHÔNG đưa vào repo (repo public).
+# Lưu ở <ROOT>/10. App - Du lieu phu tro/02. Backup PocketBase/
+backup/
+*pb-backup-*.json

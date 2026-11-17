@@ -14,6 +14,7 @@ import { DatePicker, TimePicker, MonthPicker } from './ui/DateTimePickers';
 import { useConfirm } from './ui/ConfirmDialog';
 import { toast as notify } from '../lib/toast';
 import { pdfMake, loadFontsToVfs } from '../lib/pdfFonts';
+import { today as localToday } from '../lib/format';
 
 const TYPE_SHIFT_CONFIG: Record<string, {
   icon: React.ElementType;
@@ -223,9 +224,9 @@ export default function HandoverManager() {
     
     // Safety parsing for startdate and enddate
     const parseDateTime = (dtStr: string) => {
-      if (!dtStr) return { date: new Date().toISOString().split('T')[0], time: '00:00' };
+      if (!dtStr) return { date: localToday(), time: '00:00' };
       const parts = dtStr.includes(' ') ? dtStr.split(' ') : dtStr.split('T');
-      const date = parts[0] || new Date().toISOString().split('T')[0];
+      const date = parts[0] || localToday();
       const time = (parts[1] || '00:00').substring(0, 5);
       return { date, time };
     };

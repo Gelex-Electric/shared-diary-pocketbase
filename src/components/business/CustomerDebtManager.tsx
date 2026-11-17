@@ -30,6 +30,8 @@ import { LoadingOverlay } from '../ui/LoadingOverlay';
 import { PdfViewer } from '../ui/PdfViewer';
 import { fetchEinvoicePdf, requestBillval, type EinvoicePdfType } from '../../lib/einvoiceApi';
 import { zoneFromArea, fetchLatestInvoiceMonth } from '../../lib/invoices';
+import { pad2, dateOnly } from '../../lib/format';
+import { TOAST_TITLE } from '../../lib/toast';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 type PaymentFilter = 'all' | 'paid' | 'unpaid';
@@ -41,9 +43,6 @@ const DEBT_TABS: TabItem<DebtTab>[] = [
   { id: 'report', label: 'Thói quen thanh toán', icon: ClipboardList, sub: 'Khách hàng nào luôn trả đúng hạn, khách nào hay chậm' },
 ];
 
-const TOAST_TITLE: Record<ToastType, string> = {
-  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
-};
 
 interface DebtInvoiceRecord {
   id: string;
@@ -175,7 +174,6 @@ const num = (v: any) => {
 const fmtKWh = (n: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(n);
 const fmtVND = (n: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(n);
 
-const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
 
 const fmtDate = (s?: string) => {
   const datePart = dateOnly(s);
@@ -184,7 +182,6 @@ const fmtDate = (s?: string) => {
   return d && m && y ? `${d}/${m}/${y}` : datePart;
 };
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
 
 // Sản lượng & doanh thu của 1 bản ghi — đọc TRỰC TIẾP từ trường đã lưu (nạp thẳng từ XML).
 // Hữu công: TongSL_HC (kWh) / ThTien_HC. Vô công (phản kháng): TongSL_PK (kVarh) / ThTien_PK.

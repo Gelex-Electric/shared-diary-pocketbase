@@ -1,6 +1,7 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { PowerOutage } from '../types';
+import { pad2 as p2 } from './format';
 
 const AREA_TEMPLATE: Record<string, string> = {
   'KCN Tiền Hải':      'PO.KCN-TH.docx',
@@ -10,7 +11,22 @@ const AREA_TEMPLATE: Record<string, string> = {
   'KCN Số 3':          'PO.KCN-03.docx',
 };
 
-const p2 = (n: number) => String(n).padStart(2, '0');
+/**
+ * Chữ mặc định cột "Khu vực" của bảng khung giờ (mẫu Word dùng ô điền
+ * `{areaText}`, user cho sửa theo từng khung giờ 17/11/2026). Dạng thống nhất
+ * "KCN <tên>, tỉnh <tỉnh>" (user chốt 17/11/2026); riêng Phong Điền user chốt
+ * "KCN Phong Điền Viglacera, Thành phố Huế".
+ */
+const AREA_TEXT: Record<string, string> = {
+  'KCN Tiền Hải':      'KCN Tiền Hải, tỉnh Hưng Yên',
+  'KCN Phong Điền':    'KCN Phong Điền Viglacera, Thành phố Huế',
+  'KCN Thuận Thành I': 'KCN Thuận Thành I, tỉnh Bắc Ninh',
+  'KCN Yên Mỹ':        'KCN Yên Mỹ, tỉnh Hưng Yên',
+  'KCN Số 3':          'KCN Số 3, tỉnh Hưng Yên',
+};
+
+export const defaultAreaText = (area: string) => AREA_TEXT[area] || area;
+
 const toUTC = (dt: string) => new Date(dt.includes('Z') ? dt : dt + 'Z');
 
 /** "05h00 ngày 14/02/2026" */
@@ -60,6 +76,7 @@ export async function generateOutageDocx(n: PowerOutage): Promise<Blob> {
       startTime:   fmtMoment(s.startTime),
       endTime:     fmtMoment(s.endTime),
       scope:       s.scope || '',
+      areaText:    (s.areaText || '').trim() || defaultAreaText(n.area),
       appendixRef: `Phụ lục ${String((s.appendixIndex ?? 0) + 1).padStart(2, '0')}`,
     })),
     appendices: appendices.map((a, i) => ({

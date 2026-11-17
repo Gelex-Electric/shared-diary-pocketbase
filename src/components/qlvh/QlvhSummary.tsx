@@ -24,8 +24,8 @@ import {
   remainingOf, summarize, todayStr, validityText, withVat,
   type ContractWithSchedule, type Payment,
 } from '../../lib/qlvh';
+import { money } from '../../lib/format';
 
-const money = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v || 0));
 const dateVN = (v?: string) => {
   const d = dayOf(v);
   if (!d) return '—';

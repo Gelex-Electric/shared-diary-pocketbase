@@ -18,8 +18,8 @@ import {
   withVat, withoutVat,
   type Payment,
 } from '../../lib/qlvh';
+import { money } from '../../lib/format';
 
-const money = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v || 0));
 const parseMoney = (s: string) => Number(String(s).replace(/[^\d]/g, '')) || 0;
 const dateVN = (v?: string) => {
   const d = String(v || '').slice(0, 10);

@@ -21,6 +21,7 @@ import { Select } from '../ui/Select';
 import { Tabs, TabItem } from '../ui/Tabs';
 import { toast as notify } from '../../lib/toast';
 import { StatTile, EmptyState } from '../ui/dashboard';
+import { pad2 as p2, dateOnly } from '../../lib/format';
 
 /* Cột xuất: [tên trường trong PocketBase, tiêu đề tiếng Việt, kiểu].
    'date' → dd/mm/yyyy; 'num' → để nguyên dạng SỐ cho Excel tính được; 'text' → chuỗi.
@@ -102,8 +103,6 @@ const CUSTOMER_COLUMNS: [keyof CustomerSum, string, ColKind][] = [
   ['count',   'Số bản ghi gộp',                      'num'],
 ];
 
-const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
-const p2 = (n: number) => String(n).padStart(2, '0');
 const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}`; };
 /** Đầu tháng kế tiếp của "YYYY-MM" — dùng làm cận trên (nửa mở) cho bộ lọc EndDate. */
 const nextMonthStart = (ym: string) => {

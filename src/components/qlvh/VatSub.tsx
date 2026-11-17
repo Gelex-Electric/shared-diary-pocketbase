@@ -10,8 +10,8 @@
  */
 
 import React from 'react';
+import { money } from '../../lib/format';
 
-const money = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v || 0));
 
 const FAINT = 'text-faint font-normal mt-0.5';
 

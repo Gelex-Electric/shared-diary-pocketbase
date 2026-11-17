@@ -24,12 +24,10 @@ const INVOICE_COLLECTION = 'invoice';
 const EINVOICE_COLLECTION = 'einvoice';
 
 import { toast as notify } from '../../lib/toast';
+import { TOAST_TITLE } from '../../lib/toast';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
-const TOAST_TITLE: Record<ToastType, string> = {
-  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
-};
 
 const BIEU_LABEL: Record<Bieu, string> = { BT: 'BT', CD: 'CĐ', TD: 'TĐ', VC: 'VC' };
 

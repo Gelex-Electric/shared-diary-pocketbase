@@ -5,11 +5,11 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { pad2 as p2 } from '../../lib/format';
 
 /* ============================================================
    HELPERS / CONSTANTS
 ============================================================ */
-const p2 = (n: number) => String(n).padStart(2, '0');
 
 const VN_MONTHS = [
   'Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6',

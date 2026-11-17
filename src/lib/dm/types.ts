@@ -335,10 +335,3 @@ export const VOLTAGE_LABEL: Record<Exclude<VoltageLevel, ''>, string> = {
   LV: 'Hạ áp (LV)',
   MV: 'Trung áp (MV)',
 };
-
-/**
- * HSN mặc định theo kiểu đấu nối. Trực tiếp luôn = 1 (không có TI để nhân).
- * Gián tiếp trả `undefined` — phải nhập tay hoặc tính từ TI khi có bảng vật tư.
- */
-export const defaultHsn = (c: Connection): number | undefined =>
-  c === 'truc_tiep' ? 1 : undefined;

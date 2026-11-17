@@ -27,8 +27,8 @@ import type { LineMonthPoint } from '../lib/pmaxLine';
 import { Select } from './ui/Select';
 import { StatTile, EmptyState, CHART } from './ui/dashboard';
 import { lines as dmLines, zones as dmZones } from '../lib/dm/repo';
+import { pad2 as p2 } from '../lib/format';
 
-const p2 = (n: number) => String(n).padStart(2, '0');
 const fmtKw = (n: number) => Math.round(n).toLocaleString('vi-VN');
 const fmtDateVN = (k: string) => (k ? `${k.slice(8, 10)}/${k.slice(5, 7)}` : '—');
 

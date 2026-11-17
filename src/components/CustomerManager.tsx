@@ -14,11 +14,9 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Select } from './ui/Select';
 import { toast as notify, type ToastType } from '../lib/toast';
+import { TOAST_TITLE } from '../lib/toast';
 
 /** Tiêu đề mặc định cho từng loại thông báo (toast hiển thị tiêu đề + nội dung). */
-const TOAST_TITLE: Record<ToastType, string> = {
-  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo', alert: 'Thông báo',
-};
 
 /* ---- Types ---- */
 type CustomerGroup = CustomerMeters;
