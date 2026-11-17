@@ -12,8 +12,8 @@
 import { assets as assetRepo, borrows as borrowRepo, devices as deviceRepo } from './repo';
 import type { AttachMove } from './attach';
 import type { Device } from './types';
+import { today } from '../format';
 
-const today = () => new Date().toISOString().slice(0, 10);
 
 export async function runAttach(
   picked: Device[], pointId: string, dateOn: string, moves: AttachMove[],

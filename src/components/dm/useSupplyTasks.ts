@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { isAbortError, loadCatalog, type CatalogData } from '../../lib/dm/repo';
 import { supplyTasks, taskCount, type SupplyTasks } from '../../lib/dm/supply';
 import { inAreas, pointZoneId } from '../../lib/dm/pointScope';
+import { today } from '../../lib/format';
 import { useScopeAreas, type Scope } from '../../lib/scope';
 import type { UserGroup } from '../../lib/userGroup';
 
@@ -31,7 +32,7 @@ export function useSupplyTasks(group: UserGroup) {
       const inScope = scope === 'vanphong' ? undefined
         : (p: Parameters<typeof pointZoneId>[0]) => inAreas(zoneName.get(pointZoneId(p, d.stations, d.lines) ?? '') ?? '', areas);
       setData(d);
-      setTasks(supplyTasks(d.points, d, new Date().toISOString().slice(0, 10), inScope));
+      setTasks(supplyTasks(d.points, d, today(), inScope));
     } catch (e) {
       // Badge là phụ — lỗi mạng thì giữ số cũ, không bật thông báo đỏ.
       if (!isAbortError(e)) console.warn('[useSupplyTasks]', e);

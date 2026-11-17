@@ -33,8 +33,8 @@ import { buildTerms, matchesTerms } from '../../lib/dm/search';
 import {
   ASSET_LABEL, CONNECTION_LABEL, SHAPE_LABEL, type Asset, type Device, type NeedLine, type Point,
 } from '../../lib/dm/types';
+import { today } from '../../lib/format';
 
-const today = () => new Date().toISOString().slice(0, 10);
 
 /** "3 × TI (biến dòng) 1000/5 · Vuông", "1 × Công tơ · Trực tiếp" */
 export function needText(n: NeedLine, withQty = true): string {

@@ -17,6 +17,7 @@ import type { Station as DmStation, Line as DmLine } from '../lib/dm/types';
 import { resolveLossParams } from '@/scripts/lib/lossParams.mjs';
 import { pb } from '../lib/pocketbase';
 import { zoneFromArea, zoneCodeOf, ZONE_MAP } from '../lib/invoices';
+import { pad2 } from '../lib/format';
 
 /** Ngưỡng cảnh báo tỷ lệ tổn thất tổng của khu công nghiệp (%). */
 const ZONE_WARN_PCT = 1.5;
@@ -33,7 +34,6 @@ const dateVN = (k: string) => { const [y, m, d] = k.split('-'); return d ? `${d}
 const monthVN = (m: string) => { const [y, mm] = m.split('-'); return mm ? `Tháng ${mm}/${y}` : m; };
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'vi');
 const byKcn = (a: { kcn: string }, b: { kcn: string }) => a.kcn.localeCompare(b.kcn, 'vi');
-const pad2 = (n: number) => String(n).padStart(2, '0');
 const yesterdayKey = () => {
   const n = new Date();
   const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1);

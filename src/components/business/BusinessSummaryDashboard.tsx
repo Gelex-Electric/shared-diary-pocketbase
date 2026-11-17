@@ -13,14 +13,13 @@ import {
   useInvoices, tariffSplit, rollupByCustomer, computeKpis, fmtInt, num, ZONE_MAP, ZONE_ORDER,
 } from '../../lib/invoices';
 import { usePmaxDaily } from '../../lib/pmax';
+import { pad2, dateOnly } from '../../lib/format';
 
 const MONTHS = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
 const MONTH_OPTS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `Tháng ${i + 1}` }));
 const YEAR_BARS = ['var(--text-4)', '#22b8c4', 'var(--accent)'];
 const PIE_COLORS = [CHART.bt, CHART.cd, CHART.td];
-const pad2 = (n: number) => String(n).padStart(2, '0');
 const axisNum = (v: number) => new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(v);
-const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
 
 /* Chip tích chọn (KCN + năm) — đồng bộ 1 màu accent. */
 function FilterChip({ on, label, onToggle }: { on: boolean; label: string; onToggle: () => void }) {

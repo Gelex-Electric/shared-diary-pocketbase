@@ -16,6 +16,7 @@
    ============================================================ */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { pb } from './pocketbase';
+import { dateOnly } from './format';
 
 export interface InvoiceRecord {
   id: string;
@@ -99,20 +100,6 @@ export const num = (v: any) => {
 export const fmtInt = (n: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(n);
 export const fmtKWh = (n: number) => fmtInt(n) + ' kWh';
 export const fmtVND = (n: number) => fmtInt(n) + ' ₫';
-/** Compact VND for hero tiles: 1.2 tỷ / 340 tr / 12.000. */
-export function fmtVNDShort(n: number): string {
-  const a = Math.abs(n);
-  if (a >= 1e9) return (n / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' tỷ';
-  if (a >= 1e6) return (n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + ' tr';
-  return fmtInt(n);
-}
-export function fmtKWhShort(n: number): string {
-  const a = Math.abs(n);
-  if (a >= 1e6) return (n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' GWh';
-  if (a >= 1e3) return (n / 1e3).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + ' MWh';
-  return fmtInt(n);
-}
-const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
 export const fmtDate = (s?: string) => {
   const d = dateOnly(s);
   if (!d) return '—';
@@ -173,20 +160,6 @@ export function mergeBills(records: InvoiceRecord[]): Bill[] {
 }
 
 /* ── Aggregations ──────────────────────────────────────── */
-export interface MonthPoint { month: string; label: string; kwh: number; vnd: number; bills: number; }
-
-/** Monthly series across the loaded window, chronological. */
-export function monthlySeries(bills: Bill[]): MonthPoint[] {
-  const m = new Map<string, MonthPoint>();
-  bills.forEach(b => {
-    if (!b.month) return;
-    let p = m.get(b.month);
-    if (!p) { p = { month: b.month, label: b.month.slice(5) + '/' + b.month.slice(0, 4), kwh: 0, vnd: 0, bills: 0 }; m.set(b.month, p); }
-    p.kwh += b.slHC; p.vnd += b.dtHC + b.dtVC; p.bills += 1;
-  });
-  return Array.from(m.values()).sort((a, b) => a.month.localeCompare(b.month));
-}
-
 export interface TariffSplit { bt: number; cd: number; td: number; }
 export function tariffSplit(bills: Bill[]): TariffSplit {
   return bills.reduce((a, b) => ({ bt: a.bt + b.slBT, cd: a.cd + b.slCD, td: a.td + b.slTD }), { bt: 0, cd: 0, td: 0 });
@@ -207,29 +180,6 @@ export function rollupByCustomer(bills: Bill[]): CustomerRollup[] {
     if (b.nMua && !c.nMua) c.nMua = b.nMua;
   });
   return Array.from(m.values());
-}
-
-export interface ZoneRollup {
-  code: string; name: string;
-  kwh: number; vnd: number; vndPaid: number; vndDebt: number; customers: number; unpaid: number;
-}
-export function rollupByZone(bills: Bill[]): ZoneRollup[] {
-  const m = new Map<string, ZoneRollup>();
-  const seen = new Map<string, Set<string>>();
-  bills.forEach(b => {
-    const code = b.zone || 'Khác';
-    let z = m.get(code);
-    if (!z) { z = { code, name: ZONE_MAP[code] || code, kwh: 0, vnd: 0, vndPaid: 0, vndDebt: 0, customers: 0, unpaid: 0 }; m.set(code, z); seen.set(code, new Set()); }
-    const money = b.dtHC + b.dtVC;
-    z.kwh += b.slHC; z.vnd += money;
-    if (b.paid) z.vndPaid += money; else { z.vndDebt += money; z.unpaid += 1; }
-    seen.get(code)!.add(b.mkh);
-  });
-  m.forEach((z, code) => { z.customers = seen.get(code)!.size; });
-  return Array.from(m.values()).sort((a, b) => {
-    const ia = ZONE_ORDER.indexOf(a.code), ib = ZONE_ORDER.indexOf(b.code);
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-  });
 }
 
 export interface Kpis {

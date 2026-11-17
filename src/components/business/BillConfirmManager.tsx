@@ -27,12 +27,11 @@ import {
 ============================================================ */
 
 import { toast as notify } from '../../lib/toast';
+import { pad2, dateOnly } from '../../lib/format';
+import { TOAST_TITLE } from '../../lib/toast';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
-const TOAST_TITLE: Record<ToastType, string> = {
-  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo',
-};
 
 // 4 thành phần chỉ số nhập tay. Tổng (tác dụng) = BT+CĐ+TĐ; VC = vô công (phản kháng).
 const COMPONENTS = [
@@ -72,7 +71,6 @@ interface BienBanRow {
   merged: boolean;        // true nếu gộp từ ≥2 khoảng
 }
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
 
 const todayStr = () => {
   const d = new Date();
@@ -109,7 +107,6 @@ const fmt = (n: number, digits = 0) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: digits }).format(n);
 
 // Hiển thị ngày dd/mm/yyyy từ chuỗi PocketBase (YYYY-MM-DD hoặc ISO)
-const dateOnly = (s?: string) => (s || '').split('T')[0].split(' ')[0];
 const fmtDate = (s?: string) => {
   if (!s) return '—';
   const datePart = dateOnly(s);

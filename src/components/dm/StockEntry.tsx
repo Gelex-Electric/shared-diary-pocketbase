@@ -46,11 +46,11 @@ import {
 import type { Point } from '../../lib/dm/types';
 import { buildTerms, matchesTerms } from '../../lib/dm/search';
 import { dmy } from '../../lib/dm/lifecycle';
+import { today } from '../../lib/format';
 
 const TYPES: AssetType[] = ['CONGTO', 'TI', 'TU', 'GP03', 'SIM', 'KHAC'];
 /** Loại có tỷ số — chỉ hai loại này mới hiện ô tỷ số, giống form điểm đo. */
 const HAS_RATIO: AssetType[] = ['TI', 'TU'];
-const today = () => new Date().toISOString().slice(0, 10);
 
 const STATUS_CLS: Record<Exclude<DeviceStatus, ''>, string> = {
   kho: 'bg-subtle text-soft',

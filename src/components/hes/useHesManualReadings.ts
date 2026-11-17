@@ -6,10 +6,9 @@ import { AccountHes, DataMetter } from '../../types';
 import type { ConsumptionCell as Consumption } from './hesShared';
 import { toast as notify, type ToastType } from '../../lib/toast';
 import type { MeterRow } from './hesShared';
+import { pad2 } from '../../lib/format';
+import { TOAST_TITLE } from '../../lib/toast';
 
-const TOAST_TITLE: Record<ToastType, string> = {
-  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo', alert: 'Thông báo',
-};
 
 export interface ReadingData {
   meterNo: string;
@@ -32,7 +31,6 @@ type Field = 'pg' | 'bt' | 'cd' | 'td' | 'vc';
 const _now       = new Date();
 const _yesterday = new Date(_now);
 _yesterday.setDate(_yesterday.getDate() - 1);
-const pad2 = (n: number) => String(n).padStart(2, '0');
 const todayStr     = `${_now.getFullYear()}-${pad2(_now.getMonth() + 1)}-${pad2(_now.getDate())}`;
 const yesterdayStr = `${_yesterday.getFullYear()}-${pad2(_yesterday.getMonth() + 1)}-${pad2(_yesterday.getDate())}`;
 const defaultTime  = '00:00';

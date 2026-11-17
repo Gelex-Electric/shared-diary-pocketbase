@@ -26,12 +26,12 @@ import {
   type ContractStatus, type ContractWithSchedule, type DmCustomer, type DmStation, type DmZone, type ItemInput,
   type PaymentInput,
 } from '../../lib/qlvh';
+import { money } from '../../lib/format';
 
 const INPUT =
   'w-full px-3 py-2 bg-surface border border-[var(--border)] rounded text-sm ' +
   'focus:ring-2 focus:ring-accent outline-none disabled:opacity-60 disabled:cursor-not-allowed';
 
-const money = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v || 0));
 const dateVN = (v?: string) => {
   const d = String(v || '').slice(0, 10);
   if (!d) return '—';

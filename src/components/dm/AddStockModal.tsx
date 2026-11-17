@@ -21,6 +21,7 @@ import type { PlateScan } from '../../lib/dm/plateScan';
 import {
   ASSET_LABEL, DEFAULT_TI_SHAPE, SHAPE_LABEL, type AssetType, type Connection, type Device, type TiShape, type Zone,
 } from '../../lib/dm/types';
+import { today } from '../../lib/format';
 
 const TYPES: AssetType[] = ['CONGTO', 'TI', 'TU', 'GP03', 'SIM', 'KHAC'];
 const HAS_RATIO: AssetType[] = ['TI', 'TU'];
@@ -28,7 +29,6 @@ export const SHAPE_OPTS = [
   { value: '', label: 'Chưa rõ' },
   ...(Object.keys(SHAPE_LABEL) as TiShape[]).map(s => ({ value: s, label: SHAPE_LABEL[s] })),
 ];
-const today = () => new Date().toISOString().slice(0, 10);
 /** Công tơ mặc định GIÁN TIẾP khi nhập kho (user chốt 27/10/2026) — trực tiếp là trường hợp đổi tay. */
 const DEFAULT_METER_KIND: Connection = 'gian_tiep';
 

@@ -208,15 +208,6 @@ export function consumptionBetween(
   return { value: { startAt, endAt, hsn, values } };
 }
 
-/** Ngày cũ nhất / mới nhất có dữ liệu, dạng "YYYY-MM-DD". */
-export function dayRangeOf(data: Hes30Data): { first: string; last: string } {
-  if (!data.stamps.length) return { first: '', last: '' };
-  return {
-    first: data.stamps[0].slice(0, 10),
-    last: data.stamps[data.stamps.length - 1].slice(0, 10),
-  };
-}
-
 /**
  * Các mốc giờ CÓ THẬT trong một ngày, dạng "HH:mm" — để gợi ý thay vì bắt người
  * dùng đoán.

@@ -1,6 +1,7 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { PowerOutage } from '../types';
+import { pad2 as p2 } from './format';
 
 const AREA_TEMPLATE: Record<string, string> = {
   'KCN Tiền Hải':      'PO.KCN-TH.docx',
@@ -10,7 +11,6 @@ const AREA_TEMPLATE: Record<string, string> = {
   'KCN Số 3':          'PO.KCN-03.docx',
 };
 
-const p2 = (n: number) => String(n).padStart(2, '0');
 const toUTC = (dt: string) => new Date(dt.includes('Z') ? dt : dt + 'Z');
 
 /** "05h00 ngày 14/02/2026" */

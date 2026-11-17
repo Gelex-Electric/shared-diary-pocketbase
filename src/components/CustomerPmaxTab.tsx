@@ -13,6 +13,7 @@ import { MonthPicker } from './ui/DateTimePickers';
 import { Select } from './ui/Select';
 import { StatTile, ChartTooltip, EmptyState, CHART } from './ui/dashboard';
 import { useHeadSerials } from '../lib/headMeters';
+import { pad2 as p2 } from '../lib/format';
 
 /** Khách hàng + danh sách công tơ — khớp cấu trúc CustomerInfo của trang cha. */
 export interface PmaxCustomer {
@@ -38,7 +39,6 @@ interface RankRow {
   meterCount: number;
 }
 
-const p2 = (n: number) => String(n).padStart(2, '0');
 
 const fmtDateVN = (key: string) => {
   if (!key) return '—';

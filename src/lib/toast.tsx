@@ -96,6 +96,11 @@ function push(type: ToastType, title?: string, message?: string, opts: ToastOpti
   return id;
 }
 
+/** Tiêu đề mặc định theo loại thông báo — trước 17/11/2026 chép ở 6 màn. */
+export const TOAST_TITLE: Record<ToastType, string> = {
+  success: 'Thành công', error: 'Lỗi', warning: 'Lưu ý', info: 'Thông báo', alert: 'Thông báo',
+};
+
 export const toast = {
   success: (title?: string, message?: string, opts?: ToastOptions) => push('success', title, message, opts),
   error:   (title?: string, message?: string, opts?: ToastOptions) => push('error', title, message, opts),

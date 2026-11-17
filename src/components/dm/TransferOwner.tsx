@@ -26,9 +26,9 @@ import type { CatalogData } from '../../lib/dm/repo';
 import type { OwnerTransfer, Point } from '../../lib/dm/types';
 import { dmy } from '../../lib/dm/lifecycle';
 import { Field, FormModal, TextInput } from './entryUi';
+import { today } from '../../lib/format';
 
 /** Hôm nay, `YYYY-MM-DD`. */
-const today = () => new Date().toISOString().slice(0, 10);
 
 export function TransferOwner({ point, d, onClose, onDone }: {
   /** Điểm đo đang chuyển chủ; `null` = đóng. */
