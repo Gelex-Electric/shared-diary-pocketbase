@@ -11,14 +11,15 @@ const AREA_TEMPLATE: Record<string, string> = {
 };
 
 /**
- * Chữ mặc định cột "Khu vực" của bảng khung giờ — đúng nguyên văn chữ từng in
- * cố định trong mẫu Word trước khi mẫu đổi sang ô điền `{areaText}` (17/11/2026,
- * user cho sửa cột này theo từng khung giờ).
+ * Chữ mặc định cột "Khu vực" của bảng khung giờ (mẫu Word dùng ô điền
+ * `{areaText}`, user cho sửa theo từng khung giờ 17/11/2026). Dạng thống nhất
+ * "KCN <tên>, tỉnh <tỉnh>" (user chốt 17/11/2026); riêng Phong Điền user chốt
+ * "KCN Phong Điền Viglacera, Thành phố Huế".
  */
 const AREA_TEXT: Record<string, string> = {
-  'KCN Tiền Hải':      'KCN Tiền Hải, xã Ái Quốc, tỉnh Hưng Yên',
-  'KCN Phong Điền':    'KCN Phong Điền – Viglacera, TP Huế',
-  'KCN Thuận Thành I': 'KCN Số Thuận Thành I, tỉnh Bắc Ninh',
+  'KCN Tiền Hải':      'KCN Tiền Hải, tỉnh Hưng Yên',
+  'KCN Phong Điền':    'KCN Phong Điền Viglacera, Thành phố Huế',
+  'KCN Thuận Thành I': 'KCN Thuận Thành I, tỉnh Bắc Ninh',
   'KCN Yên Mỹ':        'KCN Yên Mỹ, tỉnh Hưng Yên',
   'KCN Số 3':          'KCN Số 3, tỉnh Hưng Yên',
 };
