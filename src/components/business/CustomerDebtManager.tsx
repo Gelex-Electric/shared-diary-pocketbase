@@ -402,11 +402,10 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
   const customers = useMemo(() => buildCustomers(records), [buildCustomers, records]);
 
   /* ── Hóa đơn gốc (`einvoice`) theo BillId — để xem PDF giấy báo / hóa đơn từ CCIS ──
-     Chuyển từ màn Biên bản sang đây (user chốt 02/10/2026). API PDF chỉ cho khối KD
-     nên khối Vận hành (readOnly) không tải, không hiện nút. */
+     Chuyển từ màn Biên bản sang đây (user chốt 02/10/2026). Khối Vận hành (readOnly) cũng XEM được PDF
+     (user chốt 18/11/2026) nhưng không lấy BILLVAL — hóa đơn chưa có BILLVAL thì chỉ báo chờ khối KD. */
   const [einvByBill, setEinvByBill] = useState<Map<string, { id: string; billval?: string }>>(new Map());
   useEffect(() => {
-    if (readOnly) return;
     const ids = Array.from(new Set(records.map(r => (r.BillId ?? '').toString().trim()).filter(b => b && b !== '0')));
     if (!ids.length) { setEinvByBill(new Map()); return; }
     let alive = true;
@@ -756,7 +755,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                 {ky.ids.length} công tơ
                 {/* Xem PDF giấy báo / hóa đơn — chỉ khi hóa đơn đã nạp XML (có einvoice). */}
                 {(() => {
-                  const e = !readOnly && ky.billId ? einvByBill.get(ky.billId) : undefined;
+                  const e = ky.billId ? einvByBill.get(ky.billId) : undefined;
                   if (!e) return null;
                   const btn = 'vl-btn vl-btn-sm flex items-center gap-1 !px-2 !py-0.5 text-[11px] not-italic';
                   return (
@@ -770,7 +769,11 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                           title="Xem hóa đơn điện tử (PDF)" className={`${btn} vl-btn-outline-primary`}>
                           <Receipt className="h-3 w-3" /> Hóa đơn
                         </button>
-                      </>) : (
+                      </>) : readOnly ? (
+                        <span className="not-italic text-[11px] text-soft" title="Khối Kinh doanh cần bấm Lấy BILLVAL cho hóa đơn này">
+                          Chưa có PDF — chờ khối KD lấy BILLVAL
+                        </span>
+                      ) : (
                         <button onClick={() => void getBillval(ky)} disabled={!!ccisWait}
                           title="Tra CCIS để mở được PDF giấy báo / hóa đơn" className={`${btn} vl-btn-warning`}>
                           <KeyRound className="h-3 w-3" /> Lấy BILLVAL

@@ -5,8 +5,10 @@
  *   GET  /api/einvoice/:id/pdf/:type      PDF giấy báo (NOTI) / hóa đơn (BILLPDF), không lưu
  *
  * Xác thực: header `Authorization` = token PocketBase của người dùng (pb.authStore.token).
- * Chỉ khối Kinh doanh (`users.nhom = kinh_doanh`, hoặc `nhom` trống + `area` trống — cùng luật `src/lib/userGroup.ts`). Đọc/ghi `einvoice`
- * bằng CHÍNH token đó ⇒ rule của PocketBase vẫn áp; server không dùng tài khoản quản trị.
+ * Nhóm (cùng luật `src/lib/userGroup.ts`): lấy BILLVAL chỉ khối Kinh doanh; XEM PDF cho Kinh doanh + Vận hành
+ * (user chốt 18/11/2026 — tổ vận hành xem giấy báo/hóa đơn ở Công nợ chỉ xem). Đọc/ghi `einvoice` bằng CHÍNH
+ * token đó ⇒ rule PocketBase vẫn áp (tài khoản có `area2` chỉ đọc được hóa đơn KCN mình); server không dùng
+ * tài khoản quản trị.
  */
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { CcisError, fetchCcisPdf, resolveBillval, type PdfViewType } from './ccis';
@@ -21,7 +23,8 @@ const PB = () =>
   (process.env.PB_INTERNAL_URL || process.env.VITE_PB_URL || 'http://localhost:8090').replace(/\/$/, '');
 const ID_RE = /^[a-z0-9]{15}$/; // id bản ghi PocketBase
 
-interface Authed extends Request { pbToken?: string }
+type Group = 'van_hanh' | 'kinh_doanh' | 'vat_tu';
+interface Authed extends Request { pbToken?: string; group?: Group }
 
 async function pb(path: string, token: string, init: RequestInit = {}) {
   const res = await fetch(`${PB()}${path}`, {
@@ -32,8 +35,8 @@ async function pb(path: string, token: string, init: RequestInit = {}) {
   return { ok: res.ok, status: res.status, body: body as any };
 }
 
-/** Token hợp lệ + thuộc khối Kinh doanh. */
-async function requireBusiness(req: Authed, res: Response, next: NextFunction) {
+/** Token hợp lệ ⇒ gắn `pbToken` + `group`. */
+async function requireAuth(req: Authed, res: Response, next: NextFunction) {
   const token = req.get('authorization') || '';
   if (!token) { res.status(401).json({ message: 'Chưa đăng nhập.' }); return; }
   try {
@@ -42,14 +45,20 @@ async function requireBusiness(req: Authed, res: Response, next: NextFunction) {
     // Cùng luật `src/lib/userGroup.ts`: `nhom` có giá trị thì theo nó, trống thì theo `area`.
     const nhom = String(r.body?.record?.nhom ?? '').trim();
     const area = String(r.body?.record?.area ?? '').trim();
-    const isBusiness = nhom ? nhom === 'kinh_doanh' : !area;
-    if (!isBusiness) { res.status(403).json({ message: 'Chỉ khối Kinh doanh dùng được chức năng này.' }); return; }
+    const known: Group[] = ['van_hanh', 'kinh_doanh', 'vat_tu'];
+    req.group = (known as string[]).includes(nhom) ? nhom as Group : (area ? 'van_hanh' : 'kinh_doanh');
     req.pbToken = token;
     next();
   } catch (err: any) {
     res.status(502).json({ message: `Không kết nối được PocketBase: ${err?.message || err}` });
   }
 }
+
+/** Chỉ cho các nhóm trong danh sách. */
+const allow = (groups: Group[], message: string) => (req: Authed, res: Response, next: NextFunction) => {
+  if (!req.group || !groups.includes(req.group)) { res.status(403).json({ message }); return; }
+  next();
+};
 
 /** Đọc einvoice bằng token người dùng — không thấy (sai id hoặc rule chặn) ⇒ 404. */
 async function readEinvoice(id: string, token: string, fields: string) {
@@ -67,9 +76,9 @@ const fail = (res: Response, err: any) => {
 
 export function einvoiceRouter() {
   const r = express.Router();
-  r.use(requireBusiness);
+  r.use(requireAuth);
 
-  r.post('/:id/billval', async (req: Authed, res) => {
+  r.post('/:id/billval', allow(['kinh_doanh'], 'Chỉ khối Kinh doanh lấy được BILLVAL.'), async (req: Authed, res) => {
     try {
       const rec = await readEinvoice(req.params.id, req.pbToken!, 'id,BillId,xml');
       if (!rec.BillId || !rec.xml) throw new CcisError('Hóa đơn thiếu BillId hoặc XML.', 422);
@@ -85,12 +94,14 @@ export function einvoiceRouter() {
     } catch (err) { fail(res, err); }
   });
 
-  r.get('/:id/pdf/:type', async (req: Authed, res) => {
+  r.get('/:id/pdf/:type', allow(['kinh_doanh', 'van_hanh'], 'Tài khoản này không xem được giấy báo / hóa đơn.'), async (req: Authed, res) => {
     try {
       const type = req.params.type as PdfViewType;
       if (type !== 'NOTI' && type !== 'BILLPDF') throw new CcisError('Loại PDF phải là NOTI hoặc BILLPDF.', 400);
       const rec = await readEinvoice(req.params.id, req.pbToken!, 'id,billval,KHHDon,SHDon,MKHang');
-      if (!rec.billval) throw new CcisError('Hóa đơn chưa có BILLVAL — bấm "Lấy BILLVAL" trước.', 409);
+      if (!rec.billval) throw new CcisError(req.group === 'kinh_doanh'
+        ? 'Hóa đơn chưa có BILLVAL — bấm "Lấy BILLVAL" trước.'
+        : 'Hóa đơn chưa có PDF — chờ khối Kinh doanh lấy BILLVAL.', 409);
       const pdf = await fetchCcisPdf(String(rec.billval), type);
       const name = `${type === 'NOTI' ? 'GiayBao' : 'HoaDon'}_${rec.MKHang || ''}_${rec.KHHDon || ''}-${rec.SHDon || ''}.pdf`
         .replace(/[^\w.-]/g, '_');
