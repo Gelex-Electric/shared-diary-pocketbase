@@ -17,10 +17,11 @@ import { CcisError, fetchCcisPdf, resolveBillval, type PdfViewType } from './cci
   PocketBase để kiểm token và đọc/ghi einvoice phải là PB MÀ GIAO DIỆN ĐANG ĐĂNG NHẬP (`VITE_PB_URL`),
   KHÔNG phải PB trong chính container: staging có PB riêng nhưng giao diện staging trỏ PB production
   (dùng chung dữ liệu) — gọi `localhost:8090` ở staging thì token nào cũng "hết hạn" (sự cố 01/10/2026).
-  `PB_INTERNAL_URL` để ghi đè khi cần.
+  `PB_INTERNAL_URL` để ghi đè khi cần. Không có biến (localhost không `.env`) ⇒ cùng mặc định với
+  `src/lib/pocketbase.ts` (PB production) — trước 18/11/2026 rơi về `localhost:8090` nên localhost lỗi 502.
 */
 const PB = () =>
-  (process.env.PB_INTERNAL_URL || process.env.VITE_PB_URL || 'http://localhost:8090').replace(/\/$/, '');
+  (process.env.PB_INTERNAL_URL || process.env.VITE_PB_URL || 'https://getc.up.railway.app/pb').replace(/\/$/, '');
 const ID_RE = /^[a-z0-9]{15}$/; // id bản ghi PocketBase
 
 type Group = 'van_hanh' | 'kinh_doanh' | 'vat_tu';
