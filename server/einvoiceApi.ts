@@ -1,7 +1,8 @@
 /**
  * API hóa đơn điện tử (`einvoice`) phía server — plans/2026-10-01-ccis-billval-pdf.md.
  *
- *   POST /api/einvoice/:id/billval        tra CCIS, dựng BILLVAL, lưu vào einvoice
+ *   POST /api/einvoice/:id/billval        tra CCIS, dựng BILLVAL, lưu vào einvoice; xong thì (nếu có
+ *                                         FLOW_DONGBO_URL) đẩy nền hóa đơn + 3 file sang flow SharePoint
  *   GET  /api/einvoice/:id/pdf/:type      PDF giấy báo (NOTI) / hóa đơn (BILLPDF), không lưu
  *
  * Xác thực: header `Authorization` = token PocketBase của người dùng (pb.authStore.token).
@@ -12,6 +13,7 @@
  */
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { CcisError, fetchCcisPdf, resolveBillval, type PdfViewType } from './ccis';
+import { SHAREPOINT_FIELDS, queueSharepointPush } from './sharepointPush';
 
 /*
   PocketBase để kiểm token và đọc/ghi einvoice phải là PB MÀ GIAO DIỆN ĐANG ĐĂNG NHẬP (`VITE_PB_URL`),
@@ -81,7 +83,7 @@ export function einvoiceRouter() {
 
   r.post('/:id/billval', allow(['kinh_doanh'], 'Chỉ khối Kinh doanh lấy được BILLVAL.'), async (req: Authed, res) => {
     try {
-      const rec = await readEinvoice(req.params.id, req.pbToken!, 'id,BillId,xml');
+      const rec = await readEinvoice(req.params.id, req.pbToken!, SHAREPOINT_FIELDS);
       if (!rec.BillId || !rec.xml) throw new CcisError('Hóa đơn thiếu BillId hoặc XML.', 422);
       const { fields, billval } = await resolveBillval(String(rec.BillId), String(rec.xml));
       const up = await pb(`/api/collections/einvoice/records/${rec.id}?fields=id`, req.pbToken!, {
@@ -92,6 +94,8 @@ export function einvoiceRouter() {
       });
       if (!up.ok) throw new CcisError(`Không lưu được BILLVAL: ${up.body?.message || up.status}`, up.status);
       res.json({ ok: true, departmentId: fields.departmentId, figureBookId: fields.figureBookId });
+      // Đồng bộ SharePoint (flow "Dong bo HoaDon"): chạy nền sau khi đã trả lời — server/sharepointPush.ts.
+      queueSharepointPush(rec, billval);
     } catch (err) { fail(res, err); }
   });
 
