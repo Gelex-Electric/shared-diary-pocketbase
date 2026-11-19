@@ -40,7 +40,7 @@ async function push(url: string, rec: Record<string, any>, billval: string): Pro
     files: [
       { kind: 'NOTI', name: `GiayBao_${base}.pdf`, contentBase64: noti.toString('base64') },
       { kind: 'BILLPDF', name: `HoaDon_${base}.pdf`, contentBase64: bill.toString('base64') },
-      { kind: 'XML', name: `${base}.xml`, contentBase64: Buffer.from(String(xml ?? ''), 'utf8').toString('base64') },
+      { kind: 'XML', name: `HoaDon_${base}.xml`, contentBase64: Buffer.from(String(xml ?? ''), 'utf8').toString('base64') },
     ],
   });
 
