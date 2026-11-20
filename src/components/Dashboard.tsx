@@ -20,7 +20,7 @@ import PowerOutageManager from './PowerOutageManager';
 import NewUpdateTour from './NewUpdateTour';
 import SldPage from './sld/SldPage';
 import BillConfirmManager from './business/BillConfirmManager';
-import CustomerDebtManager from './business/CustomerDebtManager';
+import CustomerDebtManager, { type DebtFocus } from './business/CustomerDebtManager';
 import QlvhSummary from './qlvh/QlvhSummary';
 import NotificationBell from './ui/NotificationBell';
 import AlertCenter from './alerts/AlertCenter';
@@ -81,6 +81,10 @@ const subItemV = {
 
 export default function Dashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
+  /* Biên bản → "Chi tiết hóa đơn" mở Công nợ đúng khách/kỳ; rời tab Công nợ thì bỏ ghim. */
+  const [debtFocus, setDebtFocus] = useState<DebtFocus | null>(null);
+  const openDebt = (f: Omit<DebtFocus, 'nonce'>) => { setDebtFocus({ ...f, nonce: Date.now() }); setTopTab('debt'); };
+  useEffect(() => { if (topTab !== 'debt') setDebtFocus(null); }, [topTab]);
   /** Việc của Vận Hành = điểm đo chờ treo ở KCN mình — hiện ở mục "Biên bản treo tháo". */
   const supply = useSupplyTasks('van_hanh');
   const taskBadge = supply.count;
@@ -652,9 +656,9 @@ export default function Dashboard() {
             ) : topTab === 'outage' ? (
               <PowerOutageManager />
             ) : topTab === 'billconfirm' ? (
-              <BillConfirmManager readOnly />
+              <BillConfirmManager readOnly onOpenDebt={openDebt} />
             ) : topTab === 'debt' ? (
-              <CustomerDebtManager readOnly />
+              <CustomerDebtManager readOnly focus={debtFocus} />
             ) : topTab === 'qlvh' ? (
               <QlvhSummary scope="doi" />
             ) : topTab === 'handover-record' ? (

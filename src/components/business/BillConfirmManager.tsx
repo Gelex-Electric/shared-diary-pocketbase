@@ -2,15 +2,14 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { pb } from '../../lib/pocketbase';
 import { MonthPicker } from '../ui/DateTimePickers';
-import { useConfirm } from '../ui/ConfirmDialog';
-import { deleteInvoiceRows } from '../../lib/invoiceDelete';
+import type { DebtFocus } from './CustomerDebtManager';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
 import { zoneFromArea, zoneOf, ZONE_MAP, fetchLatestInvoiceMonth } from '../../lib/invoices';
 import { zoneHexOf } from '../../lib/kcnColors';
 import PizZip from 'pizzip';
 import {
-  FileCheck2, Users, ChevronRight, Trash2, FileDown, Search, FileSpreadsheet,
+  FileCheck2, Users, ChevronRight, Receipt, FileDown, Search, FileSpreadsheet,
   CreditCard, RefreshCw, Zap, CheckSquare, Square, Archive,
 } from 'lucide-react';
 
@@ -175,8 +174,14 @@ function computeResults(d: Record<string, any>) {
   return { sanLuong, bieu, cosphi };
 }
 
-export default function BillConfirmManager({ readOnly = false }: { readOnly?: boolean }) {
-  const { confirm, dialog: confirmDialog } = useConfirm();
+/**
+ * Không còn xóa ở màn này (user chốt 20/11/2026): nút "Chi tiết hóa đơn" dẫn sang Công nợ khách hàng
+ * (`onOpenDebt`, dashboard chuyển tab) — xóa hóa đơn làm ở đó, chỉ khối KD.
+ */
+export default function BillConfirmManager({ readOnly = false, onOpenDebt }: {
+  readOnly?: boolean;
+  onOpenDebt?: (focus: Omit<DebtFocus, 'nonce'>) => void;
+}) {
 
   // Khối Vận hành (readOnly): chỉ thấy khách hàng thuộc KCN của tài khoản.
   const zoneLock = useMemo(
@@ -271,26 +276,6 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
       showToast('Lỗi lấy Token: ' + err.message, 'error');
     } finally {
       setIsGettingToken(false);
-    }
-  };
-
-  const handleDelete = async (row: BienBanRow) => {
-    const r = row.data;
-    const ok = await confirm({
-      title: 'Xóa biên bản?',
-      message: `Biên bản công tơ ${r.SCT || '—'}${row.merged ? ` (${row.ids.length} khoảng đổi giá)` : ''} sẽ bị xóa vĩnh viễn. Thao tác không thể hoàn tác.`,
-      confirmLabel: 'Xóa',
-      variant: 'danger',
-    });
-    if (!ok) return;
-    try {
-      // Hóa đơn đổi giá tách nhiều bản ghi → xóa tất cả khoảng của biên bản; hết công tơ thì
-      // xóa luôn `einvoice` (luật chung ở `lib/invoiceDelete.ts`).
-      const { einvRemoved } = await deleteInvoiceRows(row.ids, r.BillId);
-      await loadRecords(monthFilterDate);
-      showToast(einvRemoved ? 'Đã xóa biên bản và hóa đơn gốc (không còn công tơ nào)' : 'Đã xóa biên bản', 'success');
-    } catch (err: any) {
-      showToast(`Lỗi khi xóa: ${err?.data?.message || err?.message || ''}`, 'error');
     }
   };
 
@@ -553,7 +538,7 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
           <p className="text-sm text-soft max-w-2xl">
             {readOnly
               ? 'Xem và tải biên bản của khách hàng thuộc khu công nghiệp phụ trách.'
-              : 'Dữ liệu lấy từ XML hóa đơn ở màn "Nạp dữ liệu" — không thêm hay sửa tay. Xem, tải Word hoặc xóa (xóa rồi nạp lại XML để sửa).'}
+              : 'Dữ liệu lấy từ XML hóa đơn ở màn "Nạp dữ liệu" — không thêm hay sửa tay. Xem, tải Word; xem/xóa hóa đơn ở Công nợ khách hàng (nút Chi tiết hóa đơn).'}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
@@ -742,10 +727,11 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                                         className="p-2 rounded-lg text-soft hover:bg-[var(--success-soft)] hover:text-ok transition-colors disabled:opacity-50">
                                         <FileDown className="w-4 h-4" />
                                       </button>
-                                      {!readOnly && (
-                                        <button onClick={() => handleDelete(row)} title="Xóa"
-                                          className="p-2 rounded-lg text-soft hover:bg-rose-50 hover:text-rose-600 transition-colors">
-                                          <Trash2 className="w-4 h-4" />
+                                      {onOpenDebt && (
+                                        <button onClick={() => onOpenDebt({ mkh: (r.MKHang || '').trim(), endDate: dateOnly(r.EndDate) })}
+                                          title="Chi tiết hóa đơn — mở Công nợ khách hàng đúng khách, đúng kỳ"
+                                          className="p-2 rounded-lg text-soft hover:bg-[var(--accent-soft)] hover:text-accent transition-colors">
+                                          <Receipt className="w-4 h-4" />
                                         </button>
                                       )}
                                       <input
@@ -776,7 +762,6 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
   return (
     <div className="relative">
       {renderList()}
-      {confirmDialog}
     </div>
   );
 }

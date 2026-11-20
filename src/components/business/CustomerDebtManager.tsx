@@ -200,7 +200,10 @@ function computeRecordTotals(r: DebtInvoiceRecord): Totals {
   };
 }
 
-export default function CustomerDebtManager({ readOnly = false }: { readOnly?: boolean }) {
+/** Mở sẵn một hóa đơn (từ màn Biên bản → "Chi tiết hóa đơn"). `nonce` đổi mỗi lần bấm để mở lại được. */
+export interface DebtFocus { mkh: string; endDate: string; nonce: number }
+
+export default function CustomerDebtManager({ readOnly = false, focus }: { readOnly?: boolean; focus?: DebtFocus | null }) {
   // Khối Vận hành (readOnly): chỉ thấy khách hàng thuộc KCN của tài khoản.
   const zoneLock = useMemo(
     () => (readOnly ? zoneFromArea(pb.authStore.model?.area) : ''),
@@ -259,6 +262,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
   /* Mặc định = tháng có hóa đơn MỚI NHẤT (không phải tháng hiện tại — đầu tháng
      thường chưa có dữ liệu nên sẽ ra bảng rỗng). Chỉ chạy 1 lần lúc mở trang. */
   useEffect(() => {
+    if (focus?.endDate) return; // được dẫn sang từ Biên bản ⇒ tháng theo hóa đơn đó (effect bên dưới)
     let alive = true;
     setLoading(true);
     fetchLatestInvoiceMonth().then(ym => {
@@ -588,6 +592,19 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
     setExpandedGroups({});
     setTab('detail');
   };
+
+  /* Dẫn sang từ Biên bản: tab Chi tiết, đúng tháng, tìm theo mã KH, ghim ngày chốt, mở sẵn khách. */
+  useEffect(() => {
+    if (!focus?.endDate) return;
+    setPending({});
+    setMonthFilter(focus.endDate.slice(0, 7));
+    setYear(focus.endDate.slice(0, 4));
+    setSearch(focus.mkh);
+    setPaymentFilter('all');
+    setFocusDate(focus.endDate);
+    setExpandedGroups(focus.mkh ? { [focus.mkh]: true } : {});
+    setTab('detail');
+  }, [focus]);
 
   /* ── lọc theo tìm kiếm + trạng thái thanh toán ──
      Lọc Ở CẤP KỲ: tab "Đã xong" chỉ giữ các kỳ đã có ngày thanh toán, tab "Còn nợ"

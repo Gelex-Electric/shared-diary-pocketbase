@@ -12,7 +12,7 @@ import BusinessSummaryDashboard from './BusinessSummaryDashboard';
 import BillConfirmManager from './BillConfirmManager';
 import QuickImportManager from './QuickImportManager';
 import InvoiceExportManager from './InvoiceExportManager';
-import CustomerDebtManager from './CustomerDebtManager';
+import CustomerDebtManager, { type DebtFocus } from './CustomerDebtManager';
 import CustomerManager from '../CustomerManager';
 import HesReadingManager from '../hes/HesReadingManager';
 import OfficeVoltagePowerDashboard from './OfficeVoltagePowerDashboard';
@@ -73,6 +73,10 @@ const QLVH_TABS: Tab[] = ['qlvh'];
 
 export default function BusinessDashboard() {
   const [topTab, setTopTab] = useState<Tab>('summary');
+  /* Biên bản → "Chi tiết hóa đơn" mở Công nợ đúng khách/kỳ; rời tab Công nợ thì bỏ ghim. */
+  const [debtFocus, setDebtFocus] = useState<DebtFocus | null>(null);
+  const openDebt = (f: Omit<DebtFocus, 'nonce'>) => { setDebtFocus({ ...f, nonce: Date.now() }); setTopTab('customer-debt'); };
+  useEffect(() => { if (topTab !== 'customer-debt') setDebtFocus(null); }, [topTab]);
   /** Việc của Kinh Doanh = chưa khai nhu cầu + chờ treo — mục "Treo tháo" trong Quản lý vật tư thiết bị điện. */
   const supply = useSupplyTasks('kinh_doanh');
   const taskBadge = supply.count;
@@ -632,7 +636,7 @@ export default function BusinessDashboard() {
             ) : topTab === 'invoice-export' ? (
               <InvoiceExportManager />
             ) : topTab === 'customer-debt' ? (
-              <CustomerDebtManager />
+              <CustomerDebtManager focus={debtFocus} />
             ) : topTab === 'operating' ? (
               <CustomerManager scope="vanphong" />
             ) : topTab === 'hes' ? (
@@ -654,7 +658,7 @@ export default function BusinessDashboard() {
                 <OfficeSldPage />
               </div>
             ) : (
-              <BillConfirmManager />
+              <BillConfirmManager onOpenDebt={openDebt} />
             )}
           </section>
         </div>
