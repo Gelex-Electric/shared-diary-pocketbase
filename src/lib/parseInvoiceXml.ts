@@ -235,6 +235,20 @@ export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
     }
   }
 
+  // Bỏ khoảng 0 ngày, chỉ số không đổi, không tiền của công tơ ĐÃ có khoảng khác (20/11/2026):
+  // CCIS có lúc kèm dòng chỉ số `IndexType=CSC` kỳ 01/11→01/11 (Old = New) bên cạnh kỳ thật `DDK`
+  // ⇒ trước đây thành dòng `invoice` thừa, màn Biên bản gắn nhầm nhãn "đổi giá điện", Công nợ đếm
+  // gấp đôi công tơ. IndexId (MIN MHHDVu) vẫn tính trên MỌI dòng nên mã gộp không đổi.
+  const isEmptyPeriod = (r: MeterPeriodRow) =>
+    r.StartDate === r.EndDate
+    && (Object.values(r.bieu) as BieuData[]).every(b => b.old === b.moi && !b.phuTru)
+    && !r.TongSL_HC && !r.ThTien_HC && !r.TongSL_PK && !r.ThTien_PK;
+  rowMap.forEach((r, key) => {
+    if (!isEmptyPeriod(r)) return;
+    const hasOther = Array.from(rowMap.entries()).some(([k, o]) => k !== key && o.SCT === r.SCT && !isEmptyPeriod(o));
+    if (hasOther) rowMap.delete(key);
+  });
+
   // Gộp thành tiền trước thuế + tính sau thuế theo TỪNG công tơ.
   // ThTien = ThTien_HC + ThTien_PK (hóa đơn HC không có PK & ngược lại). ThTienVAT = ThTien×(1+VAT).
   const rows = Array.from(rowMap.values());
@@ -280,4 +294,25 @@ export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
   };
 
   return { billId: finalBillId, loaiHD, nban, nmua, rows, tgTTTBSo, header };
+}
+
+/**
+ * Công tơ có ĐỔI GIÁ THẬT trong hóa đơn (user chốt 20/11/2026): cùng một biểu BT/CĐ/TĐ có ≥2 đơn giá
+ * khác 0 giữa các khoảng ngày. Khoảng không có dòng tính tiền (đơn giá 0, vd dòng chỉ số CSC) không tính.
+ * Màn Biên bản dùng để gắn nhãn "đổi giá điện" — thay cho việc chỉ đếm số khoảng.
+ */
+export function priceChangedMeters(xml: string): Set<string> {
+  const prices = new Map<string, Set<number>>();
+  for (const r of parseInvoiceXml(xml).rows) {
+    (['BT', 'CD', 'TD'] as Bieu[]).forEach(b => {
+      const p = r.bieu[b].dgia;
+      if (!p) return;
+      const k = `${r.SCT}|${b}`;
+      if (!prices.has(k)) prices.set(k, new Set());
+      prices.get(k)!.add(p);
+    });
+  }
+  const out = new Set<string>();
+  prices.forEach((s, k) => { if (s.size > 1) out.add(k.split('|')[0]); });
+  return out;
 }

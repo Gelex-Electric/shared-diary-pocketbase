@@ -11,8 +11,10 @@ import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
   RefreshCw, X, Loader2, Save, Banknote, LayoutDashboard, Table2, CalendarClock, AlertTriangle, ClipboardList,
-  Receipt, BellRing, KeyRound,
+  Receipt, BellRing, KeyRound, Trash2,
 } from 'lucide-react';
+import { useConfirm } from '../ui/ConfirmDialog';
+import { deleteWholeBill } from '../../lib/invoiceDelete';
 
 /* ============================================================
    Công nợ khách hàng — gộp dữ liệu từ collection `invoice`:
@@ -198,7 +200,10 @@ function computeRecordTotals(r: DebtInvoiceRecord): Totals {
   };
 }
 
-export default function CustomerDebtManager({ readOnly = false }: { readOnly?: boolean }) {
+/** Mở sẵn một hóa đơn (từ màn Biên bản → "Chi tiết hóa đơn"). `nonce` đổi mỗi lần bấm để mở lại được. */
+export interface DebtFocus { mkh: string; endDate: string; nonce: number }
+
+export default function CustomerDebtManager({ readOnly = false, focus }: { readOnly?: boolean; focus?: DebtFocus | null }) {
   // Khối Vận hành (readOnly): chỉ thấy khách hàng thuộc KCN của tài khoản.
   const zoneLock = useMemo(
     () => (readOnly ? zoneFromArea(pb.authStore.model?.area) : ''),
@@ -257,6 +262,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
   /* Mặc định = tháng có hóa đơn MỚI NHẤT (không phải tháng hiện tại — đầu tháng
      thường chưa có dữ liệu nên sẽ ra bảng rỗng). Chỉ chạy 1 lần lúc mở trang. */
   useEffect(() => {
+    if (focus?.endDate) return; // được dẫn sang từ Biên bản ⇒ tháng theo hóa đơn đó (effect bên dưới)
     let alive = true;
     setLoading(true);
     fetchLatestInvoiceMonth().then(ym => {
@@ -454,6 +460,31 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
     finally { setCcisWait(null); }
   };
 
+  /* ── Xóa CẢ hóa đơn của một kỳ (user chốt 20/11/2026): mọi dòng `invoice` cùng BillId + `einvoice`.
+     Chỉ khối KD (readOnly không hiện nút). Luật xóa chung với màn Biên bản: `lib/invoiceDelete.ts`. */
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  const [deletingKy, setDeletingKy] = useState('');
+  const deleteKy = async (ky: KyGroup, c: CustomerGroup) => {
+    const ok = await confirm({
+      title: 'Xóa hóa đơn?',
+      message: `Hóa đơn kỳ ${fmtDate(ky.endDate)} của ${c.mkh} — ${c.nMua || '(Chưa có tên)'} (${ky.ids.length} công tơ) `
+        + 'sẽ bị xóa vĩnh viễn ở cả Công nợ lẫn Biên bản chốt chỉ số, kèm hóa đơn gốc (einvoice). '
+        + 'Ngày thanh toán đã nhập cũng mất. Thao tác không thể hoàn tác — muốn có lại thì nạp lại XML.',
+      confirmLabel: 'Xóa',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setDeletingKy(ky.key);
+    try {
+      const { rows, einvRemoved } = await deleteWholeBill(ky.billId, ky.ids);
+      setPending(p => { const n = { ...p }; delete n[ky.key]; return n; });
+      await Promise.all([loadRecords(monthFilter), loadYearRecords(year)]);
+      showToast(`Đã xóa ${rows} dòng chỉ số${einvRemoved ? ' và hóa đơn gốc' : ''}`, 'success');
+    } catch (err: any) {
+      showToast(`Lỗi khi xóa: ${err?.data?.message || err?.message || ''}`, 'error');
+    } finally { setDeletingKy(''); }
+  };
+
   /* ── tra cứu kỳ theo key (ids + ngày gốc) phục vụ lưu thay đổi ── */
   const kyIndex = useMemo(() => {
     const m = new Map<string, { ids: string[]; endDate: string; mkh: string; nMua: string; original: string }>();
@@ -561,6 +592,19 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
     setExpandedGroups({});
     setTab('detail');
   };
+
+  /* Dẫn sang từ Biên bản: tab Chi tiết, đúng tháng, tìm theo mã KH, ghim ngày chốt, mở sẵn khách. */
+  useEffect(() => {
+    if (!focus?.endDate) return;
+    setPending({});
+    setMonthFilter(focus.endDate.slice(0, 7));
+    setYear(focus.endDate.slice(0, 4));
+    setSearch(focus.mkh);
+    setPaymentFilter('all');
+    setFocusDate(focus.endDate);
+    setExpandedGroups(focus.mkh ? { [focus.mkh]: true } : {});
+    setTab('detail');
+  }, [focus]);
 
   /* ── lọc theo tìm kiếm + trạng thái thanh toán ──
      Lọc Ở CẤP KỲ: tab "Đã xong" chỉ giữ các kỳ đã có ngày thanh toán, tab "Còn nợ"
@@ -753,30 +797,37 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
               </td>
               <td className="py-3 px-4 text-soft italic pl-6 whitespace-normal break-words leading-relaxed text-[11px]">
                 {ky.ids.length} công tơ
-                {/* Xem PDF giấy báo / hóa đơn — chỉ khi hóa đơn đã nạp XML (có einvoice). */}
+                {/* Xem PDF giấy báo / hóa đơn — chỉ khi hóa đơn đã nạp XML (có einvoice). Xóa: chỉ khối KD. */}
                 {(() => {
                   const e = ky.billId ? einvByBill.get(ky.billId) : undefined;
-                  if (!e) return null;
-                  const btn = 'vl-btn vl-btn-sm flex items-center gap-1 !px-2 !py-0.5 text-[11px] not-italic';
+                  if (!e && readOnly) return null;
+                  // Nhiều thao tác ⇒ nút chỉ có icon, chữ ở title/aria-label (user chốt 20/11/2026); màn Biên bản dùng nút có chữ.
+                  const btn = 'vl-btn vl-btn-sm flex items-center justify-center !p-1.5 not-italic';
                   return (
                     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                      {e.billval ? (<>
+                      {!e ? null : e.billval ? (<>
                         <button onClick={() => void openPdf(ky, 'NOTI')} disabled={!!ccisWait}
-                          title="Xem giấy báo tiền điện (PDF)" className={`${btn} vl-btn-outline-primary`}>
-                          <BellRing className="h-3 w-3" /> Giấy báo
+                          title="Giấy báo tiền điện (PDF)" aria-label="Giấy báo" className={`${btn} vl-btn-outline-primary`}>
+                          <BellRing className="h-3.5 w-3.5" />
                         </button>
                         <button onClick={() => void openPdf(ky, 'BILLPDF')} disabled={!!ccisWait}
-                          title="Xem hóa đơn điện tử (PDF)" className={`${btn} vl-btn-outline-primary`}>
-                          <Receipt className="h-3 w-3" /> Hóa đơn
+                          title="Hóa đơn điện tử (PDF)" aria-label="Hóa đơn" className={`${btn} vl-btn-outline-primary`}>
+                          <Receipt className="h-3.5 w-3.5" />
                         </button>
                       </>) : readOnly ? (
                         <span className="not-italic text-[11px] text-soft" title="Khối Kinh doanh cần bấm Lấy BILLVAL cho hóa đơn này">
-                          Chưa có PDF — chờ khối KD lấy BILLVAL
+                          Chưa có PDF
                         </span>
                       ) : (
                         <button onClick={() => void getBillval(ky)} disabled={!!ccisWait}
-                          title="Tra CCIS để mở được PDF giấy báo / hóa đơn" className={`${btn} vl-btn-warning`}>
-                          <KeyRound className="h-3 w-3" /> Lấy BILLVAL
+                          title="Lấy BILLVAL — tra CCIS để mở được PDF giấy báo / hóa đơn" aria-label="Lấy BILLVAL" className={`${btn} vl-btn-warning`}>
+                          <KeyRound className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {!readOnly && (
+                        <button onClick={() => void deleteKy(ky, c)} disabled={!!deletingKy || !!ccisWait}
+                          title="Xóa hóa đơn (mọi công tơ của kỳ + hóa đơn gốc)" aria-label="Xóa hóa đơn" className={`${btn} vl-btn-danger`}>
+                          {deletingKy === ky.key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                         </button>
                       )}
                     </div>
@@ -1331,6 +1382,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       </>
       )}
       <LoadingOverlay open={!!ccisWait} title={ccisWait?.title ?? ''} hint={ccisWait?.hint} />
+      {confirmDialog}
       <PdfViewer file={pdfView} title={pdfView?.title ?? ''} onClose={closePdf} />
     </div>
   );

@@ -2,14 +2,14 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { pb } from '../../lib/pocketbase';
 import { MonthPicker } from '../ui/DateTimePickers';
-import { useConfirm } from '../ui/ConfirmDialog';
+import type { DebtFocus } from './CustomerDebtManager';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
 import { zoneFromArea, zoneOf, ZONE_MAP, fetchLatestInvoiceMonth } from '../../lib/invoices';
 import { zoneHexOf } from '../../lib/kcnColors';
 import PizZip from 'pizzip';
 import {
-  FileCheck2, Users, ChevronRight, Trash2, FileDown, Search, FileSpreadsheet,
+  FileCheck2, Users, ChevronRight, Receipt, FileDown, Search, FileSpreadsheet,
   CreditCard, RefreshCw, Zap, CheckSquare, Square, Archive,
 } from 'lucide-react';
 
@@ -28,6 +28,7 @@ import {
 
 import { toast as notify } from '../../lib/toast';
 import { pad2, dateOnly } from '../../lib/format';
+import { priceChangedMeters } from '../../lib/parseInvoiceXml';
 import { TOAST_TITLE } from '../../lib/toast';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -174,8 +175,14 @@ function computeResults(d: Record<string, any>) {
   return { sanLuong, bieu, cosphi };
 }
 
-export default function BillConfirmManager({ readOnly = false }: { readOnly?: boolean }) {
-  const { confirm, dialog: confirmDialog } = useConfirm();
+/**
+ * Không còn xóa ở màn này (user chốt 20/11/2026): nút "Chi tiết hóa đơn" dẫn sang Công nợ khách hàng
+ * (`onOpenDebt`, dashboard chuyển tab) — xóa hóa đơn làm ở đó, chỉ khối KD.
+ */
+export default function BillConfirmManager({ readOnly = false, onOpenDebt }: {
+  readOnly?: boolean;
+  onOpenDebt?: (focus: Omit<DebtFocus, 'nonce'>) => void;
+}) {
 
   // Khối Vận hành (readOnly): chỉ thấy khách hàng thuộc KCN của tài khoản.
   const zoneLock = useMemo(
@@ -273,43 +280,6 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     }
   };
 
-  const handleDelete = async (row: BienBanRow) => {
-    const r = row.data;
-    const ok = await confirm({
-      title: 'Xóa biên bản?',
-      message: `Biên bản công tơ ${r.SCT || '—'}${row.merged ? ` (${row.ids.length} khoảng đổi giá)` : ''} sẽ bị xóa vĩnh viễn. Thao tác không thể hoàn tác.`,
-      confirmLabel: 'Xóa',
-      variant: 'danger',
-    });
-    if (!ok) return;
-    try {
-      // Hóa đơn đổi giá tách nhiều bản ghi → xóa tất cả khoảng của biên bản
-      await Promise.all(row.ids.map(id => pb.collection('invoice').delete(id)));
-      // Hóa đơn không còn dòng chi tiết nào (mọi công tơ đã xóa) ⇒ xóa luôn hóa đơn gốc
-      // `einvoice` (user chốt 01/10/2026), để nạp lại XML không vướng bản cũ.
-      const billId = (r.BillId ?? '').toString().trim();
-      let einvRemoved = false;
-      if (billId && billId !== '0') {
-        const left = await pb.collection('invoice').getList(1, 1, {
-          filter: pb.filter('BillId = {:b}', { b: billId }), fields: 'id', requestKey: null,
-        });
-        if (left.totalItems === 0) {
-          const einv = await pb.collection('einvoice').getList(1, 1, {
-            filter: pb.filter('BillId = {:b}', { b: billId }), fields: 'id', requestKey: null,
-          });
-          if (einv.items[0]) {
-            await pb.collection('einvoice').delete(einv.items[0].id);
-            einvRemoved = true;
-          }
-        }
-      }
-      await loadRecords(monthFilterDate);
-      showToast(einvRemoved ? 'Đã xóa biên bản và hóa đơn gốc (không còn công tơ nào)' : 'Đã xóa biên bản', 'success');
-    } catch (err: any) {
-      showToast(`Lỗi khi xóa: ${err?.data?.message || err?.message || ''}`, 'error');
-    }
-  };
-
   /* ── xuất PDF ── */
   const exportDocx = async (r: InvoiceRecord, exportKey: string) => {
     setExportingId(exportKey);
@@ -404,6 +374,37 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     singles.forEach(r => rows.push({ key: `__id:${r.id}`, ids: [r.id], primary: r, data: r, merged: false }));
     return rows;
   }, [filteredRecords]);
+
+  /* ── Nhãn "đổi giá điện" CHỈ khi biểu giá thật sự đổi (user chốt 20/11/2026) ──
+     Hóa đơn có XML (`einvoice`, từ 09/2026): so đơn giá từng biểu trong XML (`priceChangedMeters`).
+     Không có XML (dữ liệu trước 09/2026) ⇒ KHÔNG gắn nhãn (user chốt 20/11/2026). */
+  const [priceChanged, setPriceChanged] = useState<Map<string, Set<string>>>(new Map()); // BillId → SCT đổi giá
+  useEffect(() => {
+    const bills = Array.from(new Set(mergedRows.filter(r => r.merged)
+      .map(r => (r.primary.BillId ?? '').toString().trim()).filter(b => b && b !== '0')));
+    if (!bills.length) { setPriceChanged(new Map()); return; }
+    let alive = true;
+    (async () => {
+      const out = new Map<string, Set<string>>();
+      try {
+        for (let i = 0; i < bills.length; i += 30) {
+          const filter = bills.slice(i, i + 30).map(b => pb.filter('BillId = {:b}', { b })).join(' || ');
+          const items = await pb.collection('einvoice').getFullList<{ BillId: string; xml: string }>({
+            filter, fields: 'BillId,xml', requestKey: null,
+          });
+          items.forEach(e => { try { if (e.xml) out.set(e.BillId, priceChangedMeters(e.xml)); } catch { /* XML hỏng: không gắn nhãn */ } });
+        }
+      } catch { /* không đọc được einvoice: không gắn nhãn */ }
+      if (alive) setPriceChanged(out);
+    })();
+    return () => { alive = false; };
+  }, [mergedRows]);
+  const isPriceChange = (row: BienBanRow) => {
+    if (!row.merged) return false;
+    const bill = (row.primary.BillId ?? '').toString().trim();
+    const set = bill ? priceChanged.get(bill) : undefined;
+    return !!set?.has((row.primary.SCT || '').trim());
+  };
 
   /* ── Đồng bộ thời gian lấy chỉ số: gọi API HES (0h–23h59 ngày cuối kỳ),
      so khớp CHỈ SỐ TỔNG (BT+CĐ+TĐ) của biên bản với dữ liệu trả về, lấy mốc
@@ -569,7 +570,7 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
           <p className="text-sm text-soft max-w-2xl">
             {readOnly
               ? 'Xem và tải biên bản của khách hàng thuộc khu công nghiệp phụ trách.'
-              : 'Dữ liệu lấy từ XML hóa đơn ở màn "Nạp dữ liệu" — không thêm hay sửa tay. Xem, tải Word hoặc xóa (xóa rồi nạp lại XML để sửa).'}
+              : 'Dữ liệu lấy từ XML hóa đơn ở màn "Nạp dữ liệu" — không thêm hay sửa tay. Xem, tải Word; xem/xóa hóa đơn ở Công nợ khách hàng (nút Chi tiết hóa đơn).'}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
@@ -737,7 +738,7 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                                   <td className="py-3.5 px-4 text-xs font-semibold text-soft">
                                     <div className="flex items-center gap-1.5">
                                       <span>{fmtDate(r.StartDate)} – {fmtDate(r.EndDate)}</span>
-                                      {row.merged && (
+                                      {isPriceChange(row) && (
                                         <span title={`Hóa đơn đổi giá — gộp ${row.ids.length} khoảng`}
                                           className="px-1.5 py-0.5 rounded bg-[var(--warning-soft)] text-warn text-[10px] font-bold uppercase tracking-wide">
                                           đổi giá điện
@@ -754,16 +755,18 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
                                   </td>
                                   <td className="py-3.5 px-4">
                                     <div className="flex items-center justify-end gap-1.5">
-                                      <button onClick={() => exportDocx(r, row.key)} disabled={exportingId === row.key} title="Tải Word"
-                                        className="p-2 rounded-lg text-soft hover:bg-[var(--success-soft)] hover:text-ok transition-colors disabled:opacity-50">
-                                        <FileDown className="w-4 h-4" />
-                                      </button>
-                                      {!readOnly && (
-                                        <button onClick={() => handleDelete(row)} title="Xóa"
-                                          className="p-2 rounded-lg text-soft hover:bg-rose-50 hover:text-rose-600 transition-colors">
-                                          <Trash2 className="w-4 h-4" />
+                                      {/* Màn ít thao tác ⇒ nút có chữ (user chốt 20/11/2026); Công nợ dùng icon. */}
+                                      {onOpenDebt && (
+                                        <button onClick={() => onOpenDebt({ mkh: (r.MKHang || '').trim(), endDate: dateOnly(r.EndDate) })}
+                                          title="Mở Công nợ khách hàng đúng khách, đúng kỳ"
+                                          className="vl-btn vl-btn-sm vl-btn-outline-primary flex items-center gap-1 whitespace-nowrap">
+                                          <Receipt className="w-3.5 h-3.5" /> Chi tiết
                                         </button>
                                       )}
+                                      <button onClick={() => exportDocx(r, row.key)} disabled={exportingId === row.key} title="Tải biên bản (Word)"
+                                        className="vl-btn vl-btn-sm vl-btn-secondary flex items-center gap-1 whitespace-nowrap">
+                                        <FileDown className="w-3.5 h-3.5" /> Tải xuống
+                                      </button>
                                       <input
                                         type="checkbox"
                                         checked={isSelected}
@@ -792,7 +795,6 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
   return (
     <div className="relative">
       {renderList()}
-      {confirmDialog}
     </div>
   );
 }
