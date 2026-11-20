@@ -295,3 +295,24 @@ export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
 
   return { billId: finalBillId, loaiHD, nban, nmua, rows, tgTTTBSo, header };
 }
+
+/**
+ * Công tơ có ĐỔI GIÁ THẬT trong hóa đơn (user chốt 20/11/2026): cùng một biểu BT/CĐ/TĐ có ≥2 đơn giá
+ * khác 0 giữa các khoảng ngày. Khoảng không có dòng tính tiền (đơn giá 0, vd dòng chỉ số CSC) không tính.
+ * Màn Biên bản dùng để gắn nhãn "đổi giá điện" — thay cho việc chỉ đếm số khoảng.
+ */
+export function priceChangedMeters(xml: string): Set<string> {
+  const prices = new Map<string, Set<number>>();
+  for (const r of parseInvoiceXml(xml).rows) {
+    (['BT', 'CD', 'TD'] as Bieu[]).forEach(b => {
+      const p = r.bieu[b].dgia;
+      if (!p) return;
+      const k = `${r.SCT}|${b}`;
+      if (!prices.has(k)) prices.set(k, new Set());
+      prices.get(k)!.add(p);
+    });
+  }
+  const out = new Set<string>();
+  prices.forEach((s, k) => { if (s.size > 1) out.add(k.split('|')[0]); });
+  return out;
+}

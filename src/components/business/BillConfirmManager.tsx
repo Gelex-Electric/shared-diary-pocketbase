@@ -28,6 +28,7 @@ import {
 
 import { toast as notify } from '../../lib/toast';
 import { pad2, dateOnly } from '../../lib/format';
+import { priceChangedMeters } from '../../lib/parseInvoiceXml';
 import { TOAST_TITLE } from '../../lib/toast';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -69,6 +70,7 @@ interface BienBanRow {
   primary: InvoiceRecord; // bản ghi mới nhất theo EndDate — nguồn meta/NKy + thao tác đơn lẻ
   data: InvoiceRecord;    // dữ liệu đã gộp để tính toán & xuất Word
   merged: boolean;        // true nếu gộp từ ≥2 khoảng
+  usedPeriods: number;    // số khoảng có sản lượng/tiền > 0 (dự phòng khi hóa đơn không có XML)
 }
 
 
@@ -324,6 +326,7 @@ export default function BillConfirmManager({ readOnly = false, onOpenDebt }: {
         primary: byEndDesc[0],
         data: mergeBienBan(recs),
         merged: recs.length > 1,
+        usedPeriods: recs.filter(r => num((r as any).TongSL_HC) > 0 || num((r as any).ThTien) > 0).length,
       });
     };
 
@@ -370,9 +373,40 @@ export default function BillConfirmManager({ readOnly = false, onOpenDebt }: {
       flush();
     });
 
-    singles.forEach(r => rows.push({ key: `__id:${r.id}`, ids: [r.id], primary: r, data: r, merged: false }));
+    singles.forEach(r => rows.push({ key: `__id:${r.id}`, ids: [r.id], primary: r, data: r, merged: false, usedPeriods: 1 }));
     return rows;
   }, [filteredRecords]);
+
+  /* ── Nhãn "đổi giá điện" CHỈ khi biểu giá thật sự đổi (user chốt 20/11/2026) ──
+     Hóa đơn có XML (`einvoice`, từ 09/2026): so đơn giá từng biểu trong XML (`priceChangedMeters`).
+     Không có XML (dữ liệu cũ): dự phòng — ≥2 khoảng đều có sản lượng/tiền (khoảng rỗng 0 đồng không tính). */
+  const [priceChanged, setPriceChanged] = useState<Map<string, Set<string>>>(new Map()); // BillId → SCT đổi giá
+  useEffect(() => {
+    const bills = Array.from(new Set(mergedRows.filter(r => r.merged)
+      .map(r => (r.primary.BillId ?? '').toString().trim()).filter(b => b && b !== '0')));
+    if (!bills.length) { setPriceChanged(new Map()); return; }
+    let alive = true;
+    (async () => {
+      const out = new Map<string, Set<string>>();
+      try {
+        for (let i = 0; i < bills.length; i += 30) {
+          const filter = bills.slice(i, i + 30).map(b => pb.filter('BillId = {:b}', { b })).join(' || ');
+          const items = await pb.collection('einvoice').getFullList<{ BillId: string; xml: string }>({
+            filter, fields: 'BillId,xml', requestKey: null,
+          });
+          items.forEach(e => { try { if (e.xml) out.set(e.BillId, priceChangedMeters(e.xml)); } catch { /* XML hỏng: dùng dự phòng */ } });
+        }
+      } catch { /* không đọc được einvoice: dùng dự phòng */ }
+      if (alive) setPriceChanged(out);
+    })();
+    return () => { alive = false; };
+  }, [mergedRows]);
+  const isPriceChange = (row: BienBanRow) => {
+    if (!row.merged) return false;
+    const bill = (row.primary.BillId ?? '').toString().trim();
+    const set = bill ? priceChanged.get(bill) : undefined;
+    return set ? set.has((row.primary.SCT || '').trim()) : row.usedPeriods >= 2;
+  };
 
   /* ── Đồng bộ thời gian lấy chỉ số: gọi API HES (0h–23h59 ngày cuối kỳ),
      so khớp CHỈ SỐ TỔNG (BT+CĐ+TĐ) của biên bản với dữ liệu trả về, lấy mốc
@@ -706,7 +740,7 @@ export default function BillConfirmManager({ readOnly = false, onOpenDebt }: {
                                   <td className="py-3.5 px-4 text-xs font-semibold text-soft">
                                     <div className="flex items-center gap-1.5">
                                       <span>{fmtDate(r.StartDate)} – {fmtDate(r.EndDate)}</span>
-                                      {row.merged && (
+                                      {isPriceChange(row) && (
                                         <span title={`Hóa đơn đổi giá — gộp ${row.ids.length} khoảng`}
                                           className="px-1.5 py-0.5 rounded bg-[var(--warning-soft)] text-warn text-[10px] font-bold uppercase tracking-wide">
                                           đổi giá điện
