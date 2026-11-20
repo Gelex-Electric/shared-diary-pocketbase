@@ -235,6 +235,20 @@ export function parseInvoiceXml(xml: string, billId = ''): ParsedInvoice {
     }
   }
 
+  // Bỏ khoảng 0 ngày, chỉ số không đổi, không tiền của công tơ ĐÃ có khoảng khác (20/11/2026):
+  // CCIS có lúc kèm dòng chỉ số `IndexType=CSC` kỳ 01/11→01/11 (Old = New) bên cạnh kỳ thật `DDK`
+  // ⇒ trước đây thành dòng `invoice` thừa, màn Biên bản gắn nhầm nhãn "đổi giá điện", Công nợ đếm
+  // gấp đôi công tơ. IndexId (MIN MHHDVu) vẫn tính trên MỌI dòng nên mã gộp không đổi.
+  const isEmptyPeriod = (r: MeterPeriodRow) =>
+    r.StartDate === r.EndDate
+    && (Object.values(r.bieu) as BieuData[]).every(b => b.old === b.moi && !b.phuTru)
+    && !r.TongSL_HC && !r.ThTien_HC && !r.TongSL_PK && !r.ThTien_PK;
+  rowMap.forEach((r, key) => {
+    if (!isEmptyPeriod(r)) return;
+    const hasOther = Array.from(rowMap.entries()).some(([k, o]) => k !== key && o.SCT === r.SCT && !isEmptyPeriod(o));
+    if (hasOther) rowMap.delete(key);
+  });
+
   // Gộp thành tiền trước thuế + tính sau thuế theo TỪNG công tơ.
   // ThTien = ThTien_HC + ThTien_PK (hóa đơn HC không có PK & ngược lại). ThTienVAT = ThTien×(1+VAT).
   const rows = Array.from(rowMap.values());
