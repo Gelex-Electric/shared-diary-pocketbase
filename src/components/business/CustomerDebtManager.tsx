@@ -801,32 +801,33 @@ export default function CustomerDebtManager({ readOnly = false, focus }: { readO
                 {(() => {
                   const e = ky.billId ? einvByBill.get(ky.billId) : undefined;
                   if (!e && readOnly) return null;
-                  const btn = 'vl-btn vl-btn-sm flex items-center gap-1 !px-2 !py-0.5 text-[11px] not-italic';
+                  // Nhiều thao tác ⇒ nút chỉ có icon, chữ ở title/aria-label (user chốt 20/11/2026); màn Biên bản dùng nút có chữ.
+                  const btn = 'vl-btn vl-btn-sm flex items-center justify-center !p-1.5 not-italic';
                   return (
                     <div className="mt-1.5 flex flex-wrap items-center gap-1">
                       {!e ? null : e.billval ? (<>
                         <button onClick={() => void openPdf(ky, 'NOTI')} disabled={!!ccisWait}
-                          title="Xem giấy báo tiền điện (PDF)" className={`${btn} vl-btn-outline-primary`}>
-                          <BellRing className="h-3 w-3" /> Giấy báo
+                          title="Giấy báo tiền điện (PDF)" aria-label="Giấy báo" className={`${btn} vl-btn-outline-primary`}>
+                          <BellRing className="h-3.5 w-3.5" />
                         </button>
                         <button onClick={() => void openPdf(ky, 'BILLPDF')} disabled={!!ccisWait}
-                          title="Xem hóa đơn điện tử (PDF)" className={`${btn} vl-btn-outline-primary`}>
-                          <Receipt className="h-3 w-3" /> Hóa đơn
+                          title="Hóa đơn điện tử (PDF)" aria-label="Hóa đơn" className={`${btn} vl-btn-outline-primary`}>
+                          <Receipt className="h-3.5 w-3.5" />
                         </button>
                       </>) : readOnly ? (
                         <span className="not-italic text-[11px] text-soft" title="Khối Kinh doanh cần bấm Lấy BILLVAL cho hóa đơn này">
-                          Chưa có PDF — chờ khối KD lấy BILLVAL
+                          Chưa có PDF
                         </span>
                       ) : (
                         <button onClick={() => void getBillval(ky)} disabled={!!ccisWait}
-                          title="Tra CCIS để mở được PDF giấy báo / hóa đơn" className={`${btn} vl-btn-warning`}>
-                          <KeyRound className="h-3 w-3" /> Lấy BILLVAL
+                          title="Lấy BILLVAL — tra CCIS để mở được PDF giấy báo / hóa đơn" aria-label="Lấy BILLVAL" className={`${btn} vl-btn-warning`}>
+                          <KeyRound className="h-3.5 w-3.5" />
                         </button>
                       )}
                       {!readOnly && (
                         <button onClick={() => void deleteKy(ky, c)} disabled={!!deletingKy || !!ccisWait}
-                          title="Xóa hóa đơn này (mọi công tơ của kỳ + hóa đơn gốc)" className={`${btn} vl-btn-danger`}>
-                          {deletingKy === ky.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />} Xóa
+                          title="Xóa hóa đơn (mọi công tơ của kỳ + hóa đơn gốc)" aria-label="Xóa hóa đơn" className={`${btn} vl-btn-danger`}>
+                          {deletingKy === ky.key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                         </button>
                       )}
                     </div>

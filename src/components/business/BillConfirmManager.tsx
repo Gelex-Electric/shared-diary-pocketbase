@@ -723,17 +723,18 @@ export default function BillConfirmManager({ readOnly = false, onOpenDebt }: {
                                   </td>
                                   <td className="py-3.5 px-4">
                                     <div className="flex items-center justify-end gap-1.5">
-                                      <button onClick={() => exportDocx(r, row.key)} disabled={exportingId === row.key} title="Tải Word"
-                                        className="p-2 rounded-lg text-soft hover:bg-[var(--success-soft)] hover:text-ok transition-colors disabled:opacity-50">
-                                        <FileDown className="w-4 h-4" />
-                                      </button>
+                                      {/* Màn ít thao tác ⇒ nút có chữ (user chốt 20/11/2026); Công nợ dùng icon. */}
                                       {onOpenDebt && (
                                         <button onClick={() => onOpenDebt({ mkh: (r.MKHang || '').trim(), endDate: dateOnly(r.EndDate) })}
-                                          title="Chi tiết hóa đơn — mở Công nợ khách hàng đúng khách, đúng kỳ"
-                                          className="p-2 rounded-lg text-soft hover:bg-[var(--accent-soft)] hover:text-accent transition-colors">
-                                          <Receipt className="w-4 h-4" />
+                                          title="Mở Công nợ khách hàng đúng khách, đúng kỳ"
+                                          className="vl-btn vl-btn-sm vl-btn-outline-primary flex items-center gap-1 whitespace-nowrap">
+                                          <Receipt className="w-3.5 h-3.5" /> Chi tiết
                                         </button>
                                       )}
+                                      <button onClick={() => exportDocx(r, row.key)} disabled={exportingId === row.key} title="Tải biên bản (Word)"
+                                        className="vl-btn vl-btn-sm vl-btn-secondary flex items-center gap-1 whitespace-nowrap">
+                                        <FileDown className="w-3.5 h-3.5" /> Tải xuống
+                                      </button>
                                       <input
                                         type="checkbox"
                                         checked={isSelected}
