@@ -11,8 +11,10 @@ import {
   Wallet, Zap, DollarSign, UserX, CheckCircle2, XCircle,
   Search, ChevronRight, ChevronDown, FileSpreadsheet, Building2,
   RefreshCw, X, Loader2, Save, Banknote, LayoutDashboard, Table2, CalendarClock, AlertTriangle, ClipboardList,
-  Receipt, BellRing, KeyRound,
+  Receipt, BellRing, KeyRound, Trash2,
 } from 'lucide-react';
+import { useConfirm } from '../ui/ConfirmDialog';
+import { deleteWholeBill } from '../../lib/invoiceDelete';
 
 /* ============================================================
    Công nợ khách hàng — gộp dữ liệu từ collection `invoice`:
@@ -454,6 +456,31 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
     finally { setCcisWait(null); }
   };
 
+  /* ── Xóa CẢ hóa đơn của một kỳ (user chốt 20/11/2026): mọi dòng `invoice` cùng BillId + `einvoice`.
+     Chỉ khối KD (readOnly không hiện nút). Luật xóa chung với màn Biên bản: `lib/invoiceDelete.ts`. */
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  const [deletingKy, setDeletingKy] = useState('');
+  const deleteKy = async (ky: KyGroup, c: CustomerGroup) => {
+    const ok = await confirm({
+      title: 'Xóa hóa đơn?',
+      message: `Hóa đơn kỳ ${fmtDate(ky.endDate)} của ${c.mkh} — ${c.nMua || '(Chưa có tên)'} (${ky.ids.length} công tơ) `
+        + 'sẽ bị xóa vĩnh viễn ở cả Công nợ lẫn Biên bản chốt chỉ số, kèm hóa đơn gốc (einvoice). '
+        + 'Ngày thanh toán đã nhập cũng mất. Thao tác không thể hoàn tác — muốn có lại thì nạp lại XML.',
+      confirmLabel: 'Xóa',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setDeletingKy(ky.key);
+    try {
+      const { rows, einvRemoved } = await deleteWholeBill(ky.billId, ky.ids);
+      setPending(p => { const n = { ...p }; delete n[ky.key]; return n; });
+      await Promise.all([loadRecords(monthFilter), loadYearRecords(year)]);
+      showToast(`Đã xóa ${rows} dòng chỉ số${einvRemoved ? ' và hóa đơn gốc' : ''}`, 'success');
+    } catch (err: any) {
+      showToast(`Lỗi khi xóa: ${err?.data?.message || err?.message || ''}`, 'error');
+    } finally { setDeletingKy(''); }
+  };
+
   /* ── tra cứu kỳ theo key (ids + ngày gốc) phục vụ lưu thay đổi ── */
   const kyIndex = useMemo(() => {
     const m = new Map<string, { ids: string[]; endDate: string; mkh: string; nMua: string; original: string }>();
@@ -753,14 +780,14 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
               </td>
               <td className="py-3 px-4 text-soft italic pl-6 whitespace-normal break-words leading-relaxed text-[11px]">
                 {ky.ids.length} công tơ
-                {/* Xem PDF giấy báo / hóa đơn — chỉ khi hóa đơn đã nạp XML (có einvoice). */}
+                {/* Xem PDF giấy báo / hóa đơn — chỉ khi hóa đơn đã nạp XML (có einvoice). Xóa: chỉ khối KD. */}
                 {(() => {
                   const e = ky.billId ? einvByBill.get(ky.billId) : undefined;
-                  if (!e) return null;
+                  if (!e && readOnly) return null;
                   const btn = 'vl-btn vl-btn-sm flex items-center gap-1 !px-2 !py-0.5 text-[11px] not-italic';
                   return (
                     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                      {e.billval ? (<>
+                      {!e ? null : e.billval ? (<>
                         <button onClick={() => void openPdf(ky, 'NOTI')} disabled={!!ccisWait}
                           title="Xem giấy báo tiền điện (PDF)" className={`${btn} vl-btn-outline-primary`}>
                           <BellRing className="h-3 w-3" /> Giấy báo
@@ -777,6 +804,12 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
                         <button onClick={() => void getBillval(ky)} disabled={!!ccisWait}
                           title="Tra CCIS để mở được PDF giấy báo / hóa đơn" className={`${btn} vl-btn-warning`}>
                           <KeyRound className="h-3 w-3" /> Lấy BILLVAL
+                        </button>
+                      )}
+                      {!readOnly && (
+                        <button onClick={() => void deleteKy(ky, c)} disabled={!!deletingKy || !!ccisWait}
+                          title="Xóa hóa đơn này (mọi công tơ của kỳ + hóa đơn gốc)" className={`${btn} vl-btn-danger`}>
+                          {deletingKy === ky.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />} Xóa
                         </button>
                       )}
                     </div>
@@ -1331,6 +1364,7 @@ export default function CustomerDebtManager({ readOnly = false }: { readOnly?: b
       </>
       )}
       <LoadingOverlay open={!!ccisWait} title={ccisWait?.title ?? ''} hint={ccisWait?.hint} />
+      {confirmDialog}
       <PdfViewer file={pdfView} title={pdfView?.title ?? ''} onClose={closePdf} />
     </div>
   );

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { pb } from '../../lib/pocketbase';
 import { MonthPicker } from '../ui/DateTimePickers';
 import { useConfirm } from '../ui/ConfirmDialog';
+import { deleteInvoiceRows } from '../../lib/invoiceDelete';
 import { generateBbxnDocx } from '../../lib/bbxnDocx';
 import { AccountHes, DataMetter } from '../../types';
 import { zoneFromArea, zoneOf, ZONE_MAP, fetchLatestInvoiceMonth } from '../../lib/invoices';
@@ -283,26 +284,9 @@ export default function BillConfirmManager({ readOnly = false }: { readOnly?: bo
     });
     if (!ok) return;
     try {
-      // Hóa đơn đổi giá tách nhiều bản ghi → xóa tất cả khoảng của biên bản
-      await Promise.all(row.ids.map(id => pb.collection('invoice').delete(id)));
-      // Hóa đơn không còn dòng chi tiết nào (mọi công tơ đã xóa) ⇒ xóa luôn hóa đơn gốc
-      // `einvoice` (user chốt 01/10/2026), để nạp lại XML không vướng bản cũ.
-      const billId = (r.BillId ?? '').toString().trim();
-      let einvRemoved = false;
-      if (billId && billId !== '0') {
-        const left = await pb.collection('invoice').getList(1, 1, {
-          filter: pb.filter('BillId = {:b}', { b: billId }), fields: 'id', requestKey: null,
-        });
-        if (left.totalItems === 0) {
-          const einv = await pb.collection('einvoice').getList(1, 1, {
-            filter: pb.filter('BillId = {:b}', { b: billId }), fields: 'id', requestKey: null,
-          });
-          if (einv.items[0]) {
-            await pb.collection('einvoice').delete(einv.items[0].id);
-            einvRemoved = true;
-          }
-        }
-      }
+      // Hóa đơn đổi giá tách nhiều bản ghi → xóa tất cả khoảng của biên bản; hết công tơ thì
+      // xóa luôn `einvoice` (luật chung ở `lib/invoiceDelete.ts`).
+      const { einvRemoved } = await deleteInvoiceRows(row.ids, r.BillId);
       await loadRecords(monthFilterDate);
       showToast(einvRemoved ? 'Đã xóa biên bản và hóa đơn gốc (không còn công tơ nào)' : 'Đã xóa biên bản', 'success');
     } catch (err: any) {
